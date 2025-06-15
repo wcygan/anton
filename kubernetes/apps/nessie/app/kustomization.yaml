@@ -8,5 +8,5 @@ resources:
   # - postgres-credentials.yaml  # Disabled until 1Password is configured
   - postgres-credentials-manual.yaml  # Temporary manual secret
   - postgres-monitoring.yaml
-  - s3-credentials.yaml
+  # - s3-credentials.yaml  # Disabled until 1Password is configured
   - helmrelease.yaml
