@@ -10,31 +10,26 @@ spec:
   chart:
     spec:
       chart: trino
-      version: "0.28.0"
+      version: "1.39.1"
       sourceRef:
         kind: HelmRepository
         name: trino
         namespace: flux-system
   values:
     image:
-      tag: "476"  # Recommended version with Iceberg 1.5.0 support
+      repository: "trinodb/trino"
+      tag: "475"  # Chart app version
     
     server:
       workers: 2
-      coordinatorExtraConfig: |
-        query.max-execution-time=30m
-        query.max-run-time=1h
-        fs.cache.enabled=false
-      workerExtraConfig: |
-        query.max-memory-per-node=2GB
+      node:
+        environment: "production"
     
     coordinator:
       jvm:
         maxHeapSize: "4G"
         gcMethod:
-          type: "G1GC"
-          g1:
-            heapRegionSize: "32M"
+          type: "UseG1GC"
       resources:
         requests:
           memory: "4Gi"
@@ -54,9 +49,7 @@ spec:
       jvm:
         maxHeapSize: "6G"
         gcMethod:
-          type: "G1GC"
-          g1:
-            heapRegionSize: "32M"
+          type: "UseG1GC"
       resources:
         requests:
           memory: "6Gi"
@@ -135,11 +128,8 @@ spec:
     ingress:
       enabled: false
 
-    # Resource allocation
+    # Common labels
     commonLabels:
       app.kubernetes.io/name: trino
       app.kubernetes.io/component: analytics-engine
       app.kubernetes.io/part-of: data-platform
-
-    # Additional node properties (if needed)
-    additionalNodeProperties: {}
