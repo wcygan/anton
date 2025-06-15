@@ -9,7 +9,7 @@ resources:
   # It should NOT be included here to avoid namespace override issues
   
   # Phase 1: Iceberg Table Operations Testing
-  - ./spark-iceberg-client/ks.yaml
+  # - ./spark-iceberg-client/ks.yaml  # Disabled - ExternalSecret failing due to missing service account
   
   # Phase 1: Metadata Backup Procedures  
   - ./nessie-backup/ks.yaml
