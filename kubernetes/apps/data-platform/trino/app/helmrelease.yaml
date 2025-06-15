@@ -1,5 +1,4 @@
 ---
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -17,181 +16,130 @@ spec:
         name: trino
         namespace: flux-system
   values:
-    # Image configuration
     image:
-      repository: trinodb/trino
-      tag: "463"
-      pullPolicy: IfNotPresent
+      tag: "476"  # Recommended version with Iceberg 1.5.0 support
+    
+    server:
+      workers: 2
+      coordinatorExtraConfig: |
+        query.max-execution-time=30m
+        query.max-run-time=1h
+        fs.cache.enabled=false
+      workerExtraConfig: |
+        query.max-memory-per-node=2GB
+    
+    coordinator:
+      jvm:
+        maxHeapSize: "4G"
+        gcMethod:
+          type: "G1GC"
+          g1:
+            heapRegionSize: "32M"
+      resources:
+        requests:
+          memory: "4Gi"
+          cpu: "1000m"
+        limits:
+          memory: "4Gi"
+          cpu: "2000m"
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - key: "data-platform"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+
+    worker:
+      jvm:
+        maxHeapSize: "6G"
+        gcMethod:
+          type: "G1GC"
+          g1:
+            heapRegionSize: "32M"
+      resources:
+        requests:
+          memory: "6Gi"
+          cpu: "1500m"
+        limits:
+          memory: "6Gi"
+          cpu: "3000m"
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - key: "data-platform"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+
+    # Configure Iceberg catalog with Nessie
+    catalogs:
+      iceberg: |
+        connector.name=iceberg
+        iceberg.catalog.type=rest
+        iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/iceberg
+        # S3 configuration for Iceberg tables
+        fs.native-s3.enabled=true
+        s3.endpoint=http://rook-ceph-rgw-storage.storage.svc.cluster.local:80
+        s3.path-style-access=true
+        s3.ssl.enabled=false
+        s3.max-connections=500
+        # Iceberg warehouse location
+        iceberg.rest-catalog.warehouse=s3://iceberg-test/
+        # Metadata optimization
+        iceberg.delete-schema-locations-fallback=true
+        iceberg.materialized-views.storage-schema=iceberg_mv
+        # Performance settings
+        iceberg.query-partition-filter-required=false
+        iceberg.projection-pushdown-enabled=true
+        iceberg.optimize.enabled=true
+
+    # Security context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      readOnlyRootFilesystem: false  # Trino needs to write temp files
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+
+    # Environment variables for S3 credentials
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: rook-ceph-object-user-storage-iceberg
+            key: AccessKey
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: rook-ceph-object-user-storage-iceberg
+            key: SecretKey
 
     # Service configuration
     service:
       type: ClusterIP
       port: 8080
 
-    # Coordinator configuration
-    coordinator:
-      jvm:
-        maxHeapSize: "1600M"
-        gcMethod:
-          type: "UseG1GC"
-          g1:
-            heapRegionSize: "32M"
-      
-      config:
-        memory:
-          heapHeadroomPerNode: "256MB"
-        query:
-          maxMemory: "2GB"
-          maxMemoryPerNode: "1GB"
-          maxTotalMemory: "4GB"
+    # Ingress disabled - using Tailscale instead
+    ingress:
+      enabled: false
 
-      resources:
-        requests:
-          memory: "2Gi"
-          cpu: "1000m"
-        limits:
-          memory: "4Gi"
-          cpu: "2000m"
+    # Resource allocation
+    commonLabels:
+      app.kubernetes.io/name: trino
+      app.kubernetes.io/component: analytics-engine
+      app.kubernetes.io/part-of: data-platform
 
-      livenessProbe:
-        initialDelaySeconds: 60
-        periodSeconds: 10
-        timeoutSeconds: 5
-        failureThreshold: 6
-
-      readinessProbe:
-        initialDelaySeconds: 10
-        periodSeconds: 5
-        timeoutSeconds: 5
-        failureThreshold: 6
-
-    # Worker configuration
-    worker:
-      replicas: 2
-      
-      jvm:
-        maxHeapSize: "2400M"
-        gcMethod:
-          type: "UseG1GC"
-          g1:
-            heapRegionSize: "32M"
-
-      config:
-        memory:
-          heapHeadroomPerNode: "256MB"
-
-      resources:
-        requests:
-          memory: "3Gi"
-          cpu: "1500m"
-        limits:
-          memory: "6Gi"
-          cpu: "3000m"
-
-      livenessProbe:
-        initialDelaySeconds: 60
-        periodSeconds: 10
-        timeoutSeconds: 5
-        failureThreshold: 6
-
-      readinessProbe:
-        initialDelaySeconds: 10
-        periodSeconds: 5
-        timeoutSeconds: 5
-        failureThreshold: 6
-
-    # Server configuration
-    server:
-      node:
-        environment: "production"
-        dataDir: "/data/trino"
-        pluginDir: "/usr/lib/trino/plugin"
-
-      config:
-        path: /etc/trino
-        http:
-          port: 8080
-        processForwarded: false
-
-    # Authentication - disabled for initial deployment
-    auth: {}
-
-    # Catalogs configuration
-    additionalCatalogs:
-      iceberg: |
-        connector.name=iceberg
-        iceberg.catalog.type=rest
-        iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/api/v2
-        iceberg.rest-catalog.warehouse=s3a://iceberg-data/
-        # S3 configuration using existing Ceph ObjectStore
-        fs.s3a.endpoint=http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local
-        fs.s3a.access-key=${ENV:S3_ACCESS_KEY}
-        fs.s3a.secret-key=${ENV:S3_SECRET_KEY}
-        fs.s3a.path-style-access=true
-        fs.s3a.ssl.enabled=false
-        # Performance optimizations
-        fs.s3a.connection.maximum=100
-        fs.s3a.fast-upload=true
-        fs.s3a.multipart.size=67108864
-        fs.s3a.multipart.threshold=134217728
-
-      system: |
-        connector.name=system
-
-    # Environment variables for S3 credentials
-    env:
-      - name: S3_ACCESS_KEY
-        valueFrom:
-          secretKeyRef:
-            name: rook-ceph-object-user-storage-iceberg
-            key: AccessKey
-      - name: S3_SECRET_KEY
-        valueFrom:
-          secretKeyRef:
-            name: rook-ceph-object-user-storage-iceberg
-            key: SecretKey
-
-    # Security configuration
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 1000
-      runAsGroup: 1000
-      fsGroup: 1000
-
-    containerSecurityContext:
-      allowPrivilegeEscalation: false
-      readOnlyRootFilesystem: false  # Trino needs to write to temp directories
-      capabilities:
-        drop:
-          - ALL
-
-    # Pod annotations for monitoring
-    commonAnnotations:
-      prometheus.io/scrape: "true"
-      prometheus.io/port: "8080"
-      prometheus.io/path: "/ui/api/stats"
-
-    # Service account
-    serviceAccount:
-      create: true
-      name: "trino"
-
-    # Node selector and scheduling
-    nodeSelector: {}
-    tolerations: []
-    affinity: {}
-
-    # Additional server configuration properties
-    additionalConfigProperties: |
-      # Web UI settings
-      web-ui.enabled=true
-      
-      # Query execution settings
-      query.max-execution-time=30m
-      query.max-planning-time=10m
-      query.max-run-time=1h
-      
-      # Exchange settings for distributed queries
-      exchange.max-buffer-size=64MB
-      exchange.client-threads=25
-      exchange.concurrent-request-multiplier=3
+    # Additional configuration properties
+    additionalConfigProperties: {}
