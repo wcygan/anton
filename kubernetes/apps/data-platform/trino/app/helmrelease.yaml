@@ -141,5 +141,5 @@ spec:
       app.kubernetes.io/component: analytics-engine
       app.kubernetes.io/part-of: data-platform
 
-    # Additional configuration properties
-    additionalConfigProperties: {}
+    # Additional node properties (if needed)
+    additionalNodeProperties: {}
