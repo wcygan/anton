@@ -18,7 +18,7 @@ spec:
     name: flux-system
     namespace: flux-system
   dependsOn:
-    - name: spark-operator
-      namespace: flux-system
+    # - name: spark-operator
+    #   namespace: flux-system
     - name: data-platform
       namespace: flux-system
