@@ -49,6 +49,10 @@
     "data-platform:health": "deno run --allow-all scripts/data-platform-health-check.ts",
     "data-platform:health:json": "deno run --allow-all scripts/data-platform-health-check.ts --json",
     "data-platform:health:verbose": "deno run --allow-all scripts/data-platform-health-check.ts --verbose",
-    "spark:test": "deno run --allow-all scripts/test-spark-history-quick.ts"
+    "spark:test": "deno run --allow-all scripts/test-spark-history-quick.ts",
+    "test:trino": "deno run --allow-all scripts/test-trino-integration.ts",
+    "test:trino:json": "deno run --allow-all scripts/test-trino-integration.ts --json",
+    "test:trino:quick": "deno run --allow-all scripts/test-trino-integration.ts --quick",
+    "test:trino:verbose": "deno run --allow-all scripts/test-trino-integration.ts --verbose"
   }
 }
