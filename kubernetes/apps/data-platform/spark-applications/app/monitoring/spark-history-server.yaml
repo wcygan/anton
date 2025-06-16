@@ -42,10 +42,10 @@ spec:
       serviceAccountName: spark-application-sa
       containers:
       - name: spark-history-server
-        image: apache/spark:3.5.5
+        image: bitnami/spark:3.5
         imagePullPolicy: IfNotPresent
         command:
-        - /opt/spark/bin/spark-class
+        - /opt/bitnami/spark/bin/spark-class
         - org.apache.spark.deploy.history.HistoryServer
         env:
         - name: SPARK_HISTORY_OPTS
@@ -53,7 +53,7 @@ spec:
         - name: SPARK_DAEMON_MEMORY
           value: "1g"
         - name: SPARK_DAEMON_JAVA_OPTS
-          value: "-Xmx1g -XX:+UseG1GC"
+          value: "-XX:+UseG1GC"
         envFrom:
         - secretRef:
             name: rook-ceph-object-user-storage-iceberg
