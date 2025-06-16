@@ -25,13 +25,6 @@ spec:
       node:
         environment: "production"
     
-    # Additional configuration properties
-    additionalConfigProperties:
-      - fs.s3.enabled=true
-      - fs.s3.endpoint=http://rook-ceph-rgw-storage.storage.svc.cluster.local:80
-      - fs.s3.path-style-access=true
-      - fs.s3.ssl.enabled=false
-      
     coordinator:
       jvm:
         maxHeapSize: "4G"
@@ -78,7 +71,12 @@ spec:
         connector.name=iceberg
         iceberg.catalog.type=rest
         iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/api/iceberg
-        iceberg.rest-catalog.warehouse=iceberg-test
+        iceberg.rest-catalog.warehouse=s3://iceberg-test/
+        iceberg.file-system-factory=io.trino.filesystem.s3.S3FileSystemFactory
+        s3.endpoint=http://rook-ceph-rgw-storage.storage.svc.cluster.local:80
+        s3.path-style-access=true
+        s3.aws-access-key=${ENV:AWS_ACCESS_KEY_ID}
+        s3.aws-secret-key=${ENV:AWS_SECRET_ACCESS_KEY}
 
     # Security context
     securityContext:

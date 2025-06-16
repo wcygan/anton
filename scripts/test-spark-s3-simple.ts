@@ -65,12 +65,24 @@ spec:
     }
     
     // Create the pod
-    await $`echo ${podYaml} | kubectl apply -f -`;
+    await Deno.writeTextFile("/tmp/spark-test-pod.yaml", podYaml);
+    await $`kubectl apply -f /tmp/spark-test-pod.yaml`;
     console.log("✅ Pod created");
     
     // Wait for pod to complete
     console.log("\n⏳ Waiting for job to complete...");
-    await $`kubectl wait --for=condition=Ready pod/spark-test-s3 -n ${NAMESPACE} --timeout=60s || true`;
+    try {
+      await $`kubectl wait --for=condition=Ready pod/spark-test-s3 -n ${NAMESPACE} --timeout=60s`;
+    } catch {
+      console.log("Pod may not be ready, checking status...");
+    }
+    
+    // Check pod status
+    const podStatus = await $`kubectl get pod spark-test-s3 -n ${NAMESPACE} -o jsonpath='{.status.phase}'`.text();
+    console.log(`Pod status: ${podStatus}`);
+    
+    // Wait for completion
+    await $`kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/spark-test-s3 -n ${NAMESPACE} --timeout=120s || true`;
     
     // Check logs
     console.log("\n📝 Pod logs:");
@@ -109,7 +121,8 @@ spec:
       // Ignore
     }
     
-    await $`echo ${s3CheckPod} | kubectl apply -f -`;
+    await Deno.writeTextFile("/tmp/s3-check-pod.yaml", s3CheckPod);
+    await $`kubectl apply -f /tmp/s3-check-pod.yaml`;
     await $`kubectl wait --for=condition=Ready pod/s3-check -n ${NAMESPACE} --timeout=30s || true`;
     
     const s3Logs = await $`kubectl logs s3-check -n ${NAMESPACE}`.text();
@@ -124,8 +137,8 @@ spec:
     }
     
     // Cleanup
-    console.log("\n🧹 Cleaning up test pods...");
-    await $`kubectl delete pod spark-test-s3 s3-check -n ${NAMESPACE}`.quiet();
+    console.log("\n🧹 Cleanup skipped - check pods manually");
+    // await $`kubectl delete pod spark-test-s3 s3-check -n ${NAMESPACE}`.quiet();
     
   } catch (error) {
     console.error("❌ Test failed:", error.message);
