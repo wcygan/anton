@@ -77,7 +77,8 @@ class TrinoIntegrationTester {
   private async executeTrinoQuery(sql: string, timeout = 30): Promise<{ success: boolean; output: string; duration: number }> {
     const startTime = Date.now();
     try {
-      const result = await $`timeout ${timeout}s kubectl exec -n ${this.namespace} ${this.coordinatorPod} -- trino --execute ${sql}`.text();
+      // Use kubectl timeout instead of shell timeout for cross-platform compatibility
+      const result = await $`kubectl exec -n ${this.namespace} ${this.coordinatorPod} --timeout=${timeout}s -- trino --execute ${sql}`.text();
       const duration = Date.now() - startTime;
       return { success: true, output: result.trim(), duration };
     } catch (error) {
@@ -449,16 +450,17 @@ class TrinoIntegrationTester {
     // Summary table
     const summaryTable = new Table()
       .header(["Metric", "Value"])
-      .body([
-        ["Total Tests", summary.totalTests.toString()],
-        [colors.green("✅ Passed"), summary.passed.toString()],
-        [colors.yellow("⚠️ Warnings"), summary.warnings.toString()],
-        [colors.red("❌ Failed"), summary.failed.toString()],
-        [colors.red("💥 Errors"), summary.errors.toString()],
-        ["Total Duration", `${summary.totalDuration}ms`],
-        ["Average Query Time", summary.performanceMetrics.avgQueryTime ? `${Math.round(summary.performanceMetrics.avgQueryTime)}ms` : "N/A"]
-      ])
       .border();
+    
+    summaryTable.body([
+      ["Total Tests", summary.totalTests.toString()],
+      [colors.green("✅ Passed"), summary.passed.toString()],
+      [colors.yellow("⚠️ Warnings"), summary.warnings.toString()],
+      [colors.red("❌ Failed"), summary.failed.toString()],
+      [colors.red("💥 Errors"), summary.errors.toString()],
+      ["Total Duration", `${summary.totalDuration}ms`],
+      ["Average Query Time", summary.performanceMetrics.avgQueryTime ? `${Math.round(summary.performanceMetrics.avgQueryTime)}ms` : "N/A"]
+    ]);
 
     console.log("\n📊 Summary:");
     summaryTable.render();
@@ -474,18 +476,21 @@ class TrinoIntegrationTester {
         .header(["Test", "Status", "Duration", "Details"])
         .border();
 
+      const tableRows: string[][] = [];
       for (const result of categoryResults) {
         const statusIcon = result.status === "pass" ? "✅" : 
                           result.status === "warning" ? "⚠️" : 
                           result.status === "fail" ? "❌" : "💥";
         
-        categoryTable.body([
+        tableRows.push([
           result.name,
           `${statusIcon} ${result.status}`,
           `${result.duration}ms`,
           result.details || result.error || ""
         ]);
       }
+      
+      categoryTable.body(tableRows);
       
       categoryTable.render();
     }
