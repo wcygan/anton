@@ -40,31 +40,23 @@ spec:
         app.kubernetes.io/part-of: data-platform
     spec:
       serviceAccountName: spark-application-sa
-      securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
       containers:
       - name: spark-history-server
-        image: bitnami/spark:3.5
+        image: lightbend/spark-history-server:2.4.5
         imagePullPolicy: IfNotPresent
-        command:
-        - /opt/bitnami/spark/bin/spark-class
-        - org.apache.spark.deploy.history.HistoryServer
         env:
-        - name: SPARK_MODE
-          value: "history-server"
         - name: SPARK_HISTORY_OPTS
-          value: "-Dspark.history.fs.logDirectory=s3a://iceberg-test/spark-events -Dspark.hadoop.fs.s3a.endpoint=http://rook-ceph-rgw-storage.storage.svc:80 -Dspark.hadoop.fs.s3a.path.style.access=true -Dspark.hadoop.fs.s3a.connection.ssl.enabled=false"
-        - name: SPARK_DAEMON_MEMORY
-          value: "1g"
-        - name: SPARK_DAEMON_JAVA_OPTS
-          value: "-XX:+UseG1GC"
-        - name: SPARK_USER
-          value: "spark"
-        envFrom:
-        - secretRef:
-            name: rook-ceph-object-user-storage-iceberg
+          value: "-Dspark.history.fs.logDirectory=s3a://iceberg-test/spark-events -Dspark.hadoop.fs.s3a.endpoint=http://rook-ceph-rgw-storage.storage.svc:80 -Dspark.hadoop.fs.s3a.path.style.access=true -Dspark.hadoop.fs.s3a.connection.ssl.enabled=false -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: rook-ceph-object-user-storage-iceberg
+              key: AccessKey
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: rook-ceph-object-user-storage-iceberg
+              key: SecretKey
         ports:
         - containerPort: 18080
           name: http
