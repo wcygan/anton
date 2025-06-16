@@ -24,12 +24,21 @@ spec:
       workers: 2
       node:
         environment: "production"
+    
+    # Additional configuration properties
+    additionalConfigProperties:
+      - s3.endpoint=http://rook-ceph-rgw-storage.storage.svc.cluster.local:80
+      - s3.path-style-access=true
+      - s3.ssl.enabled=false
       
     coordinator:
       jvm:
         maxHeapSize: "4G"
         gcMethod:
           type: "UseG1GC"
+      additionalJvmConfig:
+        - -Daws.accessKeyId=$(AWS_ACCESS_KEY_ID)
+        - -Daws.secretAccessKey=$(AWS_SECRET_ACCESS_KEY)
       resources:
         requests:
           memory: "4Gi"
@@ -50,6 +59,9 @@ spec:
         maxHeapSize: "6G"
         gcMethod:
           type: "UseG1GC"
+      additionalJvmConfig:
+        - -Daws.accessKeyId=$(AWS_ACCESS_KEY_ID)
+        - -Daws.secretAccessKey=$(AWS_SECRET_ACCESS_KEY)
       resources:
         requests:
           memory: "6Gi"
@@ -72,12 +84,6 @@ spec:
         iceberg.catalog.type=rest
         iceberg.rest.uri=http://nessie.data-platform.svc.cluster.local:19120/iceberg
         iceberg.rest.warehouse=s3://iceberg-test/
-        iceberg.fs.s3.enabled=true
-        iceberg.fs.s3.endpoint=http://rook-ceph-rgw-storage.storage.svc.cluster.local:80
-        iceberg.fs.s3.path-style-access=true
-        iceberg.fs.s3.ssl.enabled=false
-        iceberg.fs.s3.access-key=${ENV:AWS_ACCESS_KEY_ID}
-        iceberg.fs.s3.secret-key=${ENV:AWS_SECRET_ACCESS_KEY}
 
     # Security context
     securityContext:
