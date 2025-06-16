@@ -40,10 +40,38 @@ spec:
         app.kubernetes.io/part-of: data-platform
     spec:
       serviceAccountName: spark-application-sa
+      initContainers:
+      - name: download-jars
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -c
+        - |
+          mkdir -p /opt/spark-libs
+          cd /opt/spark-libs
+          # Download hadoop-aws and aws-java-sdk-bundle for S3 support
+          wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar
+          wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.367/aws-java-sdk-bundle-1.12.367.jar
+          echo "Downloaded S3 libraries successfully"
+          ls -la /opt/spark-libs/
+        volumeMounts:
+        - name: spark-libs
+          mountPath: /opt/spark-libs
       containers:
       - name: spark-history-server
-        image: lightbend/spark-history-server:2.4.5
+        image: apache/spark:3.5.3
         imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -c
+        - |
+          # Copy S3 libraries to Spark jars directory
+          cp /opt/spark-libs/*.jar /opt/spark/jars/
+          # Start Spark History Server
+          exec /opt/spark/bin/spark-class org.apache.spark.deploy.history.HistoryServer
+        volumeMounts:
+        - name: spark-libs
+          mountPath: /opt/spark-libs
         env:
         - name: SPARK_HISTORY_OPTS
           value: "-Dspark.history.fs.logDirectory=s3a://iceberg-test/spark-events -Dspark.hadoop.fs.s3a.endpoint=http://rook-ceph-rgw-storage.storage.svc:80 -Dspark.hadoop.fs.s3a.path.style.access=true -Dspark.hadoop.fs.s3a.connection.ssl.enabled=false -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem"
@@ -80,6 +108,9 @@ spec:
           limits:
             cpu: 1000m
             memory: 2Gi
+      volumes:
+      - name: spark-libs
+        emptyDir: {}
 ---
 # Optional: Ingress for external access
 apiVersion: networking.k8s.io/v1
