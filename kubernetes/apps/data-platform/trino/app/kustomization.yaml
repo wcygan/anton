@@ -6,6 +6,7 @@ namespace: data-platform
 
 resources:
   - ./helmrelease.yaml
+  - ./hpa.yaml
   - ./servicemonitor.yaml
   - ./tailscale-ingress.yaml
 
