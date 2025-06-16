@@ -48,6 +48,7 @@
     "note:cursor": "deno run --allow-write --allow-read --allow-run --allow-env scripts/notes.ts --editor cursor",
     "data-platform:health": "deno run --allow-all scripts/data-platform-health-check.ts",
     "data-platform:health:json": "deno run --allow-all scripts/data-platform-health-check.ts --json",
-    "data-platform:health:verbose": "deno run --allow-all scripts/data-platform-health-check.ts --verbose"
+    "data-platform:health:verbose": "deno run --allow-all scripts/data-platform-health-check.ts --verbose",
+    "spark:test": "deno run --allow-all scripts/test-spark-history-quick.ts"
   }
 }

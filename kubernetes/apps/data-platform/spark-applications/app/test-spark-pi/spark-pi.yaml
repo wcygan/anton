@@ -13,6 +13,10 @@ spec:
   mode: cluster
   image: apache/spark:3.5.5
   imagePullPolicy: IfNotPresent
+  deps:
+    jars:
+    - https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar
+    - https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.367/aws-java-sdk-bundle-1.12.367.jar
   mainClass: org.apache.spark.examples.SparkPi
   mainApplicationFile: local:///opt/spark/examples/jars/spark-examples_2.12-3.5.5.jar
   arguments:
@@ -22,6 +26,11 @@ spec:
     spark.kubernetes.namespace: data-platform
     spark.eventLog.enabled: "true"
     spark.eventLog.dir: "s3a://iceberg-test/spark-events"
+    # S3 configuration for Ceph
+    spark.hadoop.fs.s3a.endpoint: "http://rook-ceph-rgw-storage.storage.svc:80"
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    spark.hadoop.fs.s3a.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
   restartPolicy:
     type: Never
   driver:
@@ -36,6 +45,10 @@ spec:
       prometheus.io/scrape: "true"
       prometheus.io/port: "4040"
       prometheus.io/path: "/metrics/executors/prometheus"
+    # S3 credentials for event logging
+    envFrom:
+    - secretRef:
+        name: rook-ceph-object-user-storage-iceberg
   executor:
     cores: 1
     instances: 2
@@ -43,3 +56,6 @@ spec:
     labels:
       version: 3.5.5
       test-type: basic
+    envFrom:
+    - secretRef:
+        name: rook-ceph-object-user-storage-iceberg
