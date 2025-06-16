@@ -24,6 +24,13 @@ spec:
       workers: 2
       node:
         environment: "production"
+      
+    # Additional configuration properties for S3
+    additionalConfigProperties:
+      fs.s3.enabled: "true"
+      fs.s3.endpoint: "http://rook-ceph-rgw-storage.storage.svc.cluster.local:80"
+      fs.s3.path-style-access: "true"
+      fs.s3.ssl.enabled: "false"
     
     coordinator:
       jvm:
@@ -70,22 +77,8 @@ spec:
       iceberg: |
         connector.name=iceberg
         iceberg.catalog.type=rest
-        iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/iceberg
-        # S3 configuration for Iceberg tables
-        fs.native-s3.enabled=true
-        s3.endpoint=http://rook-ceph-rgw-storage.storage.svc.cluster.local:80
-        s3.path-style-access=true
-        s3.ssl.enabled=false
-        s3.max-connections=500
-        # Iceberg warehouse location
-        iceberg.rest-catalog.warehouse=s3://iceberg-test/
-        # Metadata optimization
-        iceberg.delete-schema-locations-fallback=true
-        iceberg.materialized-views.storage-schema=iceberg_mv
-        # Performance settings
-        iceberg.query-partition-filter-required=false
-        iceberg.projection-pushdown-enabled=true
-        iceberg.optimize.enabled=true
+        iceberg.rest.uri=http://nessie.data-platform.svc.cluster.local:19120/iceberg
+        iceberg.rest.warehouse=s3://iceberg-test/
 
     # Security context
     securityContext:
