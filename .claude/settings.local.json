@@ -184,7 +184,8 @@
       "WebFetch(domain:resethard.io)",
       "WebFetch(domain:www.datamechanics.co)",
       "Bash(/tmp/create-iceberg-bucket.sh:*)",
-      "Bash(./scripts/test-spark-s3-simple.ts)"
+      "Bash(./scripts/test-spark-s3-simple.ts)",
+      "WebFetch(domain:kubernetes.io)"
     ],
     "deny": [
       "Bash(kubectl delete kustomization cluster-apps -n flux-system)",

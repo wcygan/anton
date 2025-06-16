@@ -77,8 +77,8 @@ class TrinoIntegrationTester {
   private async executeTrinoQuery(sql: string, timeout = 30): Promise<{ success: boolean; output: string; duration: number }> {
     const startTime = Date.now();
     try {
-      // Use kubectl timeout instead of shell timeout for cross-platform compatibility
-      const result = await $`kubectl exec -n ${this.namespace} ${this.coordinatorPod} --timeout=${timeout}s -- trino --execute ${sql}`.text();
+      // Execute Trino query via kubectl exec
+      const result = await $`kubectl exec -n ${this.namespace} ${this.coordinatorPod} -- trino --execute ${sql}`.text();
       const duration = Date.now() - startTime;
       return { success: true, output: result.trim(), duration };
     } catch (error) {

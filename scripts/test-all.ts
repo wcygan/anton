@@ -138,6 +138,17 @@ class UnifiedTestRunner {
       args: ["--check-dns", "--check-endpoints"],
       requires: "k8s",
     },
+    
+    // Application Tests
+    {
+      name: "Trino Integration",
+      script: "test-trino-integration.ts",
+      category: "health",
+      args: ["--quick"],
+      critical: false,
+      timeout: 180, // 3 minutes for Trino tests
+      requires: "k8s",
+    },
   ];
 
   constructor(verbose = false, quick = false, ci = false, failFast = false) {
