@@ -26,8 +26,6 @@ spec:
         environment: "production"
     
     coordinator:
-      extraConfig: |
-        http-server.process-forwarded=true
       jvm:
         maxHeapSize: "4G"
         gcMethod:
@@ -111,6 +109,10 @@ spec:
     service:
       type: ClusterIP
       port: 8080
+
+    # Additional coordinator configuration for forwarded headers
+    coordinatorExtraConfig: |
+      http-server.process-forwarded=true
 
     # Ingress disabled - using Tailscale instead
     ingress:
