@@ -128,8 +128,3 @@ spec:
     ingress:
       enabled: false
 
-    # Common labels
-    commonLabels:
-      app.kubernetes.io/name: trino
-      app.kubernetes.io/component: analytics-engine
-      app.kubernetes.io/part-of: data-platform
