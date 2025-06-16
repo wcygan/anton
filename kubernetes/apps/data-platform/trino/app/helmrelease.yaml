@@ -44,6 +44,9 @@ spec:
           operator: "Equal"
           value: "true"
           effect: "NoSchedule"
+      additionalConfigFiles:
+        extra.properties: |
+          http-server.process-forwarded=true
 
     worker:
       jvm:
@@ -109,11 +112,6 @@ spec:
     service:
       type: ClusterIP
       port: 8080
-
-    # Additional configuration properties for proxy headers
-    additionalConfigProperties:
-      # Allow Trino to process forwarded headers from Tailscale
-      - "http-server.process-forwarded=true"
 
     # Ingress disabled - using Tailscale instead
     ingress:
