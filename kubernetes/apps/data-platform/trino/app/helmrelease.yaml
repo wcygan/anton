@@ -26,6 +26,8 @@ spec:
         environment: "production"
     
     coordinator:
+      extraConfig: |
+        http-server.process-forwarded=true
       jvm:
         maxHeapSize: "4G"
         gcMethod:
@@ -44,9 +46,6 @@ spec:
           operator: "Equal"
           value: "true"
           effect: "NoSchedule"
-      additionalConfigFiles:
-        extra.properties: |
-          http-server.process-forwarded=true
 
     worker:
       jvm:
