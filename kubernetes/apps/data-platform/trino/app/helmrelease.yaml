@@ -110,6 +110,11 @@ spec:
       type: ClusterIP
       port: 8080
 
+    # Additional configuration properties for proxy headers
+    additionalConfigProperties:
+      # Allow Trino to process forwarded headers from Tailscale
+      http-server.process-forwarded: "true"
+
     # Ingress disabled - using Tailscale instead
     ingress:
       enabled: false
