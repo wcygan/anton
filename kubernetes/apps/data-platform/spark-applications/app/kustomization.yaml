@@ -4,12 +4,12 @@ namespace: data-platform
 
 resources:
   # Setup jobs
-  - setup/create-iceberg-bucket.yaml
+  # - setup/create-iceberg-bucket.yaml  # Temporarily disabled due to immutable field error
   
   # Test applications
-  - test-spark-pi/spark-pi.yaml
-  - s3-integration-test/s3-test-job.yaml
-  - iceberg-operations/iceberg-test-job.yaml
+  # - test-spark-pi/spark-pi.yaml
+  # - s3-integration-test/s3-test-job.yaml
+  # - iceberg-operations/iceberg-test-job.yaml
   
   # Monitoring
   - monitoring/spark-history-server.yaml
