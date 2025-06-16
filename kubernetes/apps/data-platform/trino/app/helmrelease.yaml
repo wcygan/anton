@@ -110,9 +110,9 @@ spec:
       type: ClusterIP
       port: 8080
 
-    # Additional coordinator configuration for forwarded headers
-    coordinatorExtraConfig: |
-      http-server.process-forwarded=true
+    # Additional configuration properties for forwarded headers
+    additionalConfigProperties:
+      - http-server.process-forwarded=true
 
     # Ingress disabled - using Tailscale instead
     ingress:
