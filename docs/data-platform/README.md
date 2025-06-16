@@ -31,6 +31,8 @@ The [`bootstrap/`](./bootstrap/) directory contains the phased deployment plan:
 
 ### Operational Guides
 
+- [`best-practices.md`](./best-practices.md) - Production-grade best practices for lakehouse operations
+- [`performance-optimization.md`](./performance-optimization.md) - Specific optimizations for your deployment
 - [`backup-procedures.md`](./backup-procedures.md) - Nessie metadata backup and recovery
 
 ## Current Status
