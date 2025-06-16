@@ -1,10 +1,14 @@
 ---
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/source.toolkit.fluxcd.io/helmrepository_v1.json
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
   name: trino
   namespace: flux-system
+  labels:
+    app.kubernetes.io/name: trino
+    app.kubernetes.io/component: helm-repository
 spec:
-  interval: 30m
-  url: https://trinodb.github.io/charts
+  type: oci
+  url: oci://ghcr.io/trinodb/charts
+  interval: 12h
+  timeout: 3m

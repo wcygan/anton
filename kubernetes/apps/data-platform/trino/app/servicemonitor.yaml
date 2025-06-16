@@ -6,18 +6,19 @@ metadata:
   namespace: data-platform
   labels:
     app.kubernetes.io/name: trino
-    app.kubernetes.io/component: trino
+    app.kubernetes.io/component: analytics-engine
+    app.kubernetes.io/part-of: data-platform
 spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: trino
       app.kubernetes.io/component: coordinator
   endpoints:
-    - port: http
-      interval: 30s
-      scrapeTimeout: 10s
-      path: /ui/api/stats
-      scheme: http
+  - port: http
+    path: /ui/api/stats
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: true
   namespaceSelector:
     matchNames:
-      - data-platform
+    - data-platform

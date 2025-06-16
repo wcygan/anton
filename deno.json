@@ -45,6 +45,9 @@
     "note": "deno run --allow-write --allow-read --allow-run --allow-env scripts/notes.ts",
     "note:zed": "deno run --allow-write --allow-read --allow-run --allow-env scripts/notes.ts --editor zed",
     "note:code": "deno run --allow-write --allow-read --allow-run --allow-env scripts/notes.ts --editor code",
-    "note:cursor": "deno run --allow-write --allow-read --allow-run --allow-env scripts/notes.ts --editor cursor"
+    "note:cursor": "deno run --allow-write --allow-read --allow-run --allow-env scripts/notes.ts --editor cursor",
+    "data-platform:health": "deno run --allow-all scripts/data-platform-health-check.ts",
+    "data-platform:health:json": "deno run --allow-all scripts/data-platform-health-check.ts --json",
+    "data-platform:health:verbose": "deno run --allow-all scripts/data-platform-health-check.ts --verbose"
   }
 }

@@ -178,7 +178,12 @@
       "Bash(./scripts/test-iceberg-operations.ts)",
       "Bash(./scripts/logging-performance-test.ts)",
       "Bash(./scripts/validate-iceberg-readiness.ts)",
-      "Bash(helm history:*)"
+      "Bash(helm history:*)",
+      "WebFetch(domain:projectnessie.org)",
+      "WebFetch(domain:trino.io)",
+      "WebFetch(domain:resethard.io)",
+      "WebFetch(domain:www.datamechanics.co)",
+      "Bash(/tmp/create-iceberg-bucket.sh:*)"
     ],
     "deny": [
       "Bash(kubectl delete kustomization cluster-apps -n flux-system)",
