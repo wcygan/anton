@@ -8,7 +8,6 @@ metadata:
     app.kubernetes.io/name: trino
     app.kubernetes.io/component: helm-repository
 spec:
-  type: oci
-  url: oci://ghcr.io/trinodb/charts
+  url: https://trinodb.github.io/charts
   interval: 12h
   timeout: 3m
