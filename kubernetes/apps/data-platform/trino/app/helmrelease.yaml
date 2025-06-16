@@ -112,7 +112,7 @@ spec:
 
     # Additional configuration properties for forwarded headers
     additionalConfigProperties:
-      - http-server.process-forwarded=true
+    - http-server.process-forwarded=true
 
     # Ingress disabled - using Tailscale instead
     ingress:
