@@ -1,0 +1,92 @@
+# Optimized resource allocations for Rook-Ceph components
+# Based on homelab scale (3 nodes, 6 OSDs, ~2TB usable)
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rook-ceph-optimized-resources
+  namespace: storage
+data:
+  cluster-patch.yaml: |
+    # Apply to CephCluster resource
+    spec:
+      resources:
+        # MGR - Ceph Manager (2 instances)
+        mgr:
+          requests:
+            cpu: 200m      # Reduced from default 500m
+            memory: 512Mi  # Reduced from default 1Gi
+          limits:
+            cpu: 500m      # Allows bursts for dashboard
+            memory: 1Gi    # Prevent OOM during operations
+        
+        # MON - Ceph Monitors (3 instances)
+        mon:
+          requests:
+            cpu: 100m      # Reduced from default 500m
+            memory: 512Mi  # Reduced from default 1Gi
+          limits:
+            cpu: 500m      # Consensus needs CPU bursts
+            memory: 1Gi    # Stable for CRUSH map
+        
+        # OSD - Object Storage Daemons (6 instances)
+        osd:
+          requests:
+            cpu: 500m      # Keep reasonable for I/O
+            memory: 2Gi    # BlueStore needs memory
+          limits:
+            cpu: 2000m     # Allow full core during recovery
+            memory: 4Gi    # Prevent OOM during compaction
+        
+        # MDS - Metadata Server (2 instances for CephFS)
+        mds:
+          requests:
+            cpu: 200m      # Metadata operations
+            memory: 1Gi    # Cache for file metadata
+          limits:
+            cpu: 1000m     # Burst for metadata ops
+            memory: 2Gi    # Large cache improves performance
+
+---
+# Operator resource optimization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rook-operator-resources
+  namespace: storage
+data:
+  values.yaml: |
+    resources:
+      requests:
+        cpu: 100m      # Controller pattern, low baseline
+        memory: 256Mi  # Reduced from default 512Mi
+      limits:
+        cpu: 500m      # Allow bursts during reconciliation
+        memory: 512Mi  # Stable memory usage
+
+---
+# CSI plugin resources (provisioner and node plugins)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ceph-csi-resources
+  namespace: storage
+data:
+  values.yaml: |
+    csi:
+      provisionerResources:
+        requests:
+          cpu: 50m       # Event-driven provisioning
+          memory: 128Mi  # Lightweight controller
+        limits:
+          cpu: 200m      # Burst during PVC creation
+          memory: 256Mi  # Stable memory
+      
+      pluginResources:
+        requests:
+          cpu: 50m       # Per-node plugin
+          memory: 128Mi  # Mount operations
+        limits:
+          cpu: 250m      # I/O operations
+          memory: 512Mi  # Buffer for mounts

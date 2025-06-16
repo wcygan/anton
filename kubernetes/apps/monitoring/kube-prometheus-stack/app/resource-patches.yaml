@@ -1,0 +1,83 @@
+# Resource optimization patches for monitoring stack components
+# Apply these via HelmRelease values or Kustomize patches
+
+---
+# Prometheus Operator - lightweight controller
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-operator-resources
+  namespace: monitoring
+data:
+  values.yaml: |
+    prometheusOperator:
+      resources:
+        requests:
+          cpu: 100m      # Typically uses 10-50m
+          memory: 128Mi  # Typically uses 50-100Mi
+        limits:
+          cpu: 500m      # Allow bursts during CRD processing
+          memory: 256Mi  # Stable memory usage
+
+---
+# Grafana - optimized for homelab scale
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-resources
+  namespace: monitoring
+data:
+  values.yaml: |
+    grafana:
+      resources:
+        requests:
+          cpu: 100m      # UI is event-driven
+          memory: 256Mi  # Base memory for caching
+        limits:
+          cpu: 500m      # Allow bursts during dashboard rendering
+          memory: 512Mi  # Prevent OOM on complex queries
+
+---
+# Prometheus - main metrics database
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-resources
+  namespace: monitoring
+data:
+  values.yaml: |
+    prometheus:
+      prometheusSpec:
+        resources:
+          requests:
+            cpu: 500m      # Query engine needs consistent CPU
+            memory: 2Gi    # TSDB needs memory for efficiency
+          limits:
+            cpu: 2000m     # Allow bursts during queries
+            memory: 4Gi    # Prevent OOM on cardinality explosions
+        
+        # Storage retention optimization
+        retention: 7d      # Reduce from default 10d for homelab
+        retentionSize: 10GB  # Limit storage usage
+        
+        # WAL compression for better resource usage
+        walCompression: true
+
+---
+# Alertmanager - lightweight notification handler
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-resources
+  namespace: monitoring
+data:
+  values.yaml: |
+    alertmanager:
+      alertmanagerSpec:
+        resources:
+          requests:
+            cpu: 50m       # Very lightweight
+            memory: 64Mi   # Small memory footprint
+          limits:
+            cpu: 200m      # Allow bursts during alert storms
+            memory: 128Mi  # Stable memory usage

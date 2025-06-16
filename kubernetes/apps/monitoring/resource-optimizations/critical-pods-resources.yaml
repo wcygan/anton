@@ -1,0 +1,87 @@
+# Resource specifications for critical pods that currently have no limits
+# These values are conservative but efficient based on typical usage patterns
+
+---
+# kube-state-metrics - collects cluster metrics
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-state-metrics-resources
+  namespace: monitoring
+data:
+  resources.yaml: |
+    resources:
+      requests:
+        cpu: 100m      # Typically uses 10-50m
+        memory: 128Mi  # Typically uses 50-100Mi
+      limits:
+        cpu: 500m      # Allow bursts for large clusters
+        memory: 256Mi  # Prevent OOM on large state changes
+
+---
+# node-exporter - collects node metrics (DaemonSet)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-exporter-resources
+  namespace: monitoring
+data:
+  resources.yaml: |
+    resources:
+      requests:
+        cpu: 50m       # Very lightweight, typically uses 5-20m
+        memory: 64Mi   # Typically uses 20-40Mi
+      limits:
+        cpu: 200m      # Allow for CPU metric collection spikes
+        memory: 128Mi  # Stable memory usage
+
+---
+# local-path-provisioner - provides local storage
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-path-provisioner-resources
+  namespace: storage
+data:
+  resources.yaml: |
+    resources:
+      requests:
+        cpu: 50m       # Event-driven, low baseline usage
+        memory: 64Mi   # Typically uses 20-30Mi
+      limits:
+        cpu: 200m      # Allow bursts during PVC creation
+        memory: 128Mi  # Stable memory footprint
+
+---
+# reloader - watches for ConfigMap/Secret changes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reloader-resources
+  namespace: kube-system
+data:
+  resources.yaml: |
+    resources:
+      requests:
+        cpu: 50m       # Event-driven, typically uses 5-10m
+        memory: 64Mi   # Typically uses 20-30Mi
+      limits:
+        cpu: 200m      # Allow bursts when many resources change
+        memory: 128Mi  # Stable memory usage
+
+---
+# snapshot-controller - manages volume snapshots
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: snapshot-controller-resources
+  namespace: kube-system
+data:
+  resources.yaml: |
+    resources:
+      requests:
+        cpu: 50m       # Controller pattern, low baseline
+        memory: 64Mi   # Typically uses 30-50Mi
+      limits:
+        cpu: 200m      # Allow bursts during snapshot operations
+        memory: 256Mi  # May need more during large snapshot operations

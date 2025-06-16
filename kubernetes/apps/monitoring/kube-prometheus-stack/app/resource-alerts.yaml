@@ -1,0 +1,165 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: resource-optimization-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus-stack-prometheus
+    app.kubernetes.io/part-of: kube-prometheus-stack
+spec:
+  groups:
+    - name: resource-efficiency
+      interval: 30s
+      rules:
+        # CPU Efficiency Alerts
+        - alert: PodCPUOverProvisioned
+          expr: |
+            (
+              avg_over_time(
+                (
+                  sum(rate(container_cpu_usage_seconds_total{container!="",pod!=""}[5m])) by (namespace, pod)
+                  /
+                  sum(kube_pod_container_resource_requests{resource="cpu", container!=""}) by (namespace, pod)
+                )[30m:]
+              ) < 0.1
+            ) and 
+            (sum(kube_pod_container_resource_requests{resource="cpu", container!=""}) by (namespace, pod) > 0.2)
+          for: 1h
+          labels:
+            severity: info
+            category: resource-optimization
+          annotations:
+            summary: "Pod CPU significantly over-provisioned"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is using less than 10% of requested CPU ({{ $value | humanizePercentage }}) for over 1 hour"
+            
+        - alert: PodCPUThrottling
+          expr: |
+            rate(container_cpu_cfs_throttled_periods_total{container!=""}[5m]) 
+            / 
+            rate(container_cpu_cfs_periods_total{container!=""}[5m]) > 0.1
+          for: 15m
+          labels:
+            severity: warning
+            category: resource-optimization
+          annotations:
+            summary: "Pod experiencing CPU throttling"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} is being throttled {{ $value | humanizePercentage }} of the time"
+
+        # Memory Efficiency Alerts
+        - alert: PodMemoryOverProvisioned
+          expr: |
+            (
+              avg_over_time(
+                (
+                  sum(container_memory_working_set_bytes{container!="",pod!=""}) by (namespace, pod)
+                  /
+                  sum(kube_pod_container_resource_requests{resource="memory", container!=""}) by (namespace, pod)
+                )[30m:]
+              ) < 0.2
+            ) and
+            (sum(kube_pod_container_resource_requests{resource="memory", container!=""}) by (namespace, pod) > 536870912) # 512Mi
+          for: 1h
+          labels:
+            severity: info
+            category: resource-optimization
+          annotations:
+            summary: "Pod memory significantly over-provisioned"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is using less than 20% of requested memory ({{ $value | humanizePercentage }}) for over 1 hour"
+            
+        - alert: PodMemoryPressure
+          expr: |
+            (
+              sum(container_memory_working_set_bytes{container!="",pod!=""}) by (namespace, pod)
+              /
+              sum(kube_pod_container_resource_limits{resource="memory", container!=""}) by (namespace, pod)
+            ) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+            category: resource-optimization
+          annotations:
+            summary: "Pod approaching memory limit"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} memory usage is at {{ $value | humanizePercentage }} of its limit"
+
+        # Critical Resource Alerts
+        - alert: PodOOMKilled
+          expr: |
+            increase(kube_pod_container_status_terminated_reason{reason="OOMKilled"}[1h]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            category: resource-optimization
+          annotations:
+            summary: "Pod was OOM killed"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} was killed due to out of memory"
+
+        - alert: NodeMemoryPressure
+          expr: |
+            kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+          for: 5m
+          labels:
+            severity: critical
+            category: resource-optimization
+          annotations:
+            summary: "Node experiencing memory pressure"
+            description: "Node {{ $labels.node }} is experiencing memory pressure"
+
+        # Cluster-wide Resource Alerts
+        - alert: ClusterCPUOvercommitted
+          expr: |
+            sum(kube_pod_container_resource_requests{resource="cpu"})
+            /
+            sum(kube_node_status_allocatable{resource="cpu"})
+            > 0.9
+          for: 15m
+          labels:
+            severity: warning
+            category: resource-optimization
+          annotations:
+            summary: "Cluster CPU requests exceed 90% of allocatable"
+            description: "Cluster CPU requests are at {{ $value | humanizePercentage }} of total allocatable CPU"
+
+        - alert: ClusterMemoryOvercommitted
+          expr: |
+            sum(kube_pod_container_resource_requests{resource="memory"})
+            /
+            sum(kube_node_status_allocatable{resource="memory"})
+            > 0.9
+          for: 15m
+          labels:
+            severity: warning
+            category: resource-optimization
+          annotations:
+            summary: "Cluster memory requests exceed 90% of allocatable"
+            description: "Cluster memory requests are at {{ $value | humanizePercentage }} of total allocatable memory"
+
+        # Unset Resource Alerts
+        - alert: PodWithoutCPULimits
+          expr: |
+            count(
+              kube_pod_container_info{container!=""} 
+              unless 
+              kube_pod_container_resource_limits{resource="cpu"}
+            ) by (namespace, pod, container) > 0
+          for: 30m
+          labels:
+            severity: info
+            category: resource-optimization
+          annotations:
+            summary: "Pod container without CPU limits"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} has no CPU limits set"
+
+        - alert: PodWithoutMemoryLimits
+          expr: |
+            count(
+              kube_pod_container_info{container!=""} 
+              unless 
+              kube_pod_container_resource_limits{resource="memory"}
+            ) by (namespace, pod, container) > 0
+          for: 30m
+          labels:
+            severity: warning
+            category: resource-optimization
+          annotations:
+            summary: "Pod container without memory limits"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} has no memory limits set"
