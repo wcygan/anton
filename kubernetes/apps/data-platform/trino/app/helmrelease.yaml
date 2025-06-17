@@ -91,25 +91,13 @@ spec:
           value: "true"
           effect: "NoSchedule"
 
-    # Configure Iceberg catalog with Nessie and performance optimizations
+    # Configure Iceberg catalog with Nessie (minimal configuration for v475)
     catalogs:
       iceberg: |
         connector.name=iceberg
         iceberg.catalog.type=rest
         iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/api/iceberg
         iceberg.rest-catalog.warehouse=s3://iceberg-test/
-        
-        # File format configuration
-        iceberg.file-format=PARQUET
-        iceberg.parquet.use-column-index=true
-        
-        # S3 configuration for Ceph object storage
-        fs.s3.endpoint=http://rook-ceph-rgw-storage.storage.svc
-        fs.s3.path-style-access=true
-        fs.s3.ssl.enabled=false
-        
-        # Table statistics and performance
-        iceberg.table-statistics-enabled=true
 
     # Security context
     securityContext:
