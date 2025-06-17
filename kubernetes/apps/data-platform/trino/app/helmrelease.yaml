@@ -27,16 +27,29 @@ spec:
     
     coordinator:
       jvm:
-        maxHeapSize: "4G"
+        maxHeapSize: "8G"
         gcMethod:
           type: "UseG1GC"
+          g1:
+            heapRegionSize: "32M"
+        # Performance optimizations for coordinator
+        additionalJvmOptions:
+          - "-XX:+UnlockExperimentalVMOptions"
+          - "-XX:+DisableExplicitGC"
+          - "-XX:ReservedCodeCacheSize=512M"
+          - "-XX:PerMethodRecompilationCutoff=10000"
+          - "-XX:PerBytecodeRecompilationCutoff=10000"
+          - "-Djdk.attach.allowAttachSelf=true"
+          - "-Djdk.nio.maxCachedBufferSize=2000000"
+          - "-XX:+ExitOnOutOfMemoryError"
+          - "-XX:+HeapDumpOnOutOfMemoryError"
       resources:
         requests:
-          memory: "4Gi"
-          cpu: "1000m"
-        limits:
-          memory: "4Gi"
+          memory: "8Gi"
           cpu: "2000m"
+        limits:
+          memory: "10Gi"  # Some headroom for off-heap usage
+          cpu: "4000m"
       nodeSelector:
         kubernetes.io/arch: amd64
       tolerations:
@@ -47,16 +60,29 @@ spec:
 
     worker:
       jvm:
-        maxHeapSize: "6G"
+        maxHeapSize: "24G"
         gcMethod:
           type: "UseG1GC"
+          g1:
+            heapRegionSize: "32M"
+        # Performance optimizations for workers
+        additionalJvmOptions:
+          - "-XX:+UseG1GC"
+          - "-XX:G1HeapRegionSize=32M"
+          - "-XX:+ExplicitGCInvokesConcurrent"
+          - "-XX:+ExitOnOutOfMemoryError"
+          - "-XX:+HeapDumpOnOutOfMemoryError"
+          - "-XX:ReservedCodeCacheSize=512M"
+          - "-XX:+UnlockExperimentalVMOptions"
+          - "-XX:+DisableExplicitGC"
+          - "-Djdk.nio.maxCachedBufferSize=2000000"
       resources:
         requests:
-          memory: "6Gi"
-          cpu: "1500m"
+          memory: "24Gi"
+          cpu: "4000m"
         limits:
-          memory: "6Gi"
-          cpu: "3000m"
+          memory: "28Gi"  # Headroom for off-heap usage
+          cpu: "6000m"
       nodeSelector:
         kubernetes.io/arch: amd64
       tolerations:
@@ -65,13 +91,35 @@ spec:
           value: "true"
           effect: "NoSchedule"
 
-    # Configure Iceberg catalog with Nessie
+    # Configure Iceberg catalog with Nessie and performance optimizations
     catalogs:
       iceberg: |
         connector.name=iceberg
         iceberg.catalog.type=rest
         iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/api/iceberg
         iceberg.rest-catalog.warehouse=s3://iceberg-test/
+        
+        # Performance optimizations
+        iceberg.split-size=134217728
+        iceberg.file-format=PARQUET
+        iceberg.parquet.use-column-index=true
+        iceberg.vectorization.enabled=true
+        iceberg.projection-pushdown.enabled=true
+        iceberg.dynamic-filtering.enabled=true
+        
+        # S3 optimizations for Ceph
+        hive.s3.endpoint=http://rook-ceph-rgw-storage.storage.svc
+        hive.s3.path-style-access=true
+        hive.s3.ssl.enabled=false
+        hive.s3.max-connections=500
+        hive.s3.multipart.min-file-size=67108864
+        hive.s3.multipart.min-part-size=33554432
+        hive.s3.streaming.upload.enabled=true
+        
+        # Metadata caching
+        iceberg.metadata.cache.enabled=true
+        iceberg.metadata.cache.size=1000
+        iceberg.metadata.cache.ttl=60m
 
     # Security context
     securityContext:

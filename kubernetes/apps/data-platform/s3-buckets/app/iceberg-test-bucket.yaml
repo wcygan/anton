@@ -1,0 +1,29 @@
+---
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: iceberg-test
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/name: iceberg-test
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: data-platform
+spec:
+  generateBucketName: iceberg-test
+  storageClassName: ceph-bucket
+  additionalConfig:
+    maxBuckets: 1
+    # Basic lifecycle configuration for test workloads
+    lifecycleConfiguration: |
+      <LifecycleConfiguration>
+        <Rule>
+          <ID>cleanup-test-data</ID>
+          <Status>Enabled</Status>
+          <Expiration>
+            <Days>90</Days>
+          </Expiration>
+          <NoncurrentVersionExpiration>
+            <NoncurrentDays>7</NoncurrentDays>
+          </NoncurrentVersionExpiration>
+        </Rule>
+      </LifecycleConfiguration>

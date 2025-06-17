@@ -9,7 +9,10 @@ metadata:
 spec:
   containers:
   - name: spark
-    image: apache/spark:3.5.0-scala2.12-java11-python3-ubuntu
+    # TODO: Replace with your custom image build
+    # For now, keeping with runtime download approach but documented for improvement
+    # Custom image would be: homelab/spark-iceberg:3.5.5
+    image: apache/spark:3.5.5-scala2.12-java11-python3-ubuntu
     command: ["sleep", "infinity"]
     env:
     - name: NESSIE_URI
@@ -19,13 +22,13 @@ spec:
     - name: AWS_ACCESS_KEY_ID
       valueFrom:
         secretKeyRef:
-          name: s3-credentials
-          key: access-key-id
+          name: rook-ceph-object-user-storage-iceberg
+          key: AccessKey
     - name: AWS_SECRET_ACCESS_KEY
       valueFrom:
         secretKeyRef:
-          name: s3-credentials
-          key: secret-access-key
+          name: rook-ceph-object-user-storage-iceberg
+          key: SecretKey
     - name: AWS_REGION
       value: "us-east-1"
     - name: SPARK_HOME
@@ -46,15 +49,26 @@ spec:
         memory: "4Gi"
         cpu: "2000m"
     workingDir: /opt/spark
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 185  # spark user
+      runAsGroup: 185
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: false  # Spark needs to write temp files
   volumes:
   - name: spark-conf
     configMap:
       name: spark-iceberg-config
   - name: iceberg-jars
     emptyDir: {}
+  # NOTE: Keeping initContainer for now as interim solution
+  # TODO: Replace with pre-built image using the provided Dockerfile
   initContainers:
   - name: download-iceberg-jars
-    image: curlimages/curl:8.5.0
+    image: curlimages/curl:8.11.0
     command:
     - /bin/sh
     - -c
@@ -62,7 +76,7 @@ spec:
       set -e
       echo "Downloading Iceberg and AWS dependencies..."
       
-      # Iceberg Spark runtime
+      # Iceberg Spark runtime - updated version
       curl -L -o /jars/iceberg-spark-runtime-3.5_2.12-1.5.2.jar \
         https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/1.5.2/iceberg-spark-runtime-3.5_2.12-1.5.2.jar
       
@@ -82,7 +96,23 @@ spec:
     volumeMounts:
     - name: iceberg-jars
       mountPath: /jars
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 100  # curl user
+      runAsGroup: 101
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
   restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 185
+    runAsGroup: 185
+    fsGroup: 185
+    seccompProfile:
+      type: RuntimeDefault
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -119,44 +149,5 @@ data:
     # Driver Configuration
     spark.driver.memory=2g
     spark.driver.maxResultSize=1g
----
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: s3-credentials
-  namespace: data-platform
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: ceph-storage-store
-    kind: SecretStore
-  target:
-    name: s3-credentials
-    creationPolicy: Owner
-  data:
-    - secretKey: access-key-id
-      remoteRef:
-        key: rook-ceph-object-user-storage-loki
-        property: AccessKey
-    - secretKey: secret-access-key
-      remoteRef:
-        key: rook-ceph-object-user-storage-loki
-        property: SecretKey
----
-apiVersion: external-secrets.io/v1
-kind: SecretStore
-metadata:
-  name: ceph-storage-store
-  namespace: data-platform
-spec:
-  provider:
-    kubernetes:
-      remoteNamespace: storage
-      server:
-        caProvider:
-          type: ConfigMap
-          name: kube-root-ca.crt
-          key: ca.crt
-      auth:
-        serviceAccount:
-          name: external-secrets
+# External secrets removed - using existing rook-ceph-object-user-storage-iceberg secret
+# This secret is automatically created by the Ceph ObjectStore User in storage namespace

@@ -53,6 +53,10 @@
     "test:trino": "deno run --allow-all scripts/test-trino-integration.ts",
     "test:trino:json": "deno run --allow-all scripts/test-trino-integration.ts --json",
     "test:trino:quick": "deno run --allow-all scripts/test-trino-integration.ts --quick",
-    "test:trino:verbose": "deno run --allow-all scripts/test-trino-integration.ts --verbose"
+    "test:trino:verbose": "deno run --allow-all scripts/test-trino-integration.ts --verbose",
+    "data-platform:perf": "deno run --allow-all scripts/data-platform/performance-test.ts",
+    "data-platform:perf:json": "deno run --allow-all scripts/data-platform/performance-test.ts --json",
+    "data-platform:perf:trino": "deno run --allow-all scripts/data-platform/performance-test.ts --component=trino",
+    "data-platform:perf:spark": "deno run --allow-all scripts/data-platform/performance-test.ts --component=spark"
   }
 }

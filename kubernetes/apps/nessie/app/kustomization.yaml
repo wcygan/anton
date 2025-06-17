@@ -5,8 +5,7 @@ kind: Kustomization
 namespace: data-platform
 resources:
   - postgres-cluster.yaml
-  # - postgres-credentials.yaml  # Disabled until 1Password is configured
-  - postgres-credentials-manual.yaml  # Temporary manual secret
+  - postgres-credentials.yaml  # ExternalSecret for secure credential management
   - postgres-monitoring.yaml
-  # - s3-credentials.yaml  # Disabled until 1Password is configured
+  - s3-credentials.yaml  # ExternalSecret for S3 credentials
   - helmrelease.yaml

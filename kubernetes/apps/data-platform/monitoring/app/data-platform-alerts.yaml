@@ -1,0 +1,170 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: data-platform-performance
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/name: data-platform-performance
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: data-platform
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: data-platform.performance
+    interval: 30s
+    rules:
+    - alert: TrinoQueryLatencyHigh
+      expr: trino_query_execution_time_seconds{quantile="0.95"} > 30
+      for: 5m
+      labels:
+        severity: warning
+        component: trino
+      annotations:
+        summary: "Trino 95th percentile query latency is high"
+        description: "95th percentile query execution time is {{ $value }}s, exceeding 30s threshold"
+        runbook_url: "https://trino.io/docs/current/admin/tuning.html"
+    
+    - alert: TrinoCoordinatorMemoryHigh
+      expr: container_memory_usage_bytes{pod=~"trino-coordinator-.*", namespace="data-platform"} / container_spec_memory_limit_bytes > 0.9
+      for: 5m
+      labels:
+        severity: critical
+        component: trino
+      annotations:
+        summary: "Trino coordinator memory usage is critically high"
+        description: "Coordinator memory usage is {{ $value | humanizePercentage }}, exceeding 90% threshold"
+        
+    - alert: TrinoWorkerMemoryHigh
+      expr: container_memory_usage_bytes{pod=~"trino-worker-.*", namespace="data-platform"} / container_spec_memory_limit_bytes > 0.85
+      for: 5m
+      labels:
+        severity: warning
+        component: trino
+      annotations:
+        summary: "Trino worker memory usage is high"
+        description: "Worker memory usage is {{ $value | humanizePercentage }}, exceeding 85% threshold"
+        
+    - alert: SparkJobFailureRate
+      expr: rate(spark_job_failures_total[5m]) > 0.1
+      for: 2m
+      labels:
+        severity: critical
+        component: spark
+      annotations:
+        summary: "Spark job failure rate is high"
+        description: "Spark job failure rate is {{ $value }} failures/sec over the last 5 minutes"
+        
+    - alert: SparkExecutorOutOfMemory
+      expr: increase(spark_executor_oom_total[10m]) > 0
+      for: 1m
+      labels:
+        severity: critical
+        component: spark
+      annotations:
+        summary: "Spark executor out of memory errors detected"
+        description: "{{ $value }} Spark executor OOM errors in the last 10 minutes"
+        
+    - alert: NessieUnavailable
+      expr: up{job="nessie", namespace="data-platform"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: nessie
+      annotations:
+        summary: "Nessie catalog service is unavailable"
+        description: "Nessie service has been down for more than 2 minutes"
+        
+    - alert: NessieHighLatency
+      expr: nessie_http_request_duration_seconds{quantile="0.95"} > 5
+      for: 5m
+      labels:
+        severity: warning
+        component: nessie
+      annotations:
+        summary: "Nessie API latency is high"
+        description: "Nessie 95th percentile response time is {{ $value }}s, exceeding 5s threshold"
+
+  - name: data-platform.iceberg
+    interval: 60s
+    rules:
+    - alert: IcebergCompactionNeeded
+      expr: iceberg_table_small_files_count > 100
+      for: 10m
+      labels:
+        severity: warning
+        component: iceberg
+      annotations:
+        summary: "Iceberg table needs compaction"
+        description: "Table {{ $labels.table_name }} has {{ $value }} small files and needs compaction"
+        
+    - alert: IcebergTableSizeGrowthHigh
+      expr: increase(iceberg_table_size_bytes[1h]) > 10737418240  # 10GB
+      for: 1h
+      labels:
+        severity: info
+        component: iceberg
+      annotations:
+        summary: "High table growth rate detected"
+        description: "Table {{ $labels.table_name }} grew by {{ $value | humanizeBytes }} in the last hour"
+
+  - name: data-platform.storage
+    interval: 60s
+    rules:
+    - alert: S3BucketUsageHigh
+      expr: s3_bucket_size_bytes{bucket=~"iceberg-.*"} / s3_bucket_quota_bytes > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: s3
+      annotations:
+        summary: "S3 bucket usage is high"
+        description: "Bucket {{ $labels.bucket }} is {{ $value | humanizePercentage }} full"
+        
+    - alert: S3ConnectionErrors
+      expr: rate(s3_request_errors_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        component: s3
+      annotations:
+        summary: "High S3 connection error rate"
+        description: "S3 error rate is {{ $value }} errors/sec over the last 5 minutes"
+
+  - name: data-platform.resources
+    interval: 30s
+    rules:
+    - alert: DataPlatformPodCrashLoop
+      expr: rate(kube_pod_container_status_restarts_total{namespace="data-platform"}[5m]) > 0
+      for: 2m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "Pod in data-platform namespace is crash looping"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+        
+    - alert: DataPlatformPodMemoryThrottling
+      expr: rate(container_memory_failures_total{namespace="data-platform"}[5m]) > 0
+      for: 2m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "Memory throttling detected in data-platform"
+        description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is experiencing memory pressure"
+        
+    - alert: DataPlatformNamespaceResourceExhaustion
+      expr: |
+        (
+          sum(kube_resourcequota{namespace="data-platform", resource="requests.memory", type="used"}) /
+          sum(kube_resourcequota{namespace="data-platform", resource="requests.memory", type="hard"})
+        ) > 0.9
+      for: 5m
+      labels:
+        severity: critical
+        component: kubernetes
+      annotations:
+        summary: "Data platform namespace approaching resource limits"
+        description: "Namespace data-platform is using {{ $value | humanizePercentage }} of allocated memory quota"

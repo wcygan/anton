@@ -8,6 +8,9 @@ resources:
   # Note: nessie/ks.yaml creates a Kustomization in flux-system namespace
   # It should NOT be included here to avoid namespace override issues
   
+  # Phase 1: S3 Storage - Automated bucket provisioning
+  - ./s3-buckets/ks.yaml
+  
   # Phase 1: Iceberg Table Operations Testing
   # - ./spark-iceberg-client/ks.yaml  # Disabled - ExternalSecret failing due to missing service account
   
@@ -23,3 +26,6 @@ resources:
   
   # Phase 3: Query Engine
   - ./trino/ks.yaml
+  
+  # Production Readiness: Monitoring and Resource Management
+  - ./monitoring/ks.yaml

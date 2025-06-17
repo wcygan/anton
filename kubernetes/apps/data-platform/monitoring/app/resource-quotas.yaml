@@ -1,0 +1,156 @@
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: data-platform-quota
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/name: data-platform-quota
+    app.kubernetes.io/component: resource-management
+    app.kubernetes.io/part-of: data-platform
+spec:
+  hard:
+    # CPU limits based on 96GB cluster capacity
+    requests.cpu: "30"      # Conservative allocation
+    limits.cpu: "60"        # Peak capacity for bursts
+    
+    # Memory limits - leaving headroom for system processes
+    requests.memory: "80Gi"  # Base allocation for all components
+    limits.memory: "120Gi"   # Burst capacity
+    
+    # Storage quotas
+    persistentvolumeclaims: "20"
+    requests.storage: "500Gi"
+    
+    # Pod limits to prevent runaway applications
+    pods: "50"
+    
+    # Service and networking limits
+    services: "20"
+    services.loadbalancers: "0"  # No LoadBalancers in homelab
+    services.nodeports: "2"
+    
+    # Spark-specific limits
+    count/sparkapplications.sparkoperator.k8s.io: "10"
+    
+    # Secret and ConfigMap limits
+    secrets: "30"
+    configmaps: "30"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: data-platform-limits
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/name: data-platform-limits
+    app.kubernetes.io/component: resource-management
+    app.kubernetes.io/part-of: data-platform
+spec:
+  limits:
+  # Default limits for containers
+  - default:
+      cpu: "2"
+      memory: "4Gi"
+      ephemeral-storage: "10Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "256Mi"
+      ephemeral-storage: "1Gi"
+    type: Container
+    
+  # Limits for PVCs
+  - max:
+      storage: "100Gi"
+    min:
+      storage: "1Gi"
+    type: PersistentVolumeClaim
+    
+  # Pod-level limits
+  - max:
+      cpu: "16"           # Maximum for large Spark jobs
+      memory: "32Gi"      # Maximum for Trino workers
+    min:
+      cpu: "50m"
+      memory: "128Mi"
+    type: Pod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-platform-network-policy
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/name: data-platform-network-policy
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: data-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080   # Trino
+    - protocol: TCP
+      port: 19120  # Nessie
+    - protocol: TCP
+      port: 4040   # Spark UI
+      
+  # Allow internal data platform communication
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: data-platform
+    - podSelector: {}
+      
+  # Allow access from ingress controllers
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: network
+          
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+      
+  # Allow access to storage namespace (Ceph)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: storage
+    ports:
+    - protocol: TCP
+      port: 80    # RGW
+    - protocol: TCP
+      port: 443   # RGW HTTPS
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+      
+  # Allow access to external secrets
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: external-secrets
+    ports:
+    - protocol: TCP
+      port: 8080
+      
+  # Allow internet access for JAR downloads (until custom images are built)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443   # HTTPS
+    - protocol: TCP
+      port: 80    # HTTP

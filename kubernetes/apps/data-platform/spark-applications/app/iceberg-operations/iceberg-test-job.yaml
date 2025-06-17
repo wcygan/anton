@@ -30,14 +30,39 @@ spec:
     spark.sql.catalog.nessie.uri: http://nessie:19120/api/v2
     spark.sql.catalog.nessie.ref: main
     spark.sql.catalog.nessie.warehouse: s3a://iceberg-test
-    # S3 configuration for Ceph
+    
+    # Core performance settings
+    spark.sql.adaptive.enabled: "true"
+    spark.sql.adaptive.coalescePartitions.enabled: "true"
+    spark.sql.adaptive.skewJoin.enabled: "true"
+    spark.serializer: org.apache.spark.serializer.KryoSerializer
+    
+    # Iceberg optimizations
+    spark.sql.iceberg.vectorization.enabled: "true"
+    spark.sql.iceberg.planning.preserve-data-grouping: "true"
+    spark.sql.iceberg.merge.cardinality-check.enabled: "false"
+    
+    # S3 configuration for Ceph with performance optimizations
     spark.hadoop.fs.s3a.endpoint: http://rook-ceph-rgw-storage.storage.svc:80
     spark.hadoop.fs.s3a.path.style.access: "true"
     spark.hadoop.fs.s3a.fast.upload: "true"
     spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    spark.hadoop.fs.s3a.block.size: "134217728"
+    spark.hadoop.fs.s3a.multipart.size: "67108864"
+    spark.hadoop.fs.s3a.multipart.threshold: "134217728"
+    spark.hadoop.fs.s3a.connection.maximum: "100"
+    spark.hadoop.fs.s3a.threads.max: "10"
+    spark.hadoop.fs.s3a.connection.establish.timeout: "5000"
+    spark.hadoop.fs.s3a.connection.timeout: "200000"
+    
     # Event logging
     spark.eventLog.enabled: "true"
     spark.eventLog.dir: "s3a://iceberg-test/spark-events"
+    
+    # Memory and execution optimizations
+    spark.sql.execution.arrow.pyspark.enabled: "true"
+    spark.sql.adaptive.localShuffleReader.enabled: "true"
+    spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled: "true"
   restartPolicy:
     type: Never
   driver:

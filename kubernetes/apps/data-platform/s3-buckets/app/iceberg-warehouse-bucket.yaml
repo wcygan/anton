@@ -1,0 +1,33 @@
+---
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: iceberg-warehouse
+  namespace: data-platform
+  labels:
+    app.kubernetes.io/name: iceberg-warehouse
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: data-platform
+spec:
+  generateBucketName: iceberg-warehouse
+  storageClassName: ceph-bucket
+  additionalConfig:
+    maxBuckets: 1
+    # Lifecycle configuration for analytics workloads
+    lifecycleConfiguration: |
+      <LifecycleConfiguration>
+        <Rule>
+          <ID>delete-old-versions</ID>
+          <Status>Enabled</Status>
+          <NoncurrentVersionExpiration>
+            <NoncurrentDays>30</NoncurrentDays>
+          </NoncurrentVersionExpiration>
+        </Rule>
+        <Rule>
+          <ID>abort-incomplete-multipart</ID>
+          <Status>Enabled</Status>
+          <AbortIncompleteMultipartUpload>
+            <DaysAfterInitiation>7</DaysAfterInitiation>
+          </AbortIncompleteMultipartUpload>
+        </Rule>
+      </LifecycleConfiguration>
