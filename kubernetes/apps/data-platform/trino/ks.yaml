@@ -12,7 +12,7 @@ spec:
   interval: 30m
   timeout: 15m
   prune: true
-  wait: true
+  wait: false
   path: ./kubernetes/apps/data-platform/trino/app
   sourceRef:
     kind: GitRepository
@@ -23,8 +23,3 @@ spec:
       namespace: flux-system
     - name: nessie
       namespace: flux-system
-  healthChecks:
-    - apiVersion: helm.toolkit.fluxcd.io/v2
-      kind: HelmRelease
-      name: trino
-      namespace: data-platform
