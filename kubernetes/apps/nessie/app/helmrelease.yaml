@@ -57,14 +57,14 @@ spec:
           endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
           region: "us-east-1"
           bucket: "iceberg-data"
-          # S3 credentials from existing Ceph user
+          # S3 credentials from 1Password via ExternalSecret
           accessKeyId:
             secret:
-              name: rook-ceph-object-user-storage-iceberg
+              name: nessie-s3-credentials
               key: AccessKey
           secretAccessKey:
             secret:
-              name: rook-ceph-object-user-storage-iceberg
+              name: nessie-s3-credentials
               key: SecretKey
 
     # Authentication disabled for initial deployment
