@@ -99,27 +99,17 @@ spec:
         iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/api/iceberg
         iceberg.rest-catalog.warehouse=s3://iceberg-test/
         
-        # Performance optimizations
-        iceberg.split-size=134217728
+        # File format configuration
         iceberg.file-format=PARQUET
         iceberg.parquet.use-column-index=true
-        iceberg.vectorization.enabled=true
-        iceberg.projection-pushdown.enabled=true
-        iceberg.dynamic-filtering.enabled=true
         
-        # S3 optimizations for Ceph
-        hive.s3.endpoint=http://rook-ceph-rgw-storage.storage.svc
-        hive.s3.path-style-access=true
-        hive.s3.ssl.enabled=false
-        hive.s3.max-connections=500
-        hive.s3.multipart.min-file-size=67108864
-        hive.s3.multipart.min-part-size=33554432
-        hive.s3.streaming.upload.enabled=true
+        # S3 configuration for Ceph object storage
+        fs.s3.endpoint=http://rook-ceph-rgw-storage.storage.svc
+        fs.s3.path-style-access=true
+        fs.s3.ssl.enabled=false
         
-        # Metadata caching
-        iceberg.metadata.cache.enabled=true
-        iceberg.metadata.cache.size=1000
-        iceberg.metadata.cache.ttl=60m
+        # Table statistics and performance
+        iceberg.table-statistics-enabled=true
 
     # Security context
     securityContext:
