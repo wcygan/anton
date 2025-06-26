@@ -8,4 +8,4 @@ spec:
   generateBucketName: loki
   storageClassName: ceph-bucket
   additionalConfig:
-    maxBuckets: 1
+    maxBuckets: "1"

@@ -12,7 +12,7 @@ spec:
   generateBucketName: iceberg-warehouse
   storageClassName: ceph-bucket
   additionalConfig:
-    maxBuckets: 1
+    maxBuckets: "1"
     # Lifecycle configuration for analytics workloads
     lifecycleConfiguration: |
       <LifecycleConfiguration>

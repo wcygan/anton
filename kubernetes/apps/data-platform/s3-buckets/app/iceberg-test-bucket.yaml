@@ -12,7 +12,7 @@ spec:
   generateBucketName: iceberg-test
   storageClassName: ceph-bucket
   additionalConfig:
-    maxBuckets: 1
+    maxBuckets: "1"
     # Basic lifecycle configuration for test workloads
     lifecycleConfiguration: |
       <LifecycleConfiguration>
