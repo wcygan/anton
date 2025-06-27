@@ -27,7 +27,7 @@ spec:
     
     coordinator:
       jvm:
-        maxHeapSize: "8G"
+        maxHeapSize: "2G"  # Reduced from 8G
         gcMethod:
           type: "UseG1GC"
           g1:
@@ -36,7 +36,7 @@ spec:
         additionalJvmOptions:
           - "-XX:+UnlockExperimentalVMOptions"
           - "-XX:+DisableExplicitGC"
-          - "-XX:ReservedCodeCacheSize=512M"
+          - "-XX:ReservedCodeCacheSize=256M"  # Reduced from 512M
           - "-XX:PerMethodRecompilationCutoff=10000"
           - "-XX:PerBytecodeRecompilationCutoff=10000"
           - "-Djdk.attach.allowAttachSelf=true"
@@ -45,11 +45,11 @@ spec:
           - "-XX:+HeapDumpOnOutOfMemoryError"
       resources:
         requests:
-          memory: "8Gi"
-          cpu: "2000m"
+          memory: "2Gi"   # Reduced from 8Gi
+          cpu: "500m"     # Reduced from 2000m
         limits:
-          memory: "10Gi"  # Some headroom for off-heap usage
-          cpu: "4000m"
+          memory: "4Gi"   # Reduced from 10Gi
+          cpu: "1000m"    # Reduced from 4000m
       nodeSelector:
         kubernetes.io/arch: amd64
       tolerations:
@@ -60,7 +60,7 @@ spec:
 
     worker:
       jvm:
-        maxHeapSize: "24G"
+        maxHeapSize: "4G"  # Reduced from 24G
         gcMethod:
           type: "UseG1GC"
           g1:
@@ -72,17 +72,17 @@ spec:
           - "-XX:+ExplicitGCInvokesConcurrent"
           - "-XX:+ExitOnOutOfMemoryError"
           - "-XX:+HeapDumpOnOutOfMemoryError"
-          - "-XX:ReservedCodeCacheSize=512M"
+          - "-XX:ReservedCodeCacheSize=256M"  # Reduced from 512M
           - "-XX:+UnlockExperimentalVMOptions"
           - "-XX:+DisableExplicitGC"
           - "-Djdk.nio.maxCachedBufferSize=2000000"
       resources:
         requests:
-          memory: "24Gi"
-          cpu: "4000m"
+          memory: "4Gi"   # Reduced from 24Gi
+          cpu: "1000m"    # Reduced from 4000m
         limits:
-          memory: "28Gi"  # Headroom for off-heap usage
-          cpu: "6000m"
+          memory: "8Gi"   # Reduced from 28Gi
+          cpu: "2000m"    # Reduced from 6000m
       nodeSelector:
         kubernetes.io/arch: amd64
       tolerations:
