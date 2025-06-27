@@ -96,8 +96,8 @@ spec:
       iceberg: |
         connector.name=iceberg
         iceberg.catalog.type=rest
-        iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/api/iceberg
-        iceberg.rest-catalog.warehouse=s3://iceberg-test/
+        iceberg.rest-catalog.uri=http://nessie.data-platform.svc.cluster.local:19120/iceberg
+        iceberg.rest-catalog.warehouse=s3://iceberg-data/
 
     # Security context
     securityContext:

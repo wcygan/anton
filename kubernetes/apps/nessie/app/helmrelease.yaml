@@ -47,25 +47,34 @@ spec:
         username: postgres_username
         password: postgres_password
 
-    # Catalog settings
+    # Catalog settings - Iceberg REST API configuration
     catalog:
       # Default branch
       defaultBranch: "main"
-      # Storage configuration for Iceberg tables
-      storage:
+      # REQUIRED: Default warehouse for Iceberg REST API
+      default-warehouse: "iceberg-warehouse"
+      
+      # Warehouse definitions - REQUIRED for Iceberg REST
+      warehouses:
+        iceberg-warehouse:
+          location: "s3://iceberg-data/"
+      
+      # Iceberg configuration defaults pushed to clients
+      iceberg-config-defaults:
+        # S3 FileIO configuration
+        io-impl: "org.apache.iceberg.aws.s3.S3FileIO"
+        s3.endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
+        s3.path-style-access: "true"
+        s3.region: "us-east-1"
+      
+      # Object storage service configuration - REQUIRED for Iceberg REST
+      service:
         s3:
-          endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
-          region: "us-east-1"
-          bucket: "iceberg-data"
-          # S3 credentials from 1Password via ExternalSecret
-          accessKeyId:
-            secret:
-              name: nessie-s3-credentials
-              key: AccessKey
-          secretAccessKey:
-            secret:
-              name: nessie-s3-credentials
-              key: SecretKey
+          default-options:
+            endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
+            region: "us-east-1"
+            auth-type: "STATIC"
+            path-style-access: true
 
     # Authentication disabled for initial deployment
     authentication:
@@ -82,6 +91,19 @@ spec:
       heapSize: "1g"
       # Additional JVM options
       options: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+    # Environment variables for S3 credentials (required for Iceberg REST)
+    env:
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: nessie-s3-credentials
+            key: AccessKey
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: nessie-s3-credentials
+            key: SecretKey
 
     # Liveness and readiness probes
     livenessProbe:
