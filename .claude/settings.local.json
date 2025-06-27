@@ -190,7 +190,9 @@
       "Bash(./scripts/validate-manifests.ts:*)",
       "mcp__filesystem__directory_tree",
       "WebFetch(domain:charts.projectnessie.org)",
-      "Bash(curl:*)"
+      "Bash(trino:*)",
+      "Bash(timeout 30 trino:*)",
+      "mcp__sequential-thinking__sequentialthinking"
     ],
     "deny": [
       "Bash(kubectl delete kustomization cluster-apps -n flux-system)",
