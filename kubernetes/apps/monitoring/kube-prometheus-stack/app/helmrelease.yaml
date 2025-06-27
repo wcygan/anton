@@ -28,37 +28,37 @@ spec:
   # Default values are generally good for a start.
   # You can customize values here as needed, for example:
   values:
-    # Resource limits for all components
+    # Resource limits for all components - optimized based on actual usage
     prometheusOperator:
       resources:
         requests:
-          cpu: 100m
-          memory: 128Mi
+          cpu: 10m      # Reduced from 100m (actual: 1m)
+          memory: 96Mi  # Reduced from 128Mi (actual: 78Mi)
         limits:
-          cpu: 500m
-          memory: 512Mi
+          cpu: 100m     # Reduced from 500m
+          memory: 192Mi # Reduced from 512Mi
 
     prometheus:
       enabled: true
       prometheusSpec:
         resources:
           requests:
-            cpu: 500m
-            memory: 2Gi
+            cpu: 250m    # Reduced from 500m (actual: 148m)
+            memory: 1Gi  # Reduced from 2Gi (actual: 942Mi)
           limits:
-            cpu: 2
-            memory: 4Gi
+            cpu: 500m    # Reduced from 2000m
+            memory: 2Gi  # Reduced from 4Gi
 
     alertmanager:
       enabled: true
       alertmanagerSpec:
         resources:
           requests:
-            cpu: 50m
-            memory: 128Mi
+            cpu: 10m     # Reduced from 50m (actual: 1m)
+            memory: 96Mi # Reduced from 128Mi (actual: 64Mi)
           limits:
-            cpu: 200m
-            memory: 256Mi
+            cpu: 50m     # Reduced from 200m
+            memory: 192Mi # Reduced from 256Mi
 
     grafana:
       enabled: true
@@ -215,21 +215,21 @@ spec:
             
       resources:
         requests:
-          cpu: 300m  # Increased for dashboard operations
-          memory: 1Gi  # Increased for better caching and persistence
+          cpu: 100m   # Reduced from 300m (actual: 52m)
+          memory: 768Mi  # Reduced from 1Gi (actual: 540Mi)
         limits:
-          cpu: 1500m  # Increased for faster dashboard loading
-          memory: 3Gi  # Increased for better caching and UI responsiveness
+          cpu: 500m   # Reduced from 1500m
+          memory: 1.5Gi  # Reduced from 3Gi
 
     kubeStateMetrics:
       enabled: true
       resources:
         requests:
-          cpu: 50m
-          memory: 64Mi
+          cpu: 10m    # Reduced from 50m (actual: 6m)
+          memory: 96Mi  # Increased from 64Mi (actual: 64Mi at limit)
         limits:
-          cpu: 200m
-          memory: 256Mi
+          cpu: 50m    # Reduced from 200m
+          memory: 192Mi # Reduced from 256Mi
 
     nodeExporter:
       enabled: true
