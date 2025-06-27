@@ -136,11 +136,9 @@ spec:
       type: ClusterIP
       port: 8080
 
-    # Additional configuration properties for forwarded headers and authentication
+    # Additional configuration properties for forwarded headers (no authentication)
     additionalConfigProperties:
     - http-server.process-forwarded=true
-    - http-server.authentication.type=INSECURE
-    - internal-communication.shared-secret=trino-cluster-secret
 
     # Ingress disabled - using Tailscale instead
     ingress:
