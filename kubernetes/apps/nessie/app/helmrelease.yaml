@@ -77,8 +77,19 @@ spec:
       storage:
         s3:
           defaultOptions:
+            endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
             region: "us-east-1"
-            authType: "STATIC"  # Use AWS credentials from environment variables
+            authType: "STATIC"
+            pathStyleAccess: true
+            # S3 credentials for catalog service
+            accessKey:
+              secret:
+                name: nessie-s3-credentials
+                key: AccessKey
+            secretKey:
+              secret:
+                name: nessie-s3-credentials
+                key: SecretKey
 
     # Authentication disabled for initial deployment
     authentication:
