@@ -81,7 +81,7 @@ spec:
           labelValue: "1"
         datasources:
           enabled: true
-          defaultDatasourceEnabled: false
+          defaultDatasourceEnabled: true
           
       # Configure dashboard providers with minimal refresh
       dashboardProviders:
@@ -212,28 +212,6 @@ spec:
             # Optimize for streaming
             streamingEnabled: true
             streamingChunkSize: 1000
-        
-        # Prometheus datasource optimizations
-        - name: prometheus
-          type: prometheus
-          access: proxy
-          url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
-          isDefault: true
-          jsonData:
-            timeInterval: 30s  # Align with scrape interval
-            queryTimeout: 300s
-            httpMethod: POST  # Better for large queries
-            # Enable incremental querying
-            incrementalQuerying: true
-            incrementalQueryOverlapWindow: 10m
-            # Optimize query handling
-            disableMetricsLookup: false
-            # Custom query parameters for performance
-            customQueryParameters: "max_source_resolution=5m"
-            # Enable exemplar support
-            exemplarTraceIdDestinations:
-              - name: traceID
-                datasourceUid: tempo
             
       resources:
         requests:
