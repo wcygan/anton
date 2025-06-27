@@ -62,7 +62,7 @@ spec:
       serviceAccountName: lib-bucket-provisioner
       containers:
         - name: lib-bucket-provisioner
-          image: objectivetruth/lib-bucket-provisioner:v0.0.2
+          image: quay.io/noobaa/lib-bucket-provisioner:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
