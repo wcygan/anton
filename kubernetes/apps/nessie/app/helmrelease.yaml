@@ -82,7 +82,11 @@ spec:
             region: "us-east-1"
             authType: "STATIC"
             pathStyleAccess: true
-            # S3 credentials provided via environment variables (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)
+            # S3 credentials from Kubernetes secret (REQUIRED for STATIC auth mode)
+            accessKeySecret:
+              name: nessie-s3-credentials
+              awsAccessKeyId: AccessKey
+              awsSecretAccessKey: SecretKey
 
     # Authentication disabled for initial deployment
     authentication:
