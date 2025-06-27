@@ -81,15 +81,7 @@ spec:
             region: "us-east-1"
             authType: "STATIC"
             pathStyleAccess: true
-            # S3 credentials for catalog service
-            accessKeyId:
-              secret:
-                name: nessie-s3-credentials
-                key: AccessKey
-            secretAccessKey:
-              secret:
-                name: nessie-s3-credentials
-                key: SecretKey
+            # S3 credentials provided via environment variables (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)
 
     # Authentication disabled for initial deployment
     authentication:
