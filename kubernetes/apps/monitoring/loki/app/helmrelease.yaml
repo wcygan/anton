@@ -213,9 +213,9 @@ spec:
       serviceMonitor:
         enabled: true
       selfMonitoring:
-        enabled: true
+        enabled: false  # Disabled - we're using Prometheus stack instead
         grafanaAgent:
-          installOperator: false  # Use existing Prometheus stack
+          installOperator: false
     
     # Disable test
     test:
