@@ -108,7 +108,7 @@ spec:
       options: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
     # Environment variables for S3 credentials (required for Iceberg REST)
-    envVars:
+    extraEnv:
       - name: AWS_ACCESS_KEY_ID
         valueFrom:
           secretKeyRef:
