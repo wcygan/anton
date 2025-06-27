@@ -108,13 +108,24 @@ spec:
       options: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
     # Environment variables for S3 credentials (required for Iceberg REST)
-    env:
+    envVars:
       - name: AWS_ACCESS_KEY_ID
         valueFrom:
           secretKeyRef:
             name: nessie-s3-credentials
             key: AccessKey
       - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: nessie-s3-credentials
+            key: SecretKey
+      # Also try direct configuration properties
+      - name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: nessie-s3-credentials
+            key: AccessKey
+      - name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_SECRET_ACCESS_KEY
         valueFrom:
           secretKeyRef:
             name: nessie-s3-credentials
