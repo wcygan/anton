@@ -44,3 +44,6 @@ spec:
     # Enable ObjectBucketClaims for S3 bucket provisioning
     rbacAggregate:
       enableOBCs: true
+    
+    # Enable the bucket provisioner for ObjectBucketClaims
+    enableOBCs: true
