@@ -1026,4 +1026,6 @@ Example: The `validate-manifests.ts` script achieves 5.7x speedup (5.4s → 0.95
 - Do what has been asked; nothing more, nothing less
 - NEVER create files unless they're absolutely necessary for achieving your goal
 - ALWAYS prefer editing an existing file to creating a new one
+- When fixing issues, update the original file instead of creating new versions (e.g., fix "helmrelease.yaml" directly, don't create "helmrelease-fixed.yaml")
+- When committing changes, ONLY commit files directly related to your current task to avoid conflicts with other agents working on the same branch
 - NEVER proactively create documentation files (*.md) or README files unless explicitly requested

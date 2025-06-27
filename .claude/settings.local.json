@@ -192,6 +192,10 @@
       "WebFetch(domain:charts.projectnessie.org)",
       "Bash(trino:*)",
       "Bash(timeout 30 trino:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "mcp__filesystem__search_files",
+      "Bash(./scripts/calculate-power-costs.ts)",
+      "mcp__sequential-thinking__sequentialthinking",
       "mcp__sequential-thinking__sequentialthinking"
     ],
     "deny": [
