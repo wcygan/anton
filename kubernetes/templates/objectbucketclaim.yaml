@@ -1,0 +1,95 @@
+---
+# ObjectBucketClaim template for automated S3 bucket provisioning
+# This template creates an S3-compatible bucket with automatic credential generation
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: ${APP_NAME}-bucket
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: ${APP_NAME}
+    app.kubernetes.io/component: storage
+spec:
+  # Name to use for the bucket (optional - auto-generated if not specified)
+  # bucketName: ${BUCKET_NAME}
+  
+  # Storage class that handles bucket provisioning
+  storageClassName: ceph-bucket
+  
+  # Additional configuration for bucket policies, lifecycle rules, etc.
+  additionalConfig:
+    # Example lifecycle rule for log rotation
+    lifecycleConfiguration:
+      rules:
+        - id: delete-old-logs
+          status: Enabled
+          prefix: logs/
+          expiration:
+            days: 30
+        - id: transition-to-cold-storage
+          status: Enabled
+          prefix: archive/
+          transitions:
+            - days: 7
+              storageClass: STANDARD_IA
+    
+    # Example bucket policy for read-only access from specific IPs
+    bucketPolicy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: "PublicReadGetObject"
+          Effect: "Allow"
+          Principal: "*"
+          Action:
+            - "s3:GetObject"
+          Resource:
+            - "arn:aws:s3:::${BUCKET_NAME}/*"
+          Condition:
+            IpAddress:
+              aws:SourceIp:
+                - "192.168.1.0/24"
+    
+    # CORS configuration for web applications
+    corsConfiguration:
+      corsRules:
+        - id: web-app-cors
+          allowedMethods:
+            - GET
+            - PUT
+            - POST
+            - DELETE
+          allowedOrigins:
+            - "https://*.${DOMAIN}"
+          allowedHeaders:
+            - "*"
+          maxAgeSeconds: 3600
+---
+# Example usage with External Secrets Operator for credential sync
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ${APP_NAME}-bucket-sync
+  namespace: ${NAMESPACE}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword-connect
+    kind: ClusterSecretStore
+  target:
+    name: ${APP_NAME}-bucket-credentials
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        # Map the auto-generated credentials to a format your app expects
+        AWS_ACCESS_KEY_ID: "{{ .AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .AWS_SECRET_ACCESS_KEY }}"
+        BUCKET_NAME: "{{ .BUCKET_NAME }}"
+        BUCKET_HOST: "{{ .BUCKET_HOST }}"
+        BUCKET_PORT: "{{ .BUCKET_PORT }}"
+        BUCKET_ENDPOINT: "http://{{ .BUCKET_HOST }}:{{ .BUCKET_PORT }}"
+  dataFrom:
+    - extract:
+        # Reference the OBC-generated secret
+        key: ${APP_NAME}-bucket-credentials
+        # This will be populated after we implement the sync automation

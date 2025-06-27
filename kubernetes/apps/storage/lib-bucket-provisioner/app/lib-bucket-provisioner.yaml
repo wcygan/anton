@@ -1,0 +1,86 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lib-bucket-provisioner
+  namespace: storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lib-bucket-provisioner
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch", "create", "update", "patch"]
+  - apiGroups: ["objectbucket.io"]
+    resources: ["objectbucketclaims", "objectbuckets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["objectbucket.io"]
+    resources: ["objectbucketclaims/status", "objectbuckets/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["objectbucket.io"]
+    resources: ["objectbucketclaims/finalizers", "objectbuckets/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lib-bucket-provisioner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lib-bucket-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: lib-bucket-provisioner
+    namespace: storage
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lib-bucket-provisioner
+  namespace: storage
+  labels:
+    app.kubernetes.io/name: lib-bucket-provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lib-bucket-provisioner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lib-bucket-provisioner
+    spec:
+      serviceAccountName: lib-bucket-provisioner
+      containers:
+        - name: lib-bucket-provisioner
+          image: objectivetruth/lib-bucket-provisioner:v0.0.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: WATCH_NAMESPACE
+              value: "" # Watch all namespaces
+            - name: PROVISIONER_NAME
+              value: "rook-ceph.rook.io/bucket"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities:
+              drop:
+                - ALL

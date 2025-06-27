@@ -57,6 +57,9 @@
     "data-platform:perf": "deno run --allow-all scripts/data-platform/performance-test.ts",
     "data-platform:perf:json": "deno run --allow-all scripts/data-platform/performance-test.ts --json",
     "data-platform:perf:trino": "deno run --allow-all scripts/data-platform/performance-test.ts --component=trino",
-    "data-platform:perf:spark": "deno run --allow-all scripts/data-platform/performance-test.ts --component=spark"
+    "data-platform:perf:spark": "deno run --allow-all scripts/data-platform/performance-test.ts --component=spark",
+    "obc:test": "deno run --allow-all scripts/test-obc-provisioning.ts",
+    "obc:sync": "deno run --allow-all scripts/obc-credential-sync.ts",
+    "obc:sync:watch": "deno run --allow-all scripts/obc-credential-sync.ts --watch"
   }
 }

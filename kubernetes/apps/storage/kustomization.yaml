@@ -17,3 +17,5 @@ resources:
   - ./rook-ceph-objectstore/ks.yaml
   # Phase 4: Data Platform S3 users
   - ./iceberg-s3-user/ks.yaml
+  # Phase 5: ObjectBucketClaim controller for automated provisioning
+  - ./lib-bucket-provisioner/ks.yaml

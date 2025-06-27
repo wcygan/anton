@@ -147,10 +147,6 @@ spec:
         limits:
           cpu: "1000m"
           memory: "2Gi"
-      # Ensure unbuffered output for log collection
-      env:
-        - name: PYTHONUNBUFFERED
-          value: "1"
 
     # If using KubernetesExecutor, configure worker resources
     workers:
@@ -236,9 +232,6 @@ spec:
         limits:
           cpu: "500m"
           memory: "1Gi"
-      env:
-        - name: PYTHONUNBUFFERED
-          value: "1"
     
     # Pod template with Vector sidecar for KubernetesExecutor
     # Note: The Airflow Helm chart handles database connection automatically
@@ -260,9 +253,6 @@ spec:
               name: vector-sidecar-config
         containers:
           - name: base
-            env:
-              - name: PYTHONUNBUFFERED
-                value: "1"
           - name: vector
             image: timberio/vector:0.39.0-debian
             args:

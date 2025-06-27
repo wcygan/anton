@@ -1,11 +1,109 @@
 ---
+# Automated S3 bucket provisioning for Loki using ObjectBucketClaim
+# This replaces the manual bucket creation process
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:
   name: loki-bucket
   namespace: monitoring
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/component: storage
 spec:
-  generateBucketName: loki
+  # Use existing bucket name to maintain compatibility
+  bucketName: loki
   storageClassName: ceph-bucket
+  
+  # Loki-specific bucket configuration
   additionalConfig:
-    maxBuckets: "1"
+    # Lifecycle rules for log retention
+    lifecycleConfiguration:
+      rules:
+        # Delete old chunks after retention period
+        - id: delete-old-chunks
+          status: Enabled
+          prefix: chunks/
+          expiration:
+            days: 30
+        
+        # Clean up old index files
+        - id: delete-old-index
+          status: Enabled
+          prefix: index/
+          expiration:
+            days: 30
+        
+        # Archive ruler data
+        - id: archive-ruler
+          status: Enabled
+          prefix: ruler/
+          transitions:
+            - days: 7
+              storageClass: STANDARD_IA
+    
+    # Bucket policy for Loki components
+    bucketPolicy:
+      Version: "2012-10-17"
+      Statement:
+        - Sid: "LokiAccess"
+          Effect: "Allow"
+          Principal:
+            AWS: "*"  # Restricted by k8s network policies
+          Action:
+            - "s3:ListBucket"
+            - "s3:GetObject"
+            - "s3:PutObject"
+            - "s3:DeleteObject"
+          Resource:
+            - "arn:aws:s3:::loki"
+            - "arn:aws:s3:::loki/*"
+---
+# ExternalSecret to sync OBC credentials to 1Password
+# This will be created automatically by obc-credential-sync.ts
+# Included here for reference
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: loki-bucket-sync
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/managed-by: obc-credential-sync
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword-connect
+    kind: ClusterSecretStore
+  target:
+    name: loki-s3-credentials
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        # Loki expects these specific key names
+        access_key_id: "{{ .AWS_ACCESS_KEY_ID }}"
+        secret_access_key: "{{ .AWS_SECRET_ACCESS_KEY }}"
+        endpoint: "http://{{ .BUCKET_HOST }}:{{ .BUCKET_PORT }}"
+        bucket_name: "{{ .BUCKET_NAME }}"
+        region: "us-east-1"  # Ceph doesn't care but Loki requires it
+  data:
+    - secretKey: AWS_ACCESS_KEY_ID
+      remoteRef:
+        key: obc-monitoring-loki-bucket
+        property: Access Key ID
+    - secretKey: AWS_SECRET_ACCESS_KEY
+      remoteRef:
+        key: obc-monitoring-loki-bucket
+        property: Secret Access Key
+    - secretKey: BUCKET_NAME
+      remoteRef:
+        key: obc-monitoring-loki-bucket
+        property: Bucket Name
+    - secretKey: BUCKET_HOST
+      remoteRef:
+        key: obc-monitoring-loki-bucket
+        property: Bucket Host
+    - secretKey: BUCKET_PORT
+      remoteRef:
+        key: obc-monitoring-loki-bucket
+        property: Bucket Port
