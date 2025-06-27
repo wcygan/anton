@@ -21,6 +21,5 @@ spec:
   dependsOn:
     - name: data-platform
       namespace: flux-system
-    # Temporarily removed nessie dependency to unblock Trino configuration update
-    # - name: nessie
-    #   namespace: flux-system
+    - name: nessie
+      namespace: flux-system
