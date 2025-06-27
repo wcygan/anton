@@ -66,12 +66,17 @@ spec:
           s3.endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
           s3.path-style-access: "true"
           s3.region: "us-east-1"
+          # S3 credentials from environment variables
+          s3.access-key-id: "${AWS_ACCESS_KEY_ID}"
+          s3.secret-access-key: "${AWS_SECRET_ACCESS_KEY}"
         
         # Warehouse definitions - REQUIRED for Iceberg REST
         warehouses:
           - name: "iceberg-warehouse"
             location: "s3://iceberg-data/"
-            configDefaults: {}
+            configDefaults:
+              s3.access-key-id: "${AWS_ACCESS_KEY_ID}"
+              s3.secret-access-key: "${AWS_SECRET_ACCESS_KEY}"
       
       # Object storage service configuration
       storage:
