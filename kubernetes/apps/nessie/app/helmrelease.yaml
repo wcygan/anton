@@ -82,11 +82,11 @@ spec:
             authType: "STATIC"
             pathStyleAccess: true
             # S3 credentials for catalog service
-            accessKey:
+            accessKeyId:
               secret:
                 name: nessie-s3-credentials
                 key: AccessKey
-            secretKey:
+            secretAccessKey:
               secret:
                 name: nessie-s3-credentials
                 key: SecretKey
