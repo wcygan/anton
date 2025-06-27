@@ -49,32 +49,36 @@ spec:
 
     # Catalog settings - Iceberg REST API configuration
     catalog:
-      # Default branch
+      # REQUIRED: Enable Iceberg REST catalog service
+      enabled: true
+      # Default branch configuration
       defaultBranch: "main"
-      # REQUIRED: Default warehouse for Iceberg REST API
-      default-warehouse: "iceberg-warehouse"
       
-      # Warehouse definitions - REQUIRED for Iceberg REST
-      warehouses:
-        iceberg-warehouse:
-          location: "s3://iceberg-data/"
+      # Iceberg-specific configuration
+      iceberg:
+        # REQUIRED: Default warehouse symbolic name
+        defaultWarehouse: "iceberg-warehouse"
+        
+        # Global Iceberg client configuration defaults
+        configDefaults:
+          # S3 FileIO configuration
+          io-impl: "org.apache.iceberg.aws.s3.S3FileIO"
+          s3.endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
+          s3.path-style-access: "true"
+          s3.region: "us-east-1"
+        
+        # Warehouse definitions - REQUIRED for Iceberg REST
+        warehouses:
+          - name: "iceberg-warehouse"
+            location: "s3://iceberg-data/"
+            configDefaults: {}
       
-      # Iceberg configuration defaults pushed to clients
-      iceberg-config-defaults:
-        # S3 FileIO configuration
-        io-impl: "org.apache.iceberg.aws.s3.S3FileIO"
-        s3.endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
-        s3.path-style-access: "true"
-        s3.region: "us-east-1"
-      
-      # Object storage service configuration - REQUIRED for Iceberg REST
-      service:
+      # Object storage service configuration
+      storage:
         s3:
-          default-options:
-            endpoint: "http://rook-ceph-rgw-ceph-objectstore.storage.svc.cluster.local"
+          defaultOptions:
             region: "us-east-1"
-            auth-type: "STATIC"
-            path-style-access: true
+            authType: "STATIC"  # Use AWS credentials from environment variables
 
     # Authentication disabled for initial deployment
     authentication:
