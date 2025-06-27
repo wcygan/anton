@@ -187,7 +187,10 @@
       "Bash(./scripts/test-spark-s3-simple.ts)",
       "WebFetch(domain:kubernetes.io)",
       "mcp__kubernetes__kubectl_rollout",
-      "Bash(./scripts/validate-manifests.ts:*)"
+      "Bash(./scripts/validate-manifests.ts:*)",
+      "mcp__filesystem__directory_tree",
+      "WebFetch(domain:charts.projectnessie.org)",
+      "Bash(curl:*)"
     ],
     "deny": [
       "Bash(kubectl delete kustomization cluster-apps -n flux-system)",

@@ -1,3 +1,5 @@
+.idea
+
 # Secrets
 *.pub
 *.key
