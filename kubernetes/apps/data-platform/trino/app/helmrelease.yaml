@@ -136,9 +136,11 @@ spec:
       type: ClusterIP
       port: 8080
 
-    # Additional configuration properties for forwarded headers
+    # Additional configuration properties for forwarded headers and authentication
     additionalConfigProperties:
     - http-server.process-forwarded=true
+    - http-server.authentication.type=INSECURE
+    - web-ui.user=admin
 
     # Ingress disabled - using Tailscale instead
     ingress:
