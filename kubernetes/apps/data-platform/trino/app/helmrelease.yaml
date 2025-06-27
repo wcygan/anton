@@ -140,6 +140,7 @@ spec:
     additionalConfigProperties:
     - http-server.process-forwarded=true
     - http-server.authentication.type=INSECURE
+    - internal-communication.shared-secret=trino-cluster-secret
 
     # Ingress disabled - using Tailscale instead
     ingress:
