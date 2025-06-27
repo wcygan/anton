@@ -140,7 +140,6 @@ spec:
     additionalConfigProperties:
     - http-server.process-forwarded=true
     - http-server.authentication.type=INSECURE
-    - web-ui.user=admin
 
     # Ingress disabled - using Tailscale instead
     ingress:
