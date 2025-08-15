@@ -15,48 +15,11 @@ spec:
   storageClassName: ceph-bucket
   
   # Loki-specific bucket configuration
+  # Note: Complex lifecycle and policy configs must be applied via Ceph tools
+  # Only simple string key-value pairs are supported in additionalConfig
   additionalConfig:
-    # Lifecycle rules for log retention
-    lifecycleConfiguration:
-      rules:
-        # Delete old chunks after retention period
-        - id: delete-old-chunks
-          status: Enabled
-          prefix: chunks/
-          expiration:
-            days: 30
-        
-        # Clean up old index files
-        - id: delete-old-index
-          status: Enabled
-          prefix: index/
-          expiration:
-            days: 30
-        
-        # Archive ruler data
-        - id: archive-ruler
-          status: Enabled
-          prefix: ruler/
-          transitions:
-            - days: 7
-              storageClass: STANDARD_IA
-    
-    # Bucket policy for Loki components
-    bucketPolicy:
-      Version: "2012-10-17"
-      Statement:
-        - Sid: "LokiAccess"
-          Effect: "Allow"
-          Principal:
-            AWS: "*"  # Restricted by k8s network policies
-          Action:
-            - "s3:ListBucket"
-            - "s3:GetObject"
-            - "s3:PutObject"
-            - "s3:DeleteObject"
-          Resource:
-            - "arn:aws:s3:::loki"
-            - "arn:aws:s3:::loki/*"
+    maxObjects: "1000000"  # Allow large number of objects for logs
+    maxSize: "100Gi"       # Set storage limit for Loki bucket
 ---
 # ExternalSecret to sync OBC credentials to 1Password
 # This will be created automatically by obc-credential-sync.ts

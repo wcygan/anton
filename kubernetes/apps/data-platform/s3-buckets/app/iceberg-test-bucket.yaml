@@ -11,19 +11,8 @@ metadata:
 spec:
   generateBucketName: iceberg-test
   storageClassName: ceph-bucket
+  # Note: Complex lifecycle configs must be applied via Ceph tools
+  # Only simple string key-value pairs are supported in additionalConfig  
   additionalConfig:
-    maxBuckets: "1"
-    # Basic lifecycle configuration for test workloads
-    lifecycleConfiguration: |
-      <LifecycleConfiguration>
-        <Rule>
-          <ID>cleanup-test-data</ID>
-          <Status>Enabled</Status>
-          <Expiration>
-            <Days>90</Days>
-          </Expiration>
-          <NoncurrentVersionExpiration>
-            <NoncurrentDays>7</NoncurrentDays>
-          </NoncurrentVersionExpiration>
-        </Rule>
-      </LifecycleConfiguration>
+    maxObjects: "10000"  # Reasonable limit for test data
+    maxSize: "10Gi"      # 10GB limit for test bucket

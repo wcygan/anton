@@ -16,53 +16,18 @@ spec:
   # Storage class that handles bucket provisioning
   storageClassName: ceph-bucket
   
-  # Additional configuration for bucket policies, lifecycle rules, etc.
+  # Additional configuration - ONLY simple string key-value pairs supported
+  # Complex configs like lifecycle rules, policies, CORS must be applied via Ceph tools
   additionalConfig:
-    # Example lifecycle rule for log rotation
-    lifecycleConfiguration:
-      rules:
-        - id: delete-old-logs
-          status: Enabled
-          prefix: logs/
-          expiration:
-            days: 30
-        - id: transition-to-cold-storage
-          status: Enabled
-          prefix: archive/
-          transitions:
-            - days: 7
-              storageClass: STANDARD_IA
+    # Basic storage limits (all values must be strings)
+    maxObjects: "100000"   # Maximum number of objects allowed
+    maxSize: "50Gi"        # Maximum storage size for bucket
     
-    # Example bucket policy for read-only access from specific IPs
-    bucketPolicy:
-      Version: "2012-10-17"
-      Statement:
-        - Sid: "PublicReadGetObject"
-          Effect: "Allow"
-          Principal: "*"
-          Action:
-            - "s3:GetObject"
-          Resource:
-            - "arn:aws:s3:::${BUCKET_NAME}/*"
-          Condition:
-            IpAddress:
-              aws:SourceIp:
-                - "192.168.1.0/24"
-    
-    # CORS configuration for web applications
-    corsConfiguration:
-      corsRules:
-        - id: web-app-cors
-          allowedMethods:
-            - GET
-            - PUT
-            - POST
-            - DELETE
-          allowedOrigins:
-            - "https://*.${DOMAIN}"
-          allowedHeaders:
-            - "*"
-          maxAgeSeconds: 3600
+    # NOTE: The following are NOT supported in additionalConfig:
+    # - lifecycleConfiguration (use Ceph lifecycle policies)
+    # - bucketPolicy (use Ceph bucket policies)
+    # - corsConfiguration (use Ceph CORS config)
+    # - Any complex YAML/JSON structures
 ---
 # Example usage with External Secrets Operator for credential sync
 apiVersion: external-secrets.io/v1

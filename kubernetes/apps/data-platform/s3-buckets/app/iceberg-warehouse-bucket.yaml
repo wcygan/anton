@@ -11,23 +11,8 @@ metadata:
 spec:
   generateBucketName: iceberg-warehouse
   storageClassName: ceph-bucket
+  # Note: Complex lifecycle configs must be applied via Ceph tools
+  # Only simple string key-value pairs are supported in additionalConfig
   additionalConfig:
-    maxBuckets: "1"
-    # Lifecycle configuration for analytics workloads
-    lifecycleConfiguration: |
-      <LifecycleConfiguration>
-        <Rule>
-          <ID>delete-old-versions</ID>
-          <Status>Enabled</Status>
-          <NoncurrentVersionExpiration>
-            <NoncurrentDays>30</NoncurrentDays>
-          </NoncurrentVersionExpiration>
-        </Rule>
-        <Rule>
-          <ID>abort-incomplete-multipart</ID>
-          <Status>Enabled</Status>
-          <AbortIncompleteMultipartUpload>
-            <DaysAfterInitiation>7</DaysAfterInitiation>
-          </AbortIncompleteMultipartUpload>
-        </Rule>
-      </LifecycleConfiguration>
+    maxObjects: "500000"  # Allow large datasets for analytics
+    maxSize: "1Ti"        # Set 1TB limit for warehouse data
