@@ -24,5 +24,4 @@ resources:
   
   # Application workloads
   - ./data-platform/ks.yaml
-  - ./nessie
   - ./kubeai

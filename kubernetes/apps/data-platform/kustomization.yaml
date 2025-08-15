@@ -11,8 +11,5 @@ resources:
   # Phase 1: S3 Storage - Automated bucket provisioning
   - ./s3-buckets/ks.yaml
   
-  # Phase 1: Metadata Backup Procedures  
-  - ./nessie-backup/ks.yaml
-  
   # Production Readiness: Monitoring and Resource Management
   - ./monitoring/ks.yaml
