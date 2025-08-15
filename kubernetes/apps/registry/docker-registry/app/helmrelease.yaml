@@ -1,0 +1,62 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: docker-registry
+  namespace: registry
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: docker-registry
+      version: "2.2.3"
+      sourceRef:
+        kind: HelmRepository
+        name: twuni
+        namespace: flux-system
+  values:
+    replicaCount: 1
+    
+    image:
+      repository: registry
+      tag: "2.8.3"
+      pullPolicy: IfNotPresent
+    
+    # Storage with Ceph
+    persistence:
+      enabled: true
+      storageClass: ceph-block
+      accessMode: ReadWriteOnce
+      size: 50Gi
+    
+    # Security - basic auth
+    secrets:
+      htpasswd: "admin:$2y$10$htKkdPYNpe3SjIaOvE3Dn.LHqJMJEqb2RUwH0Xmg2F8zBqJ2hOEUa" # admin:admin123
+    
+    # Internal ingress
+    ingress:
+      enabled: true
+      className: internal
+      hosts:
+        - host: registry.anton.local
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: registry-tls
+          hosts:
+            - registry.anton.local
+    
+    # Resources
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    
+    # Health checks
+    health:
+      storagedriver:
+        enabled: false

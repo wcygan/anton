@@ -13,6 +13,7 @@ resources:
   - ./storage
   - ./cnpg-system
   - ./database
+  - ./registry
   
   # Networking
   - ./network
