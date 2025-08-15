@@ -18,11 +18,10 @@
     'prEditedNotification',
     'prIgnoreNotification',
   ],
-  schedule: [
-    'before 6am every weekday',
-  ],
-  prConcurrentLimit: 3,
-  minimumReleaseAge: '1 day',
+  // Removed restrictive schedule - allow updates at any time
+  // schedule: ['at any time'],
+  prConcurrentLimit: 10,
+  minimumReleaseAge: '3 hours',
   ignorePaths: [
     '**/*.sops.*',
   ],
