@@ -197,7 +197,12 @@
       "Bash(./scripts/calculate-power-costs.ts)",
       "mcp__sequential-thinking__sequentialthinking",
       "mcp__sequential-thinking__sequentialthinking",
-      "WebSearch"
+      "WebSearch",
+      "Bash(gh repo view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh api:*)",
+      "Bash(git log:*)",
+      "Bash(gh issue view:*)"
     ],
     "deny": [
       "Bash(kubectl delete kustomization cluster-apps -n flux-system)",
