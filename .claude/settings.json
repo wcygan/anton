@@ -27,6 +27,60 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && CLAUDE_LAST_COMMAND=\"$CLAUDE_BASH_COMMAND\" ./scripts/hooks/flux-health-check.ts",
+            "description": "Monitor Flux deployment health after reconciliation",
+            "timeout": 8000,
+            "suppressOutput": false
+          },
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && CLAUDE_LAST_COMMAND=\"$CLAUDE_BASH_COMMAND\" ./scripts/hooks/storage-health-check.ts",
+            "description": "Check Ceph storage health after storage operations",
+            "timeout": 8000,
+            "suppressOutput": false
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && echo \"$CLAUDE_USER_PROMPT\" | ./scripts/hooks/prompt-guardian.ts",
+            "description": "Analyze user prompts for risky operations",
+            "timeout": 3000,
+            "suppressOutput": false
+          },
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && CLAUDE_SESSION_START=true ./scripts/hooks/cluster-context.ts",
+            "description": "Inject cluster context at session start",
+            "timeout": 5000,
+            "suppressOutput": false
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && ./scripts/hooks/session-summary.ts",
+            "description": "Generate session summary and rollback commands",
+            "timeout": 5000,
+            "suppressOutput": false
+          }
+        ]
+      }
     ]
   }
 }

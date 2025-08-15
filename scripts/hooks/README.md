@@ -108,13 +108,55 @@ Test individual hooks manually:
 ./scripts/hooks/manifest-validator.ts deployment.yaml
 ```
 
-## Phase 2 Hooks (Planned)
+## Phase 2-4 Hooks (Active)
 
-- **prompt-guardian.ts** - Analyze risky user prompts
-- **cluster-context.ts** - Inject cluster state context
-- **flux-health-check.ts** - Monitor deployment health
-- **storage-health-check.ts** - Validate Ceph health
-- **session-summary.ts** - Generate change reports
+### 🛡️ prompt-guardian.ts
+**Purpose**: Analyze user prompts for risky operations
+**Trigger**: UserPromptSubmit
+**Features**:
+- Detects destructive operations (delete all, wipe, reset)
+- Identifies infrastructure changes
+- Injects safety context and alternatives
+- Reminds about golden rules for critical operations
+**Override**: `FORCE_PROMPT_GUARDIAN=true`
+
+### 🌐 cluster-context.ts  
+**Purpose**: Inject cluster health context at session start
+**Trigger**: UserPromptSubmit (first prompt)
+**Features**:
+- Quick cluster health check (nodes, Flux, critical workloads)
+- Caches context for 5 minutes for speed
+- Non-blocking on failures
+**Override**: `SKIP_CLUSTER_CONTEXT=true`
+
+### 🔄 flux-health-check.ts
+**Purpose**: Monitor Flux deployments after reconciliation
+**Trigger**: PostToolUse after `flux reconcile` commands
+**Features**:
+- Quick check for failing Flux resources
+- Suggests rollback commands
+- Shows recent reconciliations
+**Override**: `SKIP_FLUX_CHECK=true`
+
+### 🗄️ storage-health-check.ts
+**Purpose**: Monitor Ceph storage health
+**Trigger**: PostToolUse for storage-related operations
+**Features**:
+- Checks Ceph cluster health and OSD status
+- Monitors PVC binding status
+- Blocks operations if storage unhealthy
+**Override**: `SKIP_STORAGE_CHECK=true`
+
+### 📋 session-summary.ts
+**Purpose**: Generate session summary and rollback commands
+**Trigger**: Stop event (session end)
+**Features**:
+- Lists all modified files
+- Shows Git changes
+- Identifies affected Flux resources
+- Generates rollback commands
+- Saves summary to JSON file
+**Override**: `SKIP_SESSION_SUMMARY=true`
 
 ## Troubleshooting
 
