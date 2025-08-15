@@ -49,3 +49,16 @@ patches:
         path: /metadata/annotations
         value:
           storageclass.kubernetes.io/is-default-class: "true"
+  - target:
+      kind: Deployment
+      name: local-path-provisioner
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi

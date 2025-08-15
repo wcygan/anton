@@ -44,6 +44,9 @@ spec:
     prometheus:
       enabled: true
       prometheusSpec:
+        # Enable remote write receiver for Alloy agents
+        enableFeatures:
+          - remote-write-receiver
         resources:
           requests:
             cpu: 250m    # Reduced from 500m (actual: 148m)
