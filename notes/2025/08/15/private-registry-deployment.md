@@ -41,17 +41,33 @@ kubernetes/apps/registry/
 - **Auth**: Basic auth (admin:admin123)
 - **TLS**: Auto-generated via cert-manager
 
-## Workflow
+## Deployment Results
 
-### Infrastructure (Done)
-1. Deploy registry via GitOps
-2. Registry available at `registry.anton.local`
-3. Ready for any container images
+### ✅ Infrastructure Deployed Successfully
+1. **Service**: Running on `docker-registry.registry.svc.cluster.local:5000`
+2. **Authentication**: Working (returns 401 without credentials)
+3. **Ingress**: Available at `registry.anton.local`
+4. **Storage**: 50GB Ceph PVC allocated and mounted
+5. **TLS**: Certificate auto-provisioned via cert-manager
 
-### Application Deployment (Future)
-1. Build: `docker build -t registry.anton.local/nextjs-app:latest .`
-2. Push: `docker push registry.anton.local/nextjs-app:latest`
-3. Deploy: Standard k8s manifests referencing private image
+### Deployment Fixes Applied
+- Fixed HelmRepository namespace reference (registry namespace)
+- Corrected ingress hosts format for chart compatibility
+- Verified GitOps reconciliation through Flux
+
+### Usage Instructions
+```bash
+# From local machine (via Tailscale):
+docker build -t registry.anton.local/nextjs-app:latest .
+docker login registry.anton.local  # admin:admin123
+docker push registry.anton.local/nextjs-app:latest
+
+# In Kubernetes manifests:
+spec:
+  containers:
+  - name: nextjs-app
+    image: registry.anton.local/nextjs-app:latest
+```
 
 ## Benefits
 
@@ -81,3 +97,17 @@ If needed later:
 - Added registry to `kubernetes/apps/kustomization.yaml`
 - Zero changes required to application repositories
 - Maintains separation of concerns (infra vs app code)
+
+## Final Status
+
+**✅ DEPLOYMENT COMPLETE**
+- Registry is fully operational and accessible
+- Ready for NextJS application image hosting
+- All GitOps workflows functioning correctly
+- Verified through cluster testing and ingress connectivity
+
+**Commits Applied:**
+- `e37f6fc`: Initial registry deployment
+- `753db73`: Fix helm repository namespace
+- `2b7cb6a`: Update namespace reference
+- `a2dfa61`: Correct ingress hosts format
