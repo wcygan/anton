@@ -15,7 +15,7 @@ resources:
   # - ./rook-ceph-filesystem/ks.yaml
   # Phase 3: S3 storage for Loki
   - ./rook-ceph-objectstore/ks.yaml
-  # Phase 4: Data Platform S3 users
-  - ./iceberg-s3-user/ks.yaml
+  # Phase 4: S3 users for applications
+  # ./iceberg-s3-user/ks.yaml - REMOVED: Data platform decommissioned
   # Phase 5: ObjectBucketClaim support provided by Rook operator natively
   # ./lib-bucket-provisioner/ks.yaml - REMOVED: Redundant with Rook OBC support
