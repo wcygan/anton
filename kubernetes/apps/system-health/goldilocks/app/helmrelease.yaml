@@ -49,10 +49,8 @@ spec:
           cpu: 100m
           memory: 128Mi
           
-      # Flags for controller
-      flags:
-        on-by-default: false  # Don't enable VPA for all namespaces by default
-        exclude-containers: "linkerd-proxy,istio-proxy"  # Exclude service mesh sidecars
+      # Flags for controller (on-by-default: false is default behavior)
+      flags: {}
         
       deployment:
         replicas: 1
@@ -109,8 +107,10 @@ spec:
             - ALL
             
       # Dashboard flags
-      flags:
-        exclude-containers: "linkerd-proxy,istio-proxy"
+      flags: {}
+      
+      # Exclude service mesh sidecars from dashboard
+      excludeContainers: "linkerd-proxy,istio-proxy"
     
     # Enable VPA for specific namespaces only
     # Use namespace labels: goldilocks.fairwinds.com/enabled=true
