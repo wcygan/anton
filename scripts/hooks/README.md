@@ -65,15 +65,38 @@ The hooks transform Claude Code into a **production-ready cluster operator** tha
 **Validates**: YAML syntax, K8s schema, Flux v2 patterns, HelmRelease structure
 **Override**: `FORCE_MANIFEST_VALIDATION=true`
 
-## Hook Execution Order
+## AI Agent Alignment Through Speed
 
-Hooks run in sequence for Write/Edit/MultiEdit operations:
+**The faster hooks execute, the better the AI agent alignment:**
 
-1. **namespace-protector** (3s timeout) - Fast path protection
-2. **secret-scanner** (5s timeout) - Content analysis  
-3. **manifest-validator** (10s timeout) - Comprehensive validation
+### ⚡ Sub-Second Response (Ideal)
+- **namespace-protector** - Instant path validation
+- **prompt-guardian** - Real-time risk assessment
+- Creates **seamless conversation flow**
 
-If any hook fails with exit code 2, the operation is blocked.
+### 🚀 <5 Second Response (Excellent)  
+- **secret-scanner** - Multi-pattern analysis
+- **cluster-context** - Health status injection
+- Maintains **natural interaction pace**
+
+### ✅ <10 Second Response (Acceptable)
+- **manifest-validator** - Schema validation
+- **storage-health** - Infrastructure checks
+- Preserves **conversational continuity**
+
+### ❌ >10 Second Response (Breaks Flow)
+- **Degrades user experience**
+- **Interrupts AI thought process**
+- **Should trigger optimization**
+
+## Hook Execution Flow (Sequential)
+
+**PreToolUse (Write/Edit/MultiEdit)** - Total: ~8-18s
+1. **namespace-protector** (1s) - Instant protection
+2. **secret-scanner** (2-5s) - Credential detection  
+3. **manifest-validator** (5-10s) - Configuration validation
+
+**Early failure exits immediately** - If hook returns exit code 2, operation blocks instantly.
 
 ## Exit Codes
 
@@ -162,31 +185,84 @@ Test individual hooks manually:
 **AI Alignment**: Provides comprehensive change context for future sessions
 **Override**: `SKIP_SESSION_SUMMARY=true`
 
-## Troubleshooting
+## Performance Monitoring & Optimization
 
-### Hook Timeout
-If hooks timeout frequently, increase timeouts in `.claude/settings.json`
+### Speed Monitoring
+```bash
+# Check hook execution times in logs
+grep "completed in" /tmp/claude-hooks-*.log
 
-### False Positives
-Use override flags for legitimate operations that trigger false alarms
+# Monitor for slow hooks (>5s)
+grep -E "completed in [5-9][0-9][0-9][0-9]ms|completed in [0-9]+[0-9]s" /tmp/claude-hooks-*.log
+```
 
-### Hook Failures
-Check log files in `/tmp/claude-hooks-*.log` for detailed error information
+### Optimization Strategies
+- **Parallel execution** - Run independent checks simultaneously
+- **Early termination** - Exit immediately on first critical issue
+- **Caching** - Store repeated query results (5-minute TTL)
+- **Selective triggering** - Only run when conditions match
+- **Minimal I/O** - Reduce filesystem and network operations
 
-### Disable All Hooks
-In emergencies: `CLAUDE_HOOKS_DISABLED=true claude`
+### Troubleshooting Performance
+
+#### Hook Taking >10s (CRITICAL)
+1. **Check system load**: `htop`, `kubectl top nodes`
+2. **Review network latency**: `kubectl get nodes` response time
+3. **Optimize hook logic**: Add early exits, reduce I/O
+4. **Consider async patterns**: Cache results, background updates
+
+#### Hook Timeouts
+- **Increase timeout** in `.claude/settings.json` (last resort)
+- **Profile execution**: Add timing logs to identify bottlenecks
+- **Split complex hooks**: Break into smaller, faster operations
+
+#### False Positives
+- **Use override flags**: `FORCE_*=true` for legitimate edge cases
+- **Refine patterns**: Update regex/logic to reduce false matches
+- **Add allow-lists**: Skip known-safe patterns
+
+### Emergency Procedures
+```bash
+# Disable all hooks immediately
+CLAUDE_HOOKS_DISABLED=true claude
+
+# Disable specific slow hook
+SKIP_STORAGE_CHECK=true claude
+
+# Bypass protection for emergency ops
+FORCE_NAMESPACE_EDIT=true claude
+```
 
 ## Configuration
 
 Hooks are configured in `.claude/settings.json`. See the file for current configuration.
 
-## Golden Rules Enforced
+## Golden Rules Enforced (Speed + Safety)
 
-These hooks enforce the cluster's golden rules:
+These hooks **rapidly enforce** the cluster's golden rules:
 
-1. **Think before you delete. Suspend, don't delete.**
-2. **All changes MUST go through Git (GitOps)**
-3. **Never commit unencrypted secrets**
-4. **Storage resources need special handling**
+1. **Think before you delete. Suspend, don't delete.** ⚡ *~1s response*
+2. **All changes MUST go through Git (GitOps)** ⚡ *~2s validation*  
+3. **Never commit unencrypted secrets** ⚡ *~3s scanning*
+4. **Storage resources need special handling** ⚡ *~5s health check*
+
+**The combination of speed + enforcement creates an AI agent that operates within safe boundaries while maintaining natural conversation flow.**
+
+## AI Agent Success Metrics
+
+### Conversation Quality
+- **<3s total hook time** = Seamless interaction
+- **<10s total hook time** = Acceptable flow
+- **>10s total hook time** = Degraded experience requiring optimization
+
+### Safety Alignment  
+- **0 blocked dangerous operations** that bypassed hooks
+- **100% compliance** with golden rules
+- **Proactive suggestions** instead of reactive fixes
+
+### System Health
+- **Real-time cluster awareness** through context injection
+- **Immediate feedback** on deployment success/failure  
+- **Automated rollback guidance** when issues occur
 
 For more details, see `/docs/golden-rules/` in the repository.
