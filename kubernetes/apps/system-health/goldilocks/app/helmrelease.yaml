@@ -27,7 +27,7 @@ spec:
     # Image configuration
     image:
       repository: us-docker.pkg.dev/fairwinds-ops/oss/goldilocks
-      tag: v8.0.2
+      tag: v4.14.1
       pullPolicy: IfNotPresent
     
     # Controller configuration
