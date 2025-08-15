@@ -1,53 +1,68 @@
 # Claude Code Hooks for Kubernetes Homelab
 
-This directory contains safety hooks that prevent common cluster management mistakes and enhance operational security.
+**CRITICAL: All hooks are optimized for speed (<10s execution) to maintain conversational flow while providing essential guardrails.**
 
-## Overview
+## Philosophy
 
-The hooks are designed to run automatically when Claude Code performs operations, providing multiple layers of protection:
+These hooks serve as **intelligent guardrails** that:
+- **Align AI agents** with operational safety goals
+- **Constrain conversations** to high-quality, safe outcomes
+- **Maintain system health** through proactive monitoring
+- **Execute rapidly** to preserve natural interaction flow
 
-1. **Namespace Protection** - Prevents modification of critical infrastructure
-2. **Secret Scanning** - Detects potential credential leaks  
-3. **Manifest Validation** - Ensures valid Kubernetes configurations
+The hooks transform Claude Code into a **production-ready cluster operator** that follows your golden rules and best practices automatically.
 
-## Phase 1 Hooks (Active)
+## Core Design Principles
 
-### 🛡️ namespace-protector.ts
-**Purpose**: Protect critical namespaces from accidental modification
+### ⚡ Speed First
+- **Target: <3s for critical hooks, <10s maximum**
+- **Parallel execution** where possible
+- **Caching** for repeated queries
+- **Selective triggers** - only run when relevant
+- **Fail-fast** with clear feedback
 
-**Protected Paths**:
-- `kubernetes/apps/kube-system/` - Core Kubernetes components
-- `kubernetes/apps/flux-system/` - GitOps controllers  
-- `kubernetes/apps/storage/rook-ceph*` - Storage system
-- `kubernetes/flux/` - Flux configuration
-- `kubernetes/bootstrap/` - Bootstrap configs
-- `talos/` - Node OS configuration
+### 🎯 Quality Alignment  
+- **Enforce golden rules** automatically
+- **Inject context** for informed decisions
+- **Suggest alternatives** for risky operations
+- **Prevent common mistakes** before they happen
 
+### 🛡️ System Health
+- **Monitor deployments** after changes
+- **Validate configurations** before writes
+- **Track changes** for easy rollback
+- **Alert on degraded states**
+
+## Hook Performance Targets
+
+| Hook Type | Speed Target | Timeout | Purpose |
+|-----------|--------------|---------|---------|
+| **Critical Protection** | <3s | 3-5s | Block dangerous operations |
+| **Validation** | <5s | 10s | Ensure config quality |
+| **Health Monitoring** | <8s | 8s | Post-operation verification |
+| **Context Injection** | <5s | 5s | Enhance AI awareness |
+
+## Phase 1 Hooks (Critical Protection - <5s)
+
+### 🛡️ namespace-protector.ts ⚡ **~1s**
+**Purpose**: **Instantly block** critical infrastructure modifications
+**Performance**: Path-based regex matching for millisecond response
+**Triggers**: PreToolUse on Write|Edit|MultiEdit
+**Protected Paths**: kube-system, flux-system, storage/rook-ceph, talos/
 **Override**: `FORCE_NAMESPACE_EDIT=true`
 
-### 🔍 secret-scanner.ts  
-**Purpose**: Prevent accidentally committing secrets and credentials
-
-**Detects**:
-- API keys (OpenAI, GitHub, AWS, etc.)
-- Database connection strings
-- Private keys and certificates
-- JWT tokens  
-- Base64 encoded secrets
-- Kubernetes Secret data
-
+### 🔍 secret-scanner.ts ⚡ **~2-5s**  
+**Purpose**: **Rapidly detect** credential leaks before commit
+**Performance**: Multi-pattern regex scan with early termination
+**Triggers**: PreToolUse on Write|Edit|MultiEdit
+**Detects**: API keys, passwords, tokens, base64 secrets, private keys
 **Override**: `FORCE_SECRET_SCAN=true`
 
-### ✅ manifest-validator.ts
-**Purpose**: Validate Kubernetes manifests before writing
-
-**Validates**:
-- YAML syntax
-- Kubernetes schema (via kubeconform if available)
-- Flux v2 compatibility (no retryInterval)
-- HelmRelease best practices
-- Dependency configurations
-
+### ✅ manifest-validator.ts ⚡ **~5-10s**
+**Purpose**: **Fast validation** of Kubernetes configurations
+**Performance**: Parallel YAML+schema validation, kubeconform integration
+**Triggers**: PreToolUse on Write|Edit|MultiEdit  
+**Validates**: YAML syntax, K8s schema, Flux v2 patterns, HelmRelease structure
 **Override**: `FORCE_MANIFEST_VALIDATION=true`
 
 ## Hook Execution Order
@@ -110,52 +125,41 @@ Test individual hooks manually:
 
 ## Phase 2-4 Hooks (Active)
 
-### 🛡️ prompt-guardian.ts
-**Purpose**: Analyze user prompts for risky operations
-**Trigger**: UserPromptSubmit
-**Features**:
-- Detects destructive operations (delete all, wipe, reset)
-- Identifies infrastructure changes
-- Injects safety context and alternatives
-- Reminds about golden rules for critical operations
+## Phase 2-4 Hooks (Intelligence & Monitoring - <8s)
+
+### 🛡️ prompt-guardian.ts ⚡ **~1-3s**
+**Purpose**: **Instantly analyze** risky prompts and inject safety context
+**Performance**: Regex pattern matching with cached alternatives
+**Triggers**: UserPromptSubmit (before AI processing)
+**AI Alignment**: Transforms dangerous requests into safe, guided conversations
 **Override**: `FORCE_PROMPT_GUARDIAN=true`
 
-### 🌐 cluster-context.ts  
-**Purpose**: Inject cluster health context at session start
-**Trigger**: UserPromptSubmit (first prompt)
-**Features**:
-- Quick cluster health check (nodes, Flux, critical workloads)
-- Caches context for 5 minutes for speed
-- Non-blocking on failures
+### 🌐 cluster-context.ts ⚡ **~2-5s**  
+**Purpose**: **Rapidly inject** cluster health for informed AI decisions
+**Performance**: Parallel kubectl queries with 5-minute caching
+**Triggers**: UserPromptSubmit (first prompt only)
+**AI Alignment**: Provides real-time cluster state for contextual responses
 **Override**: `SKIP_CLUSTER_CONTEXT=true`
 
-### 🔄 flux-health-check.ts
-**Purpose**: Monitor Flux deployments after reconciliation
-**Trigger**: PostToolUse after `flux reconcile` commands
-**Features**:
-- Quick check for failing Flux resources
-- Suggests rollback commands
-- Shows recent reconciliations
+### 🔄 flux-health-check.ts ⚡ **~3-8s**
+**Purpose**: **Quick verification** of GitOps deployment health
+**Performance**: Targeted Flux resource queries, failure-focused
+**Triggers**: PostToolUse after `flux reconcile` commands
+**AI Alignment**: Ensures AI gets immediate feedback on deployment success
 **Override**: `SKIP_FLUX_CHECK=true`
 
-### 🗄️ storage-health-check.ts
-**Purpose**: Monitor Ceph storage health
-**Trigger**: PostToolUse for storage-related operations
-**Features**:
-- Checks Ceph cluster health and OSD status
-- Monitors PVC binding status
-- Blocks operations if storage unhealthy
+### 🗄️ storage-health-check.ts ⚡ **~4-8s**
+**Purpose**: **Fast validation** of Ceph storage integrity  
+**Performance**: Parallel Ceph status + PVC checks with JSON parsing
+**Triggers**: PostToolUse for storage-related operations
+**AI Alignment**: Blocks AI from proceeding if storage is degraded
 **Override**: `SKIP_STORAGE_CHECK=true`
 
-### 📋 session-summary.ts
-**Purpose**: Generate session summary and rollback commands
-**Trigger**: Stop event (session end)
-**Features**:
-- Lists all modified files
-- Shows Git changes
-- Identifies affected Flux resources
-- Generates rollback commands
-- Saves summary to JSON file
+### 📋 session-summary.ts ⚡ **~2-5s**
+**Purpose**: **Efficient tracking** of all session changes
+**Performance**: Parallel git status + file analysis with caching
+**Triggers**: Stop event (session end)
+**AI Alignment**: Provides comprehensive change context for future sessions
 **Override**: `SKIP_SESSION_SUMMARY=true`
 
 ## Troubleshooting
