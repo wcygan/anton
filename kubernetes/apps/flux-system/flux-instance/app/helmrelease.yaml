@@ -44,7 +44,13 @@ spec:
           cpu: 500m
           memory: 512Mi
     kustomize-controller:
-      resources: *ref_0
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi  # Increased due to restart loop
+        limits:
+          cpu: 500m
+          memory: 1Gi
     helm-controller:
       resources: *ref_0
     notification-controller:

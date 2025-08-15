@@ -245,14 +245,14 @@ spec:
         timeoutSeconds: 5
         failureThreshold: 3
       
-      # Resources
+      # Resources (optimized based on actual usage: ~160m CPU, ~400Mi memory)
       resources:
         requests:
-          cpu: 100m
+          cpu: 50m    # Reduced from 100m (actual usage is lower)
           memory: 256Mi
         limits:
-          cpu: 500m
-          memory: 512Mi
+          cpu: 300m   # Reduced from 500m (actual peak is 160m)
+          memory: 600Mi # Increased from 512Mi (actual usage is 400Mi)
       
       # Volume configuration for Talos/containerd
       extraVolumes:
