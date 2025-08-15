@@ -49,8 +49,6 @@
     "obc:test": "deno run --allow-all scripts/test-obc-provisioning.ts",
     "obc:sync": "deno run --allow-all scripts/obc-credential-sync.ts",
     "obc:sync:watch": "deno run --allow-all scripts/obc-credential-sync.ts --watch",
-    "load-test": "deno run --allow-run --allow-read --allow-write --allow-net scripts/load-testing/comprehensive-load-test.ts",
-    "load-test:realistic": "deno run --allow-run --allow-read --allow-write --allow-net scripts/load-testing/realistic-workload-test.ts",
-    "load-test:chaos": "deno run --allow-run --allow-read --allow-write --allow-net scripts/load-testing/chaos-resilience-test.ts"
+    "load-test": "deno run --allow-run --allow-read --allow-write --allow-net scripts/load-testing/load-test.ts"
   }
 }

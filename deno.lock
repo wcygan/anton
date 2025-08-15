@@ -23,6 +23,7 @@
     "jsr:@std/async@^1.0.11": "1.0.13",
     "jsr:@std/bytes@0.221": "0.221.0",
     "jsr:@std/bytes@^1.0.5": "1.0.6",
+    "jsr:@std/cli@*": "1.0.18",
     "jsr:@std/cli@1": "1.0.18",
     "jsr:@std/cli@^1.0.18": "1.0.18",
     "jsr:@std/encoding@~1.0.5": "1.0.10",
