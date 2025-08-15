@@ -5,6 +5,7 @@ metadata:
   namespace: monitoring
 spec:
   interval: 15m
+  timeout: 15m
   chart:
     spec:
       chart: kube-prometheus-stack
@@ -18,11 +19,13 @@ spec:
   targetNamespace: monitoring
   install:
     createNamespace: true
+    crds: CreateReplace
     remediation:
       retries: 3
   upgrade:
+    crds: CreateReplace
     remediation:
-      retries: 3
+      retries: 5
       remediateLastFailure: true
     cleanupOnFail: true
   # Default values are generally good for a start.
