@@ -5,5 +5,5 @@ namespace: monitoring
 resources:
   - ./externalsecret.yaml
   - ./helmrelease.yaml
-  - ./objectbucketclaim.yaml
+  # ObjectBucketClaim moved to loki-s3-bucket app to avoid duplicates
   - ./loki-recording-rules.yaml
