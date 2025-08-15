@@ -3,16 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "docusaurus": "docusaurus",
-    "start": "docusaurus start",
-    "build": "docusaurus build",
-    "swizzle": "docusaurus swizzle",
-    "deploy": "docusaurus deploy",
-    "clear": "docusaurus clear",
-    "serve": "docusaurus serve",
-    "write-translations": "docusaurus write-translations",
-    "write-heading-ids": "docusaurus write-heading-ids",
-    "typecheck": "tsc"
+    "docusaurus": "bunx docusaurus",
+    "start": "bunx docusaurus start",
+    "build": "bunx docusaurus build",
+    "swizzle": "bunx docusaurus swizzle",
+    "deploy": "bunx docusaurus deploy",
+    "clear": "bunx docusaurus clear",
+    "serve": "bunx docusaurus serve",
+    "write-translations": "bunx docusaurus write-translations",
+    "write-heading-ids": "bunx docusaurus write-heading-ids",
+    "typecheck": "bunx tsc"
   },
   "dependencies": {
     "@docusaurus/core": "3.8.1",
