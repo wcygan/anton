@@ -23,7 +23,6 @@ resources:
   - ./system-health
   
   # Application workloads
-  - ./airflow
   - ./data-platform/ks.yaml
   - ./data-platform/spark-operator/ks.yaml
   - ./nessie
