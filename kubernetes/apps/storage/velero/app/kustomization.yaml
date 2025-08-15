@@ -5,5 +5,5 @@ kind: Kustomization
 namespace: storage
 resources:
   - ./helmrelease.yaml
-  - ./schedules.yaml
   - ./servicemonitor.yaml
+  # - ./schedules.yaml  # Disabled until Velero CRDs are available
