@@ -31,6 +31,20 @@ spec:
     remediation:
       strategy: rollback
       retries: 3
-  valuesFrom:
-    - kind: ConfigMap
-      name: flux-operator-values
+  values:
+    # Increase resources to fix OOMKill and timeout issues
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    
+    # Adjust probe timeouts to prevent false failures
+    livenessProbe:
+      timeoutSeconds: 5
+      periodSeconds: 30
+    readinessProbe:
+      timeoutSeconds: 5
+      periodSeconds: 15
