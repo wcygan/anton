@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && ./scripts/hooks/namespace-protector.ts \"$CLAUDE_TARGET_FILE\"",
+            "description": "Protect critical namespaces from accidental modification",
+            "timeout": 3000,
+            "suppressOutput": false
+          },
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && ./scripts/hooks/secret-scanner.ts \"$CLAUDE_TARGET_FILE\"",
+            "description": "Scan for potential secrets and credentials",
+            "timeout": 5000,
+            "suppressOutput": false
+          },
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && ./scripts/hooks/manifest-validator.ts \"$CLAUDE_TARGET_FILE\"",
+            "description": "Validate Kubernetes manifests before write operations",
+            "timeout": 10000,
+            "suppressOutput": false
+          }
+        ]
+      }
+    ]
+  }
+}

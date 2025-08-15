@@ -242,6 +242,8 @@
       "Bash(talosctl reset:*)",
       "Bash(kubectl drain:* --force)",
       "Bash(kubectl cordon:* --force)"
-    ]
-  }
+    ],
+    "defaultMode": "acceptEdits"
+  },
+  "outputStyle": "default"
 }
