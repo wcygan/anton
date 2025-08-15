@@ -38,10 +38,7 @@ spec:
       enabled: true
       className: internal
       hosts:
-        - host: registry.anton.local
-          paths:
-            - path: /
-              pathType: Prefix
+        - registry.anton.local
       tls:
         - secretName: registry-tls
           hosts:
