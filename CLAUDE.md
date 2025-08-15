@@ -86,6 +86,111 @@ grep -l "storage" docs/milestones/*.md | xargs head -50
 
 This approach ensures all decisions are grounded in official documentation and well-reasoned analysis, not guesswork or outdated information.
 
+## Specialized Sub-Agents for Cluster Health
+
+**IMPORTANT**: Claude Code provides specialized sub-agents for maintaining cluster health and operational excellence. Use these agents proactively to prevent issues and maintain long-term cluster stability.
+
+### Available Sub-Agents
+
+#### 1. 🔍 cluster-health-auditor
+**Purpose**: Automated discovery of maintenance opportunities and security vulnerabilities
+
+**When to Use**:
+- Monthly comprehensive cluster health assessments
+- After major upgrades to identify new issues
+- When searching for components with known CVEs
+- To detect configuration drift across namespaces
+- For creating prioritized maintenance plans
+
+**Example Usage**:
+```
+"Search the entire cluster for components with known CVEs, outdated versions, or configuration drift, and create a prioritized maintenance plan"
+```
+
+#### 2. 🏗️ cluster-tech-lead  
+**Purpose**: Strategic architectural guidance and integration planning
+
+**When to Use**:
+- Planning integration of new operators or Helm charts
+- Reviewing GitOps workflows and patterns
+- Making architectural decisions for cluster evolution
+- Evaluating upgrade strategies and compatibility
+- Establishing best practices for new capabilities
+
+**Example Usage**:
+```
+"Review our approach to integrating new operators in the cnpg-system namespace and recommend best practices for future database operator deployments"
+```
+
+#### 3. 🔬 integration-analyzer
+**Purpose**: Deep integration analysis and troubleshooting
+
+**When to Use**:
+- Investigating why integrations aren't working (Rook-Ceph, Loki, etc.)
+- Analyzing cross-namespace dependencies and data flows
+- Troubleshooting multi-component failures
+- Creating documentation of system interactions
+- Identifying performance bottlenecks between services
+
+**Example Usage**:
+```
+"Investigate how Loki integrates with our Ceph S3 storage backend and identify potential bottlenecks or misconfigurations affecting log ingestion"
+```
+
+#### 4. 📊 k8s-ops-architect
+**Purpose**: Operational excellence and monitoring strategy
+
+**When to Use**:
+- Designing comprehensive monitoring for pod restart patterns
+- Implementing network policies to reduce unnecessary traffic
+- Creating resource governance with quotas and limits
+- Planning disaster recovery and backup strategies
+- Optimizing cluster for reliability and performance
+
+**Example Usage**:
+```
+"Design a comprehensive monitoring strategy to detect and alert on pod restart patterns, resource over-allocation, and Flux reconciliation failures"
+```
+
+#### 5. ⚡ resource-optimization-analyst
+**Purpose**: Resource efficiency and technical debt management
+
+**When to Use**:
+- After major upgrades to optimize resource allocations
+- When experiencing CrashBackoffLoops or pod instability
+- To identify over/under-provisioned resources
+- For optimizing Helm chart values and configurations
+- To eliminate technical debt in deployments
+
+**Example Usage**:
+```
+"After upgrading to Rook-Ceph v1.17.7, analyze our storage configuration for optimization opportunities and resource allocation improvements"
+```
+
+### Recommended Maintenance Workflows
+
+#### 🗓️ Monthly Health Review
+1. **cluster-health-auditor**: Comprehensive scan for CVEs and outdated components
+2. **k8s-ops-architect**: Review monitoring alerts and optimization opportunities  
+3. **integration-analyzer**: Deep-dive into any identified integration issues
+
+#### 📅 Quarterly Strategic Review
+1. **cluster-tech-lead**: Architectural review and future planning
+2. **resource-optimization-analyst**: Technical debt assessment and resource optimization
+
+#### 🚨 Ad-Hoc Problem Solving
+- **integration-analyzer**: When integrations fail or behave unexpectedly
+- **resource-optimization-analyst**: When experiencing pod instability or resource issues
+- **k8s-ops-architect**: When planning new features or troubleshooting complex issues
+
+### Integration with Existing Workflows
+
+These sub-agents complement your existing tools:
+- Use **after** running monitoring scripts (`./scripts/k8s-health-check.ts`)
+- Combine with **MCP servers** for documentation-based decisions
+- Reference **milestone documentation** for historical context
+- Apply findings through **GitOps workflows** documented below
+
 ## Repository Overview
 
 This is "Anton" - a production-grade Kubernetes homelab running on 3 MS-01 mini
@@ -939,6 +1044,13 @@ When asked to check system health or monitor the cluster:
    - Use MCP for immediate resource inspection and troubleshooting
    - Run monitoring scripts for aggregated health checks
    - Cross-reference MCP live data with script outputs for validation
+
+7. **Leverage Specialized Sub-Agents**: For comprehensive cluster health maintenance, use the specialized sub-agents defined in this document:
+   - **cluster-health-auditor**: For comprehensive health assessments, CVE discovery, and maintenance planning
+   - **resource-optimization-analyst**: For resource efficiency analysis and technical debt management
+   - **integration-analyzer**: For complex multi-component troubleshooting and dependency mapping
+   - **k8s-ops-architect**: For monitoring strategy design and operational excellence frameworks
+   - **cluster-tech-lead**: For strategic architectural guidance and upgrade planning
 
 ## Code Style & Conventions
 
