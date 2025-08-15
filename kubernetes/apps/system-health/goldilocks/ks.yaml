@@ -13,7 +13,7 @@ spec:
   dependsOn:
     - name: vpa
       namespace: system-health
-    - name: ingress-nginx-internal
+    - name: internal-ingress-nginx
       namespace: network
   interval: 30m
   timeout: 10m
