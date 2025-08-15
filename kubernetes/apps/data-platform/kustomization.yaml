@@ -11,18 +11,8 @@ resources:
   # Phase 1: S3 Storage - Automated bucket provisioning
   - ./s3-buckets/ks.yaml
   
-  # Phase 1: Iceberg Table Operations Testing
-  # - ./spark-iceberg-client/ks.yaml  # Disabled - ExternalSecret failing due to missing service account
-  
   # Phase 1: Metadata Backup Procedures  
   - ./nessie-backup/ks.yaml
-  
-  # Phase 2: Spark Job Management
-  # Note: spark-operator/ks.yaml creates a Kustomization in flux-system namespace
-  # It should NOT be included here to avoid namespace override issues
-  
-  # Phase 2: Spark Applications (actual job deployments)
-  - ./spark-applications/ks.yaml
   
   # Phase 3: Query Engine
   - ./trino/ks.yaml

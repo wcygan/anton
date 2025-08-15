@@ -24,6 +24,5 @@ resources:
   
   # Application workloads
   - ./data-platform/ks.yaml
-  - ./data-platform/spark-operator/ks.yaml
   - ./nessie
   - ./kubeai
