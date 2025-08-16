@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'My Site',
+  title: 'Kubernetes Cluster',
   tagline: 'Dinosaurs are cool',
   favicon: 'img/favicon.ico',
 
@@ -64,9 +64,9 @@ const config: Config = {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
     navbar: {
-      title: 'My Site',
+      title: 'Kubernetes Cluster',
       logo: {
-        alt: 'My Site Logo',
+        alt: 'Anton Logo',
         src: 'img/logo.svg',
       },
       items: [
