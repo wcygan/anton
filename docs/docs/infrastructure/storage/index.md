@@ -77,7 +77,9 @@ parameters:
   imageFormat: "2"
   imageFeatures: layering
   csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: storage
   csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+  csi.storage.k8s.io/node-stage-secret-namespace: storage
 allowVolumeExpansion: true
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
@@ -192,7 +194,7 @@ kubectl -n storage exec deploy/rook-ceph-tools -- ceph df detail
 kubectl -n storage exec deploy/rook-ceph-tools -- ceph osd df
 
 # Monitor cluster growth trends
-kubectl -n storage exec deploy/rook-ceph-tools -- ceph tell osd.* perf dump
+kubectl -n storage exec deploy/rook-ceph-tools -- ceph tell osd.* perf schema
 ```
 
 ## Management Commands
@@ -233,7 +235,7 @@ kubectl -n storage exec deploy/rook-ceph-tools -- rbd info -p ceph-blockpool pvc
 
 ```bash
 # Monitor cluster performance
-kubectl -n storage exec deploy/rook-ceph-tools -- ceph tell osd.* perf dump
+kubectl -n storage exec deploy/rook-ceph-tools -- ceph tell osd.* perf schema
 
 # Check slow operations
 kubectl -n storage exec deploy/rook-ceph-tools -- ceph daemon osd.0 dump_historic_slow_ops

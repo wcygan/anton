@@ -76,7 +76,7 @@ metadata:
   namespace: storage
 spec:
   cephVersion:
-    image: quay.io/ceph/ceph:v18.2.0
+    image: quay.io/ceph/ceph:v19.2.3
     allowUnsupported: false
   dataDirHostPath: /var/lib/rook
   skipUpgradeChecks: false
@@ -429,7 +429,7 @@ kubectl -n storage exec -it deploy/rook-ceph-tools -- bash
 # Update Ceph version in CephCluster
 spec:
   cephVersion:
-    image: quay.io/ceph/ceph:v18.2.1  # New version
+    image: quay.io/ceph/ceph:v19.2.3  # New version
     allowUnsupported: false
 ```
 

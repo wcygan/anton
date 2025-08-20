@@ -65,7 +65,7 @@ The monitoring stack is deployed using the `kube-prometheus-stack` Helm chart in
 # Deployed via Flux GitOps
 namespace: monitoring
 chart: kube-prometheus-stack
-version: 45.7.1
+version: 76.3.1
 ```
 
 ## Key Metrics
@@ -123,7 +123,7 @@ kubectl get configmap -n monitoring | grep grafana
 kubectl get events -n monitoring --sort-by='.lastTimestamp'
 
 # View Prometheus logs
-kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus
+kubectl logs -n monitoring -l app.kubernetes.io/name=kube-prometheus-stack-prometheus
 
 # Check Grafana logs
 kubectl logs -n monitoring -l app.kubernetes.io/name=grafana

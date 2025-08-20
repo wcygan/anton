@@ -66,7 +66,7 @@ metadata:
   namespace: flux-system
 spec:
   interval: 30m
-  retryInterval: 2m  # Note: This field was removed in newer versions
+  # Note: retryInterval field was removed in Flux v2 - use interval and timeout instead
   path: "./kubernetes/apps/namespace/app-name/app"
   prune: true
   sourceRef:

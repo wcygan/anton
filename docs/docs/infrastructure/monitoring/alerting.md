@@ -311,7 +311,7 @@ kubectl exec -n monitoring alertmanager-pod -- \
   telnet smtp.example.com 587
 
 # Check alert rule evaluation
-kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus | grep "rule evaluation"
+kubectl logs -n monitoring -l app.kubernetes.io/name=kube-prometheus-stack-prometheus | grep "rule evaluation"
 ```
 
 ### Alert Debugging

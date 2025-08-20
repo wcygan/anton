@@ -201,7 +201,7 @@ topk(10, sum by (pod) (rate({namespace!=""}[1h])))
 
 ```bash
 # Install LogCLI (if not available)
-# curl -fSL -o logcli.zip "https://github.com/grafana/loki/releases/download/v2.9.0/logcli-linux-amd64.zip"
+# curl -fSL -o logcli.zip "https://github.com/grafana/loki/releases/download/v3.5.3/logcli-linux-amd64.zip"
 
 # Query logs
 logcli query '{namespace="monitoring"}'

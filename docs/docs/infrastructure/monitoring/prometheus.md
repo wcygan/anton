@@ -234,7 +234,7 @@ promtool check rules alert-rules.yml
 
 ```bash
 # Check Prometheus logs
-kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus
+kubectl logs -n monitoring -l app.kubernetes.io/name=kube-prometheus-stack-prometheus
 
 # Verify service discovery
 kubectl get servicemonitor -n monitoring

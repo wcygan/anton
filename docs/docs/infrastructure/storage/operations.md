@@ -59,7 +59,7 @@ flowchart TD
 
 ```bash
 # Check cluster performance trends
-kubectl -n storage exec deploy/rook-ceph-tools -- ceph tell osd.* perf dump
+kubectl -n storage exec deploy/rook-ceph-tools -- ceph tell osd.* perf schema
 
 # Review slow operations
 kubectl -n storage exec deploy/rook-ceph-tools -- ceph daemon osd.0 dump_historic_slow_ops
@@ -156,7 +156,7 @@ watch "kubectl -n storage exec deploy/rook-ceph-tools -- ceph osd perf"
 
 ```bash
 # Adjust OSD memory targets (if needed)
-kubectl -n storage exec deploy/rook-ceph-tools -- ceph config set osd osd_memory_target 2147483648
+kubectl -n storage exec deploy/rook-ceph-tools -- ceph config set osd.* osd_memory_target 2147483648
 
 # Tune RBD cache settings
 kubectl -n storage exec deploy/rook-ceph-tools -- ceph config set client rbd_cache true
@@ -313,9 +313,11 @@ kubectl -n storage exec deploy/rook-ceph-tools -- rados import -p ceph-blockpool
 
 ```bash
 # Complete cluster rebuild (last resort)
+# ⚠️  WARNING: This will DELETE ALL DATA. Ensure backups are verified and accessible.
+# ⚠️  CRITICAL: Verify no other clusters share the same storage devices.
 # 1. Backup critical data and configurations
 # 2. Delete CephCluster resource
-kubectl -n storage delete cephcluster rook-ceph
+kubectl -n storage delete cephcluster rook-ceph --wait
 
 # 3. Clean up node storage
 kubectl -n storage get job -l app=rook-ceph-detect-version

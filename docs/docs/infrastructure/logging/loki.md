@@ -23,7 +23,7 @@ flowchart TD
     
     subgraph storage[Storage Backend]
         chunks[Object Storage<br/>S3/Ceph RGW]
-        index[Index Store<br/>BoltDB Shipper]
+        index[Index Store<br/>TSDB]
     end
     
     subgraph querying[Query Path]
@@ -152,9 +152,9 @@ frontend:
 ### Object Storage (S3)
 
 ```yaml
-# S3 storage configuration for chunks
-storage_config:
-  aws:
+# S3 storage configuration for chunks (v13 schema)
+storage:
+  s3:
     s3: s3://loki-chunks
     region: us-east-1
     access_key_id: ${S3_ACCESS_KEY}
@@ -166,11 +166,11 @@ storage_config:
 ### Index Storage
 
 ```yaml
-# BoltDB shipper configuration
-storage_config:
-  boltdb_shipper:
-    active_index_directory: /loki/boltdb-shipper-active
-    cache_location: /loki/boltdb-shipper-cache
+# TSDB configuration (v13 schema)
+storage:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-shipper-active
+    cache_location: /loki/tsdb-shipper-cache
     cache_ttl: 24h
     shared_store: s3
 ```
@@ -178,13 +178,13 @@ storage_config:
 ## Schema Configuration
 
 ```yaml
-# Schema evolution configuration
+# Schema evolution configuration (v13 - current)
 schema_config:
   configs:
-    - from: 2020-10-24
-      store: boltdb-shipper
-      object_store: aws
-      schema: v11
+    - from: 2024-04-01
+      store: tsdb
+      object_store: s3
+      schema: v13
       index:
         prefix: index_
         period: 24h
