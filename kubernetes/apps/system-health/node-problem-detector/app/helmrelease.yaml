@@ -27,7 +27,7 @@ spec:
     # Image configuration
     image:
       repository: registry.k8s.io/node-problem-detector/node-problem-detector
-      tag: v0.8.22
+      tag: v1.34.0
       pullPolicy: IfNotPresent
 
     # Security settings - required for node monitoring
