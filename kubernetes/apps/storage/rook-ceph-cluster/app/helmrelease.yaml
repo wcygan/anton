@@ -72,7 +72,7 @@ spec:
         enable: false
       clusterName: storage
       cephVersion:
-        image: 'quay.io/ceph/ceph:v19.2.3'
+        image: 'quay.io/ceph/ceph:v20.1.1'
         allowUnsupported: false
       dataDirHostPath: /var/lib/rook
       skipUpgradeChecks: false
