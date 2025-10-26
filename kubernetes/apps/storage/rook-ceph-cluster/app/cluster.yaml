@@ -6,7 +6,7 @@ metadata:
   namespace: storage
 spec:
   cephVersion:
-    image: quay.io/ceph/ceph:v19.2.3  # Reef stable
+    image: quay.io/ceph/ceph:v20.1.1  # Reef stable
     allowUnsupported: false
   dataDirHostPath: /var/lib/rook
   skipUpgradeChecks: false
