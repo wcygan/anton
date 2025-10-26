@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: kubeai
-      version: "0.22.0" # Pinned to latest stable version
+      version: "0.22.1" # Pinned to latest stable version
       sourceRef:
         kind: HelmRepository
         name: kubeai
