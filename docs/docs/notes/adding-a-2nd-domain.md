@@ -1,0 +1,558 @@
+# Multi-Domain Support in Talos Kubernetes Cluster
+
+## Overview
+
+This document describes the architecture and implementation for hosting multiple domains from a single Talos Kubernetes cluster using Flux GitOps, with Cloudflare as the DNS provider and SSL certificate authority.
+
+## Goals
+
+- Support multiple domains (e.g., `example.com`, `example.org`) from one cluster
+- Automatic DNS record management via external-dns
+- Automatic SSL certificate provisioning via cert-manager
+- Maintain GitOps workflow with SOPS-encrypted secrets
+- Template-driven configuration for easy domain addition/removal
+
+## System Architecture
+
+```mermaid
+flowchart TD
+    subgraph git[Git Repository]
+        cluster_yaml["cluster.yaml"]
+        templates["Jinja2 Templates"]
+    end
+
+    subgraph local[Local Workstation]
+        makejinja["Makejinja"]
+        sops["SOPS"]
+        flux_cli["Flux CLI"]
+    end
+
+    subgraph cloudflare[Cloudflare]
+        dns_records["DNS Records"]
+        acme_txt["ACME TXT Records"]
+        tunnel["Cloudflare Tunnel"]
+    end
+
+    subgraph k8s[Kubernetes Cluster]
+        flux["Flux GitOps"]
+
+        subgraph controllers[Controllers]
+            external_dns["external-dns"]
+            cert_manager["cert-manager"]
+        end
+
+        subgraph gateway[Gateway Layer]
+            envoy_ext["envoy-external"]
+            envoy_int["envoy-internal"]
+        end
+
+        subgraph apps[Applications]
+            app1["App Pod"]
+            app2["App Pod"]
+        end
+
+        subgraph secrets[Secrets]
+            cluster_secrets["cluster-secrets"]
+        end
+    end
+
+    subgraph internet[Internet]
+        users["Users"]
+        letsencrypt["Let's Encrypt"]
+    end
+
+    %% Template flow
+    cluster_yaml -->|1 Read config| makejinja
+    templates -->|2 Render| makejinja
+    makejinja -->|3 Generate manifests| sops
+    sops -->|4 Encrypt secrets| git
+
+    %% GitOps flow
+    git -->|5 Pull and decrypt| flux
+    flux -->|6 Apply manifests| cluster_secrets
+    flux -->|7 Deploy controllers| controllers
+    flux -->|8 Deploy gateway| gateway
+
+    %% DNS management
+    gateway -->|9 Watch HTTPRoutes| external_dns
+    external_dns -->|10 Create records| dns_records
+
+    %% Certificate flow
+    cert_manager -->|11 Request cert| letsencrypt
+    letsencrypt -->|12 ACME challenge| cert_manager
+    cert_manager -->|13 Create TXT| acme_txt
+    letsencrypt -->|14 Validate| acme_txt
+    letsencrypt -->|15 Issue cert| cert_manager
+    cert_manager -->|16 Store Secret| gateway
+
+    %% Traffic flow
+    users -->|HTTPS| dns_records
+    dns_records -->|Resolve| envoy_ext
+    tunnel -->|Tunnel| envoy_ext
+    envoy_ext -->|TLS termination| apps
+    envoy_int -->|Internal| apps
+
+    classDef gitClass fill:#f39c12,color:white
+    classDef localClass fill:#3498db,color:white
+    classDef cloudClass fill:#e67e22,color:white
+    classDef k8sClass fill:#2ecc71,color:white
+    classDef secretClass fill:#e74c3c,color:white
+    classDef internetClass fill:#95a5a6,color:white
+
+    class cluster_yaml,templates gitClass
+    class makejinja,sops,flux_cli localClass
+    class dns_records,acme_txt,tunnel cloudClass
+    class flux,external_dns,cert_manager,envoy_ext,envoy_int,app1,app2 k8sClass
+    class cluster_secrets secretClass
+    class users,letsencrypt internetClass
+```
+
+## Architecture Components
+
+### 1. Cloudflare Role
+
+Cloudflare serves three critical functions:
+
+**DNS Provider**
+- Hosts authoritative DNS records for all managed domains
+- external-dns (cloudflare-dns) automatically creates/updates DNS records
+- Supports wildcard records (e.g., `*.example.com`) pointing to gateway IPs
+
+**SSL Certificate Authority Interface**
+- cert-manager uses Cloudflare DNS-01 ACME challenge for Let's Encrypt
+- DNS-01 allows wildcard certificates without exposing cluster to internet
+- Single Cloudflare API token provides access to all domains in account
+
+**Tunnel Provider (optional)**
+- Cloudflare Tunnel (cloudflared) provides secure ingress without port forwarding
+- Routes external traffic through Cloudflare network to cluster gateway
+
+### 2. Core Kubernetes Components
+
+**cert-manager**
+- Requests wildcard SSL certificates from Let's Encrypt
+- Uses Cloudflare DNS-01 solver for domain validation
+- Stores certificates as Kubernetes Secrets
+- Configured via `ClusterIssuer` with multiple `dnsZones`
+
+**external-dns (cloudflare-dns)**
+- Watches `HTTPRoute` and `DNSEndpoint` resources
+- Automatically creates DNS records in Cloudflare
+- Filters domains via `domainFilters` array
+- Syncs changes bidirectionally (policy: sync)
+
+**envoy-gateway**
+- Provides internal (`envoy-internal`) and external (`envoy-external`) gateways
+- Terminates SSL using cert-manager certificates
+- Routes traffic based on `HTTPRoute` hostname matching
+
+**k8s_gateway**
+- Provides internal DNS resolution for split-horizon DNS
+- Limited to single domain (primary domain only)
+- Not affected by multi-domain configuration
+
+### 3. Template System (Makejinja)
+
+**Purpose**
+- Single source of truth: `cluster.yaml` defines all domain names
+- Jinja2 templates in `templates/config/` generate all manifests
+- Conditional rendering supports optional domains
+
+**Key Templates Modified**
+- `.taskfiles/template/resources/cluster.schema.cue` - Schema validation
+- `templates/config/kubernetes/components/sops/cluster-secrets.sops.yaml.j2` - Secret generation
+- `templates/config/kubernetes/apps/network/cloudflare-dns/app/helmrelease.yaml.j2` - DNS filters
+- `templates/config/kubernetes/apps/cert-manager/cert-manager/app/clusterissuer.yaml.j2` - Certificate zones
+
+## Implementation Details
+
+### Step 1: Schema Definition
+
+Add optional domain field to CUE schema:
+
+```cue
+// .taskfiles/template/resources/cluster.schema.cue
+#Config: {
+    cloudflare_domain: net.FQDN      // Primary domain (required)
+    cloudflare_domain_two?: net.FQDN // Secondary domain (optional)
+    // ...
+}
+```
+
+### Step 2: Secret Template
+
+Conditionally add domain to cluster secrets:
+
+```yaml
+# templates/config/kubernetes/components/sops/cluster-secrets.sops.yaml.j2
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-secrets
+stringData:
+  SECRET_DOMAIN: "#{ cloudflare_domain }#"
+#% if cloudflare_domain_two is defined %#
+  SECRET_DOMAIN_TWO: "#{ cloudflare_domain_two }#"
+#% endif %#
+```
+
+**Result**: Secret available in `flux-system` namespace, consumed by manifests using `${SECRET_DOMAIN_TWO}` syntax.
+
+### Step 3: DNS Management (external-dns)
+
+Configure cloudflare-dns to manage multiple domains:
+
+```yaml
+# templates/config/kubernetes/apps/network/cloudflare-dns/app/helmrelease.yaml.j2
+domainFilters: ["${SECRET_DOMAIN}"#% if cloudflare_domain_two is defined %#, "${SECRET_DOMAIN_TWO}"#% endif %#]
+```
+
+**Behavior**:
+- external-dns watches `HTTPRoute` resources with `gateway-name=envoy-external`
+- For each matching route, creates DNS A/AAAA record in Cloudflare
+- Record points to `cloudflare_gateway_addr` (external gateway IP)
+- TXT records with prefix `k8s.` track ownership
+
+### Step 4: SSL Certificates (cert-manager)
+
+Configure Let's Encrypt DNS-01 solver for multiple zones:
+
+```yaml
+# templates/config/kubernetes/apps/cert-manager/cert-manager/app/clusterissuer.yaml.j2
+solvers:
+  - dns01:
+      cloudflare:
+        apiTokenSecretRef:
+          name: cert-manager-secret
+          key: api-token
+    selector:
+      dnsZones: ["${SECRET_DOMAIN}"#% if cloudflare_domain_two is defined %#, "${SECRET_DOMAIN_TWO}"#% endif %#]
+```
+
+**Flow**:
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant CM as cert-manager
+    participant CF as Cloudflare DNS
+    participant LE as Let's Encrypt
+    participant K8s as Kubernetes
+
+    App->>K8s: Create Certificate resource
+    K8s->>CM: Trigger certificate request
+    CM->>LE: Request certificate (ACME)
+    LE->>CM: Issue DNS-01 challenge
+    CM->>CF: Create TXT record<br/>_acme-challenge.example.com
+    CF-->>LE: DNS query returns TXT record
+    LE->>LE: Validate domain ownership
+    LE->>CM: Issue signed certificate
+    CM->>K8s: Store as Secret<br/>(example-com-production-tls)
+    K8s-->>App: Certificate available
+
+    Note over CM,CF: Challenge record automatically cleaned up
+    Note over K8s: Secret used by envoy-gateway for TLS
+```
+
+**Steps**:
+1. Application requests certificate via `Certificate` resource
+2. cert-manager creates ACME challenge with Let's Encrypt
+3. Cloudflare DNS-01 solver creates temporary TXT record `_acme-challenge.example.com`
+4. Let's Encrypt validates domain ownership via DNS query
+5. Certificate issued and stored as Kubernetes Secret
+6. envoy-gateway references Secret for TLS termination
+
+### Step 5: Template Rendering
+
+Run configuration pipeline:
+
+```bash
+task configure --yes
+```
+
+**Pipeline Steps**:
+
+```mermaid
+flowchart LR
+    subgraph input[Input Files]
+        cluster[cluster.yaml]
+        nodes[nodes.yaml]
+    end
+
+    subgraph validate[Validation]
+        cue[CUE Schema<br/>Validation]
+    end
+
+    subgraph render[Rendering]
+        makejinja[Makejinja<br/>Template Engine]
+        j2[.j2 Templates]
+    end
+
+    subgraph encrypt[Encryption]
+        sops[SOPS<br/>Age Encryption]
+        age[age.key]
+    end
+
+    subgraph validate2[Validation]
+        kubeconform[kubeconform<br/>K8s Manifests]
+        talhelper[talhelper<br/>Talos Config]
+    end
+
+    subgraph output[Output]
+        kubernetes[kubernetes/]
+        talos[talos/]
+        bootstrap[bootstrap/]
+    end
+
+    cluster --> cue
+    nodes --> cue
+    cue -->|Valid| makejinja
+    j2 --> makejinja
+    makejinja --> kubernetes
+    makejinja --> talos
+    makejinja --> bootstrap
+    kubernetes --> sops
+    talos --> sops
+    bootstrap --> sops
+    age --> sops
+    sops --> kubeconform
+    sops --> talhelper
+    kubeconform -->|Valid| output
+    talhelper -->|Valid| output
+
+    classDef inputClass fill:#3498db,color:white
+    classDef validateClass fill:#e67e22,color:white
+    classDef processClass fill:#2ecc71,color:white
+    classDef outputClass fill:#9b59b6,color:white
+
+    class cluster,nodes inputClass
+    class cue,kubeconform,talhelper validateClass
+    class makejinja,j2,sops,age processClass
+    class kubernetes,talos,bootstrap outputClass
+```
+
+**Steps**:
+1. **Validate schemas** - CUE validates `cluster.yaml` structure
+2. **Render templates** - Makejinja generates all manifests from `.j2` templates
+3. **Encrypt secrets** - SOPS encrypts all `*.sops.*` files with Age key
+4. **Validate manifests** - kubeconform validates Kubernetes YAML
+5. **Validate Talos** - talhelper validates Talos configuration
+
+### Step 6: GitOps Deployment
+
+```bash
+git add -A
+git commit -m "feat: add secondary domain support"
+git push
+task reconcile  # Force Flux to pull changes
+```
+
+**Flux Reconciliation**:
+1. Flux pulls latest Git state
+2. Decrypts SOPS secrets using in-cluster Age key
+3. Applies `cluster-secrets` Secret to `flux-system` namespace
+4. Kustomizations apply updated HelmReleases
+5. cloudflare-dns and cert-manager detect config changes
+6. DNS records created, certificates requested automatically
+
+## Domain Usage Patterns
+
+### Traffic Flow Comparison
+
+```mermaid
+flowchart TD
+    subgraph primary[Primary Domain Traffic]
+        user1[Internal User]
+        user2[External User]
+        home_dns[Home DNS Server<br/>192.168.1.254]
+        k8s_gw[k8s_gateway<br/>192.168.1.102]
+        cloudflare1[Cloudflare DNS]
+
+        user1 -->|DNS query| home_dns
+        home_dns -->|Forward *.example.com| k8s_gw
+        k8s_gw -->|Resolve to| envoy_int1[envoy-internal<br/>192.168.1.103]
+
+        user2 -->|DNS query| cloudflare1
+        cloudflare1 -->|Resolve to| envoy_ext1[envoy-external<br/>192.168.1.104]
+    end
+
+    subgraph secondary[Secondary Domain Traffic]
+        user3[External User Only]
+        cloudflare2[Cloudflare DNS]
+
+        user3 -->|DNS query| cloudflare2
+        cloudflare2 -->|Resolve to| envoy_ext2[envoy-external<br/>192.168.1.104]
+    end
+
+    subgraph apps[Application Pods]
+        envoy_int1 --> app1[App Pod]
+        envoy_ext1 --> app1
+        envoy_ext2 --> app1
+    end
+
+    classDef userClass fill:#3498db,color:white
+    classDef dnsClass fill:#e67e22,color:white
+    classDef gatewayClass fill:#2ecc71,color:white
+    classDef appClass fill:#9b59b6,color:white
+
+    class user1,user2,user3 userClass
+    class home_dns,k8s_gw,cloudflare1,cloudflare2 dnsClass
+    class envoy_int1,envoy_ext1,envoy_ext2 gatewayClass
+    class app1 appClass
+```
+
+### Accessing Applications
+
+**Primary Domain** (`${SECRET_DOMAIN}`):
+- Internal DNS via k8s_gateway (split-horizon)
+- External DNS via cloudflare-dns
+- SSL certificates via cert-manager
+- HTTPRoutes use gateway `envoy-external` or `envoy-internal`
+
+**Secondary Domain** (`${SECRET_DOMAIN_TWO}`):
+- External DNS only (no k8s_gateway support)
+- SSL certificates via cert-manager
+- HTTPRoutes must use gateway `envoy-external`
+- Access via public DNS or manual `/etc/hosts` entry
+
+### Example HTTPRoute
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: example-app
+spec:
+  parentRefs:
+    - name: envoy-external
+      namespace: kube-system
+  hostnames:
+    - "app.${SECRET_DOMAIN}"
+    - "app.${SECRET_DOMAIN_TWO}"
+  rules:
+    - backendRefs:
+        - name: example-app
+          port: 80
+```
+
+Both domains automatically receive:
+- DNS A record → `cloudflare_gateway_addr`
+- SSL certificate (shared or separate)
+- Traffic routed to same backend
+
+## Security Considerations
+
+### Cloudflare API Token
+
+**Required Permissions**:
+- Zone:DNS:Edit - Create/update/delete DNS records
+- Account:Cloudflare Tunnel:Read - Read tunnel configurations
+
+**Scope**: Limit to specific zones (domains) in Cloudflare dashboard
+
+### SOPS Encryption
+
+All secrets encrypted with Age key:
+- `age.key` - Master key (never commit)
+- `.sops.yaml` - Encryption rules
+- `*.sops.*` - Encrypted files in Git
+
+Flux decrypts at runtime using in-cluster Age key.
+
+### Certificate Security
+
+- Private keys stored as Kubernetes Secrets
+- Automatic rotation via cert-manager (90-day certificates)
+- DNS-01 challenge prevents exposing cluster to internet
+- Wildcard certificates reduce per-service certificate overhead
+
+## Limitations
+
+### k8s_gateway Single Domain
+
+k8s_gateway only supports one domain for internal DNS:
+- Primary domain gets split-horizon DNS
+- Secondary domains require external DNS or manual entries
+- Workaround: Use external DNS provider for internal resolution
+
+### Cloudflare API Rate Limits
+
+Cloudflare free tier limits:
+- 1200 requests/5 minutes
+- external-dns batches updates to stay within limits
+- Use `txtPrefix` and `txtOwnerId` to avoid conflicts
+
+### Certificate Naming
+
+Envoy Gateway expects specific certificate Secret names:
+- Format: `${SECRET_DOMAIN/./-}-production-tls`
+- Example: `example-com-production-tls`
+- Must update references when adding domains
+
+## Adding Additional Domains
+
+```mermaid
+flowchart TD
+    start([Start]) --> schema[Add cloudflare_domain_three<br/>to cluster.schema.cue]
+    schema --> secret[Add SECRET_DOMAIN_THREE<br/>to cluster-secrets.sops.yaml.j2]
+    secret --> dns[Update domainFilters array<br/>in cloudflare-dns template]
+    dns --> cert[Update dnsZones array<br/>in cert-manager template]
+    cert --> configure[Run: task configure --yes]
+    configure --> validate{Validation<br/>Passed?}
+    validate -->|No| fix[Fix errors]
+    fix --> configure
+    validate -->|Yes| commit[git add -A && git commit]
+    commit --> push[git push]
+    push --> flux[Flux pulls changes]
+    flux --> apply[Apply to cluster]
+    apply --> verify[Verify DNS records<br/>and certificates]
+    verify --> done([Done])
+
+    classDef configClass fill:#3498db,color:white
+    classDef actionClass fill:#2ecc71,color:white
+    classDef decisionClass fill:#e67e22,color:white
+    classDef gitClass fill:#9b59b6,color:white
+
+    class schema,secret,dns,cert configClass
+    class configure,apply,verify actionClass
+    class validate decisionClass
+    class commit,push,flux gitClass
+```
+
+**Steps**:
+1. Add `cloudflare_domain_three?: net.FQDN` to schema
+2. Update secret template with conditional block
+3. Update `domainFilters` and `dnsZones` arrays
+4. Run `task configure --yes`
+5. Commit and push changes
+6. Flux automatically applies updates
+
+## Troubleshooting
+
+### DNS Records Not Created
+
+```bash
+kubectl -n network logs -l app.kubernetes.io/name=cloudflare-dns
+# Check for Cloudflare API errors
+```
+
+### Certificates Not Issued
+
+```bash
+kubectl -n cert-manager logs -l app.kubernetes.io/name=cert-manager
+kubectl describe certificate -n <namespace> <cert-name>
+kubectl describe certificaterequest -n <namespace>
+```
+
+### Split-Horizon DNS Issues
+
+- k8s_gateway only serves primary domain
+- Verify home DNS forwards primary domain to `cluster_dns_gateway_addr`
+- Secondary domains require different DNS strategy
+
+## References
+
+- [Cloudflare DNS-01 ACME Challenge](https://cert-manager.io/docs/configuration/acme/dns01/cloudflare/)
+- [external-dns Cloudflare Provider](https://kubernetes-sigs.github.io/external-dns/latest/tutorials/cloudflare/)
+- [Envoy Gateway TLS Configuration](https://gateway.envoyproxy.io/latest/user/tls/)
+- [Makejinja Template Engine](https://github.com/mirkolenz/makejinja)

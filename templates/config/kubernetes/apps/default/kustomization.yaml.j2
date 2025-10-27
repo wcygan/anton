@@ -9,3 +9,6 @@ components:
 resources:
   - ./namespace.yaml
   - ./echo/ks.yaml
+#% if cloudflare_domain_two is defined %#
+  - ./echo-two/ks.yaml
+#% endif %#
