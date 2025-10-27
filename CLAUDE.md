@@ -146,3 +146,126 @@ To enable push-triggered reconciliation:
 ## Makejinja Plugin
 
 The template engine uses a custom Python plugin at `templates/scripts/plugin.py` that provides filters and functions for rendering Kubernetes manifests. Refer to existing templates for usage patterns.
+
+## Code Quality Principles
+
+**Low Cognitive Complexity**
+
+Write code optimized for human brain processing (max 4 concepts at once):
+
+- **Extract complex conditions** into intermediate variables with meaningful names:
+  ```bash
+  # ✗ Bad: Overloads working memory
+  if [[ "$val" -gt 10 ]] && ([[ "$cond2" == "true" ]] || [[ "$cond3" == "true" ]]) && [[ "$cond4" == "true" ]] && [[ "$cond5" != "true" ]]; then
+
+  # ✓ Good: Cognitive load stays manageable
+  is_valid="$([[ "$val" -gt 10 ]] && echo true || echo false)"
+  is_allowed="$([[ "$cond2" == "true" ]] || [[ "$cond3" == "true" ]] && echo true || echo false)"
+  is_secure="$([[ "$cond4" == "true" ]] && [[ "$cond5" != "true" ]] && echo true || echo false)"
+
+  if [[ "$is_valid" == "true" ]] && [[ "$is_allowed" == "true" ]] && [[ "$is_secure" == "true" ]]; then
+  ```
+
+- **Prefer early returns** over nested ifs (free working memory by focusing on happy path only):
+  ```bash
+  # ✗ Bad: Deep nesting
+  function process() {
+    if [[ -f "$file" ]]; then
+      if [[ -r "$file" ]]; then
+        if [[ -s "$file" ]]; then
+          # ... actual work 20 lines deep
+        fi
+      fi
+    fi
+  }
+
+  # ✓ Good: Early returns keep logic flat
+  function process() {
+    if [[ ! -f "$file" ]]; then
+      log error "File not found" "path=$file"
+    fi
+    if [[ ! -r "$file" ]]; then
+      log error "File not readable" "path=$file"
+    fi
+    if [[ ! -s "$file" ]]; then
+      log error "File empty" "path=$file"
+    fi
+
+    # ... actual work at top level (easy to follow)
+  }
+  ```
+
+- **Write WHY comments, not WHAT comments** (code shows what; comments explain motivation):
+  ```yaml
+  # ✗ Bad: Duplicates code
+  # Set interval to 1 hour
+  interval: 1h
+
+  # ✓ Good: Explains motivation
+  # WHY: Frequent reconciliation (1h) catches config drift quickly
+  # without overloading Git API (15m would hit rate limits)
+  interval: 1h
+  ```
+
+- **Deep modules over shallow modules** (simple interface, complex implementation is better than complex interface, simple implementation):
+  ```bash
+  # ✗ Bad: Shallow (complex interface, trivial implementation)
+  function get_namespace() { echo "$1"; }
+  function get_app() { echo "$2"; }
+  function build_path() { echo "kubernetes/apps/$1/$2"; }
+
+  # ✓ Good: Deep (simple interface, complex internals)
+  function get_app_path() {
+    local namespace="$1"
+    local app="$2"
+    local base_dir="${ROOT_DIR}/kubernetes/apps"
+
+    # ... validation, error handling, defaults ...
+
+    echo "${base_dir}/${namespace}/${app}"
+  }
+  ```
+
+## Security and Safety Requirements
+
+**Never Commit Secrets**
+
+- Always run `task configure` before committing (encrypts all `*.sops.*` files)
+- Verify encryption status: `find . -name '*.sops.*' -exec sops filestatus {} \;`
+- Never commit: `age.key`, `github-deploy.key`, `*.sops.yaml` (unencrypted)
+- Never log secret values in scripts (log file paths, not contents)
+
+**Never Perform Destructive Operations Without Explicit Confirmation**
+
+Destructive operations require explicit user approval:
+
+- `task talos:reset` - **DESTRUCTIVE**: Deletes all cluster data
+- `task template:reset` - **DESTRUCTIVE**: Deletes all rendered configs
+- `kubectl delete namespace` - **DESTRUCTIVE**: Removes namespace and all resources
+- `talosctl reset` - **DESTRUCTIVE**: Wipes node data
+
+**Safety checklist before destructive operations**:
+1. Verify correct kubeconfig context: `kubectl config current-context`
+2. Verify correct Talos context: `talosctl config info`
+3. Backup critical data (etcd snapshots, PV data)
+4. Confirm intent explicitly (don't automate destructive operations)
+
+**Read-Only Operations by Default**
+
+Prefer read-only commands when investigating:
+- `kubectl get` over `kubectl apply`
+- `kubectl describe` over `kubectl edit`
+- `talosctl get` over `talosctl apply`
+- `--dry-run=client` for validation without applying
+
+## Nested Context Files
+
+Detailed guidance for specific subsystems:
+
+- **kubernetes/apps/CLAUDE.md** - How to add Flux-managed applications (3-file pattern, variable substitution)
+- **bootstrap/CLAUDE.md** - Bootstrap vs Flux decision tree (when to use helmfile vs Flux)
+- **kubernetes/apps/network/CLAUDE.md** - Network stack architecture (gateways, DNS, Cloudflare tunnel)
+- **scripts/CLAUDE.md** - Shell script conventions (error handling, logging, reusable functions)
+- **.taskfiles/CLAUDE.md** - Task workflow map (init → configure → bootstrap → manage)
+
+Read these nested context files for detailed subsystem-specific guidance.
