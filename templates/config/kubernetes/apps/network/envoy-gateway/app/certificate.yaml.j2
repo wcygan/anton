@@ -10,3 +10,17 @@ spec:
     kind: ClusterIssuer
   commonName: "${SECRET_DOMAIN}"
   dnsNames: ["${SECRET_DOMAIN}", "*.${SECRET_DOMAIN}"]
+#% if cloudflare_domain_two is defined %#
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "${SECRET_DOMAIN_TWO/./-}-production"
+spec:
+  secretName: "${SECRET_DOMAIN_TWO/./-}-production-tls"
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  commonName: "${SECRET_DOMAIN_TWO}"
+  dnsNames: ["${SECRET_DOMAIN_TWO}", "*.${SECRET_DOMAIN_TWO}"]
+#% endif %#
