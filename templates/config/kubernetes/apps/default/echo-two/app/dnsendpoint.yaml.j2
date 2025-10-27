@@ -1,0 +1,10 @@
+---
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: echo-two
+spec:
+  endpoints:
+    - dnsName: "echo-two.${SECRET_DOMAIN_TWO}"
+      recordType: CNAME
+      targets: ["external.${SECRET_DOMAIN_TWO}"]
