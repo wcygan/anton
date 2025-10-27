@@ -5,7 +5,7 @@ slug: /
 
 # Anton
 
-Kubernetes homelab cluster for learning & experimentation.
+Kubernetes homelab cluster.
 
 🔗 **Blog Post**: https://wcygan.net/anton
 
@@ -18,7 +18,6 @@ Kubernetes homelab cluster for learning & experimentation.
 - **OS**: [Talos Linux](https://www.talos.dev/) - API-driven, immutable Kubernetes OS
 - **Management**: Declarative configuration via YAML
 - **Security**: No SSH access, minimal attack surface
-- **Updates**: Dual disk image approach with rollback capability
 
 ## Cluster Topology
 
