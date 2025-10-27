@@ -766,6 +766,6 @@ kubectl describe challenge -n <namespace> <name>
 ## References
 
 - [Cloudflare DNS-01 ACME Challenge](https://cert-manager.io/docs/configuration/acme/dns01/cloudflare/)
-- [external-dns Cloudflare Provider](https://kubernetes-sigs.github.io/external-dns/latest/tutorials/cloudflare/)
-- [Envoy Gateway TLS Configuration](https://gateway.envoyproxy.io/latest/user/tls/)
+- [external-dns Cloudflare Tutorial](https://kubernetes-sigs.github.io/external-dns/latest/docs/tutorials/cloudflare/)
+- [Envoy Gateway Secure Gateways (TLS)](https://gateway.envoyproxy.io/docs/tasks/security/secure-gateways/)
 - [Makejinja Template Engine](https://github.com/mirkolenz/makejinja)
