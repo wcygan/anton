@@ -215,7 +215,7 @@ domainFilters: ["${SECRET_DOMAIN}"#% if cloudflare_domain_two is defined %#, "${
 
 ### Step 4: SSL Certificates (cert-manager)
 
-Configure Let's Encrypt DNS-01 solver for multiple zones:
+**A. Configure ClusterIssuer for Multiple Zones**
 
 ```yaml
 # templates/config/kubernetes/apps/cert-manager/cert-manager/app/clusterissuer.yaml.j2
@@ -228,6 +228,67 @@ solvers:
     selector:
       dnsZones: ["${SECRET_DOMAIN}"#% if cloudflare_domain_two is defined %#, "${SECRET_DOMAIN_TWO}"#% endif %#]
 ```
+
+**B. Create Certificate Resources for Each Domain**
+
+```yaml
+# templates/config/kubernetes/apps/network/envoy-gateway/app/certificate.yaml.j2
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "${SECRET_DOMAIN/./-}-production"
+spec:
+  secretName: "${SECRET_DOMAIN/./-}-production-tls"
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  commonName: "${SECRET_DOMAIN}"
+  dnsNames: ["${SECRET_DOMAIN}", "*.${SECRET_DOMAIN}"]
+#% if cloudflare_domain_two is defined %#
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "${SECRET_DOMAIN_TWO/./-}-production"
+spec:
+  secretName: "${SECRET_DOMAIN_TWO/./-}-production-tls"
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  commonName: "${SECRET_DOMAIN_TWO}"
+  dnsNames: ["${SECRET_DOMAIN_TWO}", "*.${SECRET_DOMAIN_TWO}"]
+#% endif %#
+```
+
+**C. Add Certificates to Gateway TLS Configuration**
+
+```yaml
+# templates/config/kubernetes/apps/network/envoy-gateway/app/envoy.yaml.j2
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: envoy-external
+spec:
+  gatewayClassName: envoy
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        certificateRefs:
+          - kind: Secret
+            name: ${SECRET_DOMAIN/./-}-production-tls
+#% if cloudflare_domain_two is defined %#
+          - kind: Secret
+            name: ${SECRET_DOMAIN_TWO/./-}-production-tls
+#% endif %#
+```
+
+**Important**: Repeat for `envoy-internal` gateway if using second domain internally.
+
+**How it works**: Gateway uses SNI (Server Name Indication) to select the correct certificate based on the requested hostname.
 
 **Flow**:
 
@@ -415,9 +476,65 @@ flowchart TD
 - HTTPRoutes must use gateway `envoy-external`
 - Access via public DNS or manual `/etc/hosts` entry
 
-### Example HTTPRoute
+### Deploying Apps on Secondary Domain
+
+**Critical**: Secondary domain apps require **DNSEndpoint** instead of relying on HTTPRoute annotations.
+
+**Why**: external-dns has `--gateway-name=envoy-external` filter that forces ALL HTTPRoutes to use the Gateway's annotation, ignoring individual HTTPRoute annotations. DNSEndpoint bypasses this limitation.
+
+**Example App Structure** (second domain):
 
 ```yaml
+# app/dnsendpoint.yaml
+---
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: my-app
+spec:
+  endpoints:
+    - dnsName: "my-app.${SECRET_DOMAIN_TWO}"
+      recordType: CNAME
+      targets: ["external.${SECRET_DOMAIN_TWO}"]
+```
+
+```yaml
+# app/httproute.yaml
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: my-app
+spec:
+  parentRefs:
+    - name: envoy-external
+      namespace: network
+      sectionName: https
+  hostnames:
+    - "my-app.${SECRET_DOMAIN_TWO}"
+  rules:
+    - backendRefs:
+        - name: my-app
+          port: 80
+```
+
+```yaml
+# app/kustomization.yaml
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./dnsendpoint.yaml    # Critical: Must be listed
+  - ./helmrelease.yaml
+  - ./httproute.yaml
+  - ./ocirepository.yaml
+```
+
+**Multi-Domain App** (works on both domains):
+
+```yaml
+# Use HTTPRoute annotation for primary domain (automatic via gateway filter)
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -425,20 +542,33 @@ metadata:
 spec:
   parentRefs:
     - name: envoy-external
-      namespace: kube-system
+      namespace: network
+      sectionName: https
   hostnames:
-    - "app.${SECRET_DOMAIN}"
-    - "app.${SECRET_DOMAIN_TWO}"
+    - "app.${SECRET_DOMAIN}"      # Primary - automatic DNS
+    - "app.${SECRET_DOMAIN_TWO}"  # Secondary - needs DNSEndpoint
   rules:
     - backendRefs:
         - name: example-app
           port: 80
+
+# Add DNSEndpoint for secondary domain
+---
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: example-app-secondary
+spec:
+  endpoints:
+    - dnsName: "app.${SECRET_DOMAIN_TWO}"
+      recordType: CNAME
+      targets: ["external.${SECRET_DOMAIN_TWO}"]
 ```
 
-Both domains automatically receive:
-- DNS A record → `cloudflare_gateway_addr`
-- SSL certificate (shared or separate)
-- Traffic routed to same backend
+**Result**:
+- Primary domain: DNS created automatically from HTTPRoute via gateway annotation
+- Secondary domain: DNS created explicitly from DNSEndpoint (bypasses gateway-name filter)
+- Both use same backend and certificate
 
 ## Security Considerations
 
@@ -529,26 +659,109 @@ flowchart TD
 
 ## Troubleshooting
 
+### DNS Records Pointing to Wrong Domain
+
+**Symptom**: DNS record created but points to primary domain instead of secondary domain
+- Example: `app.secondary.com` → `external.primary.com` (wrong)
+- Expected: `app.secondary.com` → `external.secondary.com` (correct)
+
+**Root Cause**: external-dns `--gateway-name=envoy-external` filter forces all HTTPRoutes to use Gateway's annotation, ignoring HTTPRoute-level annotations.
+
+**Solution**: Use DNSEndpoint resource instead of HTTPRoute annotations
+```bash
+# Check current DNS records
+kubectl get dnsendpoint -A
+
+# Verify external-dns configuration
+kubectl get helmrelease -n network cloudflare-dns -o yaml | grep -A 5 "extraArgs"
+# Should show: --gateway-name=envoy-external
+
+# Fix: Create DNSEndpoint for second domain app
+# See "Deploying Apps on Secondary Domain" section above
+```
+
+### HTTP 502 Bad Gateway on Second Domain
+
+**Symptom**: DNS resolves correctly, but HTTPS returns 502 error
+
+**Root Cause**: Missing TLS certificate for second domain (gateway only has cert for primary domain)
+
+**Diagnosis**:
+```bash
+# Check certificates
+kubectl get certificate -n network
+
+# Check gateway certificate references
+kubectl get gateway -n network envoy-external -o yaml | grep -A 10 "certificateRefs"
+
+# Test DNS
+dig +short app.secondary.com
+```
+
+**Solution**: Add certificate for second domain
+1. Update `templates/config/kubernetes/apps/network/envoy-gateway/app/certificate.yaml.j2`
+2. Add certificate to Gateway listeners in `envoy.yaml.j2`
+3. Run `task configure --yes && git add -A && git commit && git push && task reconcile`
+4. Wait for cert-manager to issue certificate (~2-3 minutes)
+
+```bash
+# Monitor certificate issuance
+kubectl get certificate -n network -w
+
+# Check certificate details
+kubectl describe certificate -n network <domain>-com-production
+
+# View challenges (DNS-01)
+kubectl get challenge -n network
+```
+
 ### DNS Records Not Created
 
 ```bash
 kubectl -n network logs -l app.kubernetes.io/name=cloudflare-dns
 # Check for Cloudflare API errors
+
+# Verify domain filters
+kubectl get helmrelease -n network cloudflare-dns -o yaml | grep domainFilters
+
+# Check DNSEndpoint status
+kubectl get dnsendpoint -A
+kubectl describe dnsendpoint -n <namespace> <name>
 ```
 
 ### Certificates Not Issued
 
 ```bash
+# Check cert-manager logs
 kubectl -n cert-manager logs -l app.kubernetes.io/name=cert-manager
+
+# Certificate status
 kubectl describe certificate -n <namespace> <cert-name>
-kubectl describe certificaterequest -n <namespace>
+
+# Certificate request details
+kubectl get certificaterequest -n <namespace>
+kubectl describe certificaterequest -n <namespace> <name>
+
+# ACME order and challenges
+kubectl get order -n <namespace>
+kubectl get challenge -n <namespace>
+kubectl describe challenge -n <namespace> <name>
+
+# Verify Cloudflare API token has correct permissions
+# Zone:DNS:Edit required for DNS-01 challenge
 ```
+
+**Common Issues**:
+- DNS-01 challenge waiting for propagation (normal, 1-3 minutes)
+- Cloudflare API rate limits (1200 req/5min on free tier)
+- Invalid API token or missing Zone:DNS:Edit permission
+- ClusterIssuer not configured for domain (check `dnsZones` array)
 
 ### Split-Horizon DNS Issues
 
 - k8s_gateway only serves primary domain
 - Verify home DNS forwards primary domain to `cluster_dns_gateway_addr`
-- Secondary domains require different DNS strategy
+- Secondary domains require different DNS strategy (external DNS or manual entries)
 
 ## References
 
