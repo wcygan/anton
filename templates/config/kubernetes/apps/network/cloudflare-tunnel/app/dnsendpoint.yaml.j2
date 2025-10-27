@@ -8,3 +8,8 @@ spec:
     - dnsName: "external.${SECRET_DOMAIN}"
       recordType: CNAME
       targets: ["#{ cloudflare_tunnel_id() }#.cfargotunnel.com"]
+#% if cloudflare_domain_two is defined %#
+    - dnsName: "external.${SECRET_DOMAIN_TWO}"
+      recordType: CNAME
+      targets: ["#{ cloudflare_tunnel_id() }#.cfargotunnel.com"]
+#% endif %#
