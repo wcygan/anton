@@ -69,12 +69,22 @@ spec:
         data:
           config.yaml: |-
             ingress:
+              - hostname: "${SECRET_DOMAIN}"
+                originRequest:
+                  http2Origin: true
+                  originServerName: external.${SECRET_DOMAIN}
+                service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
               - hostname: "*.${SECRET_DOMAIN}"
                 originRequest:
                   http2Origin: true
                   originServerName: external.${SECRET_DOMAIN}
                 service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
 #% if cloudflare_domain_two is defined %#
+              - hostname: "${SECRET_DOMAIN_TWO}"
+                originRequest:
+                  http2Origin: true
+                  originServerName: external.${SECRET_DOMAIN_TWO}
+                service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
               - hostname: "*.${SECRET_DOMAIN_TWO}"
                 originRequest:
                   http2Origin: true
