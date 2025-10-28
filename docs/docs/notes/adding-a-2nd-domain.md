@@ -763,6 +763,96 @@ kubectl describe challenge -n <namespace> <name>
 - Verify home DNS forwards primary domain to `cluster_dns_gateway_addr`
 - Secondary domains require different DNS strategy (external DNS or manual entries)
 
+### HTTP 404 Not Found on Apex Domain (But Wildcard Works)
+
+**Symptom**:
+- `https://example.com` returns 404 from Cloudflare
+- `https://www.example.com` or `https://app.example.com` work correctly
+- Direct gateway test works: `curl -H "Host: example.com" https://192.168.1.104`
+
+**Root Cause**: Cloudflare Tunnel ingress rules only have wildcard patterns (`*.example.com`), missing apex domain rules.
+
+**Why**: Wildcard patterns (`*.domain.com`) don't match the apex domain (`domain.com`) - this is standard DNS/HTTP routing behavior.
+
+**Diagnosis**:
+```bash
+# Check tunnel configuration
+kubectl get configmap -n network cloudflare-tunnel -o yaml | grep -A 20 "ingress:"
+
+# Should see only wildcards (problem):
+# ingress:
+#   - hostname: "*.example.com"
+#   - service: https://...
+
+# Test direct gateway routing
+curl -H "Host: example.com" https://192.168.1.104 --insecure
+# If this works but public URL doesn't, it's a tunnel config issue
+```
+
+**Solution**: Add explicit apex domain rules **before** wildcard rules in Cloudflare Tunnel template:
+
+```yaml
+# templates/config/kubernetes/apps/network/cloudflare-tunnel/app/helmrelease.yaml.j2
+configMaps:
+  config:
+    data:
+      config.yaml: |-
+        ingress:
+          # Apex domain MUST come before wildcard
+          - hostname: "${SECRET_DOMAIN}"
+            originRequest:
+              http2Origin: true
+              originServerName: external.${SECRET_DOMAIN}
+            service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
+          # Wildcard pattern
+          - hostname: "*.${SECRET_DOMAIN}"
+            originRequest:
+              http2Origin: true
+              originServerName: external.${SECRET_DOMAIN}
+            service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
+#% if cloudflare_domain_two is defined %#
+          # Repeat for second domain
+          - hostname: "${SECRET_DOMAIN_TWO}"
+            originRequest:
+              http2Origin: true
+              originServerName: external.${SECRET_DOMAIN_TWO}
+            service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
+          - hostname: "*.${SECRET_DOMAIN_TWO}"
+            originRequest:
+              http2Origin: true
+              originServerName: external.${SECRET_DOMAIN_TWO}
+            service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
+#% endif %#
+          # Catch-all 404
+          - service: http_status:404
+```
+
+**Apply the fix**:
+```bash
+# Regenerate manifests with apex domain rules
+task configure --yes
+
+# Commit changes (domain names safe as Flux variables)
+git add -A && git commit -m "feat: add apex domain support to cloudflare tunnel"
+git push
+
+# Apply to cluster
+task reconcile
+
+# Wait for tunnel pod to restart (~30 seconds)
+kubectl get pods -n network -l app.kubernetes.io/name=cloudflare-tunnel -w
+
+# Test apex domain
+curl -I https://example.com
+# Should return HTTP/2 200
+```
+
+**Key Points**:
+- Apex domain rules **must precede** wildcard rules (order matters in Cloudflare Tunnel ingress)
+- Both domains (primary and secondary) need explicit apex rules if using Cloudflare Tunnel
+- Uses `${SECRET_DOMAIN}` variables so no domain names are committed to git
+- Tunnel pod automatically restarts when ConfigMap changes (via reloader annotation)
+
 ## References
 
 - [Cloudflare DNS-01 ACME Challenge](https://cert-manager.io/docs/configuration/acme/dns01/cloudflare/)
