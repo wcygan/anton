@@ -138,37 +138,37 @@ spec:
         useAllDevices: false
         config:
           osdsPerDevice: '1'
-        # NOTE: Update this section based on your actual disk configuration
-        # Use: talosctl --nodes <node-ip> get disks --insecure
-        # to discover available disks on each node
+        # Disk configuration based on actual hardware layout
+        # System disks (500GB CT500P3SSD8) vary by node, excluded below
+        # All WD_BLACK SN7100 1TB drives are used for Ceph storage
         nodes:
           - name: k8s-1
             devices:
-              - name: /dev/nvme0n1
+              - name: /dev/nvme0n1  # 1TB WD_BLACK SN7100
                 config:
                   deviceClass: nvme
-              # Uncomment if you have a second NVMe drive:
-              # - name: /dev/nvme1n1
-              #   config:
-              #     deviceClass: nvme
+              - name: /dev/nvme1n1  # 1TB WD_BLACK SN7100
+                config:
+                  deviceClass: nvme
+              # nvme2n1 is system disk (500GB)
           - name: k8s-2
             devices:
-              - name: /dev/nvme0n1
+              - name: /dev/nvme1n1  # 1TB WD_BLACK SN7100
                 config:
                   deviceClass: nvme
-              # Uncomment if you have a second NVMe drive:
-              # - name: /dev/nvme1n1
-              #   config:
-              #     deviceClass: nvme
+              - name: /dev/nvme2n1  # 1TB WD_BLACK SN7100
+                config:
+                  deviceClass: nvme
+              # nvme0n1 is system disk (500GB)
           - name: k8s-3
             devices:
-              - name: /dev/nvme0n1
+              - name: /dev/nvme0n1  # 1TB WD_BLACK SN7100
                 config:
                   deviceClass: nvme
-              # Uncomment if you have a second NVMe drive:
-              # - name: /dev/nvme1n1
-              #   config:
-              #     deviceClass: nvme
+              - name: /dev/nvme2n1  # 1TB WD_BLACK SN7100
+                config:
+                  deviceClass: nvme
+              # nvme1n1 is system disk (500GB)
       disruptionManagement:
         managePodBudgets: true
         osdMaintenanceTimeout: 30
