@@ -116,6 +116,10 @@ cilium status         # Verify Cilium CNI
 - k8s_gateway provides DNS at `cluster_dns_gateway_addr` for split-horizon DNS
 - Configure home DNS server to forward `cloudflare_domain` queries to `cluster_dns_gateway_addr`
 
+**Multi-Domain Support**: The cluster supports hosting multiple domains (e.g., `primary.com`, `secondary.com`) with automatic DNS and SSL certificate management. For detailed guidance on adding secondary domains, DNS configuration, certificate setup, and troubleshooting, see `docs/docs/notes/adding-a-2nd-domain.md`.
+
+**Critical for Second Domain Apps**: Apps on secondary domains require explicit `DNSEndpoint` resources instead of relying on HTTPRoute annotations due to external-dns `--gateway-name` filter behavior. Gateway certificates must also be configured for each domain. See multi-domain documentation for complete implementation details.
+
 ## Updating Configuration
 
 After modifying `talconfig.yaml` or patches:
