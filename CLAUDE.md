@@ -109,6 +109,15 @@ cilium status         # Verify Cilium CNI
 - Shellcheck: `.shellcheckrc` enforces shell script standards
 - Never push unencrypted `*.sops.*` files
 
+**Documentation Standards**
+
+- All documentation files (`.md`) **MUST** be valid UTF-8 encoded text
+- Never use control characters (`\x00-\x08`, `\x0B-\x0C`, `\x0E-\x1F`) in documentation
+- Use proper Unicode symbols when needed (✓ for checkmarks, → for arrows, ✅ for success indicators)
+- Validate UTF-8 encoding before committing: `file <filename>` should output "Unicode text, UTF-8 text"
+- If encoding issues are detected, clean with: `iconv -f UTF-8 -t UTF-8 <file> > /dev/null` to validate
+- Documentation should render correctly in all standard Markdown viewers without binary corruption
+
 ## Gateway & DNS
 
 - `envoy-internal` gateway for cluster-internal HTTPRoutes (via `cluster_gateway_addr`)
