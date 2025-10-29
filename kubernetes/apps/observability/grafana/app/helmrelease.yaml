@@ -39,9 +39,6 @@ spec:
       limits:
         memory: 1Gi
     adminUser: admin
-    env:
-      GF_SERVER_ROOT_URL: "https://grafana.${SECRET_DOMAIN}"
-      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
     datasources:
       datasources.yaml:
         apiVersion: 1
@@ -54,7 +51,7 @@ spec:
             editable: true
           - name: Loki
             type: loki
-            url: http://loki-gateway.observability.svc.cluster.local:80
+            url: http://loki.observability.svc.cluster.local:3100
             access: proxy
             editable: true
     dashboardProviders:
