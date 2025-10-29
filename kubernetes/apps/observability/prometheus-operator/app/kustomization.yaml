@@ -5,3 +5,5 @@ resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
   - ./prometheus-rules.yaml
+  - ./ingress-tailscale-prometheus.yaml
+  - ./ingress-tailscale-alertmanager.yaml

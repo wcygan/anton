@@ -1,19 +1,19 @@
 ---
-# Tailscale Ingress for Rook Ceph Dashboard
+# Tailscale Ingress for Alertmanager
 # Requires: Tailscale Operator installed in cluster
 # Access: Hostname assigned automatically by Tailscale operator
 # TLS: Automatically provisioned via Let's Encrypt on first access
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: rook-ceph-dashboard-tailscale
+  name: alertmanager-tailscale
 spec:
   ingressClassName: tailscale
   defaultBackend:
     service:
-      name: rook-ceph-mgr-dashboard
+      name: prometheus-operator-kube-p-alertmanager
       port:
-        number: 7000
+        number: 9093
   tls:
     - hosts:
-        - rook-ceph-dashboard
+        - observability-alertmanager
