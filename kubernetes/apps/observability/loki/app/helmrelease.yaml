@@ -50,6 +50,12 @@ spec:
           memory: 1Gi
         limits:
           memory: 2Gi
+    write:
+      replicas: 0
+    read:
+      replicas: 0
+    backend:
+      replicas: 0
     gateway:
       enabled: false
     monitoring:
