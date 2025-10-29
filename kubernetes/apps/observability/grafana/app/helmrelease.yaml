@@ -1,0 +1,87 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: grafana
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: grafana
+      version: 8.10.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+  install:
+    remediation:
+      retries: 3
+    crds: CreateReplace
+  upgrade:
+    remediation:
+      retries: 3
+    cleanupOnFail: true
+    crds: CreateReplace
+  valuesFrom:
+    - kind: Secret
+      name: grafana-admin-secret
+      valuesKey: admin-password
+      targetPath: adminPassword
+  values:
+    replicas: 1
+    persistence:
+      enabled: true
+      storageClassName: ceph-block
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+    adminUser: admin
+    env:
+      GF_SERVER_ROOT_URL: "https://grafana.${SECRET_DOMAIN}"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            url: http://prometheus-operator-kube-prometheus-prometheus.observability.svc.cluster.local:9090
+            access: proxy
+            isDefault: true
+            editable: true
+          - name: Loki
+            type: loki
+            url: http://loki-gateway.observability.svc.cluster.local:80
+            access: proxy
+            editable: true
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: 'default'
+            orgId: 1
+            folder: ''
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/default
+    dashboards:
+      default:
+        kubernetes-cluster:
+          gnetId: 15759
+          revision: 47
+          datasource: Prometheus
+        node-exporter:
+          gnetId: 19268
+          revision: 1
+          datasource: Prometheus
+        loki-logs:
+          gnetId: 12019
+          revision: 2
+          datasource: Loki
+    serviceMonitor:
+      enabled: true
