@@ -5,9 +5,46 @@ slug: /
 
 # Anton
 
-Kubernetes homelab cluster.
+Kubernetes homelab cluster. I use this for:
+
+- Exposing applications to the public internet
+- Hosting applications that I can access remotely over VPN
+- Trying new stuff
 
 🔗 **Blog Post**: https://wcygan.net/anton
+
+## Cluster Access
+
+```mermaid
+flowchart TD
+    subgraph external[Public Access]
+        direction TB
+        domain1[wcygan.net<br/>Cloudflare]
+        domain2[anotherdomain.com<br/>Cloudflare]
+    end
+
+    subgraph internal[Internal Access - VPN Only]
+        direction TB
+        domain3[my.private.ts.net<br/>Tailscale]
+    end
+
+    subgraph cluster[Anton Cluster]
+        direction TB
+        apps[Applications<br/>& Services]
+    end
+
+    domain1 --> apps
+    domain2 --> apps
+    domain3 -.-> apps
+
+    classDef cloudflare fill:#f4811f,color:#fff
+    classDef tailscale fill:#242526,color:#fff
+    classDef clusterBox fill:#e1f5fe
+
+    class domain1,domain2 cloudflare
+    class domain3 tailscale
+    class apps clusterBox
+```
 
 ### Hardware
 - **Nodes**: 3x MS-01 mini PCs (Intel N100, 16GB RAM each)
