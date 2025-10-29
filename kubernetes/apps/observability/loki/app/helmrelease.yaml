@@ -51,8 +51,7 @@ spec:
         limits:
           memory: 2Gi
     gateway:
-      enabled: true
-      replicas: 1
+      enabled: false
     monitoring:
       serviceMonitor:
         enabled: true
