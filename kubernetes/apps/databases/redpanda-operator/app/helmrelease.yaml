@@ -26,5 +26,7 @@ spec:
     # The operator is namespace-scoped and manages Redpanda clusters
     # in the same namespace where it's deployed (databases)
 
-    # CRDs are managed via install.crds above (v25.1.1+ supports this)
-    # No additional configuration needed for operator-only deployment
+    # Enable CRD installation (stable CRDs only, not experimental)
+    crds:
+      enabled: true
+      experimental: false
