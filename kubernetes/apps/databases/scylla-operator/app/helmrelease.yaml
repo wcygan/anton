@@ -26,10 +26,7 @@ spec:
     # Scylla Operator configuration
     # The operator manages ScyllaCluster CRDs across the cluster
 
-    # Image configuration
-    image:
-      repository: scylladb/scylla-operator
-      pullPolicy: IfNotPresent
+    # Image configuration (don't override repository - chart handles it)
 
     # Resource limits (adjust based on cluster size)
     resources:
