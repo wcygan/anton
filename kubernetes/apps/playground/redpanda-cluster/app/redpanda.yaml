@@ -4,14 +4,13 @@ kind: Redpanda
 metadata:
   name: redpanda-playground
 spec:
-  chartRef:
-    chartVersion: 5.9.17
+  chartRef: {}
   clusterSpec:
-    # Single node cluster for testing
+    # Minimal single-node configuration
     statefulset:
       replicas: 1
 
-    # Minimal resources
+    # Minimal resource requests
     resources:
       cpu:
         cores: 500m
@@ -26,11 +25,6 @@ spec:
         enabled: true
         size: 2Gi
 
-    # Disable external access
+    # Disable external access for testing
     external:
       enabled: false
-
-    # Basic configuration
-    config:
-      cluster:
-        auto_create_topics_enabled: true
