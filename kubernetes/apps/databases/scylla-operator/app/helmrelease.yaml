@@ -1,0 +1,44 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: scylla-operator
+spec:
+  chart:
+    spec:
+      chart: scylla-operator
+      sourceRef:
+        kind: HelmRepository
+        name: scylla
+  interval: 1h
+  timeout: 10m
+  install:
+    remediation:
+      retries: 3
+    disableWait: true
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    # Scylla Operator configuration
+    # The operator manages ScyllaCluster CRDs across the cluster
+
+    # Image configuration
+    image:
+      repository: scylladb/scylla-operator
+      pullPolicy: IfNotPresent
+
+    # Resource limits (adjust based on cluster size)
+    resources:
+      limits:
+        cpu: 200m
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 32Mi
+
+    # Webhook configuration
+    webhook:
+      # Use cert-manager for webhook certificates
+      createSelfSignedCertificate: false

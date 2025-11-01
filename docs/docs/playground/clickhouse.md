@@ -18,3 +18,5 @@ I use [Altinity ClickHouse Operator](https://github.com/Altinity/clickhouse-oper
 > - Customized pod templates
 > - ClickHouse cluster scaling including automatic schema propagation
 > - Exporting ClickHouse metrics to Prometheus
+
+Docs: https://github.com/Altinity/clickhouse-operator/blob/master/docs/operator_installation_details.md

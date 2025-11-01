@@ -8,4 +8,6 @@ resources:
   - ./namespace.yaml
   - ./dragonfly-operator/ks.yaml
   - ./redpanda-operator/ks.yaml
+  - ./scylla-operator/ks.yaml
+  - ./scylla-manager/ks.yaml
   - ./tidb-operator/ks.yaml
