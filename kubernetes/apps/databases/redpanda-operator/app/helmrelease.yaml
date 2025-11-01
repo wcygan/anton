@@ -12,9 +12,11 @@ spec:
         kind: HelmRepository
         name: redpanda
   interval: 1h
+  timeout: 10m
   install:
     remediation:
       retries: 3
+    disableWait: true
   upgrade:
     cleanupOnFail: true
     remediation:
