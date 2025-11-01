@@ -1,0 +1,23 @@
+---
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  name: scylla-playground
+spec:
+  version: 6.2.1
+  developerMode: true
+
+  datacenter:
+    name: datacenter1
+    racks:
+      - name: rack1
+        members: 1
+        storage:
+          capacity: 2Gi
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
