@@ -37,21 +37,20 @@ spec:
 
     # Internal Scylla cluster configuration
     scylla:
-      datacenter:
-        name: manager-dc
-        racks:
-          - name: manager-rack
-            members: 1
-            storage:
-              capacity: 2Gi
-              storageClassName: ceph-block
-            resources:
-              requests:
-                cpu: 500m
-                memory: 512Mi
-              limits:
-                cpu: 1000m
-                memory: 1Gi
-            # Remove node affinity requirement - allow scheduling on any node
-            placement: {}
       developerMode: true
+      datacenter: manager-dc
+      racks:
+        - name: manager-rack
+          members: 1
+          storage:
+            capacity: 2Gi
+            storageClassName: ceph-block
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          # Remove node affinity requirement - allow scheduling on any node
+          placement: {}
