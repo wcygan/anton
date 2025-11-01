@@ -26,9 +26,7 @@ spec:
     # Scylla Manager configuration
     # Manages backup, repair, and maintenance tasks for ScyllaClusters
 
-    # Image configuration (don't override repository - chart handles it)
-
-    # Resource limits
+    # Manager resource limits
     resources:
       limits:
         cpu: 200m
@@ -36,3 +34,24 @@ spec:
       requests:
         cpu: 10m
         memory: 32Mi
+
+    # Internal Scylla cluster configuration
+    scylla:
+      datacenter:
+        name: manager-dc
+        racks:
+          - name: manager-rack
+            members: 1
+            storage:
+              capacity: 2Gi
+              storageClassName: ceph-block
+            resources:
+              requests:
+                cpu: 500m
+                memory: 512Mi
+              limits:
+                cpu: 1000m
+                memory: 1Gi
+            # Remove node affinity requirement - allow scheduling on any node
+            placement: {}
+      developerMode: true
