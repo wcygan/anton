@@ -6,11 +6,10 @@ metadata:
 spec:
   chart:
     spec:
-      chart: dragonfly-operator
-      version: v1.3.0
+      chart: ./charts/dragonfly-operator
       sourceRef:
-        kind: HelmRepository
-        name: dragonfly
+        kind: GitRepository
+        name: dragonfly-operator
   interval: 1h
   install:
     crds: Create

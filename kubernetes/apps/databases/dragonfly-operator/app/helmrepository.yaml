@@ -1,9 +1,0 @@
----
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: dragonfly
-spec:
-  interval: 1h
-  url: https://dragonflydb.github.io/dragonfly-operator
-  type: default
