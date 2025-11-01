@@ -42,5 +42,5 @@ spec:
 
     # Webhook configuration
     webhook:
-      # Use cert-manager for webhook certificates
-      createSelfSignedCertificate: false
+      # Use cert-manager to generate self-signed certificates
+      createSelfSignedCertificate: true
