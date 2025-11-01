@@ -11,7 +11,11 @@ spec:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
-  targetNamespace: scylla-manager
+  targetNamespace: databases
   wait: false
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
   dependsOn:
     - name: scylla-operator
