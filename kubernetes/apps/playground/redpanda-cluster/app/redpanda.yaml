@@ -10,14 +10,14 @@ spec:
     statefulset:
       replicas: 1
 
-    # Minimal resource requests
+    # Minimal resource requests (Redpanda needs at least 610Mi)
     resources:
       cpu:
         cores: 500m
       memory:
         container:
-          min: 512Mi
-          max: 1Gi
+          min: 1Gi
+          max: 2Gi
 
     # Small storage
     storage:
