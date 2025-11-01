@@ -2,20 +2,16 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: &name scylla-operator
-  namespace: flux-system
+  name: scylla-operator
 spec:
-  targetNamespace: scylla-operator
-  commonMetadata:
-    labels:
-      app.kubernetes.io/name: *name
-  interval: 10m
-  timeout: 5m
+  interval: 1h
   path: ./kubernetes/apps/databases/scylla-operator/app
   prune: true
   sourceRef:
     kind: GitRepository
-    name: anton
-  wait: true
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: scylla-operator
+  wait: false
   dependsOn:
     - name: cert-manager-ready
