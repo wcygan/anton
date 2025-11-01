@@ -13,11 +13,9 @@ spec:
         name: redpanda
   interval: 1h
   install:
-    crds: Create
     remediation:
       retries: 3
   upgrade:
-    crds: CreateReplace
     cleanupOnFail: true
     remediation:
       retries: 3
