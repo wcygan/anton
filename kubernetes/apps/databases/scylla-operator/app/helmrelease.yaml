@@ -3,7 +3,9 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: scylla-operator
+  namespace: scylla-operator
 spec:
+  targetNamespace: scylla-operator
   chart:
     spec:
       chart: scylla-operator
