@@ -4,9 +4,13 @@ kind: HelmRelease
 metadata:
   name: tidb-operator
 spec:
-  chartRef:
-    kind: OCIRepository
-    name: tidb-operator
+  chart:
+    spec:
+      chart: tidb-operator
+      version: v1.6.3
+      sourceRef:
+        kind: HelmRepository
+        name: pingcap
   interval: 1h
   install:
     crds: Create
