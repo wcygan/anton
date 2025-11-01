@@ -140,7 +140,7 @@ flowchart TD
     mgr_pod -->|Manages| playground[Playground<br/>Scylla Clusters]
 
     internal -->|Requires| storage[Storage Class<br/>ceph-block]
-    internal -->|Placement| nodes[Any K8s Node<br/>placement: {}]
+    internal -->|Placement| nodes[Any K8s Node<br/>placement: empty]
 
     classDef component fill:#7e57c2,color:white
     classDef resource fill:#42a5f5,color:white
