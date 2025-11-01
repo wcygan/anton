@@ -38,9 +38,9 @@ spec:
     # Internal Scylla cluster configuration
     scylla:
       developerMode: true
-      datacenter: manager-dc
+      datacenter: dc1
       racks:
-        - name: manager-rack
+        - name: rack1
           members: 1
           storage:
             capacity: 2Gi
