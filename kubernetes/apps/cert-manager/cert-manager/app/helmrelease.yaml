@@ -18,3 +18,26 @@ spec:
       enabled: true
       servicemonitor:
         enabled: true
+    # WHY: Resource limits prevent runaway memory consumption from impacting node stability.
+    # Current usage: controller ~89Mi, cainjector ~118Mi, webhook ~67Mi
+    # Limits set at ~2x current usage with headroom for certificate processing spikes.
+    resources:
+      limits:
+        memory: 256Mi
+      requests:
+        cpu: 10m
+        memory: 128Mi
+    cainjector:
+      resources:
+        limits:
+          memory: 256Mi
+        requests:
+          cpu: 10m
+          memory: 128Mi
+    webhook:
+      resources:
+        limits:
+          memory: 128Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi

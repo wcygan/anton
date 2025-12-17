@@ -27,11 +27,20 @@ spec:
       enabled: true
     endpointRoutes:
       enabled: true
+    # WHY: Resource limits prevent runaway memory consumption from impacting node stability.
+    # Current usage: cilium envoy ~71Mi per node
+    # Limits set at ~3x current usage with headroom for proxy growth.
     envoy:
       rollOutPods: true
       prometheus:
         serviceMonitor:
           enabled: true
+      resources:
+        limits:
+          memory: 256Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
     gatewayAPI:
       enabled: true
     hubble:
@@ -49,6 +58,9 @@ spec:
       algorithm: maglev
       mode: "dsr"
     localRedirectPolicy: true
+    # WHY: Resource limits for operator prevent runaway memory consumption.
+    # Current usage: cilium operator ~63Mi
+    # Limits set at ~4x current usage with headroom for reconciliation loops.
     operator:
       dashboards:
         enabled: true
@@ -58,6 +70,12 @@ spec:
           enabled: true
       replicas: 1
       rollOutPods: true
+      resources:
+        limits:
+          memory: 256Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
     prometheus:
       enabled: true
       serviceMonitor:
@@ -87,3 +105,12 @@ spec:
           - SYS_RESOURCE
     socketLB:
       hostNamespaceOnly: true
+    # WHY: Resource limits for cilium agents prevent runaway memory consumption.
+    # Current usage: cilium agents ~750Mi per node
+    # Limits set at ~2x current usage with headroom for BPF map growth.
+    resources:
+      limits:
+        memory: 1536Mi
+      requests:
+        cpu: 100m
+        memory: 512Mi
