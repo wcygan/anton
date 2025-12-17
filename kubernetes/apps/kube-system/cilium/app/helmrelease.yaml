@@ -44,7 +44,35 @@ spec:
     gatewayAPI:
       enabled: true
     hubble:
-      enabled: false
+      enabled: true
+      relay:
+        enabled: true
+        rollOutPods: true
+        # WHY: Resource limits prevent relay from consuming excessive memory
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
+      ui:
+        enabled: true
+        rollOutPods: true
+        # WHY: Resource limits prevent UI from consuming excessive memory
+        frontend:
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+        backend:
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
     ipam:
       mode: kubernetes
     ipv4NativeRoutingCIDR: "10.42.0.0/16"
