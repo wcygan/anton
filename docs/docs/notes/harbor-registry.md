@@ -42,7 +42,7 @@ Harbor is exposed internally through Tailscale at `https://registry.<tailnet>.ts
 - **External database**: CloudNative PG Operator provides HA PostgreSQL (3 replicas) instead of Harbor's internal database
 - **External cache**: DragonflyDB Operator provides HA Redis-compatible cache (3 replicas) instead of Harbor's internal Redis
 - **Ceph storage**: Registry images stored on `ceph-filesystem` (RWX) for multi-replica access
-- **Tailscale-only access**: No public exposure; registry accessible only to tailnet members
+- **Tailscale-only access**: No public exposure; registry accessible only to tailnet members (Allows [Public Projects](https://goharbor.io/docs/2.0.0/working-with-projects/create-projects/), anyone in the tailnet can pull)
 
 ## Usage
 
