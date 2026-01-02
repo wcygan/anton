@@ -1,0 +1,19 @@
+---
+# Tailscale Ingress for Harbor Container Registry
+# Access via: https://harbor-registry.<TAILNET>.ts.net
+# Requires: Tailscale Operator installed in cluster
+# TLS: Automatically provisioned via Let's Encrypt on first access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: registry-tailscale
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: harbor
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - registry
