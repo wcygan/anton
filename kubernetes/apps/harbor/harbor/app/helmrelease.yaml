@@ -63,7 +63,8 @@ spec:
           size: 100Gi
         jobservice:
           jobLog:
-            storageClass: ceph-block
+            # WHY: ceph-filesystem (RWX) needed for multi-replica jobservice
+            storageClass: ceph-filesystem
             size: 1Gi
         trivy:
           storageClass: ceph-block
