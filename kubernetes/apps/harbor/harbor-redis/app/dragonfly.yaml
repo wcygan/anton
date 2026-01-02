@@ -1,0 +1,25 @@
+---
+apiVersion: dragonflydb.io/v1alpha1
+kind: Dragonfly
+metadata:
+  name: harbor-redis
+spec:
+  # WHY: 3 replicas provides HA for session and cache data
+  # DragonflyDB handles failover automatically
+  replicas: 3
+
+  image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.23.1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  args:
+    # WHY: Harbor cache workload is moderate, 256MB is sufficient
+    - --maxmemory=256mb
+    # WHY: Single thread is enough for Harbor's Redis usage pattern
+    - --proactor_threads=1

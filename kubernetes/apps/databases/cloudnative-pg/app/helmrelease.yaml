@@ -1,0 +1,35 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cloudnative-pg
+spec:
+  chart:
+    spec:
+      chart: cloudnative-pg
+      version: 0.23.0
+      sourceRef:
+        kind: HelmRepository
+        name: cloudnative-pg
+  interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    # WHY: Resource limits prevent operator from consuming excessive resources
+    # while ensuring it has enough headroom for managing multiple clusters
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+    # WHY: Enable monitoring for PostgreSQL cluster observability
+    monitoring:
+      podMonitorEnabled: true

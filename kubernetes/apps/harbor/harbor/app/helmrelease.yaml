@@ -1,0 +1,156 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: harbor
+spec:
+  chart:
+    spec:
+      chart: harbor
+      version: 1.16.2
+      sourceRef:
+        kind: HelmRepository
+        name: harbor
+  interval: 1h
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  valuesFrom:
+    # WHY: Pull admin password from SOPS-encrypted secret
+    - kind: Secret
+      name: harbor-admin-secret
+      valuesKey: adminPassword
+      targetPath: harborAdminPassword
+    # WHY: CNPG auto-generates credentials in harbor-postgres-app secret
+    - kind: Secret
+      name: harbor-postgres-app
+      valuesKey: password
+      targetPath: database.external.password
+  values:
+    # WHY: Use ClusterIP since we expose via Gateway API HTTPRoute
+    # Harbor doesn't need to manage its own ingress
+    expose:
+      type: clusterIP
+      tls:
+        enabled: false
+      clusterIP:
+        name: harbor
+        ports:
+          httpPort: 80
+          httpsPort: 443
+
+    # WHY: externalURL is critical for Docker client redirects
+    # and generating correct URLs in the Harbor UI
+    externalURL: https://registry.${SECRET_DOMAIN}
+
+    # WHY: Hardcoded false forces internal TLS off since envoy-internal
+    # handles TLS termination. Avoids double-encryption overhead.
+    internalTLS:
+      enabled: false
+
+    persistence:
+      enabled: true
+      resourcePolicy: keep
+      persistentVolumeClaim:
+        registry:
+          # WHY: ceph-filesystem supports RWX mode needed when scaling
+          # registry replicas for HA (all pods share same storage)
+          storageClass: ceph-filesystem
+          size: 100Gi
+        jobservice:
+          jobLog:
+            storageClass: ceph-block
+            size: 1Gi
+        trivy:
+          storageClass: ceph-block
+          size: 5Gi
+
+    # WHY: 2 replicas for core components enables HA
+    # without excessive resource consumption
+    portal:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+
+    core:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    jobservice:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+
+    registry:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    trivy:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          memory: 1Gi
+
+    # WHY: Disable internal database - use CNPG HA cluster instead
+    database:
+      type: external
+      external:
+        host: harbor-postgres-rw.harbor.svc.cluster.local
+        port: "5432"
+        username: harbor
+        coreDatabase: registry
+        sslmode: require
+
+    # WHY: Disable internal Redis - use DragonflyDB HA cluster instead
+    redis:
+      type: external
+      external:
+        addr: harbor-redis.harbor.svc.cluster.local:6379
+        coreDatabaseIndex: "0"
+        jobserviceDatabaseIndex: "1"
+        registryDatabaseIndex: "2"
+        trivyAdapterIndex: "5"
+
+    # WHY: Prometheus metrics for observability
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+
+    # WHY: Log to stdout for collection by cluster logging stack
+    log:
+      level: info
+
+    # WHY: Disable components not needed for basic registry functionality
+    notary:
+      enabled: false
+
+    cache:
+      enabled: true
+      expireHours: 24

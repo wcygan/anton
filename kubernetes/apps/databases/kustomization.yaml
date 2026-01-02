@@ -6,6 +6,7 @@ components:
   - ../../components/sops
 resources:
   - ./namespace.yaml
+  - ./cloudnative-pg/ks.yaml
   - ./dragonfly-operator/ks.yaml
   - ./redpanda-operator/ks.yaml
   - ./scylla-operator/ks.yaml
