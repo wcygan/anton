@@ -57,14 +57,15 @@ spec:
       resourcePolicy: keep
       persistentVolumeClaim:
         registry:
-          # WHY: ceph-filesystem supports RWX mode needed when scaling
-          # registry replicas for HA (all pods share same storage)
+          # WHY: ceph-filesystem with RWX needed for multi-replica registry
           storageClass: ceph-filesystem
+          accessMode: ReadWriteMany
           size: 100Gi
         jobservice:
           jobLog:
-            # WHY: ceph-filesystem (RWX) needed for multi-replica jobservice
+            # WHY: ceph-filesystem with RWX needed for multi-replica jobservice
             storageClass: ceph-filesystem
+            accessMode: ReadWriteMany
             size: 1Gi
         trivy:
           storageClass: ceph-block
