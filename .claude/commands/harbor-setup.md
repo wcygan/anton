@@ -6,72 +6,76 @@ Help the developer set up their Docker image pipeline with the private Harbor re
 
 ## Context
 
-This cluster uses a private Harbor registry exposed via Tailscale at `registry.<tailnet>.ts.net`. Developers must:
-1. Be connected to Tailscale
-2. Build images for `linux/amd64` (cluster architecture)
-3. Push to Harbor with proper authentication
-4. Reference images correctly in Kubernetes manifests
+This cluster uses a private Harbor registry. The key insight is:
+
+- **Push**: Use `localhost:8080` via port-forward (fast, ~LAN speed)
+- **Pull**: Pods reference `registry.<tailnet>.ts.net` (auto-redirected to internal ClusterIP)
+
+Both hostnames access the same Harbor instance. The repository path (`library/myapp:v1`) is what identifies the image, not the hostname.
 
 ## Step 1: Gather Information
 
 Use the AskUserQuestion tool to collect:
 
 **Question 1 - Application name**: "What is your application name?"
-- This determines the image name (e.g., `myapp` becomes `registry.<tailnet>/library/myapp`)
+- This determines the image name (e.g., `myapp` becomes `library/myapp`)
 
 **Question 2 - Dockerfile location**: "Where is your Dockerfile?"
 - Options: "Current directory", "Subdirectory (specify path)", "Need to create one"
 
 **Question 3 - Development machine**: "What machine are you building on?"
 - Options: "ARM Mac (M1/M2/M3/M4)", "Intel Mac", "Linux x86_64"
-- This determines if `--platform linux/amd64` is needed
+- ARM Macs MUST use `--platform linux/amd64`
 
-**Question 4 - Harbor credentials**: "Do you have Harbor login credentials?"
-- Options: "Yes, I have them", "No, I need to get them from admin"
+## Step 2: One-Time Setup
 
-## Step 2: Verify Prerequisites
-
-After gathering info, verify:
+### Start Harbor Port-Forward
 
 ```bash
-# Check Tailscale connection
-tailscale status
-
-# Get tailnet suffix for registry URL
-tailscale status --json | jq -r '.MagicDNSSuffix'
+# Run in a separate terminal (or background with &)
+kubectl port-forward svc/harbor -n harbor 8080:80
 ```
 
-If not connected, instruct: "Run `tailscale up` to connect to the network."
+This creates a fast local tunnel to Harbor, bypassing slow Tailscale DERP relay.
 
-## Step 3: Provide Customized Instructions
-
-Based on their answers, provide a complete workflow. Use their actual application name.
-
-### For ARM Mac users, emphasize:
+### Login to Harbor
 
 ```bash
-# CRITICAL: Always use --platform flag or image won't run on cluster
-docker build --platform linux/amd64 -t <app-name>:v1 .
+# Login once (credentials are cached)
+docker login localhost:8080
+# Username: admin (or your username)
+# Password: (get from cluster admin or Harbor UI)
 ```
 
-### Docker login:
+## Step 3: Build and Push Workflow
+
+Based on their machine type, provide the appropriate workflow.
+
+### For ARM Mac users (M1/M2/M3/M4):
 
 ```bash
-# Login to Harbor (only needed once, credentials are cached)
-docker login registry.<tailnet-suffix>
+# Build for cluster architecture (REQUIRED - cluster runs amd64)
+docker build --platform linux/amd64 -t <app-name>:<tag> .
+
+# Push via port-forward (fast)
+docker tag <app-name>:<tag> localhost:8080/library/<app-name>:<tag>
+docker push localhost:8080/library/<app-name>:<tag>
 ```
 
-### Tag and push:
+### For Intel Mac / Linux x86_64:
 
 ```bash
-# Tag for Harbor registry
-docker tag <app-name>:v1 registry.<tailnet-suffix>/library/<app-name>:v1
+# Build (no platform flag needed)
+docker build -t <app-name>:<tag> .
 
-# Push to Harbor
-docker push registry.<tailnet-suffix>/library/<app-name>:v1
+# Push via port-forward (fast)
+docker tag <app-name>:<tag> localhost:8080/library/<app-name>:<tag>
+docker push localhost:8080/library/<app-name>:<tag>
 ```
 
-### Kubernetes deployment snippet:
+## Step 4: Kubernetes Reference
+
+Pods always reference the Tailscale hostname (cluster handles the fast internal routing):
 
 ```yaml
 apiVersion: apps/v1
@@ -90,47 +94,51 @@ spec:
     spec:
       containers:
         - name: <app-name>
-          image: registry.<tailnet-suffix>/library/<app-name>:v1
+          image: registry.<tailnet-suffix>/library/<app-name>:<tag>
 ```
 
-Note: The `default` namespace has image pull credentials configured. For other namespaces, ask the cluster admin.
-
-## Step 4: Verification Commands
-
-Provide commands to verify the setup worked:
-
-```bash
-# Verify image was pushed (check Harbor UI or use skopeo)
-skopeo inspect docker://registry.<tailnet-suffix>/library/<app-name>:v1
-
-# Verify architecture is correct
-skopeo inspect --format '{{.Architecture}}' docker://registry.<tailnet-suffix>/library/<app-name>:v1
-# Should output: amd64
-```
+**Why different hostnames?**
+- Push uses `localhost:8080` for speed (port-forward to Harbor)
+- Pull uses `registry.<tailnet>.ts.net` which containerd redirects to internal ClusterIP (~69 MB/s)
+- Same image - Harbor stores by repository path, not hostname
 
 ## Step 5: Quick Reference Card
 
-After setup is complete, provide a copy-pasteable quick reference:
+Provide this copy-pasteable summary:
 
 ```bash
-# Build (ARM Mac)
+# === One-time setup ===
+kubectl port-forward svc/harbor -n harbor 8080:80 &
+docker login localhost:8080
+
+# === Build and push ===
 docker build --platform linux/amd64 -t <app-name>:<tag> .
+docker tag <app-name>:<tag> localhost:8080/library/<app-name>:<tag>
+docker push localhost:8080/library/<app-name>:<tag>
 
-# Tag
+# === In Kubernetes manifests ===
+image: registry.<tailnet-suffix>/library/<app-name>:<tag>
+```
+
+## Fallback: Push via Tailscale
+
+If port-forward isn't available, push directly via Tailscale (slower, ~200 KB/s):
+
+```bash
+docker login registry.<tailnet-suffix>
 docker tag <app-name>:<tag> registry.<tailnet-suffix>/library/<app-name>:<tag>
-
-# Push
 docker push registry.<tailnet-suffix>/library/<app-name>:<tag>
 ```
 
-## Troubleshooting Tips
+## Troubleshooting
 
-If they encounter issues, reference these solutions:
-
-- **"unauthorized"**: Run `docker login registry.<tailnet-suffix>` again
-- **"no such host"**: Check `tailscale status` - must be connected
-- **"exec format error" in cluster**: Image built for wrong architecture - rebuild with `--platform linux/amd64`
-- **Image not found in cluster**: Verify push succeeded and image path matches exactly
+| Issue | Solution |
+|-------|----------|
+| `unauthorized` on push | Run `docker login localhost:8080` (or the registry URL you're using) |
+| `connection refused` on localhost:8080 | Start port-forward: `kubectl port-forward svc/harbor -n harbor 8080:80` |
+| `exec format error` in cluster | Image built for wrong arch - rebuild with `--platform linux/amd64` |
+| Push is slow | Use port-forward method instead of Tailscale |
+| Image not found in cluster | Verify repository path matches exactly (`library/<app-name>:<tag>`) |
 
 ## Output Style
 
