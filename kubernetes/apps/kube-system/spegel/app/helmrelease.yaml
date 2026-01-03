@@ -15,7 +15,7 @@ spec:
       # WHY: Explicitly list registries for Spegel to mirror.
       # Without this, Spegel uses _default which intercepts ALL registries
       # including Harbor, but can't fallback to non-standard registries after 404.
-      registries:
+      mirroredRegistries:
         - https://docker.io
         - https://ghcr.io
         - https://gcr.io
