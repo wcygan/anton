@@ -5,3 +5,15 @@ machine:
       - 192.168.1.254
       - 1.1.1.1
       - 1.0.0.1
+    # WHY: Map Harbor registry hostname to Tailscale IP so containerd
+    # can resolve it without MagicDNS integration in system DNS.
+    #
+    # NOTE: This IP is assigned by the Tailscale operator to the Harbor Ingress.
+    # It is stable during normal operation but could change if the Ingress is
+    # deleted/recreated. If image pulls fail with "no such host", verify the IP:
+    #   dig +short <registry-host> @100.100.100.100
+    # Then update HARBOR_TAILSCALE_IP in talenv.sops.yaml and reapply to all nodes.
+    extraHostEntries:
+      - ip: ${HARBOR_TAILSCALE_IP}
+        aliases:
+          - ${HARBOR_REGISTRY_HOST}

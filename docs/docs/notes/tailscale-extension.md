@@ -63,7 +63,61 @@ patches:
   - "@./patches/global/tailscale.yaml"
 ```
 
-### 4. Update Node Image URLs
+### 4. DNS Resolution for Tailscale Hostnames
+
+**Critical**: The Tailscale extension runs on the node and creates routes, but does NOT configure system DNS to use MagicDNS. Containerd uses the node's DNS resolver, which doesn't know about `.ts.net` domains.
+
+Add the registry hostname and IP to `talos/talenv.sops.yaml`:
+
+```yaml
+HARBOR_REGISTRY_HOST: registry.<tailnet>.ts.net
+HARBOR_TAILSCALE_IP: <tailscale-ip>
+```
+
+Find the Tailscale IP:
+```bash
+dig +short registry.<tailnet>.ts.net @100.100.100.100
+```
+
+Then encrypt:
+```bash
+sops --encrypt --in-place talos/talenv.sops.yaml
+```
+
+The `talos/patches/global/machine-network.yaml` uses these variables:
+
+```yaml
+machine:
+  network:
+    extraHostEntries:
+      - ip: ${HARBOR_TAILSCALE_IP}
+        aliases:
+          - ${HARBOR_REGISTRY_HOST}
+```
+
+**After applying this config, a reboot is required** for containerd to pick up the new `/etc/hosts` entries.
+
+#### IP Stability Warning
+
+The Tailscale IP is assigned by the Tailscale operator to the Ingress resource. It is **stable during normal operation** but **could change** if:
+
+- The Tailscale Ingress is deleted and recreated
+- The Tailscale operator loses state
+- Flux reconciles and recreates the resource
+
+If image pulls suddenly fail with "no such host" errors, verify the current IP:
+
+```bash
+# Check current IP
+dig +short registry.<tailnet>.ts.net @100.100.100.100
+
+# Decrypt and compare with config
+sops -d talos/talenv.sops.yaml | grep HARBOR_TAILSCALE_IP
+```
+
+If they differ, update `HARBOR_TAILSCALE_IP` in `talenv.sops.yaml`, re-encrypt, regenerate configs, and apply to all nodes with reboot.
+
+### 5. Update Node Image URLs
 
 In `talos/talconfig.yaml`, update all nodes to use the new schematic:
 
@@ -168,4 +222,49 @@ talosctl apply-config -n <node-ip> -f talos/clusterconfig/kubernetes-<hostname>.
 
 ```bash
 talosctl get extensionserviceconfigs -n <node-ip> -o yaml
+```
+
+### Image pull fails with "not found" but Tailscale is running
+
+This usually means DNS resolution is failing. Check containerd logs:
+```bash
+talosctl -n <node-ip> logs cri 2>&1 | grep -i "registry" | tail -10
+```
+
+If you see `no such host` errors, the `/etc/hosts` entry is missing or containerd hasn't picked it up. Verify:
+```bash
+talosctl -n <node-ip> read /etc/hosts | grep registry
+```
+
+If missing, apply the config with `extraHostEntries` and reboot the node.
+
+### Image architecture mismatch
+
+If you push images from an ARM Mac, they'll be `arm64` but cluster nodes are `amd64`. Check the image architecture:
+```bash
+skopeo inspect --format '{{.Architecture}}' docker://registry.<tailnet>.ts.net/project/image:tag
+```
+
+Push multi-arch or the correct architecture:
+```bash
+docker pull --platform linux/amd64 myimage:tag
+docker push registry.<tailnet>.ts.net/project/image:tag
+```
+
+### ImagePullSecret not found
+
+Harbor requires authentication even for "public" projects at the Docker v2 API level. Create an imagePullSecret:
+```bash
+kubectl create secret docker-registry harbor-registry-secret \
+  --docker-server=registry.<tailnet>.ts.net \
+  --docker-username=admin \
+  --docker-password=<password> \
+  -n <namespace>
+```
+
+Reference it in your pod spec:
+```yaml
+spec:
+  imagePullSecrets:
+    - name: harbor-registry-secret
 ```
