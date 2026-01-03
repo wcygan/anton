@@ -1,4 +1,13 @@
 machine:
+  # WHY: Explicit registry config for Harbor bypasses Spegel mirrors.
+  # Spegel's _default config intercepts all registries but can't fallback
+  # to non-standard registries after 404. This ensures containerd goes
+  # directly to Harbor via Tailscale.
+  registries:
+    mirrors:
+      ${HARBOR_REGISTRY_HOST}:
+        endpoints:
+          - https://${HARBOR_REGISTRY_HOST}
   network:
     disableSearchDomain: true
     nameservers:

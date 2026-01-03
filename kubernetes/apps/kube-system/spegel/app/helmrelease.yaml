@@ -12,6 +12,16 @@ spec:
     spegel:
       containerdSock: /run/containerd/containerd.sock
       containerdRegistryConfigPath: /etc/cri/conf.d/hosts
+      # WHY: Explicitly list registries for Spegel to mirror.
+      # Without this, Spegel uses _default which intercepts ALL registries
+      # including Harbor, but can't fallback to non-standard registries after 404.
+      registries:
+        - https://docker.io
+        - https://ghcr.io
+        - https://gcr.io
+        - https://registry.k8s.io
+        - https://quay.io
+        - https://mcr.microsoft.com
     service:
       registry:
         hostPort: 29999
