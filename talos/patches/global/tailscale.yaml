@@ -1,0 +1,8 @@
+# WHY: Enable Tailscale on nodes so they can pull images from
+# Harbor registry via the Tailscale-exposed HTTPS endpoint
+# using valid Let's Encrypt TLS
+apiVersion: v1alpha1
+kind: ExtensionServiceConfig
+name: tailscale
+environment:
+  - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
