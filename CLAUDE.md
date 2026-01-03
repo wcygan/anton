@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository is a Talos Kubernetes cluster template that uses Makejinja to render Flux, Talos, and bootstrap configurations from YAML templates. The cluster includes Cilium CNI, Cert-Manager, External-DNS, Cloudflared tunnels, and GitOps via Flux.
 
+## Restrictions
+
+Never add the tailnet name in files in git. Instead of the-actual-name.ts.net, use the placeholder `<tailnet-name>.ts.net`.
+
 ## Core Architecture
 
 **Template-Driven Configuration**
