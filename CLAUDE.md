@@ -243,6 +243,18 @@ Write code optimized for human brain processing (max 4 concepts at once):
   }
   ```
 
+## Common Errors
+
+**Container images fail with "exec format error"**
+
+Cluster nodes are `linux/amd64`. ARM Mac users (M1/M2/M3) must build with the correct platform:
+
+```bash
+docker build --platform linux/amd64 -t myapp:v1 .
+```
+
+Without this flag, Docker builds for your local architecture (`arm64`), which won't run on the cluster.
+
 ## Security and Safety Requirements
 
 **Never Commit Secrets**
