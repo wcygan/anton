@@ -1,13 +1,18 @@
 machine:
-  # WHY: Explicit registry config for Harbor bypasses Spegel mirrors.
-  # Spegel's _default config intercepts all registries but can't fallback
-  # to non-standard registries after 404. This ensures containerd goes
-  # directly to Harbor via Tailscale.
+  # WHY: Route Harbor pulls to internal Kubernetes service for speed.
+  # External pushes use registry.<tailnet>.ts.net via Tailscale.
+  # Internal pulls use harbor.harbor.svc.cluster.local (instant).
+  # This avoids Tailscale DERP relay overhead for in-cluster traffic.
   registries:
     mirrors:
       ${HARBOR_REGISTRY_HOST}:
         endpoints:
-          - https://${HARBOR_REGISTRY_HOST}
+          - http://harbor.harbor.svc.cluster.local
+    config:
+      harbor.harbor.svc.cluster.local:
+        auth:
+          username: ${HARBOR_ROBOT_USERNAME}
+          password: ${HARBOR_ROBOT_PASSWORD}
   network:
     disableSearchDomain: true
     nameservers:
@@ -26,3 +31,8 @@ machine:
       - ip: ${HARBOR_TAILSCALE_IP}
         aliases:
           - ${HARBOR_REGISTRY_HOST}
+      # WHY: containerd runs on the node, not in a pod, so it can't resolve
+      # Kubernetes service names. Add static entry for the internal mirror.
+      - ip: 10.43.216.243
+        aliases:
+          - harbor.harbor.svc.cluster.local

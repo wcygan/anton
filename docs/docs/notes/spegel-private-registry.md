@@ -1,62 +1,96 @@
-# Spegel and Private Registry Integration
+# Harbor Registry with Spegel
 
-This document explains how Spegel (P2P registry mirror) interacts with private registries like Harbor, and how to configure them to work together.
+This document explains how to use the private Harbor registry in the cluster, and how Spegel (P2P registry mirror) is configured to work alongside it.
 
-## The Problem
+---
 
-Spegel is a peer-to-peer registry mirror that caches container images across cluster nodes. By default, it creates a catch-all configuration (`_default`) that intercepts **all** registry requests. This causes issues with private registries like Harbor because:
+## Quick Start
 
-1. Spegel intercepts the pull request
-2. Spegel checks its P2P peers for the image
-3. Peers return 404 (they don't have the private image)
-4. Spegel has no fallback to the actual registry for non-standard registries
-5. The pull fails with "not found" even though the image exists
+### Push an Image (from workstation)
 
-## Symptoms
+```bash
+# 1. Build for the correct architecture (ARM Mac users)
+docker build --platform linux/amd64 -t myapp:v1 .
 
-- Image pulls from Harbor fail with `ErrImagePull` or `ImagePullBackOff`
-- Error messages like "not found" or "manifest unknown"
-- The same image pulls successfully from a workstation but fails on cluster nodes
-- Pulls work initially after a node reboot, then fail after Spegel starts
+# 2. Tag for Harbor
+docker tag myapp:v1 registry.<tailnet>.ts.net/library/myapp:v1
 
-## Root Cause
-
-Spegel's default behavior creates `/etc/cri/conf.d/hosts/_default/hosts.toml`:
-
-```toml
-# This intercepts ALL registries
-[host.'http://192.168.1.100:29999']
-capabilities = ['pull', 'resolve']
-dial_timeout = '200ms'
+# 3. Login and push (via Tailscale - works from anywhere on tailnet)
+docker login registry.<tailnet>.ts.net
+docker push registry.<tailnet>.ts.net/library/myapp:v1
 ```
 
-For standard registries (docker.io, ghcr.io), this works because Spegel's mirrors can fallback to the upstream. For private registries like Harbor, there's no fallback path - Spegel doesn't know how to reach Harbor.
+**Alternative: Fast push via port-forward** (when on same network as cluster):
 
-## Solution
+```bash
+# Terminal 1: Port-forward to Harbor
+kubectl port-forward svc/harbor -n harbor 8080:80
 
-Configure Spegel to only mirror specific registries, leaving private registries untouched.
+# Terminal 2: Push via localhost (faster than Tailscale)
+docker tag myapp:v1 localhost:8080/library/myapp:v1
+docker push localhost:8080/library/myapp:v1
+```
 
-### 1. Update Spegel HelmRelease
+### Pull an Image (in Kubernetes)
 
-Edit `kubernetes/apps/kube-system/spegel/app/helmrelease.yaml`:
+Simply reference the image in your pod spec:
 
 ```yaml
-apiVersion: helm.toolkit.fluxcd.io/v2
-kind: HelmRelease
+apiVersion: v1
+kind: Pod
 metadata:
-  name: spegel
+  name: myapp
 spec:
-  chartRef:
-    kind: OCIRepository
-    name: spegel
-  interval: 1h
+  containers:
+    - name: myapp
+      image: registry.<tailnet>.ts.net/library/myapp:v1
+```
+
+Cluster nodes automatically pull via the internal ClusterIP mirror (~69 MB/s) instead of going through Tailscale.
+
+---
+
+## How It Works
+
+```
+Workstation Push                          Cluster Pull
+─────────────────                         ────────────────
+docker push                               Pod: image: registry.<tailnet>.ts.net/library/myapp:v1
+     │                                           │
+     ▼                                           ▼
+Tailscale ────────────────────────────>  containerd checks hosts.toml
+     │                                           │
+     ▼                                           ▼
+Harbor Ingress                           Mirror: http://harbor.harbor.svc.cluster.local
+(100.x.x.x)                                      │
+     │                                           ▼
+     ▼                                   Harbor ClusterIP (10.43.216.243)
+Harbor Registry                                  │
+(stores image)                                   ▼
+                                         Pull completes in ~500ms (37MB)
+```
+
+**Key insight**: Pods reference images using the Tailscale hostname, but containerd redirects pulls to the internal ClusterIP. This gives:
+- **Push**: Works from anywhere on tailnet (slow but convenient)
+- **Pull**: Fast internal path (~69 MB/s vs ~200 KB/s via Tailscale DERP)
+
+---
+
+## Configuration Pattern
+
+Use this pattern when adding a private registry to a Talos cluster with Spegel.
+
+### 1. Exclude from Spegel
+
+Configure Spegel to only mirror public registries, not your private registry:
+
+```yaml
+# kubernetes/apps/kube-system/spegel/app/helmrelease.yaml
+spec:
   values:
     spegel:
-      containerdSock: /run/containerd/containerd.sock
-      containerdRegistryConfigPath: /etc/cri/conf.d/hosts
       # WHY: Explicitly list registries for Spegel to mirror.
-      # Without this, Spegel uses _default which intercepts ALL registries
-      # including Harbor, but can't fallback to non-standard registries after 404.
+      # Without this, Spegel uses _default which intercepts ALL registries.
       mirroredRegistries:
         - https://docker.io
         - https://ghcr.io
@@ -66,133 +100,165 @@ spec:
         - https://mcr.microsoft.com
 ```
 
-**Key insight**: The value is `mirroredRegistries`, not `registries`. Empty list means "mirror all" (bad for private registries).
+### 2. Configure Registry Mirror (Talos)
 
-### 2. Verify Configuration
+Add to `talos/patches/global/machine-network.yaml`:
 
-After applying, check that `_default` is gone:
-
-```bash
-# Should NOT show _default
-talosctl -n <node-ip> ls /etc/cri/conf.d/hosts/
-
-# Expected output:
-# docker.io
-# gcr.io
-# ghcr.io
-# mcr.microsoft.com
-# quay.io
-# registry.k8s.io
+```yaml
+machine:
+  registries:
+    mirrors:
+      # Maps external hostname to internal service
+      registry.<tailnet>.ts.net:
+        endpoints:
+          - http://harbor.harbor.svc.cluster.local
+    config:
+      # Auth for the internal endpoint
+      harbor.harbor.svc.cluster.local:
+        auth:
+          username: ${HARBOR_ROBOT_USERNAME}
+          password: ${HARBOR_ROBOT_PASSWORD}
+  network:
+    extraHostEntries:
+      # containerd runs on host, can't resolve k8s service names
+      # Map to Harbor ClusterIP so internal pulls work
+      - ip: 10.43.216.243
+        aliases:
+          - harbor.harbor.svc.cluster.local
 ```
 
-### 3. Restart Spegel Pods
+### 3. Add Credentials to talenv.sops.yaml
 
-Force Spegel to recreate its configuration:
+```yaml
+# talos/talenv.sops.yaml (encrypted)
+HARBOR_ROBOT_USERNAME: robot$cluster-pull
+HARBOR_ROBOT_PASSWORD: <robot-account-token>
+```
+
+### 4. Apply Configuration
+
+```bash
+# Regenerate Talos configs
+task talos:generate-config
+
+# Apply to all nodes
+task talos:apply-node IP=192.168.1.98 MODE=auto
+task talos:apply-node IP=192.168.1.99 MODE=auto
+task talos:apply-node IP=192.168.1.100 MODE=auto
+
+# Verify (should show hosts.toml for your registry)
+talosctl -n 192.168.1.98 ls /etc/cri/conf.d/hosts/
+```
+
+---
+
+## Verification
+
+### Check Pull Speed
+
+```bash
+# Should complete in <1s for ~40MB images
+kubectl run test --image=registry.<tailnet>.ts.net/library/myapp:v1 --restart=Never
+kubectl describe pod test | grep "Pulled"
+# Expected: "Successfully pulled image ... in 542ms"
+```
+
+### Check Node Configuration
+
+```bash
+# Verify hosts.toml exists
+talosctl -n <node-ip> read /etc/cri/conf.d/hosts/registry.<tailnet>.ts.net/hosts.toml
+
+# Verify auth is configured
+talosctl -n <node-ip> read /etc/cri/conf.d/cri.toml | grep -A 4 "harbor.harbor.svc.cluster.local"
+```
+
+### Check Spegel Isn't Intercepting
+
+```bash
+# Should NOT show _default or your private registry hostname
+talosctl -n <node-ip> ls /etc/cri/conf.d/hosts/
+
+# Expected: only public registries
+# docker.io  gcr.io  ghcr.io  mcr.microsoft.com  quay.io  registry.k8s.io  registry.<tailnet>.ts.net
+```
+
+---
+
+## Troubleshooting
+
+### Image pull fails with "unauthorized"
+
+**Symptom**: Pod stuck in `ImagePullBackOff` with 401 error.
+
+**Checks**:
+1. Verify robot credentials in `talenv.sops.yaml`
+2. Check CRI has auth configured: `talosctl -n <ip> read /etc/cri/conf.d/cri.toml | grep -A 4 harbor`
+3. Test auth manually: `curl -u 'robot$cluster-pull:<password>' http://harbor.harbor.svc.cluster.local/v2/`
+
+### Image pull hangs or is slow
+
+**Symptom**: Pull takes >30s for small images.
+
+**Checks**:
+1. Verify internal mirror is used: `talosctl -n <ip> read /etc/cri/conf.d/hosts/registry.<tailnet>.ts.net/hosts.toml`
+2. Check extraHostEntries: `talosctl -n <ip> read /etc/hosts | grep harbor`
+3. If internal path broken, pulls fall back to Tailscale (slow but works)
+
+### Spegel intercepts Harbor requests
+
+**Symptom**: Pull fails with "not found" even though image exists in Harbor.
+
+**Checks**:
+1. Look for `_default` directory: `talosctl -n <ip> ls /etc/cri/conf.d/hosts/`
+2. If `_default` exists, Spegel is intercepting all registries
+3. Fix: Add `mirroredRegistries` list to Spegel HelmRelease and restart
 
 ```bash
 flux reconcile hr spegel -n kube-system
 kubectl rollout restart ds/spegel -n kube-system
 ```
 
-## Debugging Checklist
+### Stale containerd downloads
 
-When Harbor image pulls fail, check these in order:
+**Symptom**: Pulls hang indefinitely.
 
-### 1. Check if Spegel is intercepting Harbor
+**Check**: `talosctl -n <ip> ls /var/lib/containerd/io.containerd.content.v1.content/ingest/`
 
-```bash
-# Look for _default directory (bad) or your Harbor hostname
-talosctl -n <node-ip> ls /etc/cri/conf.d/hosts/
+**Fix**: If stuck ingests exist (>5 min old), reboot the node.
 
-# If _default exists, Spegel is intercepting all registries
-talosctl -n <node-ip> read /etc/cri/conf.d/hosts/_default/hosts.toml
-```
+---
 
-### 2. Check for stale containerd ingests
+## Architecture Details
 
-Stuck downloads can block new pulls:
+### Why This Configuration?
 
-```bash
-# Should be empty or have recent timestamps
-talosctl -n <node-ip> ls /var/lib/containerd/io.containerd.content.v1.content/ingest/
+| Challenge | Solution |
+|-----------|----------|
+| Spegel intercepts all registries by default | Configure `mirroredRegistries` to exclude Harbor |
+| containerd can't resolve k8s service names | Add `extraHostEntries` mapping to ClusterIP |
+| Harbor requires auth even for "public" projects | Configure robot credentials in `machine.registries.config` |
+| Tailscale pulls are slow (~200 KB/s via DERP) | Mirror to internal ClusterIP for fast pulls |
 
-# If stuck ingests exist (older than 5 minutes), reboot the node
-talosctl -n <node-ip> reboot
-```
+### File Locations
 
-### 3. Verify Harbor DNS resolution
+| Purpose | File |
+|---------|------|
+| Registry mirror + auth | `talos/patches/global/machine-network.yaml` |
+| Robot credentials | `talos/talenv.sops.yaml` |
+| Spegel exclusion list | `kubernetes/apps/kube-system/spegel/app/helmrelease.yaml` |
+| Harbor deployment | `kubernetes/apps/harbor/harbor/app/helmrelease.yaml` |
 
-```bash
-# Check /etc/hosts on node
-talosctl -n <node-ip> read /etc/hosts | grep harbor
+### Key IPs
 
-# Should show: <tailscale-ip> registry.<tailnet>.ts.net
-```
+| Service | IP | Port |
+|---------|-----|------|
+| Harbor ClusterIP (nginx) | `10.43.216.243` | 80 |
+| Harbor registry service | `10.43.12.149` | 5000 |
 
-### 4. Test direct connectivity
-
-```bash
-# From a pod or node, test Harbor is reachable
-curl -I https://registry.<tailnet>.ts.net/v2/
-```
-
-### 5. Check imagePullSecrets
-
-```bash
-# Verify secret exists in namespace
-kubectl get secret harbor-pull -n <namespace>
-
-# Verify ServiceAccount has imagePullSecrets
-kubectl get sa default -n <namespace> -o yaml | grep -A 5 imagePullSecrets
-```
-
-### 6. Watch CRI logs during pull
-
-```bash
-# Real-time CRI activity
-talosctl -n <node-ip> logs cri -f | grep -i pull
-```
-
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Pod Pull Request                         │
-│                    (registry.example.ts.net/image)               │
-└─────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                          containerd                              │
-│                                                                  │
-│  Checks /etc/cri/conf.d/hosts/<registry-hostname>/hosts.toml    │
-└─────────────────────────────────────────────────────────────────┘
-                                  │
-                    ┌─────────────┴─────────────┐
-                    │                           │
-            Config exists?              No config found
-                    │                           │
-                    ▼                           ▼
-┌───────────────────────────┐   ┌───────────────────────────────┐
-│   Use configured mirrors   │   │  Direct to registry hostname  │
-│   (Spegel P2P for docker.io│   │  (Harbor via Tailscale)       │
-│    ghcr.io, etc.)          │   │                               │
-└───────────────────────────┘   └───────────────────────────────┘
-```
-
-**Goal**: Harbor should NOT have a hosts.toml in Spegel's config directory, so containerd goes directly to Harbor.
-
-## Common Mistakes
-
-| Mistake | Symptom | Fix |
-|---------|---------|-----|
-| Using `registries:` instead of `mirroredRegistries:` | Spegel ignores the config | Use correct key: `mirroredRegistries:` |
-| Empty `mirroredRegistries: []` | Spegel mirrors everything (including Harbor) | List specific registries to mirror |
-| Not restarting Spegel after config change | Old _default config persists | `kubectl rollout restart ds/spegel -n kube-system` |
-| Stale containerd ingest | Pulls hang indefinitely | Reboot the affected node |
+---
 
 ## Related Documentation
 
-- [Harbor Developer Guide](./harbor-developer-guide.md) - How to push/pull images with Harbor
-- [Harbor Registry Setup](./harbor-registry.md) - Initial Harbor configuration
-- [Tailscale Extension](./tailscale-extension.md) - Tailscale networking for nodes
+- [Harbor Developer Guide](./harbor-developer-guide.md) - Detailed push/pull workflow
+- [Harbor Registry Setup](./harbor-registry.md) - Initial Harbor configuration and architecture
