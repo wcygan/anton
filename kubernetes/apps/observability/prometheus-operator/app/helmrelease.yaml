@@ -24,14 +24,14 @@ spec:
   values:
     prometheus:
       prometheusSpec:
-        retention: 15d
+        retention: 7d
         storageSpec:
           volumeClaimTemplate:
             spec:
               storageClassName: ceph-block
               resources:
                 requests:
-                  storage: 100Gi
+                  storage: 200Gi
         resources:
           requests:
             cpu: 500m
