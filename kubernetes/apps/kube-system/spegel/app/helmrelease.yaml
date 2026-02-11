@@ -15,6 +15,9 @@ spec:
       # WHY: Explicitly list registries for Spegel to mirror.
       # Without this, Spegel uses _default which intercepts ALL registries
       # including Harbor, but can't fallback to non-standard registries after 404.
+      # Harbor registry is included so Spegel manages its hosts.toml —
+      # with prependExisting, the Talos-level Harbor mirror is preserved
+      # as a fallback after Spegel's P2P layer.
       mirroredRegistries:
         - https://docker.io
         - https://ghcr.io
@@ -22,6 +25,7 @@ spec:
         - https://registry.k8s.io
         - https://quay.io
         - https://mcr.microsoft.com
+        - https://${SECRET_HARBOR_REGISTRY_HOST}
       # WHY: Preserve Talos-managed containerd mirror configs (e.g. Harbor registry)
       # that Spegel doesn't manage. Without this, Spegel backs up and removes
       # non-Spegel host configs from /etc/cri/conf.d/hosts/ after node resets.
