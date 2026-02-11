@@ -1,14 +1,24 @@
 #!/bin/bash
 # Validate that a 1Password item exists and has the expected fields
-# Usage: validate-secret-ref.sh <item-name> [field-name]
+# Usage: validate-secret-ref.sh <item-name/field-name> [vault]
+#        validate-secret-ref.sh <item-name> [vault]
 
-ITEM_NAME="$1"
-FIELD_NAME="$2"
-VAULT="${3:-Kubernetes}"
+RAW_KEY="$1"
+VAULT="${2:-Kubernetes}"
 
-if [ -z "$ITEM_NAME" ]; then
-    echo "Usage: validate-secret-ref.sh <item-name> [field-name] [vault]"
+if [ -z "$RAW_KEY" ]; then
+    echo "Usage: validate-secret-ref.sh <item-name/field-name> [vault]"
+    echo "       validate-secret-ref.sh <item-name> [vault]"
     exit 1
+fi
+
+# Support combined "item/field" format used by 1Password SDK provider
+if [[ "$RAW_KEY" == *"/"* ]]; then
+    ITEM_NAME="${RAW_KEY%%/*}"
+    FIELD_NAME="${RAW_KEY#*/}"
+else
+    ITEM_NAME="$RAW_KEY"
+    FIELD_NAME=""
 fi
 
 # Check if op CLI is available

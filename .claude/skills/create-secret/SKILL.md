@@ -62,8 +62,7 @@ spec:
   data:
     - secretKey: {{K8S_SECRET_KEY}}
       remoteRef:
-        key: {{1PASSWORD_ITEM_NAME}}
-        property: {{1PASSWORD_FIELD_NAME}}
+        key: {{1PASSWORD_ITEM_NAME}}/{{1PASSWORD_FIELD_NAME}}
 ```
 
 ### 6. Common Patterns
@@ -73,8 +72,7 @@ spec:
 data:
   - secretKey: password
     remoteRef:
-      key: "my-app-credentials"
-      property: password
+      key: "my-app-credentials/password"
 ```
 
 **Multiple fields:**
@@ -82,12 +80,10 @@ data:
 data:
   - secretKey: username
     remoteRef:
-      key: "my-app-credentials"
-      property: username
+      key: "my-app-credentials/username"
   - secretKey: password
     remoteRef:
-      key: "my-app-credentials"
-      property: password
+      key: "my-app-credentials/password"
 ```
 
 **Entire item as JSON:**
