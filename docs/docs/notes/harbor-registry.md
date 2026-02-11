@@ -1,17 +1,23 @@
 # Harbor Container Registry
 
-Private container registry for the cluster, accessible only via Tailscale.
+Private container registry for the cluster, accessible on the LAN via Cilium LoadBalancer at `192.168.1.105`.
 
 ## Access
 
-Harbor is exposed internally through Tailscale at `https://registry.<tailnet>.ts.net`. You must be connected to the tailnet to access it.
+Harbor is exposed on the LAN at `http://192.168.1.105` (HTTP). The web UI is also available remotely via Tailscale at `https://registry.<tailnet-name>.ts.net`.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Tailscale Ingress                       │
-│              (TLS termination, Let's Encrypt)               │
+│                  Cilium LoadBalancer                         │
+│          192.168.1.105 (LAN-accessible, HTTP)               │
+│         Docker push/pull + auth realm endpoint              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                  Tailscale Ingress                           │
+│            (TLS termination, web UI only)                    │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -39,35 +45,38 @@ Harbor is exposed internally through Tailscale at `https://registry.<tailnet>.ts
 
 **Key design decisions:**
 
+- **LoadBalancer exposure**: Cilium LB IPAM assigns 192.168.1.105, making Harbor's auth realm reachable from containerd on Talos nodes (host network)
 - **External database**: CloudNative PG Operator provides HA PostgreSQL (3 replicas) instead of Harbor's internal database
 - **External cache**: DragonflyDB Operator provides HA Redis-compatible cache (3 replicas) instead of Harbor's internal Redis
 - **Ceph storage**: Registry images stored on `ceph-filesystem` (RWX) for multi-replica access
-- **Tailscale-only access**: No public exposure; registry accessible only to tailnet members (Allows [Public Projects](https://goharbor.io/docs/2.14.0/working-with-projects/create-projects/), anyone in the tailnet can pull)
+- **Tailscale Ingress preserved**: Web UI still accessible remotely via Tailscale for browsing and management
 
 ## Usage
 
 ### Docker Login
 
 ```bash
-docker login registry.<tailnet>.ts.net
+docker login 192.168.1.105
 # Username: admin
 # Password: (stored in SOPS secret)
 ```
+
+**Note**: Requires Docker insecure registry config for HTTP. See [Harbor Developer Guide](./harbor-developer-guide.md).
 
 ### Push an Image
 
 ```bash
 # Tag your image for the private registry
-docker tag myapp:latest registry.<tailnet>.ts.net/library/myapp:latest
+docker tag myapp:latest 192.168.1.105/library/myapp:latest
 
 # Push to Harbor
-docker push registry.<tailnet>.ts.net/library/myapp:latest
+docker push 192.168.1.105/library/myapp:latest
 ```
 
 ### Pull an Image
 
 ```bash
-docker pull registry.<tailnet>.ts.net/library/myapp:latest
+docker pull 192.168.1.105/library/myapp:latest
 ```
 
 ### Use in Kubernetes
@@ -80,7 +89,7 @@ metadata:
 spec:
   containers:
     - name: myapp
-      image: registry.<tailnet>.ts.net/library/myapp:latest
+      image: 192.168.1.105/library/myapp:latest
   imagePullSecrets:
     - name: harbor-pull
 ```
@@ -89,7 +98,7 @@ Create the pull secret:
 
 ```bash
 kubectl create secret docker-registry harbor-pull-secret \
-  --docker-server=registry.<tailnet>.ts.net \
+  --docker-server=192.168.1.105 \
   --docker-username=admin \
   --docker-password=<password> \
   -n <namespace>
@@ -116,6 +125,7 @@ Trivy is enabled for automatic vulnerability scanning. Images are scanned on pus
 ```bash
 kubectl get pods -n harbor
 kubectl get hr -n harbor
+curl http://192.168.1.105/api/v2.0/health
 ```
 
 ### Check database connectivity
@@ -148,7 +158,7 @@ Harbor's "public" project setting only affects UI/API visibility, not the Docker
 
 **Step 1**: Create a robot account in Harbor UI
 
-1. Go to `https://registry.<tailnet>.ts.net` → Administration → Robot Accounts
+1. Go to `https://registry.<tailnet-name>.ts.net` → Administration → Robot Accounts
 2. Click "New Robot Account"
 3. Name: `cluster-pull` (or similar)
 4. Expiration: Never expire (or set appropriate duration)
@@ -160,7 +170,7 @@ Harbor's "public" project setting only affects UI/API visibility, not the Docker
 ```bash
 # Create secret (repeat for each namespace that needs Harbor access)
 kubectl create secret docker-registry harbor-pull \
-  --docker-server=registry.<tailnet>.ts.net \
+  --docker-server=192.168.1.105 \
   --docker-username='robot$cluster-pull' \
   --docker-password='<robot-token>' \
   -n <namespace>
@@ -179,7 +189,7 @@ kubectl patch serviceaccount default -n <namespace> \
 ```bash
 # Test without explicit imagePullSecrets in pod spec
 kubectl run harbor-test \
-  --image=registry.<tailnet>.ts.net/library/myapp:latest \
+  --image=192.168.1.105/library/myapp:latest \
   --restart=Never \
   -n <namespace> \
   --command -- sleep 30
@@ -202,7 +212,7 @@ metadata:
 type: kubernetes.io/dockerconfigjson
 stringData:
   .dockerconfigjson: |
-    {"auths":{"registry.<tailnet>.ts.net":{"username":"robot$cluster-pull","password":"<token>"}}}
+    {"auths":{"192.168.1.105":{"username":"robot$cluster-pull","password":"<token>"}}}
 ```
 
 Then patch the default ServiceAccount in a post-deploy hook or init container.

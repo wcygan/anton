@@ -12,21 +12,23 @@ This document explains how to use the private Harbor registry in the cluster, an
 # 1. Build for the correct architecture (ARM Mac users)
 docker build --platform linux/amd64 -t myapp:v1 .
 
-# 2. Tag for Harbor
-docker tag myapp:v1 registry.<tailnet>.ts.net/library/myapp:v1
+# 2. Tag for Harbor (LAN LoadBalancer IP)
+docker tag myapp:v1 192.168.1.105/library/myapp:v1
 
-# 3. Login and push (via Tailscale - works from anywhere on tailnet)
-docker login registry.<tailnet>.ts.net
-docker push registry.<tailnet>.ts.net/library/myapp:v1
+# 3. Login and push (works from any machine on the cluster LAN)
+docker login 192.168.1.105
+docker push 192.168.1.105/library/myapp:v1
 ```
 
-**Alternative: Fast push via port-forward** (when on same network as cluster):
+**Note**: Requires Docker insecure registry config for HTTP. See [Harbor Developer Guide](./harbor-developer-guide.md).
+
+**Off-LAN push via port-forward**:
 
 ```bash
 # Terminal 1: Port-forward to Harbor
 kubectl port-forward svc/harbor -n harbor 8080:80
 
-# Terminal 2: Push via localhost (faster than Tailscale)
+# Terminal 2: Push via localhost
 docker tag myapp:v1 localhost:8080/library/myapp:v1
 docker push localhost:8080/library/myapp:v1
 ```
@@ -43,10 +45,10 @@ metadata:
 spec:
   containers:
     - name: myapp
-      image: registry.<tailnet>.ts.net/library/myapp:v1
+      image: 192.168.1.105/library/myapp:v1
 ```
 
-Cluster nodes automatically pull via the internal ClusterIP mirror (~69 MB/s) instead of going through Tailscale.
+Cluster nodes automatically pull via the internal ClusterIP mirror for fast in-cluster pulls.
 
 ---
 
@@ -55,14 +57,14 @@ Cluster nodes automatically pull via the internal ClusterIP mirror (~69 MB/s) in
 ```
 Workstation Push                          Cluster Pull
 ─────────────────                         ────────────────
-docker push                               Pod: image: registry.<tailnet>.ts.net/library/myapp:v1
+docker push                               Pod: image: 192.168.1.105/library/myapp:v1
      │                                           │
      ▼                                           ▼
-Tailscale ────────────────────────────>  containerd checks hosts.toml
+LAN ──────────────────────────────────>  containerd checks hosts.toml
      │                                           │
      ▼                                           ▼
-Harbor Ingress                           Mirror: http://harbor.harbor.svc.cluster.local
-(100.x.x.x)                                      │
+Harbor LoadBalancer                      Mirror: http://harbor.harbor.svc.cluster.local
+(192.168.1.105)                                  │
      │                                           ▼
      ▼                                   Harbor ClusterIP (10.43.216.243)
 Harbor Registry                                  │
@@ -70,9 +72,9 @@ Harbor Registry                                  │
                                          Pull completes in ~500ms (37MB)
 ```
 
-**Key insight**: Pods reference images using the Tailscale hostname, but containerd redirects pulls to the internal ClusterIP. This gives:
-- **Push**: Works from anywhere on tailnet (slow but convenient)
-- **Pull**: Fast internal path (~69 MB/s vs ~200 KB/s via Tailscale DERP)
+**Key insight**: Pods reference images using the LoadBalancer IP, but containerd redirects pulls to the internal ClusterIP. This gives:
+- **Push**: Works from any machine on the cluster LAN (direct, no Tailscale needed)
+- **Pull**: Fast internal path via ClusterIP mirror
 
 ---
 
@@ -80,17 +82,15 @@ Harbor Registry                                  │
 
 Use this pattern when adding a private registry to a Talos cluster with Spegel.
 
-### 1. Exclude from Spegel
+### 1. Include in Spegel's mirroredRegistries
 
-Configure Spegel to only mirror public registries, not your private registry:
+Configure Spegel to manage the Harbor registry's hosts.toml alongside public registries:
 
 ```yaml
 # kubernetes/apps/kube-system/spegel/app/helmrelease.yaml
 spec:
   values:
     spegel:
-      # WHY: Explicitly list registries for Spegel to mirror.
-      # Without this, Spegel uses _default which intercepts ALL registries.
       mirroredRegistries:
         - https://docker.io
         - https://ghcr.io
@@ -98,6 +98,9 @@ spec:
         - https://registry.k8s.io
         - https://quay.io
         - https://mcr.microsoft.com
+        - http://192.168.1.105
+      # WHY: Preserve Talos-managed containerd mirror configs
+      prependExisting: true
 ```
 
 ### 2. Configure Registry Mirror (Talos)
@@ -108,8 +111,8 @@ Add to `talos/patches/global/machine-network.yaml`:
 machine:
   registries:
     mirrors:
-      # Maps external hostname to internal service
-      registry.<tailnet>.ts.net:
+      # Maps LoadBalancer IP to internal service
+      192.168.1.105:
         endpoints:
           - http://harbor.harbor.svc.cluster.local
     config:
@@ -158,7 +161,7 @@ talosctl -n 192.168.1.98 ls /etc/cri/conf.d/hosts/
 
 ```bash
 # Should complete in <1s for ~40MB images
-kubectl run test --image=registry.<tailnet>.ts.net/library/myapp:v1 --restart=Never
+kubectl run test --image=192.168.1.105/library/myapp:v1 --restart=Never
 kubectl describe pod test | grep "Pulled"
 # Expected: "Successfully pulled image ... in 542ms"
 ```
@@ -167,20 +170,19 @@ kubectl describe pod test | grep "Pulled"
 
 ```bash
 # Verify hosts.toml exists
-talosctl -n <node-ip> read /etc/cri/conf.d/hosts/registry.<tailnet>.ts.net/hosts.toml
+talosctl -n <node-ip> read /etc/cri/conf.d/hosts/192.168.1.105/hosts.toml
 
 # Verify auth is configured
 talosctl -n <node-ip> read /etc/cri/conf.d/cri.toml | grep -A 4 "harbor.harbor.svc.cluster.local"
 ```
 
-### Check Spegel Isn't Intercepting
+### Check Spegel Configuration
 
 ```bash
-# Should NOT show _default or your private registry hostname
+# Should show 192.168.1.105 alongside public registries
 talosctl -n <node-ip> ls /etc/cri/conf.d/hosts/
 
-# Expected: only public registries
-# docker.io  gcr.io  ghcr.io  mcr.microsoft.com  quay.io  registry.k8s.io  registry.<tailnet>.ts.net
+# Expected: docker.io  gcr.io  ghcr.io  mcr.microsoft.com  quay.io  registry.k8s.io  192.168.1.105
 ```
 
 ---
@@ -201,9 +203,9 @@ talosctl -n <node-ip> ls /etc/cri/conf.d/hosts/
 **Symptom**: Pull takes >30s for small images.
 
 **Checks**:
-1. Verify internal mirror is used: `talosctl -n <ip> read /etc/cri/conf.d/hosts/registry.<tailnet>.ts.net/hosts.toml`
+1. Verify internal mirror is used: `talosctl -n <ip> read /etc/cri/conf.d/hosts/192.168.1.105/hosts.toml`
 2. Check extraHostEntries: `talosctl -n <ip> read /etc/hosts | grep harbor`
-3. If internal path broken, pulls fall back to Tailscale (slow but works)
+3. If internal path broken, pulls fall back to LoadBalancer IP (still works, slightly slower)
 
 ### Spegel intercepts Harbor requests
 
@@ -235,10 +237,10 @@ kubectl rollout restart ds/spegel -n kube-system
 
 | Challenge | Solution |
 |-----------|----------|
-| Spegel intercepts all registries by default | Configure `mirroredRegistries` to exclude Harbor |
+| Docker auth realm must be reachable from containerd | LoadBalancer IP (192.168.1.105) on host network |
+| Spegel must manage Harbor's hosts.toml | Include in `mirroredRegistries` with `prependExisting: true` |
 | containerd can't resolve k8s service names | Add `extraHostEntries` mapping to ClusterIP |
 | Harbor requires auth even for "public" projects | Configure robot credentials in `machine.registries.config` |
-| Tailscale pulls are slow (~200 KB/s via DERP) | Mirror to internal ClusterIP for fast pulls |
 
 ### File Locations
 
@@ -246,15 +248,15 @@ kubectl rollout restart ds/spegel -n kube-system
 |---------|------|
 | Registry mirror + auth | `talos/patches/global/machine-network.yaml` |
 | Robot credentials | `talos/talenv.sops.yaml` |
-| Spegel exclusion list | `kubernetes/apps/kube-system/spegel/app/helmrelease.yaml` |
+| Spegel mirror list | `kubernetes/apps/kube-system/spegel/app/helmrelease.yaml` |
 | Harbor deployment | `kubernetes/apps/harbor/harbor/app/helmrelease.yaml` |
 
 ### Key IPs
 
 | Service | IP | Port |
 |---------|-----|------|
-| Harbor ClusterIP (nginx) | `10.43.216.243` | 80 |
-| Harbor registry service | `10.43.12.149` | 5000 |
+| Harbor LoadBalancer | `192.168.1.105` | 80 |
+| Harbor ClusterIP (internal) | `10.43.216.243` | 80 |
 
 ---
 

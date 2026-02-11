@@ -25,32 +25,30 @@ spec:
       name: harbor-admin-secret
       valuesKey: adminPassword
       targetPath: harborAdminPassword
-    # WHY: Pull externalURL from secret to keep tailnet name out of Git
-    - kind: Secret
-      name: harbor-admin-secret
-      valuesKey: externalURL
-      targetPath: externalURL
     # WHY: CNPG auto-generates credentials in harbor-postgres-app secret
     - kind: Secret
       name: harbor-postgres-app
       valuesKey: password
       targetPath: database.external.password
   values:
-    # WHY: Use ClusterIP since we expose via Tailscale Ingress
-    # Harbor doesn't need to manage its own ingress
+    # WHY: LoadBalancer with Cilium LB IPAM gives Harbor a stable LAN IP (192.168.1.105).
+    # This makes the externalURL reachable from both containerd (host network) and pods,
+    # fixing Docker auth realm redirects that failed with Tailscale-only access.
     expose:
-      type: clusterIP
+      type: loadBalancer
       tls:
         enabled: false
-      clusterIP:
+      loadBalancer:
         name: harbor
         ports:
           httpPort: 80
           httpsPort: 443
+        annotations:
+          lbipam.cilium.io/ips: "192.168.1.105"
 
-    # WHY: externalURL is critical for Docker client redirects
-    # and generating correct URLs in the Harbor UI
-    # Pulled from secret via valuesFrom (keeps tailnet name out of Git)
+    # WHY: externalURL controls the Docker token auth realm in WWW-Authenticate headers.
+    # Using the LoadBalancer IP ensures containerd on Talos nodes can complete auth flow.
+    externalURL: http://192.168.1.105
 
     # WHY: Internal TLS disabled since Tailscale proxy handles TLS
     # termination with Let's Encrypt certificates

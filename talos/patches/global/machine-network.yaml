@@ -1,11 +1,10 @@
 machine:
   # WHY: Route Harbor pulls to internal Kubernetes service for speed.
-  # External pushes use registry.<tailnet>.ts.net via Tailscale.
-  # Internal pulls use harbor.harbor.svc.cluster.local (instant).
-  # This avoids Tailscale DERP relay overhead for in-cluster traffic.
+  # The LoadBalancer IP (192.168.1.105) is the externalURL / auth realm.
+  # containerd mirrors this to the ClusterIP for fast in-cluster pulls.
   registries:
     mirrors:
-      ${HARBOR_REGISTRY_HOST}:
+      192.168.1.105:
         endpoints:
           - http://harbor.harbor.svc.cluster.local
     config:
@@ -19,18 +18,7 @@ machine:
       - 192.168.1.254
       - 1.1.1.1
       - 1.0.0.1
-    # WHY: Map Harbor registry hostname to Tailscale IP so containerd
-    # can resolve it without MagicDNS integration in system DNS.
-    #
-    # NOTE: This IP is assigned by the Tailscale operator to the Harbor Ingress.
-    # It is stable during normal operation but could change if the Ingress is
-    # deleted/recreated. If image pulls fail with "no such host", verify the IP:
-    #   dig +short <registry-host> @100.100.100.100
-    # Then update HARBOR_TAILSCALE_IP in talenv.sops.yaml and reapply to all nodes.
     extraHostEntries:
-      - ip: ${HARBOR_TAILSCALE_IP}
-        aliases:
-          - ${HARBOR_REGISTRY_HOST}
       # WHY: containerd runs on the node, not in a pod, so it can't resolve
       # Kubernetes service names. Add static entry for the internal mirror.
       - ip: 10.43.216.243

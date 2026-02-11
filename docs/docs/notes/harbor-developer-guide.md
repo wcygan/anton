@@ -5,26 +5,29 @@ Quick reference for pushing and pulling container images from the private Harbor
 ## Prerequisites
 
 - Docker installed
-- Connected to the Tailscale network
+- On the same LAN as the cluster (192.168.1.x network)
+- Docker configured with `192.168.1.105` as an insecure registry (see below)
 
 **Important**: Cluster nodes run `linux/amd64`. If you're on an ARM Mac (M1/M2/M3), always build with `--platform linux/amd64` or images will fail to run.
 
-## Find Your Registry URL
+## Docker Insecure Registry Setup
 
-Get your tailnet suffix:
+Harbor is exposed over HTTP on `192.168.1.105`. Docker requires explicit opt-in for HTTP registries.
 
-```bash
-tailscale status --json | jq -r '.MagicDNSSuffix'
+**Docker Desktop**: Settings → Docker Engine → add to the JSON config:
+
+```json
+{
+  "insecure-registries": ["192.168.1.105"]
+}
 ```
 
-Your registry URL is: `registry.<tailnet-suffix>`
-
-For example, if the command returns `example.ts.net`, your registry is `registry.example.ts.net`.
+Then restart Docker Desktop.
 
 ## Login
 
 ```bash
-docker login registry.<tailnet-suffix>
+docker login 192.168.1.105
 ```
 
 Get credentials from the cluster admin or Harbor UI.
@@ -33,10 +36,10 @@ Get credentials from the cluster admin or Harbor UI.
 
 ```bash
 # Tag your local image for Harbor
-docker tag myapp:v1 registry.<tailnet-suffix>/library/myapp:v1
+docker tag myapp:v1 192.168.1.105/library/myapp:v1
 
 # Push
-docker push registry.<tailnet-suffix>/library/myapp:v1
+docker push 192.168.1.105/library/myapp:v1
 ```
 
 **Projects**: `library` is the default public project. Ask an admin to create additional projects if needed.
@@ -44,7 +47,7 @@ docker push registry.<tailnet-suffix>/library/myapp:v1
 ## Pull an Image
 
 ```bash
-docker pull registry.<tailnet-suffix>/library/myapp:v1
+docker pull 192.168.1.105/library/myapp:v1
 ```
 
 ## Use in Kubernetes
@@ -68,7 +71,7 @@ spec:
     spec:
       containers:
         - name: myapp
-          image: registry.<tailnet-suffix>/library/myapp:v1
+          image: 192.168.1.105/library/myapp:v1
 ```
 
 The cluster handles authentication automatically in the `default` namespace. For other namespaces, ask the cluster admin to configure image pull credentials.
@@ -77,16 +80,31 @@ The cluster handles authentication automatically in the `default` namespace. For
 
 ```bash
 docker build --platform linux/amd64 -t myapp:v1 .
-docker tag myapp:v1 registry.<tailnet-suffix>/library/myapp:v1
-docker push registry.<tailnet-suffix>/library/myapp:v1
+docker tag myapp:v1 192.168.1.105/library/myapp:v1
+docker push 192.168.1.105/library/myapp:v1
 ```
 
 ## Web UI
 
-Browse images and check vulnerability scans at:
+Browse images and check vulnerability scans via Tailscale at:
 
 ```
-https://registry.<tailnet-suffix>
+https://registry.<tailnet-name>.ts.net
+```
+
+The web UI is still accessible via Tailscale Ingress for remote access.
+
+## Off-LAN Push/Pull
+
+When not on the cluster LAN, use port-forward:
+
+```bash
+# Terminal 1: Port-forward to Harbor
+kubectl port-forward svc/harbor -n harbor 8080:80
+
+# Terminal 2: Push via localhost
+docker tag myapp:v1 localhost:8080/library/myapp:v1
+docker push localhost:8080/library/myapp:v1
 ```
 
 ## Troubleshooting
@@ -95,12 +113,12 @@ https://registry.<tailnet-suffix>
 
 Run `docker login` again. Credentials may have expired.
 
-### "no such host" error
+### Connection refused or timeout
 
-Verify you're connected to Tailscale:
+Verify you're on the cluster LAN (192.168.1.x) and can reach the Harbor IP:
 
 ```bash
-tailscale status
+curl http://192.168.1.105/api/v2.0/health
 ```
 
 ### Image works locally but fails in cluster

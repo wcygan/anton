@@ -1,6 +1,4 @@
 TAILSCALE_AUTHKEY: ENC[AES256_GCM,data:RsiD8frWhmBT+OQV7GbMG1NNsFKpGtj3ZDXHLnDcMyJgOJ9clsgMLbfWFWHiRpJRn3+1DfhBzGYmM8l8ig==,iv:rc9P5rTjYpb1T/I6c+138Z7RHHfzXD8QpZy9UVqyRKg=,tag:S+ylj1Z9CPKB2NcsZHeQ1g==,type:str]
-HARBOR_REGISTRY_HOST: ENC[AES256_GCM,data:y131YBwgCmNCk+GtZngrosDw4Gb17Z5btPXy0OknPQ==,iv:PG2JENV43ngImkqk0WVCB6gPXQC0cK4Rl/JnYlpUvjY=,tag:ER8XZ8OBwvQLcZu/JzUlFg==,type:str]
-HARBOR_TAILSCALE_IP: ENC[AES256_GCM,data:V8HxSRvw8OnXs9/KPw==,iv:Y352ozmvlljpsJKRxEiVutyHsvpB6/R3hCcRUrFFcZ8=,tag:fkD3HgLDqOeorhc/6wAH4g==,type:str]
 HARBOR_ROBOT_USERNAME: ENC[AES256_GCM,data:mfEh+1Ih9EGZukd8N4ev2KTi,iv:9FzRB2bN04jK/F9C8ympbtVCawWY6l4yhDgXWRD6Lgg=,tag:fqbkRrcz1TeDfaV1wNRQxQ==,type:str]
 HARBOR_ROBOT_PASSWORD: ENC[AES256_GCM,data:OYXrIka7szesDqB5SiJ8Zo54U1k0n3MF4XauM2HhxyY=,iv:iskphbl9XUMQPeIZX9+Fthn9uOJWkMa2bYa5oz7O6uI=,tag:Tae1MYiTsYcFBe8rgdQDLQ==,type:str]
 sops:
@@ -14,8 +12,8 @@ sops:
         VlNBWHczUlJkbVNBRnpoU1ZwcXVBZzgKUI2zf7Z7XHVoBhjdaRzrpmAF35F3SGCW
         2HNZ4gC8geOl8tYbNuCzkKbhssUl19FAaZbvcBoI2UtJlSLmgrmEyQ==
         -----END AGE ENCRYPTED FILE-----
-  lastmodified: "2026-02-11T17:55:42Z"
-  mac: ENC[AES256_GCM,data:T4S6umInZDxK9WpIo34YYuNkeIAhvl38yjQmBDbhJKq1sB1gSU7QgftVDv4zlpG4e9+P+i8KMrJQOd7puO3Bhkiny/ZyMvyhQEd9uN+LttGq1BuKA/sFLPGuG1N4R/Lk8DPI6WMfoyfprOk/qWVu2q6AP/GnssPxHdvirKrGOM0=,iv:MYy0ZMn01MuKg2eJtFDg+hOAjq1rWH0MGATOOcoYkC4=,tag:UBvdJSDQNSm9UB/63fxANQ==,type:str]
+  lastmodified: "2026-02-11T18:29:17Z"
+  mac: ENC[AES256_GCM,data:cNnigi6TtOSN1ssEQVWvYFh0GCnLvonnNLvoqBxmQUrukF1dNNrJQQt429FXyDYLjNav6bA76kYam3WMjPNnPpNhpsntHF6S8oDT4LaDj0u30sSg/yN6f37/JotEEI1zqMSM3mXSGMjxLaZrWp0awsDaf1haHpZzwMKLXBuqwDs=,iv:HKLyuiq1nbspkGZKMdtjWOhUM5IPytB8R2h2JJkjFb8=,tag:tasGCcvCKWMQPM8GUeCYwQ==,type:str]
   unencrypted_suffix: _unencrypted
   mac_only_encrypted: true
   version: 3.11.0
