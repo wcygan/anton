@@ -89,12 +89,43 @@ cilium status         # Verify Cilium CNI
 
 ## Secrets Management
 
+**Two systems coexist**: SOPS for bootstrap/infrastructure secrets, External Secrets Operator (ESO) for application secrets.
+
+**SOPS (legacy, still used for infrastructure)**
 - Age key in `age.key` (referenced by `SOPS_AGE_KEY_FILE`)
 - SOPS config in `.sops.yaml` defines encryption rules for `*.sops.*` files
 - Never commit unencrypted secrets; `task configure` encrypts all `*.sops.*` files
 - Remove `~/.config/sops/age/keys.txt` if it conflicts with repository Age key
 - `cloudflare-tunnel.json` contains tunnel credentials (not encrypted by default)
 - `github-deploy.key` is the SSH key for Flux repository access (add public key to GitHub deploy keys for private repos)
+
+**External Secrets Operator (preferred for new apps)**
+- ESO pulls secrets from 1Password into Kubernetes using the 1Password SDK provider
+- `ClusterSecretStore` named `onepassword-connect` authenticates via a service account token
+- 1Password vault: `anton` — all items for the cluster live here
+- Use `/create-secret <name> <namespace>` skill to create new ExternalSecrets
+- `remoteRef` uses combined `key: "item-name/field-name"` format (SDK provider style)
+- `dataFrom.extract.key: "item-name"` pulls all fields from an item
+
+```yaml
+# Example ExternalSecret
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: my-secret
+  namespace: default
+spec:
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: onepassword-connect
+  target:
+    name: my-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: password
+      remoteRef:
+        key: "my-app/password"
+```
 
 ## Development Workflow
 
