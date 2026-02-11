@@ -23,7 +23,7 @@ Required:
 
 ```bash
 # Check if 1Password CLI is available and item exists
-op item get "<item-name>" --vault "Kubernetes" --format json 2>/dev/null | jq -r '.title' || echo "Item not found or op CLI unavailable"
+op item get "<item-name>" --vault "anton" --format json 2>/dev/null | jq -r '.title' || echo "Item not found or op CLI unavailable"
 ```
 
 ### 3. Check Existing Secrets Setup

@@ -4,7 +4,7 @@
 #        validate-secret-ref.sh <item-name> [vault]
 
 RAW_KEY="$1"
-VAULT="${2:-Kubernetes}"
+VAULT="${2:-anton}"
 
 if [ -z "$RAW_KEY" ]; then
     echo "Usage: validate-secret-ref.sh <item-name/field-name> [vault]"
