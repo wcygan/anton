@@ -22,6 +22,10 @@ spec:
         - https://registry.k8s.io
         - https://quay.io
         - https://mcr.microsoft.com
+      # WHY: Preserve Talos-managed containerd mirror configs (e.g. Harbor registry)
+      # that Spegel doesn't manage. Without this, Spegel backs up and removes
+      # non-Spegel host configs from /etc/cri/conf.d/hosts/ after node resets.
+      prependExisting: true
     service:
       registry:
         hostPort: 29999
