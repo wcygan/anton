@@ -85,7 +85,7 @@ function check_env() {
         log error "Missing required env variables" "envs=${missing[*]}"
     fi
 
-    log debug "Env variables are set" "envs=${values[*]}"
+    log debug "Env variables are set" "envs=${envs[*]}"
 }
 
 # Check if required CLI tools are installed

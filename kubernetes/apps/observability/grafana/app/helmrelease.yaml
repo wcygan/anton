@@ -48,12 +48,12 @@ spec:
             url: http://prometheus-operator-kube-p-prometheus.observability.svc.cluster.local:9090
             access: proxy
             isDefault: true
-            editable: true
+            editable: false
           - name: Loki
             type: loki
             url: http://loki.observability.svc.cluster.local:3100
             access: proxy
-            editable: true
+            editable: false
     dashboardProviders:
       dashboardproviders.yaml:
         apiVersion: 1
@@ -62,8 +62,8 @@ spec:
             orgId: 1
             folder: ''
             type: file
-            disableDeletion: false
-            editable: true
+            disableDeletion: true
+            editable: false
             options:
               path: /var/lib/grafana/dashboards/default
     dashboards:
