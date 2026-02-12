@@ -99,12 +99,12 @@ spec:
               url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
             }
           }
-    resources:
-      requests:
-        cpu: 50m
-        memory: 128Mi
-      limits:
-        memory: 512Mi
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
     controller:
       type: daemonset
     serviceMonitor:
