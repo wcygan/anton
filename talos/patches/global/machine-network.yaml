@@ -21,6 +21,8 @@ machine:
     extraHostEntries:
       # WHY: containerd runs on the node, not in a pod, so it can't resolve
       # Kubernetes service names. Add static entry for the internal mirror.
+      # NOTE: If Harbor service is deleted/recreated, this IP may change:
+      #   kubectl get svc harbor -n harbor -o jsonpath='{.spec.clusterIP}'
       - ip: 10.43.216.243
         aliases:
           - harbor.harbor.svc.cluster.local

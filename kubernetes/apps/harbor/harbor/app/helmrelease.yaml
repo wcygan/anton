@@ -50,8 +50,8 @@ spec:
     # Using the LoadBalancer IP ensures containerd on Talos nodes can complete auth flow.
     externalURL: http://192.168.1.105
 
-    # WHY: Internal TLS disabled since Tailscale proxy handles TLS
-    # termination with Let's Encrypt certificates
+    # WHY: Internal TLS disabled — primary access is HTTP via LoadBalancer (192.168.1.105).
+    # Tailscale Ingress handles TLS only for the remote web UI.
     internalTLS:
       enabled: false
 

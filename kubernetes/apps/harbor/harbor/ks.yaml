@@ -20,7 +20,3 @@ spec:
       namespace: harbor
     - name: harbor-redis
       namespace: harbor
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret

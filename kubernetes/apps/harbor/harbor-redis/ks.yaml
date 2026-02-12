@@ -17,7 +17,3 @@ spec:
   dependsOn:
     - name: dragonfly-operator
       namespace: databases
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret

@@ -39,10 +39,6 @@ spec:
     initdb:
       database: registry
       owner: harbor
-      # WHY: Harbor requires specific databases for its components
-      postInitSQL:
-        - CREATE DATABASE notaryserver OWNER harbor;
-        - CREATE DATABASE notarysigner OWNER harbor;
 
   monitoring:
     enablePodMonitor: true

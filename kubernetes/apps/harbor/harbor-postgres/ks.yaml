@@ -17,7 +17,3 @@ spec:
   dependsOn:
     - name: cloudnative-pg
       namespace: databases
-  postBuild:
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
