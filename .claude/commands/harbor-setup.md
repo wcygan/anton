@@ -6,12 +6,11 @@ Help the developer set up their Docker image pipeline with the private Harbor re
 
 ## Context
 
-This cluster uses a private Harbor registry. The key insight is:
+This cluster uses a private Harbor registry exposed at `192.168.1.105` via Cilium LoadBalancer (HTTP).
 
-- **Push**: Use `localhost:8080` via port-forward (fast, ~LAN speed)
-- **Pull**: Pods reference `registry.<tailnet>.ts.net` (auto-redirected to internal ClusterIP)
-
-Both hostnames access the same Harbor instance. The repository path (`library/myapp:v1`) is what identifies the image, not the hostname.
+- **Push**: Use `192.168.1.105` directly from LAN (fast, no port-forward needed)
+- **Pull**: Pods reference `192.168.1.105` (containerd mirrors to internal ClusterIP for ~100ms pulls)
+- **Web UI**: `https://registry.<tailnet-name>.ts.net` via Tailscale (remote access only)
 
 ## Step 1: Gather Information
 
@@ -29,27 +28,29 @@ Use the AskUserQuestion tool to collect:
 
 ## Step 2: One-Time Setup
 
-### Start Harbor Port-Forward
+### Configure Docker for HTTP Registry
 
-```bash
-# Run in a separate terminal (or background with &)
-kubectl port-forward svc/harbor -n harbor 8080:80
+Harbor is HTTP-only. Docker requires explicit opt-in:
+
+**Docker Desktop**: Settings → Docker Engine → add to JSON config:
+
+```json
+{
+  "insecure-registries": ["192.168.1.105"]
+}
 ```
 
-This creates a fast local tunnel to Harbor, bypassing slow Tailscale DERP relay.
+Restart Docker Desktop after saving.
 
 ### Login to Harbor
 
 ```bash
-# Login once (credentials are cached)
-docker login localhost:8080
+docker login 192.168.1.105
 # Username: admin (or your username)
 # Password: (get from cluster admin or Harbor UI)
 ```
 
 ## Step 3: Build and Push Workflow
-
-Based on their machine type, provide the appropriate workflow.
 
 ### For ARM Mac users (M1/M2/M3/M4):
 
@@ -57,9 +58,9 @@ Based on their machine type, provide the appropriate workflow.
 # Build for cluster architecture (REQUIRED - cluster runs amd64)
 docker build --platform linux/amd64 -t <app-name>:<tag> .
 
-# Push via port-forward (fast)
-docker tag <app-name>:<tag> localhost:8080/library/<app-name>:<tag>
-docker push localhost:8080/library/<app-name>:<tag>
+# Tag and push directly to Harbor LAN IP
+docker tag <app-name>:<tag> 192.168.1.105/library/<app-name>:<tag>
+docker push 192.168.1.105/library/<app-name>:<tag>
 ```
 
 ### For Intel Mac / Linux x86_64:
@@ -68,14 +69,14 @@ docker push localhost:8080/library/<app-name>:<tag>
 # Build (no platform flag needed)
 docker build -t <app-name>:<tag> .
 
-# Push via port-forward (fast)
-docker tag <app-name>:<tag> localhost:8080/library/<app-name>:<tag>
-docker push localhost:8080/library/<app-name>:<tag>
+# Tag and push
+docker tag <app-name>:<tag> 192.168.1.105/library/<app-name>:<tag>
+docker push 192.168.1.105/library/<app-name>:<tag>
 ```
 
 ## Step 4: Kubernetes Reference
 
-Pods always reference the Tailscale hostname (cluster handles the fast internal routing):
+Pods reference the LoadBalancer IP (cluster handles fast internal routing via ClusterIP mirror):
 
 ```yaml
 apiVersion: apps/v1
@@ -94,13 +95,20 @@ spec:
     spec:
       containers:
         - name: <app-name>
-          image: registry.<tailnet-suffix>/library/<app-name>:<tag>
+          image: 192.168.1.105/library/<app-name>:<tag>
+      imagePullSecrets:
+        - name: harbor-pull
 ```
 
-**Why different hostnames?**
-- Push uses `localhost:8080` for speed (port-forward to Harbor)
-- Pull uses `registry.<tailnet>.ts.net` which containerd redirects to internal ClusterIP (~69 MB/s)
-- Same image - Harbor stores by repository path, not hostname
+**imagePullSecret setup** (per namespace):
+
+```bash
+kubectl create secret docker-registry harbor-pull \
+  --docker-server=192.168.1.105 \
+  --docker-username='robot$cluster-pull' \
+  --docker-password='<robot-token>' \
+  -n <namespace>
+```
 
 ## Step 5: Quick Reference Card
 
@@ -108,37 +116,40 @@ Provide this copy-pasteable summary:
 
 ```bash
 # === One-time setup ===
-kubectl port-forward svc/harbor -n harbor 8080:80 &
-docker login localhost:8080
+# Add "192.168.1.105" to Docker insecure-registries, restart Docker
+docker login 192.168.1.105
 
 # === Build and push ===
 docker build --platform linux/amd64 -t <app-name>:<tag> .
-docker tag <app-name>:<tag> localhost:8080/library/<app-name>:<tag>
-docker push localhost:8080/library/<app-name>:<tag>
+docker tag <app-name>:<tag> 192.168.1.105/library/<app-name>:<tag>
+docker push 192.168.1.105/library/<app-name>:<tag>
 
 # === In Kubernetes manifests ===
-image: registry.<tailnet-suffix>/library/<app-name>:<tag>
+image: 192.168.1.105/library/<app-name>:<tag>
 ```
 
-## Fallback: Push via Tailscale
+## Fallback: Off-LAN Push via Port-Forward
 
-If port-forward isn't available, push directly via Tailscale (slower, ~200 KB/s):
+If not on the cluster LAN, push via kubectl port-forward:
 
 ```bash
-docker login registry.<tailnet-suffix>
-docker tag <app-name>:<tag> registry.<tailnet-suffix>/library/<app-name>:<tag>
-docker push registry.<tailnet-suffix>/library/<app-name>:<tag>
+# Terminal 1: Port-forward to Harbor
+kubectl port-forward svc/harbor -n harbor 8080:80
+
+# Terminal 2: Push via localhost
+docker tag <app-name>:<tag> localhost:8080/library/<app-name>:<tag>
+docker push localhost:8080/library/<app-name>:<tag>
 ```
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| `unauthorized` on push | Run `docker login localhost:8080` (or the registry URL you're using) |
-| `connection refused` on localhost:8080 | Start port-forward: `kubectl port-forward svc/harbor -n harbor 8080:80` |
+| `unauthorized` on push | Run `docker login 192.168.1.105` |
+| Connection refused | Verify you're on cluster LAN: `curl http://192.168.1.105/api/v2.0/health` |
 | `exec format error` in cluster | Image built for wrong arch - rebuild with `--platform linux/amd64` |
-| Push is slow | Use port-forward method instead of Tailscale |
 | Image not found in cluster | Verify repository path matches exactly (`library/<app-name>:<tag>`) |
+| Off-LAN and can't reach 192.168.1.105 | Use port-forward fallback above |
 
 ## Output Style
 
