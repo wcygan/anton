@@ -9,6 +9,8 @@ cluster:
   controllerManager:
     extraArgs:
       bind-address: 0.0.0.0
+      # Keep terminated pod objects from accumulating after node shutdowns/upgrades.
+      terminated-pod-gc-threshold: "30"
   coreDNS:
     disabled: true
   etcd:
