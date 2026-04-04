@@ -25,6 +25,10 @@ spec:
     prometheus:
       prometheusSpec:
         retention: 7d
+        # WHY: WAL replay of ~4000 segments takes ~80 min on this hardware; the
+        # default 900s startup probe killed the pod mid-replay, creating a
+        # death-spiral where each restart grew the WAL further.
+        maximumStartupDurationSeconds: 6000
         storageSpec:
           volumeClaimTemplate:
             spec:
