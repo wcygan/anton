@@ -6,3 +6,8 @@ kind: ExtensionServiceConfig
 name: tailscale
 environment:
   - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
+  # WHY: Store tailscaled state in memory. Persisting to /var/lib/tailscale
+  # triggered a stuck ghost nodekey on Tailscale control plane that couldn't
+  # be cleared. mem: means nodes re-register on reboot (new -1 suffix name);
+  # rename via admin console when this happens. Reboots are rare.
+  - "TS_STATE_DIR=mem:"
