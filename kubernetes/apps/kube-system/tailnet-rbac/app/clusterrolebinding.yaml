@@ -1,0 +1,17 @@
+---
+# Binds the tailnet-impersonated user (wcygan@github, produced by the
+# tailscale-operator k8s API proxy) to cluster-admin so that kubectl over
+# Tailscale works without 403s. Without this binding, the tailnet kubeconfig
+# authenticates successfully but has zero authorization.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tailnet-wcygan-admin
+subjects:
+  - kind: User
+    name: wcygan@github
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
