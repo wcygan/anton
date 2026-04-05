@@ -6,4 +6,3 @@ resources:
   - ./tidb-cluster/ks.yaml
   - ./dragonfly-cluster/ks.yaml
   - ./redpanda-cluster/ks.yaml
-  - ./scylla-cluster/ks.yaml
