@@ -35,7 +35,13 @@ spec:
               storageClassName: ceph-block
               resources:
                 requests:
-                  storage: 200Gi
+                  # WHY: Expanded from 200Gi after PVC hit 100% and Prometheus
+                  # panicked mid-WAL-replay with ENOSPC. StatefulSet PVC
+                  # templates are immutable, so the live PVC was patched
+                  # directly; this value keeps GitOps in sync for future
+                  # recreation. 7d retention at current ingest rate uses ~40G;
+                  # 300Gi leaves comfortable headroom for WAL growth spikes.
+                  storage: 300Gi
         resources:
           requests:
             cpu: 500m
