@@ -6,7 +6,7 @@ Step-by-step recipes for the most frequent changes. All of these assume the repo
 
 1. Pick a namespace under `kubernetes/apps/<namespace>/`. Create it first if needed (see next section).
 2. `mkdir kubernetes/apps/<namespace>/<app>/app`
-3. Create `kubernetes/apps/<namespace>/<app>/ks.yaml` — copy from `kubernetes/apps/default/echo/ks.yaml`, update `metadata.name`, `spec.path`, and `spec.targetNamespace`.
+3. Create `kubernetes/apps/<namespace>/<app>/ks.yaml` — copy from `kubernetes/apps/kube-system/reloader/ks.yaml`, update `metadata.name`, `spec.path`, and `spec.targetNamespace`.
 4. Create `kubernetes/apps/<namespace>/<app>/app/kustomization.yaml` listing the resources you'll add.
 5. Create the chart source:
    - OCI chart: `app/ocirepository.yaml` (preferred)

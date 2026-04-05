@@ -43,7 +43,7 @@ Every app has **exactly three tiers**:
 **Tier 2 — `<ns>/<app>/app/kustomization.yaml`**: Plain Kustomize list of resources in the `app/` dir.
 **Tier 3 — `<ns>/<app>/app/{helmrelease,ocirepository,…}.yaml`**: The actual resources.
 
-Clean exemplar: `kubernetes/apps/default/echo/`.
+Clean exemplar: `kubernetes/apps/kube-system/reloader/`.
 
 ```yaml
 # ks.yaml
@@ -51,10 +51,10 @@ Clean exemplar: `kubernetes/apps/default/echo/`.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: echo
+  name: reloader
 spec:
   interval: 1h
-  path: ./kubernetes/apps/default/echo/app   # Always .../app, never .../echo
+  path: ./kubernetes/apps/kube-system/reloader/app   # Always .../app, never .../reloader
   postBuild:
     substituteFrom:
       - name: cluster-secrets
@@ -64,7 +64,7 @@ spec:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
-  targetNamespace: default
+  targetNamespace: kube-system
   wait: false
 ```
 
@@ -103,25 +103,25 @@ resources:
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
-  name: echo
+  name: reloader
 spec:
   interval: 15m
   layerSelector:
     mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
     operation: copy
   ref:
-    tag: 4.4.0
-  url: oci://ghcr.io/bjw-s-labs/helm/app-template
+    tag: 2.2.3
+  url: oci://ghcr.io/stakater/charts/reloader
 ---
 # helmrelease.yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: echo
+  name: reloader
 spec:
   chartRef:
     kind: OCIRepository
-    name: echo             # MUST match ocirepository.metadata.name
+    name: reloader         # MUST match ocirepository.metadata.name
   interval: 1h
   values:
     # ...
@@ -257,16 +257,18 @@ spec:
 
 ### Secondary domain apps (CRITICAL)
 
-For apps on `${SECRET_DOMAIN_TWO}`, **explicit `DNSEndpoint` is required** — external-dns's `--gateway-name` filter does not pick up HTTPRoute annotations for the second domain. Also add a gateway certificate for the second domain. See `docs/docs/notes/adding-a-2nd-domain.md` and exemplar `kubernetes/apps/default/echo-two/app/dnsendpoint.yaml`:
+For apps on `${SECRET_DOMAIN_TWO}`, **explicit `DNSEndpoint` is required** — external-dns's `--gateway-name` filter does not pick up HTTPRoute annotations for the second domain. Also add a gateway certificate for the second domain (see `kubernetes/apps/network/envoy-gateway/app/certificate.yaml` for the per-domain cert pattern) and `docs/docs/notes/adding-a-2nd-domain.md` for background.
+
+There is currently no in-repo app exemplar for the secondary domain — the `kneady-*` apps that use it are managed outside this repo. Pattern for the required `DNSEndpoint`:
 
 ```yaml
 apiVersion: externaldns.k8s.io/v1alpha1
 kind: DNSEndpoint
 metadata:
-  name: echo-two
+  name: my-app
 spec:
   endpoints:
-    - dnsName: "echo-two.${SECRET_DOMAIN_TWO}"
+    - dnsName: "my-app.${SECRET_DOMAIN_TWO}"
       recordType: CNAME
       targets: ["external.${SECRET_DOMAIN_TWO}"]
 ```

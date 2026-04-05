@@ -87,12 +87,12 @@ When this reference conflicts with the repo, the repo wins. Re-read these nested
 
 When showing a pattern, point at one of these known-good exemplars rather than inventing:
 
-- **Clean OCI-chart app**: `kubernetes/apps/default/echo/`
-- **HelmRepository variant**: `kubernetes/apps/harbor/harbor/`
+- **Clean OCI-chart app**: `kubernetes/apps/kube-system/reloader/`
+- **HelmRepository variant**: `kubernetes/apps/databases/cloudnative-pg/`
+- **GitRepository variant**: `kubernetes/apps/databases/dragonfly-operator/`
 - **App with SOPS secret + DNSEndpoint + HTTPRoute**: `kubernetes/apps/network/cloudflare-tunnel/`
 - **App with ExternalSecret (ESO)**: `kubernetes/apps/external-secrets/onepassword-store/`
-- **Secondary-domain app**: `kubernetes/apps/default/echo-two/`
-- **Gateway + Certificate**: `kubernetes/apps/network/envoy-gateway/app/`
+- **Gateway + Certificate (multi-domain)**: `kubernetes/apps/network/envoy-gateway/app/`
 
 ## Hard Rules (from nested CLAUDE.md)
 
