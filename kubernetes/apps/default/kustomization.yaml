@@ -7,4 +7,3 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./echo-two/ks.yaml
