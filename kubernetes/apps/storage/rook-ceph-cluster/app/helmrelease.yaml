@@ -135,7 +135,9 @@ spec:
           limits:
             cpu: 2000m
             memory: 6Gi
-      removeOSDsIfOutAndSafeToRemove: true
+      # WHY: 3-node cluster with osd.3 already down — auto-purge on a k8s-2
+      # outage could cascade into purging osd.1. Manual removal only.
+      removeOSDsIfOutAndSafeToRemove: false
       storage:
         useAllNodes: false
         useAllDevices: false
@@ -156,13 +158,12 @@ spec:
               # nvme2n1 is system disk (500GB)
           - name: k8s-2
             devices:
-              - name: /dev/nvme1n1  # 1TB WD_BLACK SN7100
+              - name: /dev/nvme0n1  # 1TB WD_BLACK SN7100 (osd.1)
                 config:
                   deviceClass: nvme
-              - name: /dev/nvme2n1  # 1TB WD_BLACK SN7100
-                config:
-                  deviceClass: nvme
-              # nvme0n1 is system disk (500GB)
+              # nvme1n1 is system disk (Crucial 500GB, XFS STATE on p5)
+              # nvme2n1 would be the 2nd WD SN7100 — currently not enumerated
+              #   (osd.3 down). Re-add this entry if/when the drive returns.
           - name: k8s-3
             devices:
               - name: /dev/nvme0n1  # 1TB WD_BLACK SN7100
