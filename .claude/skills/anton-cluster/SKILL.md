@@ -26,10 +26,22 @@ Project-local reference for *this repo's* conventions. The cluster is a Talos Li
 
 This skill is **read-only**. It does not run `task`, `flux`, `kubectl`, `talosctl`, or any mutation.
 
+## Remote Access (Primary Path)
+
+The workstation is **not** assumed to be on the node LAN. Nodes `k8s-1`, `k8s-2`, `k8s-3` are reached over **Tailscale via MagicDNS hostnames**. Always use the repo's generated talosconfig with an explicit endpoint:
+
+```sh
+talosctl --talosconfig ./talos/clusterconfig/talosconfig \
+  -e k8s-1 -n k8s-1,k8s-2,k8s-3 <command>
+```
+
+Full details, troubleshooting, and kubectl notes → [references/remote-access.md](references/remote-access.md). **Read this before running any talosctl or kubectl command against the cluster.**
+
 ## Routing Table
 
 | User asks about... | Read |
 |---|---|
+| How to reach nodes remotely (talosctl / kubectl / Tailscale) | [references/remote-access.md](references/remote-access.md) |
 | Flux app layout, ks.yaml / HelmRelease / OCIRepository, substitution, components | [references/kubernetes-patterns.md](references/kubernetes-patterns.md) |
 | Secrets (SOPS vs ExternalSecret, cluster-secrets, 1Password) | [references/kubernetes-patterns.md](references/kubernetes-patterns.md) §5 |
 | Gateways, HTTPRoute, DNSEndpoint, certificates, split-horizon DNS | [references/kubernetes-patterns.md](references/kubernetes-patterns.md) §6 |
