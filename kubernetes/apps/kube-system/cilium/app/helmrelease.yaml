@@ -133,6 +133,7 @@ spec:
           - SYS_ADMIN
           - SYS_RESOURCE
     socketLB:
+      enabled: true
       hostNamespaceOnly: true
     # WHY: Resource limits for cilium agents prevent runaway memory consumption.
     # Current usage: cilium agents ~750Mi per node
