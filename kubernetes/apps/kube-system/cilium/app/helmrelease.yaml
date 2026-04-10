@@ -85,7 +85,8 @@ spec:
     loadBalancer:
       algorithm: maglev
       mode: "dsr"
-    localRedirectPolicy: true
+    localRedirectPolicies:
+      enabled: true
     # WHY: Resource limits for operator prevent runaway memory consumption.
     # Current usage: cilium operator ~63Mi
     # Limits set at ~4x current usage with headroom for reconciliation loops.
