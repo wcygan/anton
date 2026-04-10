@@ -24,7 +24,7 @@ spec:
     # NOTE: devices might need to be set if you have more than one active NIC on your hosts
     # devices: eno+ eth+
     dashboards:
-      enabled: true
+      enabled: false
     endpointRoutes:
       enabled: true
     # WHY: Resource limits prevent runaway memory consumption from impacting node stability.
@@ -34,7 +34,7 @@ spec:
       rollOutPods: true
       prometheus:
         serviceMonitor:
-          enabled: true
+          enabled: false
       resources:
         limits:
           memory: 256Mi
@@ -91,11 +91,11 @@ spec:
     # Limits set at ~4x current usage with headroom for reconciliation loops.
     operator:
       dashboards:
-        enabled: true
+        enabled: false
       prometheus:
-        enabled: true
+        enabled: false
         serviceMonitor:
-          enabled: true
+          enabled: false
       replicas: 1
       rollOutPods: true
       resources:
@@ -105,9 +105,9 @@ spec:
           cpu: 10m
           memory: 64Mi
     prometheus:
-      enabled: true
+      enabled: false
       serviceMonitor:
-        enabled: true
+        enabled: false
         trustCRDsExist: true
     rollOutCiliumPods: true
     routingMode: native
