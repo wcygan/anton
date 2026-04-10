@@ -8,4 +8,3 @@ resources:
   - ./namespace.yaml
   - ./harbor-postgres/ks.yaml
   - ./harbor-redis/ks.yaml
-  - ./harbor/ks.yaml
