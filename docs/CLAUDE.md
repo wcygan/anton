@@ -1,162 +1,17 @@
-# CLAUDE.md
+# docs/
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Docusaurus static site that publishes the homelab's long-form notes to `wcygan.github.io/anton`. Narrative docs referenced from repo CLAUDE.md files (e.g. `docs/docs/notes/adding-a-2nd-domain.md`) live here so they render on the site with Mermaid diagrams and navigation — short inline notes stay in repo markdown.
 
-## Project Overview
+## Contents
 
-This is a Docusaurus-based documentation site for the Anton Kubernetes homelab cluster. It generates static documentation with Mermaid diagram support for visualizing Kubernetes architecture and workflows.
+- `docs/` — published MDX pages; `intro.md` is the landing page, `notes/` holds the homelab write-ups, `playground/` is a scratch area
+- `src/`, `static/` — custom theme overrides and static assets (rarely touched)
+- `docusaurus.config.ts` — site config; `baseUrl: /anton/`, Mermaid enabled, deploys to `wcygan/anton` GitHub Pages
+- `sidebars.ts` — sidebar is auto-generated from `docs/` folder structure; edit only to override ordering
+- `package.json` — Bun-managed, Docusaurus 3 + React 19
 
-**Key Technologies:**
-- **Docusaurus 3.8.1** - Modern static site generator
-- **Bun** - Package manager and runtime
-- **TypeScript** - Type checking support
-- **Mermaid** - Diagram generation (@docusaurus/theme-mermaid)
-- **GitHub Pages** - Deployment target
+## Usage
 
-## Development Commands
+This directory is self-contained — it does not touch the cluster and is not rendered by `task configure`. Run `bun install` once, then `bun start` for the hot-reload dev server, `bun run build` to validate production output, or `bun run typecheck` before committing config changes. `bun run deploy` pushes to the `gh-pages` branch (use `USE_SSH=true` off-LAN).
 
-```bash
-# Install dependencies
-bun install
-
-# Start development server (auto-reload)
-bun start
-
-# Production build
-bun run build
-
-# Serve built site locally
-bun run serve
-
-# Type checking
-bun run typecheck
-
-# Clear Docusaurus cache
-bun run clear
-
-# Deploy to GitHub Pages
-bun run deploy                    # HTTPS
-USE_SSH=true bun run deploy      # SSH
-```
-
-## Architecture
-
-### Directory Structure
-```
-docs/
-├── docs/               # Documentation pages (auto-sidebar)
-├── src/css/           # Custom styles
-├── static/img/        # Static assets
-├── docusaurus.config.ts  # Main configuration
-├── sidebars.ts        # Sidebar config (auto-generated)
-└── package.json       # Bun scripts and dependencies
-```
-
-### Configuration
-- **Base URL**: `/anton/` (for GitHub Pages wcygan.github.io/anton)
-- **Docs root**: `/` (docs serve as homepage)
-- **Auto-sidebar**: Generated from docs/ folder structure
-- **Mermaid**: Enabled with theming support
-
-## Mermaid Diagram Guidelines
-
-### Kubernetes Architecture Diagrams
-
-**Basic Flowchart Structure:**
-```mermaid
-flowchart TD
-    subgraph cluster[Kubernetes Cluster]
-        deployment[Deployment] --> service[Service]
-        service --> pod1[Pod 1]
-        service --> pod2[Pod 2]
-    end
-    
-    external[External Traffic] --> cluster
-    
-    classDef k8s fill:#326ce5,color:white
-    class deployment,service k8s
-```
-
-### Node Shapes for K8s Resources
-- **Deployments/Apps**: `[Rectangle]`
-- **Services**: `([Stadium/Pill])`
-- **Databases**: `[("Cylinder")]` or `NodeName@{shape: cyl}`
-- **External**: `{{Hexagon}}`
-- **Pods**: `(Round)`
-
-### Diagram Direction
-- **Cluster topology**: `flowchart TD` (top-down)
-- **Data flow**: `flowchart LR` (left-right)
-- **Network flow**: `flowchart TD`
-
-### Styling Patterns
-```mermaid
-classDef node fill:#e1f5fe
-classDef ingress fill:#fff3e0
-classDef app fill:#f3e5f5
-
-class k8s1,k8s2,k8s3 node
-class nginx ingress
-class monitoring,storage app
-```
-
-### Subgraphs for Logical Grouping
-```mermaid
-flowchart TD
-    subgraph nodes[Control Plane Nodes]
-        direction LR
-        k8s1[k8s-1<br/>192.168.1.98]
-        k8s2[k8s-2<br/>192.168.1.99]
-    end
-    
-    subgraph apps[Applications]
-        monitoring[Monitoring Stack]
-        storage[Rook Ceph]
-    end
-```
-
-### Best Practices
-1. **Keep diagrams simple** - Focus on key relationships
-2. **Use consistent node shapes** - Map to Kubernetes resource types
-3. **Group related components** - Use subgraphs for namespaces/clusters
-4. **Add IP addresses** - For node identification (format: `node<br/>IP`)
-5. **Use semantic colors** - Blue for K8s, orange for ingress, purple for apps
-
-## Content Creation
-
-### Page Structure
-```markdown
----
-sidebar_position: 1
-slug: /
----
-
-# Page Title
-
-Content with Mermaid diagrams...
-
-```mermaid
-flowchart TD
-    A --> B
-```
-```
-
-### File Organization
-- Place `.md` files in `docs/` directory
-- Sidebar auto-generates from folder structure
-- Use `sidebar_position` for ordering
-- Set `slug: /` for homepage
-
-## Deployment
-
-**Target**: GitHub Pages at `wcygan.github.io/anton`
-
-The site auto-deploys via:
-1. Build static files with `bun run build`
-2. Deploy to `gh-pages` branch with `bun run deploy`
-3. GitHub Pages serves from `gh-pages` branch
-
-**Prerequisites**:
-- GitHub repository: `wcygan/anton`
-- GitHub Pages enabled
-- Proper `organizationName` and `projectName` in config
+To add a note, drop a new `.md` file under `docs/docs/notes/` with frontmatter (`sidebar_position`, optional `slug`) — the sidebar picks it up automatically. When linking from a repo CLAUDE.md, use the on-disk path (`docs/docs/notes/<name>.md`) so agents can Read it directly without fetching the rendered site.
