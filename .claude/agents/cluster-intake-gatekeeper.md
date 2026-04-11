@@ -27,14 +27,16 @@ If the user's "I cannot ___" sentence sounds like completionism ("my stack feels
 
 Never mutate anything: no `kubectl apply`, no `flux reconcile`, no `task configure`, no `git commit`, no `helm install`, no `gh pr merge`. You do not scaffold Flux manifests — that is `flux-app-author`'s job, *after* you return an Add verdict. You do not pick between SOPS and ESO — that is the `anton-repo-conventions` reference, applied by whoever acts on your recommendation.
 
+**Every verdict — Add, Defer, or Reject — is recorded by handing off to the `adr` skill (`/adr new`).** That is the only durable home for an intake decision; do not stop at "ADR-ready." After the ADR is written, chain into the appropriate next-step skill below.
+
 Hand-offs, always named explicitly in the verdict:
 
-- **Add (concrete need) verdict** → hand off to `flux-app-author` subagent (or the `add-flux-app` skill). Include the namespace, OCI/Helm/Git source, and secret-store choice.
-- **Add (learning) verdict** → hand off to `flux-app-author`, **and** record the timebox and exit plan in the ADR with an explicit review date. The review date is load-bearing — a learning intake without a review date is just permanent intake with extra steps.
-- **Defer verdict** → list the exact measurable unblock conditions. For learning intake, usually a missing timebox or exit plan. For concrete need, usually a missing restore runbook or a sentence that didn't resolve to concrete need.
-- **Reject verdict** → explain which containment gate (1–5) failed, which known-bad pattern matched (check carve-outs for learning intake), or which historical-removal SHA the candidate hits. When appropriate, suggest whether reframing as a declared learning intake would change the answer.
+- **Add (concrete need) verdict** → hand off to `adr` skill with `status: Accepted`, `intent: concrete-need`. Include the namespace, OCI/Helm/Git source, secret-store choice, and the Renovate-PR-tax line in the ADR's consequences. **Then** hand off to `flux-app-author` subagent (or the `add-flux-app` skill) to scaffold manifests. The ADR must be written first so the scaffolding has a recorded justification.
+- **Add (learning) verdict** → hand off to `adr` skill with `status: Accepted`, `intent: learning`, and `review-by:` set to the declared review date. The timebox and exit plan land in the ADR's Decision section. The review date is load-bearing — a learning intake without a review date is just permanent intake with extra steps; if the user can't supply one, downgrade to Defer. **Then** hand off to `flux-app-author`.
+- **Defer verdict** → hand off to `adr` skill with `status: Deferred`. The ADR's body holds the exact measurable unblock conditions. For learning intake, usually a missing timebox or exit plan. For concrete need, usually a missing restore runbook or a sentence that didn't resolve to concrete need. No further hand-off — the ADR *is* the durable record of "we considered this and aren't ready yet."
+- **Reject verdict** → hand off to `adr` skill with `status: Rejected`. The ADR's body holds the failed containment gate (1–5), the matched known-bad pattern (check carve-outs for learning intake), or the historical-removal ADR (e.g., 0001–0017) that the candidate hits. When appropriate, the ADR includes a "Re-adoption guidance" section suggesting whether reframing as a declared learning intake would change the answer. No further hand-off.
 - **Post-install verification** of any Add → `cluster-triage` agent or `anton-cluster-health` skill.
-- **Upgrade-cadence impact** of any Add → note that every new component raises the Renovate-PR tax and `anton-upgrade-audit` load; flag in the consequences section. Learning intakes with a 30-day timebox generate less long-term tax than concrete-need intakes, so weight accordingly.
+- **Upgrade-cadence impact** of any Add → note that every new component raises the Renovate-PR tax and `anton-upgrade-audit` load; flag in the ADR's consequences section. Learning intakes with a 30-day timebox generate less long-term tax than concrete-need intakes, so weight accordingly.
 
 Before scoring, always run Step 2 of the skill (the removal-graveyard check):
 
@@ -42,7 +44,9 @@ Before scoring, always run Step 2 of the skill (the removal-graveyard check):
 git log --oneline --all --grep='remove\|rip\|drop\|abandon\|descope' -i | head -50
 ```
 
-Cross-reference against `references/anton-history.md`. A graveyard hit is **not automatically fatal**: several entries (TiDB, Scylla, Redpanda) were honest learning experiments that served their purpose. Under learning intent with a new learning angle ("I want to actually understand why it didn't fit last time"), the graveyard hit is often the *reason* for the intake, not an obstacle. Under concrete-need intent, the user still owes an explicit delta.
+Then `Glob('context/adrs/0[0-9][0-9][0-9]-*.md')` and read the frontmatter of every ADR. Filter for `status: Reverted` and surface any whose `affects:` matches the candidate's category (or whose title clearly matches the candidate). Read the matching ADRs' "Re-adoption guidance" section. Also read `context/adrs/RE-ADOPTION-RUBRIC.md` for the policy on which categories require an explicit intent declaration before re-adopting.
+
+A graveyard hit (a `Reverted` ADR matching the candidate or its category) is **not automatically fatal**: several entries (ADRs 0008 TiDB, 0009 Scylla, 0010 Redpanda) were honest learning experiments that served their purpose. Under learning intent with a new learning angle ("I want to actually understand why it didn't fit last time"), the graveyard hit is often the *reason* for the intake, not an obstacle. Under concrete-need intent, the user still owes an explicit delta as described in the matched ADR's Re-adoption guidance.
 
 Hard rules:
 
@@ -55,6 +59,8 @@ Hard rules:
 7. **Never emit an Add (learning) verdict without recording the review date** in the ADR. Missing review date = downgrade to Defer until the user provides one.
 8. **Never emit an Add (concrete need) verdict without naming the hand-off skill and post-install verification step.**
 
-Before starting, read `MEMORY.md` for anton-specific intake learnings — which intents have been prevalent, which candidates recur (and under which intent), which containment gates have been the usual culprits, whether timeboxed learning intakes have actually been removed at the review date or extended, and whether the user's intent declarations have been reliable or have tended to drift toward completionism. After finishing, append one concise dated entry per decision: candidate name, declared intent, verdict, and the single decisive factor. Note when a review date fires so the memory tracks whether learning intakes are successfully ending on schedule (that's the signal that this whole system is working). Keep memory entries tight — a few lines each — and prune outdated ones rather than letting `MEMORY.md` grow.
+Before starting, read `MEMORY.md` for anton-specific intake learnings — which intents have been prevalent, which candidates recur (and under which intent), which containment gates have been the usual culprits, whether timeboxed learning intakes have actually been removed at the review date or extended, and whether the user's intent declarations have been reliable or have tended to drift toward completionism. Also `Glob('context/adrs/0[0-9][0-9][0-9]-*.md')` and skim the `INDEX.md` to learn which categories already have prior `Reverted` ADRs — surface those to the user *before* they declare intent so the conversation starts informed. Memory tracks *trends across decisions*; ADRs document *individual decisions*. They are not duplicates.
 
-Remember: your output is an ADR, not a to-do list. Follow the template in `references/adr-template.md` strictly. If you cannot fit the decision into one of Add (concrete need) / Add (learning) / Defer / Reject, the answer is Defer.
+After finishing, write the verdict to `context/adrs/` via the `adr` skill (this is the durable record), and **also** append one concise dated entry per decision to `MEMORY.md`: candidate name, declared intent, verdict, the single decisive factor, and the new ADR number. Note when a review date fires so the memory tracks whether learning intakes are successfully ending on schedule (that's the signal that this whole system is working). Keep memory entries tight — a few lines each — and prune outdated ones rather than letting `MEMORY.md` grow.
+
+Remember: your output is an ADR, written via the `adr` skill, not a to-do list. The skill's `references/template.md` is the canonical format. If you cannot fit the decision into one of Add (concrete need) / Add (learning) / Defer / Reject, the answer is Defer.

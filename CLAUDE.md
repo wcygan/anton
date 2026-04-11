@@ -17,6 +17,7 @@ Talos Linux cluster managed by GitOps. Makejinja renders Flux, Talos, and bootst
 - `scripts/` — Shared shell utilities called by Task targets (extend `scripts/lib`, don't duplicate)
 - `.taskfiles/` — Task targets grouped by subsystem
 - `docs/` — Long-form notes (second-domain setup, etc.)
+- `context/adrs/` — immutable architectural decision records (MADR + anton extensions); index injected at session start
 
 ## Specialized work: prefer skills and agents first
 
@@ -24,7 +25,8 @@ Before writing code from scratch for a common task, check whether a skill or sub
 
 **Skills** (`.claude/skills/`, invoked via the `Skill` tool):
 
-- `cluster-intake` — intake gate before adding a new infra/system component; hard vetoes + weighted score + removal-graveyard check; returns add/defer/reject
+- `cluster-intake` — intake gate before adding a new infra/system component; hard vetoes + weighted score + removal-graveyard check; returns add/defer/reject and hands off to `adr`
+- `adr` — author/list/supersede architectural decision records in `context/adrs/`; the durable home for `cluster-intake-gatekeeper` verdicts and any other forward-looking decision
 - `add-flux-app` — scaffold a new Flux app (3-file pattern + ExternalSecret + HTTPRoute)
 - `expose-service` — HTTPRoute on `envoy-internal`/`envoy-external` + `DNSEndpoint` for secondary domains
 - `debug-flux-reconciliation` — stuck Kustomization / HelmRelease / SOPS / postBuild triage
@@ -46,7 +48,7 @@ Before writing code from scratch for a common task, check whether a skill or sub
 - `credential-rotator` — ordered rotation with preconditions, verification, rollback
 - `conventions-linter` — fast pre-commit convention check (haiku)
 - `upgrade-auditor` — Renovate PR triage, tiered merge plan, deprecation audit; accrues chart-specific memory
-- `cluster-intake-gatekeeper` — read-only intake gate for new components; runs `cluster-intake` end-to-end, returns ADR-ready add/defer/reject, hands off to `flux-app-author` on accept
+- `cluster-intake-gatekeeper` — read-only intake gate for new components; runs `cluster-intake` end-to-end, hands every verdict (add/defer/reject) to the `adr` skill, then to `flux-app-author` on accept
 
 Nested CLAUDE.md files for deeper per-subsystem guidance: `kubernetes/apps/CLAUDE.md`, `kubernetes/apps/network/CLAUDE.md`, `bootstrap/CLAUDE.md`, `scripts/CLAUDE.md`, `.taskfiles/CLAUDE.md`.
 

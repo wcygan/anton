@@ -73,15 +73,23 @@ Intent is the axis that decides which rubric applies:
 - **Honest learning** → contained-learning rubric (gates 1, 2, 3, 4, 5 only; skip sustainability gating; require a timebox and exit plan)
 - **Completionism-as-need** → reject, cite pattern #10 in [known-bad-patterns](known-bad-patterns.md)
 
-### Step 2 — Check the removal graveyard
+### Step 2 — Check the removal graveyard (now in `context/adrs/`)
 
-Before anything else, check if this component or its category is already in anton's removal history:
+Before anything else, check if this component or its category is already in anton's removal history. The removal graveyard has been migrated into the ADR system:
 
 ```sh
 git log --oneline --all --grep='remove\|rip\|drop\|abandon\|descope' -i | head -50
 ```
 
-Known removals and the lesson each one taught → [anton-history](references/anton-history.md). If the candidate or its category appears there, demand an explicit delta from the user. Otherwise reject.
+Then query the ADR index for prior `Reverted` decisions:
+
+- `Glob('context/adrs/0[0-9][0-9][0-9]-*.md')` — list all ADRs
+- For each, read the frontmatter and filter for `status: Reverted`
+- Surface any whose `affects:` matches the candidate's category, *or* whose title clearly references the same component
+- Read each matched ADR's "Re-adoption guidance" section — that holds the conditions under which a re-attempt would be valid
+- Read `context/adrs/RE-ADOPTION-RUBRIC.md` for the policy on which categories require an explicit intent declaration before re-adopting
+
+If the candidate or its category matches a `Reverted` ADR, demand an explicit delta from the user (concrete-need reframing) **or** an explicit learning-intake declaration with timebox + exit plan (learning-intake reframing). The matched ADR's Re-adoption guidance section spells out the acceptable forms. If neither path applies, reject under the matched ADR's lesson.
 
 ### Step 3 — Run the hard vetoes (any red = reject, no override)
 
@@ -125,14 +133,16 @@ Under learning intent, the tiebreaker does not apply. Learning has value that do
 
 Cross-check against well-known homelab landmines. → [known-bad-patterns](references/known-bad-patterns.md). Any match that is **not** a declared learning intake is an auto-reject. Several patterns (HA Postgres on 3 nodes, full LGTM observability, self-hosted email) have an explicit "learning-intake variant is okay if…" carve-out; read the pattern's learning note before auto-rejecting.
 
-### Step 8 — Return a structured recommendation
+### Step 8 — Return a structured recommendation, then hand off to `adr`
 
-Format → [adr-template](references/adr-template.md). One of:
+Every verdict — Add, Defer, or Reject — is recorded by handing off to the **`adr` skill** (`/adr new`). That skill owns the canonical anton ADR template (`.claude/skills/adr/references/template.md`), allocates the next NNNN, writes the ADR file under `context/adrs/`, and regenerates `INDEX.md`. Do not stop at "ADR-ready" — the verdict must land in `context/adrs/`.
 
-- **Add (concrete need)** — all 7 hard gates pass, soft score ≥22, do-nothing clear, no known-bad match. Recommend explicit handoff to `add-flux-app`.
-- **Add (learning)** — gates 1–5 pass, the contained-learning checklist is complete (timebox, exit plan, containment verified), the user has consciously accepted the sustainability / resource trade-offs. Recommend handoff to `add-flux-app` *and* record the review date in the ADR so the experiment has a known end.
-- **Defer** — a blocking prerequisite is missing (e.g., no timebox declared for a learning intake, no tested restore runbook for stateful concrete-need intake, marginal soft score under concrete need). List exact conditions to unblock.
-- **Reject** — any containment gate (1–5) fails, completionism-as-need detected, known-bad match without a learning-intake carve-out, or historical-removal match without stated delta. Explain which gate and why, and — if appropriate — suggest whether reframing as a declared learning intake would change the answer.
+The four verdict shapes:
+
+- **Add (concrete need)** — all 7 hard gates pass, soft score ≥22, do-nothing clear, no known-bad match. Hand off to `adr` skill with `status: Accepted`, `intent: concrete-need`. Then hand off to `add-flux-app` to scaffold manifests.
+- **Add (learning)** — gates 1–5 pass, the contained-learning checklist is complete (timebox, exit plan, containment verified), the user has consciously accepted the sustainability / resource trade-offs. Hand off to `adr` skill with `status: Accepted`, `intent: learning`, and `review-by:` set to the declared review date (a learning intake without a review date is just permanent intake with extra steps — if missing, downgrade to Defer). Then hand off to `add-flux-app`.
+- **Defer** — a blocking prerequisite is missing (e.g., no timebox declared for a learning intake, no tested restore runbook for stateful concrete-need intake, marginal soft score under concrete need). Hand off to `adr` skill with `status: Deferred` — the ADR's body holds the exact conditions to unblock. No further hand-off; the ADR *is* the durable record.
+- **Reject** — any containment gate (1–5) fails, completionism-as-need detected, known-bad match without a learning-intake carve-out, or historical-removal match without stated delta. Hand off to `adr` skill with `status: Rejected` — the ADR's body explains which gate and why, and — if appropriate — whether reframing as a declared learning intake would change the answer. No further hand-off.
 
 ## What this skill does NOT do
 
