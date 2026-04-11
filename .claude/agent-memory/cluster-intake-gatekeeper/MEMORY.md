@@ -1,0 +1,2 @@
+- [S3 shortlist Apr 2026](project_s3_shortlist_apr2026.md) — verified MinIO archived, Rook alive, SeaweedFS pre-1.0 op, Garage slow; anton has zero storage layer
+- 2026-04-11: S3-on-k8s comparison (Rook/MinIO/SeaweedFS/Garage), intent not declared, produced conditional verdicts. Concrete-need: reject Rook (graveyard) + MinIO (archived), defer SeaweedFS + Garage pending consuming-app. Learning: recommend Garage as lowest-regret, SeaweedFS as runner-up, reject MinIO (archived codebase) and Rook (would learn Ceph not S3). User has not yet picked intent.
