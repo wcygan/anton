@@ -6,7 +6,6 @@ Mechanical reference for the `adr` skill. This file is loaded on demand from `SK
 
 ```
 context/adrs/
-├── INDEX.md                  # generated table; regenerated on every new/supersede
 ├── TEMPLATE.md               # canonical anton ADR template (also mirrored at .claude/skills/adr/references/template.md)
 ├── RE-ADOPTION-RUBRIC.md     # meta-policy preserved from anton-history.md (non-ADR)
 └── NNNN-kebab-slug.md        # one ADR per file
@@ -83,7 +82,7 @@ The canonical categories used by `cluster-intake` Step 2 for removal-detection l
 
 The template enforces this section order. Do not add or remove sections.
 
-1. **Blockquote summary** (`> ...`) — one sentence right after the H1. This is what appears in `INDEX.md`.
+1. **Blockquote summary** (`> ...`) — one sentence right after the H1.
 2. **Status** — restates the frontmatter status as a sentence.
 3. **Context** — what is the situation that prompts this decision. 1–3 paragraphs. Mark "Context (retrospective)" if `retrospective: true`.
 4. **Decision** — active voice. Usually 1–2 sentences.

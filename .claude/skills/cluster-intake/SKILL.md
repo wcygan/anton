@@ -135,7 +135,7 @@ Cross-check against well-known homelab landmines. → [known-bad-patterns](refer
 
 ### Step 8 — Return a structured recommendation, then hand off to `adr`
 
-Every verdict — Add, Defer, or Reject — is recorded by handing off to the **`adr` skill** (`/adr new`). That skill owns the canonical anton ADR template (`.claude/skills/adr/references/template.md`), allocates the next NNNN, writes the ADR file under `context/adrs/`, and regenerates `INDEX.md`. Do not stop at "ADR-ready" — the verdict must land in `context/adrs/`.
+Every verdict — Add, Defer, or Reject — is recorded by handing off to the **`adr` skill** (`/adr new`). That skill owns the canonical anton ADR template (`.claude/skills/adr/references/template.md`), allocates the next NNNN, and writes the ADR file under `context/adrs/`. Do not stop at "ADR-ready" — the verdict must land in `context/adrs/`.
 
 The four verdict shapes:
 

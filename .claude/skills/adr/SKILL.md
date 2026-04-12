@@ -1,6 +1,6 @@
 ---
 name: adr
-description: Anton ADR lifecycle — author new architectural decision records, list existing ones by status or affects-category, and mark old decisions superseded. Use when capturing a decision (especially after `cluster-intake-gatekeeper` returns an ADD/DEFER/REJECT verdict), when reviewing prior decisions before changing direction, when checking if a candidate component has been removed before, or when promoting a decision out of memory into a durable record. ADRs live in `context/adrs/` and are immutable — supersession is the only way to change a decision. The current ADR index is injected into every Claude Code session by `.claude/hooks/inject_adr_index.py`. Keywords — ADR, architecture decision record, decision log, supersede, decision history, why did we, prior decision, recorded decision, MADR, immutable, intake handoff, cluster-intake-gatekeeper handoff, removal graveyard, reverted decision.
+description: Anton ADR lifecycle — author new architectural decision records, list existing ones by status or affects-category, and mark old decisions superseded. Use when capturing a decision (especially after `cluster-intake-gatekeeper` returns an ADD/DEFER/REJECT verdict), when reviewing prior decisions before changing direction, when checking if a candidate component has been removed before, or when promoting a decision out of memory into a durable record. ADRs live in `context/adrs/` and are immutable — supersession is the only way to change a decision. The ADR index is built by scanning ADR files directly and injected into every Claude Code session by `.claude/hooks/inject_adr_index.py`. Keywords — ADR, architecture decision record, decision log, supersede, decision history, why did we, prior decision, recorded decision, MADR, immutable, intake handoff, cluster-intake-gatekeeper handoff, removal graveyard, reverted decision.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -22,14 +22,11 @@ The skill is anton-local and has **no runtime dependency** on `~/.claude/skills/
 
 - **ADRs are immutable.** Once an ADR's `status:` is `Accepted` (or `Reverted` / `Rejected` / `Deferred`), the body never changes. The *only* edit allowed on an existing ADR is flipping the `status:` line to `Superseded-by NNNN`. Any other change must go through `supersede`.
 - **Numbers are never reused.** The next number is always `max(existing) + 1`, zero-padded to four digits, regardless of whether earlier numbers were superseded.
-- **`INDEX.md` is regenerated, not edited.** Both `new` and `supersede` rebuild it from on-disk frontmatter as the last step of every invocation. Never `Edit` `INDEX.md` directly.
-- **Atomicity**: there is no path where an ADR file exists without a corresponding `INDEX.md` row, because the index is always rebuilt from disk. If something fails mid-write, regenerating the index fixes it.
 - **`Status: Reverted`** is anton-specific. Use it for any decision that was once live and is now removed. Standard MADR has no equivalent.
 
 References:
 - Field reference and immutability rule → [conventions](references/conventions.md)
 - Canonical template for new ADRs → [template](references/template.md)
-- INDEX.md regeneration spec → [index-format](references/index-format.md)
 
 ## Workflow — `new`
 
@@ -45,7 +42,7 @@ Triggered by:
 
 3. **Interview the user** (skip this when invoked from intake — see Handoff from intake). Ask only the questions whose answers aren't already known:
    - Title (one short sentence)
-   - One-sentence summary (the line that will appear in `INDEX.md`)
+   - One-sentence summary (the blockquote after the H1)
    - `status` — usually `Accepted` for forward-looking decisions; `Deferred` / `Rejected` / `Reverted` if known
    - `affects` — pick the broadest applicable category from: `storage`, `observability`, `databases`, `registries`, `demos`, `networking`, `security`, `compute`, `all`, or a new category if none fit
    - `intent` — `concrete-need` / `learning` / `unknown`
@@ -59,14 +56,7 @@ Triggered by:
 
 5. **If `supersedes:` is non-empty**, also flip the `status:` line of each superseded ADR to `Superseded-by NNNN`. This is the *only* allowed in-place edit on an existing ADR. Use `Edit` with a precise old/new string for the status line only — never touch the body.
 
-6. **Regenerate `INDEX.md`** by:
-   - `Glob('context/adrs/0[0-9][0-9][0-9]-*.md')`
-   - For each, read the frontmatter (status, date, affects, intent) and the H1 (title) and the blockquote summary (`> ...`)
-   - Sort by NNNN
-   - Render the markdown table per [index-format](references/index-format.md)
-   - `Write` `context/adrs/INDEX.md` (full overwrite — never partial edit)
-
-7. **Confirm to the user** with the file path and the new ADR number. Do not narrate the regeneration.
+6. **Confirm to the user** with the file path and the new ADR number.
 
 ### Handoff from intake
 
@@ -95,7 +85,7 @@ Triggered by:
    - `--status <X>` → keep only ADRs whose `status:` matches `X` (case-insensitive)
    - `--affects <X>` → keep only ADRs whose `affects:` contains `X`
    - With no filter, return all
-4. Format as a markdown table (same columns as `INDEX.md`) sorted by NNNN.
+4. Format as a markdown table sorted by NNNN (columns: #, Title, Status, Date, Affects, Intent).
 5. If used as the data source for `cluster-intake` Step 2: also read the matching ADRs' "Re-adoption guidance" section so the intake can surface the conditions under which a re-attempt would be valid.
 
 ## Workflow — `supersede`
@@ -109,8 +99,7 @@ Triggered by:
 2. **Verify the target's current status.** If it is already `Superseded-by NNNN`, abort — supersession chains exist (NNNN can be superseded by MMMM which is superseded by PPPP), so the user must supersede the *latest* in the chain.
 3. **Author the replacement** by invoking the `new` workflow with `supersedes: [<NNNN>]` pre-populated. Walk the interview as normal.
 4. **Flip the old ADR's status line** — and *only* the status line — from `Accepted` (or whatever it was) to `Superseded-by <new NNNN>`. Use `Edit` with the precise old/new strings. Do not touch the body, the date, or any other field.
-5. **Regenerate `INDEX.md`** (same as in `new`). Both the old and new ADRs will appear, the old one with its updated status.
-6. **Confirm to the user** with both ADR numbers (old → new) and the file paths.
+5. **Confirm to the user** with both ADR numbers (old → new) and the file paths.
 
 ## What this skill does NOT do
 
@@ -130,7 +119,6 @@ Triggered by:
 ## Anti-patterns
 
 - **Editing an ADR body to reflect a changed decision.** That's what `supersede` is for. Editing in place destroys the historical record.
-- **Skipping `INDEX.md` regeneration.** The SessionStart hook reads `INDEX.md`; if it drifts from disk, future sessions get stale context.
 - **Re-using a number after a delete.** ADRs are never deleted, so this shouldn't come up — but if it does, allocate the next number, never the gap.
 - **Authoring an ADR before the decision is actually made.** ADRs document decisions that happened, not aspirations. If the user is still considering, they're not ready for an ADR.
 - **Verbose ADRs.** One screen of body is the target. If the decision genuinely needs more context, link to a doc — don't inline it.

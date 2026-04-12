@@ -4,13 +4,12 @@ This directory holds **immutable architectural decisions** for anton. It exists 
 
 ## Layout
 
-- `adrs/` — numbered ADRs (`NNNN-kebab-slug.md`), `INDEX.md`, `TEMPLATE.md`, and `RE-ADOPTION-RUBRIC.md`.
+- `adrs/` — numbered ADRs (`NNNN-kebab-slug.md`), `TEMPLATE.md`, and `RE-ADOPTION-RUBRIC.md`.
 
 ## Hard rules
 
 - **ADRs are immutable.** Once a decision is recorded, the body never changes. To revise a decision, write a new ADR with `supersedes: [NNNN]` in frontmatter and edit *only* the old ADR's `status:` line to `Superseded-by NNNN`.
 - **Numbers are never reused.** Allocate the next NNNN by globbing the highest existing file.
-- **`INDEX.md` is regenerated, not edited.** The `adr` skill rebuilds it from on-disk frontmatter every time `new` or `supersede` runs.
 - **`Status: Reverted`** is anton-specific — a decision that was originally accepted, then later removed. Standard MADR has no status for this; the migrated graveyard ADRs (0001–0017) all use it.
 
 ## How decisions get here
@@ -21,7 +20,7 @@ This directory holds **immutable architectural decisions** for anton. It exists 
 
 ## How decisions get read
 
-- **At session start** — `.claude/hooks/inject_adr_index.py` injects `adrs/INDEX.md` (titles + status + affects, capped at 40 lines) into every Claude Code session, including subagents.
+- **At session start** — `.claude/hooks/inject_adr_index.py` scans ADR files directly (frontmatter + H1 title), builds a table, and injects it (capped at 40 lines) into every Claude Code session, including subagents. No intermediate index file needed.
 - **On demand** — the `adr` skill's `list` workflow filters by `--status` or `--affects` for targeted lookup. `cluster-intake` Step 2 uses this to detect retries of past failures.
 
 ## Out of scope (for now)

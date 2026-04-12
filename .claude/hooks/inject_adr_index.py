@@ -3,22 +3,21 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""SessionStart hook: inject the anton ADR index.
+"""SessionStart hook: inject the anton ADR index by scanning ADR files directly.
 
-Reads `context/adrs/INDEX.md` and prints a trimmed version to stdout so it
-lands in the agent's initial context. Lets every Claude Code session (and every
-spawned subagent) see prior decisions at turn 0 without the operator typing
-them in.
+Globs `context/adrs/NNNN-*.md`, parses YAML-ish frontmatter, and prints a
+trimmed markdown table to stdout so it lands in the agent's initial context.
 
-Fail-open: if the index file is missing, empty, or unreadable, the hook exits
-0 with no output. Never raises. Capped at 40 body lines so it cannot bloat
-the session context window.
+Fail-open: if no ADR files exist or are unreadable, exits 0 with no output.
+Never raises. Capped at MAX_BODY_LINES so it cannot bloat the session context.
 """
 import os
+import re
 import sys
 from pathlib import Path
 
 MAX_BODY_LINES = 40
+ADR_PATTERN = re.compile(r"^(\d{4})-(.+)\.md$")
 
 
 def project_root() -> Path:
@@ -28,50 +27,104 @@ def project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def read_index() -> list[str]:
-    path = project_root() / "context" / "adrs" / "INDEX.md"
+def parse_frontmatter(path: Path) -> dict[str, str] | None:
+    """Extract YAML frontmatter fields and the H1 title from an ADR file.
+
+    Hand-rolls parsing to avoid a pyyaml dependency. Expects the standard
+    MADR frontmatter block delimited by --- lines.
+    """
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
+        return None
+
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return None
+
+    meta: dict[str, str] = {}
+    i = 1
+    while i < len(lines):
+        line = lines[i].strip()
+        if line == "---":
+            i += 1
+            break
+        if ":" in line:
+            key, _, val = line.partition(":")
+            meta[key.strip()] = val.strip()
+        i += 1
+
+    # Extract H1 title from the body after frontmatter
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith("# "):
+            # Strip the "# NNNN — " prefix to get just the title
+            title = re.sub(r"^#\s*\d{4}\s*[—–-]\s*", "", line)
+            meta["title"] = title
+            break
+        i += 1
+
+    return meta if meta else None
+
+
+def scan_adrs() -> list[tuple[str, dict[str, str]]]:
+    """Return (number, metadata) pairs sorted by ADR number."""
+    adr_dir = project_root() / "context" / "adrs"
+    if not adr_dir.is_dir():
         return []
-    return [line for line in text.splitlines() if line.strip()]
+
+    results = []
+    for p in sorted(adr_dir.iterdir()):
+        m = ADR_PATTERN.match(p.name)
+        if not m:
+            continue
+        meta = parse_frontmatter(p)
+        if meta is None:
+            continue
+        results.append((m.group(1), meta))
+    return results
+
+
+def build_table(adrs: list[tuple[str, dict[str, str]]]) -> list[str]:
+    """Build a markdown table from scanned ADR metadata."""
+    header = "| # | Title | Status | Date | Affects | Intent |"
+    sep = "|---|---|---|---|---|---|"
+    rows = []
+    for num, meta in adrs:
+        slug = meta.get("title", "(untitled)")
+        status = meta.get("status", "?")
+        date = meta.get("date", "?")
+        affects = meta.get("affects", "?")
+        intent = meta.get("intent", "?")
+        rows.append(f"| {num} | {slug} | {status} | {date} | {affects} | {intent} |")
+    return [header, sep, *rows]
 
 
 def trim(lines: list[str]) -> list[str]:
-    """Keep header + table; cap total body length at MAX_BODY_LINES."""
-    if len(lines) <= MAX_BODY_LINES:
+    """Cap table rows at MAX_BODY_LINES, dropping oldest rows first."""
+    preamble = lines[:2]  # header + separator
+    rows = lines[2:]
+    max_rows = MAX_BODY_LINES - len(preamble) - 1  # -1 for truncation marker
+    if max_rows < 1:
+        max_rows = 1
+    if len(rows) <= max_rows:
         return lines
-
-    # Preserve the H1, the "Generated:" line, the header row, and the
-    # separator row at the top; truncate the oldest table rows from the middle.
-    table_start = next(
-        (i for i, line in enumerate(lines) if line.startswith("| #")),
-        None,
-    )
-    if table_start is None:
-        return lines[:MAX_BODY_LINES]
-
-    preamble = lines[: table_start + 2]  # header row + separator row
-    rows = lines[table_start + 2 :]
-    keep_rows = MAX_BODY_LINES - len(preamble) - 1  # -1 for the truncation marker
-    if keep_rows < 1:
-        keep_rows = 1
-    truncated = len(rows) - keep_rows
-    if truncated <= 0:
-        return lines
-    kept = rows[-keep_rows:]
+    truncated = len(rows) - max_rows
     marker = f"| … | _({truncated} older entries omitted)_ |  |  |  |  |"
-    return preamble + [marker] + kept
+    return preamble + [marker] + rows[-max_rows:]
 
 
 def main() -> int:
-    lines = read_index()
-    if not lines:
+    adrs = scan_adrs()
+    if not adrs:
         return 0
+
+    table = build_table(adrs)
+    table = trim(table)
 
     print("## Anton ADR index (injected at session start)")
     print()
-    for line in trim(lines):
+    for line in table:
         print(line)
     print()
     print(
