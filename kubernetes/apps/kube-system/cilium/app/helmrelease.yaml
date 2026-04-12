@@ -97,7 +97,7 @@ spec:
         enabled: false
         serviceMonitor:
           enabled: false
-      replicas: 1
+      replicas: 2
       rollOutPods: true
       resources:
         limits:
