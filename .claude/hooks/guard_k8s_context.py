@@ -10,8 +10,13 @@ subcommands require the current context to match the expected anton context.
 Fails open (exit 0) if the context can't be resolved so local tooling bugs
 don't block routine work — the other guards still apply.
 
+The expected kubectl context defaults to the Tailscale operator proxy
+(`tailscale-operator.<MagicDNSSuffix>`), which is how this repo connects to
+the cluster remotely. The MagicDNS suffix is resolved at runtime via
+`tailscale status --json` so the literal tailnet name never lives in the repo.
+
 Override via env vars:
-  ANTON_KUBE_CONTEXT   (default: admin@anton)
+  ANTON_KUBE_CONTEXT   (default: tailscale-operator.<tailscale MagicDNSSuffix>)
   ANTON_TALOS_CONTEXT  (default: anton)
 """
 import json
@@ -20,7 +25,38 @@ import shutil
 import subprocess
 import sys
 
-EXPECTED_KUBE = os.environ.get("ANTON_KUBE_CONTEXT", "admin@anton")
+
+def run_stdout(cmd: list[str], timeout: int = 3) -> str | None:
+    if not shutil.which(cmd[0]):
+        return None
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    if r.returncode != 0:
+        return None
+    return r.stdout.strip()
+
+
+def tailscale_magic_dns_suffix() -> str | None:
+    out = run_stdout(["tailscale", "status", "--json"])
+    if out is None:
+        return None
+    try:
+        suffix = json.loads(out).get("MagicDNSSuffix")
+    except json.JSONDecodeError:
+        return None
+    return suffix or None
+
+
+def default_kube_context() -> str:
+    suffix = tailscale_magic_dns_suffix()
+    if suffix:
+        return f"tailscale-operator.{suffix}"
+    return "admin@anton"
+
+
+EXPECTED_KUBE = os.environ.get("ANTON_KUBE_CONTEXT") or default_kube_context()
 EXPECTED_TALOS = os.environ.get("ANTON_TALOS_CONTEXT", "anton")
 
 READ_ONLY_KUBECTL = frozenset({
@@ -42,18 +78,6 @@ READ_ONLY_FLUX = frozenset({
     "get", "stats", "version", "check", "tree", "trace",
     "events", "logs", "diff", "envsubst", "completion",
 })
-
-
-def run_stdout(cmd: list[str], timeout: int = 3) -> str | None:
-    if not shutil.which(cmd[0]):
-        return None
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except (subprocess.SubprocessError, OSError):
-        return None
-    if r.returncode != 0:
-        return None
-    return r.stdout.strip()
 
 
 def current_kube_context() -> str | None:
