@@ -73,9 +73,33 @@ def current_talos_context() -> str | None:
     return None
 
 
+# Short/long flags that consume the next token as their value.
+# Covers kubectl, talosctl, and flux global flags.
+_FLAGS_WITH_ARG = frozenset({
+    "-n", "--namespace",
+    "-o", "--output",
+    "-l", "--selector",
+    "-f", "--filename",
+    "-c", "--container",
+    "-s", "--server",
+    "-p", "--patch",
+    "-e", "--endpoints",
+    "--context", "--kubeconfig", "--cluster", "--user",
+    "--talosconfig", "--nodes",
+})
+
+
 def first_subcommand(tokens: list[str]) -> str | None:
+    skip_next = False
     for t in tokens:
-        if t.startswith("-") or "=" in t:
+        if skip_next:
+            skip_next = False
+            continue
+        if t.startswith("-"):
+            if t in _FLAGS_WITH_ARG:
+                skip_next = True
+            continue
+        if "=" in t:
             continue
         return t
     return None

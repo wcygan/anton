@@ -76,6 +76,12 @@ Two systems coexist, chosen by audience:
 
 See `add-flux-app` skill for ExternalSecret templates and `anton-repo-conventions` skill for the SOPS-vs-ESO decision.
 
+## Kubectl context
+
+The cluster is accessed remotely via the Tailscale operator proxy. The active kubectl context is `tailscale-operator.<tailnet-name>.ts.net`, **not** `admin@anton`. This is the expected context for all kubectl, flux, and helm commands.
+
+The `guard_k8s_context.py` hook defaults to expecting `admin@anton`. It passes read-only subcommands (`get`, `describe`, `logs`, etc.) regardless of context.
+
 ## Hard rules
 
 - **Never** commit the literal tailnet name. Use the placeholder `<tailnet-name>.ts.net` in every committed file.
