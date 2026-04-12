@@ -26,22 +26,24 @@ A leftover smartctl-exporter cron from the prior Rook install runs daily at ~00:
 - **2026-03-06 00:07:13Z** — last successful smartctl scan of `/dev/nvme2n1` (the missing WD_BLACK was still present)
 - **2026-03-06** — early-startup.log shows two reboots later that day: 16:16 and 18:56 UTC. The drive disappeared in this window.
 - **2026-03-07 00:07:18Z onward** — only `nvme0n1` and `nvme1n1` are scanned. The third NVMe never reappears.
-- Today (2026-04-11) — still missing.
+- 2026-04-12 — still missing. 32nd boot since Feb 11, latest reboot 2026-04-12 02:40 UTC.
 
 ## Reboot pattern (verified from `/var/log/early-startup.log`, persistent across boots)
 
-`/var/log/early-startup.log` accumulates one `platform information` line per boot and survives reboots. As of 2026-04-11:
+`/var/log/early-startup.log` accumulates one `platform information` line per boot and survives reboots. As of 2026-04-12:
 
-- **k8s-2: 31 boots** since 2026-02-11 (60 days). Spaced 1-3 days apart, never clustered, no manual-maintenance signature. **This is the alarming one.**
+- **k8s-2: 32 boots** since 2026-02-11 (61 days). Spaced 1-3 days apart, never clustered, no manual-maintenance signature. **This is the alarming one.** Rebooted again 2026-04-12 02:40 UTC — ~45 hours after the previous boot on 2026-04-10 05:55 UTC.
 - **k8s-1: 17 boots** since 2026-01-02. 5 cluster-install boots in early Jan, then a clean 90-day uptime, then 12 boots clustered within ~30 minutes on 2026-04-04 (clearly a manual `task talos:apply-node` / `upgrade-node` sequence). Healthy pattern.
-- **k8s-3: 6 boots** since 2026-01-02, all on cluster install day. Has been up for ~98 days continuously. Healthy.
+- **k8s-3: 6 boots** since 2026-01-02, all on cluster install day. Has been up for ~98+ days continuously. Healthy.
 
 k8s-2's `early-startup.log` starts on 2026-02-11 (the others start ~Jan 2-3), suggesting **k8s-2's OS disk was wiped and reinstalled on 2026-02-11**, ~6 weeks after the original cluster bootstrap. Whatever happened on Feb 11 reset k8s-2 from a clean state. The reboot thrashing started immediately after.
 
-Most recent k8s-2 reboots (when the user asked about "~2 recent restarts"):
+Most recent k8s-2 reboots:
+- 2026-03-27 20:19 UTC
 - 2026-04-03 16:45 UTC
 - 2026-04-07 08:11 UTC
-- 2026-04-10 05:55 UTC (current boot)
+- 2026-04-10 05:55 UTC
+- 2026-04-12 02:40 UTC (current boot)
 
 **The user's "~twice recently" perception was correct — and that's just the latest in a 2-month pattern.**
 
