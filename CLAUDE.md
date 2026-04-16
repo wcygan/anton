@@ -44,6 +44,7 @@ Before writing code from scratch for a common task, check whether a skill or sub
 - `longhorn-volume-ops` — per-volume Longhorn PVC work (create/resize/clone, replica/locality overrides)
 - `longhorn-node-ops` — Longhorn disk/node operations (disk add/remove, eviction, disk-routing fixes, replaced-node integration)
 - `longhorn-backup-dr` — Longhorn backup target, RecurringJobs, and restore/DR flows
+- `observability-integrate` — wire a workload into kube-prometheus-stack (SM/PM, Grafana dashboard, PrometheusRule, scrape verification)
 
 **Subagents** (`.claude/agents/`, invoked via the `Agent` tool):
 

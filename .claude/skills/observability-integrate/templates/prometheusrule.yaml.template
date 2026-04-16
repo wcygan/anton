@@ -1,0 +1,39 @@
+---
+# PrometheusRule — alerting and/or recording rules.
+# Co-locate with the app: kubernetes/apps/{{NAMESPACE}}/{{APP_NAME}}/app/prometheusrule.yaml
+#
+# Validate before commit:
+#   yq '.spec.groups' <file> | yq -o=yaml > /tmp/rules.yaml
+#   mise exec -- promtool check rules /tmp/rules.yaml
+#
+# Doctrine: alert on symptoms (user-visible), not causes (internal state).
+# Every alert must be actionable or delete it. See references/promql-and-rules.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{APP_NAME}}
+  namespace: {{NAMESPACE}}
+  labels:
+    app.kubernetes.io/name: {{APP_NAME}}
+spec:
+  groups:
+    # Recording rules — precompute expensive queries.
+    - name: {{APP_NAME}}.recording
+      interval: 30s
+      rules:
+        - record: job:{{APP_NAME}}_example:rate_5m
+          expr: |
+            sum by(job) (rate({{APP_NAME}}_events_total[5m]))
+
+    # Alerting rules — fire when a symptom persists.
+    - name: {{APP_NAME}}.alerts
+      rules:
+        - alert: {{APP_NAME}}ExampleAlert
+          expr: job:{{APP_NAME}}_example:rate_5m > 10
+          for: 10m
+          labels:
+            severity: warning    # or: critical
+          annotations:
+            summary: "{{APP_NAME}} rate above threshold for 10m"
+            description: "{{ $labels.job }} at {{ $value }} events/s"
+            runbook_url: "https://wcygan.github.io/anton/runbooks/{{APP_NAME}}"

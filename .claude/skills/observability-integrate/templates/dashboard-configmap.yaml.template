@@ -1,0 +1,62 @@
+---
+# Grafana dashboard as a sidecar-picked-up ConfigMap.
+# Co-locate with the app whose subject matters most:
+#   kubernetes/apps/{{NAMESPACE}}/{{APP_NAME}}/app/dashboard-{{SLUG}}.yaml
+# (namespace does not matter to discovery — sidecar watches all)
+#
+# Validation before commit:
+#   1. JSON parses: mise exec -- jq . <(yq '.data.*' <file>)
+#   2. Each panel's .targets[].expr returns non-empty via the probe recipe in references/verify-scrapes.md
+#   3. datasource.uid is literal "prometheus" (not an auto-generated UID from a UI export)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-{{SLUG}}
+  namespace: {{NAMESPACE}}
+  labels:
+    grafana_dashboard: "1"     # EXACT value. Do not change.
+data:
+  {{SLUG}}.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": false,
+      "schemaVersion": 39,
+      "tags": ["anton", "{{TAG}}"],
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "timezone": "browser",
+      "title": "{{TITLE}}",
+      "uid": "{{SLUG}}",
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Example panel",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "up{job=\"{{APP_NAME}}\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        }
+      ]
+    }

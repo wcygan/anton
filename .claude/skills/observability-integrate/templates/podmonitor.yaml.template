@@ -1,0 +1,25 @@
+---
+# PodMonitor — scrape pods directly, bypassing Services.
+# Use when no Service exposes the metrics port (e.g., Flux controllers on anton —
+# their Services only expose port 80, not http-prom).
+#
+# Co-locate with the app: kubernetes/apps/{{NAMESPACE}}/{{APP_NAME}}/app/podmonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{APP_NAME}}
+  namespace: {{NAMESPACE}}
+  labels:
+    app.kubernetes.io/name: {{APP_NAME}}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{NAMESPACE}}
+  selector:
+    matchLabels:
+      # Must match POD labels (not Service labels).
+      app.kubernetes.io/name: {{APP_NAME}}
+  podMetricsEndpoints:
+    - port: {{CONTAINER_PORT_NAME}}   # Container port NAME (spec.containers[].ports[].name). Required.
+      interval: 30s
+      path: /metrics
