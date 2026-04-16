@@ -1,0 +1,302 @@
+---
+# Grafana sidecar picks this up via `grafana_dashboard=1` label.
+# searchNamespace: ALL in the HelmRelease values means this can live anywhere;
+# it's co-located here so the dashboard and app churn together.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-cluster-health-glance
+  labels:
+    grafana_dashboard: "1"
+data:
+  cluster-health-glance.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": false,
+      "schemaVersion": 39,
+      "tags": ["anton", "cluster", "health"],
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "30s",
+      "timezone": "browser",
+      "title": "Cluster Health Glance",
+      "uid": "cluster-health-glance",
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Node CPU %",
+          "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Node Memory %",
+          "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 75 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "bargauge",
+          "title": "Node Filesystem Usage %",
+          "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 75 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\", mountpoint!~\"/var/lib/kubelet/.*\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\", mountpoint!~\"/var/lib/kubelet/.*\"}) * 100",
+              "legendFormat": "{{instance}} {{mountpoint}}",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "table",
+          "title": "Top Pod Restarts (24h)",
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": { "custom": { "align": "auto" } },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Value" },
+                "properties": [
+                  { "id": "displayName", "value": "Restarts" },
+                  { "id": "unit", "value": "short" },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        { "color": "green", "value": null },
+                        { "color": "yellow", "value": 1 },
+                        { "color": "red", "value": 5 }
+                      ]
+                    }
+                  },
+                  { "id": "custom.cellOptions", "value": { "type": "color-background" } }
+                ]
+              }
+            ]
+          },
+          "options": { "showHeader": true, "sortBy": [{ "displayName": "Restarts", "desc": true }] },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "topk(15, sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[24h])) > 0)",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true }, "indexByName": { "namespace": 0, "pod": 1, "Value": 2 } } }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Flux Reconcile State",
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "mappings": []
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": ".*Not Ready.*|.*Failed.*|.*Stalled.*" },
+                "properties": [
+                  { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "horizontal",
+            "textMode": "value_and_name",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(gotk_reconcile_condition{type=\"Ready\", status=\"True\"}) by (kind)",
+              "legendFormat": "{{kind}} Ready",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "expr": "count(gotk_reconcile_condition{type=\"Ready\", status=\"False\"}) by (kind)",
+              "legendFormat": "{{kind}} Not Ready",
+              "instant": true
+            },
+            {
+              "refId": "C",
+              "expr": "count(gotk_reconcile_condition{type=\"Stalled\", status=\"True\"}) by (kind)",
+              "legendFormat": "{{kind}} Stalled",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "bargauge",
+          "title": "PVC Saturation %",
+          "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 75 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100",
+              "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "stat",
+          "title": "Longhorn Volume Health",
+          "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Robustness values: 1=Healthy, 2=Degraded, 3=Faulted, 0=Unknown. Counts volumes by status.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Healthy" },
+                "properties": [
+                  { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "horizontal",
+            "textMode": "value_and_name",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(longhorn_volume_robustness == 1)",
+              "legendFormat": "Healthy",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "expr": "count(longhorn_volume_robustness == 2) or vector(0)",
+              "legendFormat": "Degraded",
+              "instant": true
+            },
+            {
+              "refId": "C",
+              "expr": "count(longhorn_volume_robustness == 3) or vector(0)",
+              "legendFormat": "Faulted",
+              "instant": true
+            }
+          ]
+        }
+      ]
+    }
