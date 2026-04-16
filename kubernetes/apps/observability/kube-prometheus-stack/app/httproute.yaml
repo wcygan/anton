@@ -1,0 +1,21 @@
+---
+# Grafana is internal-only per ADR 0007. Prometheus and Alertmanager stay
+# ClusterIP — do not add HTTPRoutes for them without an ADR change.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+spec:
+  hostnames: ["grafana.${SECRET_DOMAIN}"]
+  parentRefs:
+    - name: envoy-internal
+      namespace: network
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: kube-prometheus-stack-grafana
+          port: 80
+      matches:
+        - path:
+            type: PathPrefix
+            value: /

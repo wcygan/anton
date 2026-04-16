@@ -1,0 +1,124 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+spec:
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: 83.5.0
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+      interval: 15m
+  interval: 1h
+
+  # CRD lifecycle — let the chart's upgrade Job own CRD rollover (chart 68.4.0+).
+  # The Job runs before the Helm upgrade, so the Prometheus Operator never sees an
+  # un-Established CRD at startup (prometheus-operator #7459). These settings
+  # override the cluster-wide defaults in kubernetes/flux/cluster/ks.yaml, which
+  # set both install.crds and upgrade.crds to CreateReplace.
+  install:
+    crds: Create
+  upgrade:
+    crds: Skip
+
+  values:
+    # Chart's own CRD-upgrade Job — gated behind this flag; off by default upstream.
+    crds:
+      upgradeJob:
+        enabled: true
+
+    # ---- Prometheus Operator (defaults; no overrides needed) ----
+    prometheusOperator:
+      enabled: true
+
+    # ---- Prometheus ----
+    prometheus:
+      prometheusSpec:
+        replicas: 1
+        retention: 15d
+
+        # Match-all selectors so ServiceMonitors/PodMonitors/PrometheusRules/Probes
+        # from every namespace are discovered without needing per-namespace labels.
+        # Without these overrides the chart injects release-scoped selectors that
+        # silently drop scrape targets from anton's other charts.
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+        ruleSelectorNilUsesHelmValues: false
+        probeSelectorNilUsesHelmValues: false
+
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 50Gi
+
+    # ---- Alertmanager ----
+    # No routes configured — intentional per ADR 0007. Alerts go nowhere until
+    # Trigger 4 fires and a destination is chosen. Do NOT add `.alertmanager.config`
+    # here without first writing the corresponding ADR.
+    alertmanager:
+      alertmanagerSpec:
+        replicas: 1
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 2Gi
+
+    # ---- Grafana ----
+    grafana:
+      replicas: 1
+      # Admin credentials come from the ExternalSecret in this same app directory,
+      # which materialises a Secret named `grafana-admin` with keys `admin-user`
+      # and `admin-password`. Note: Grafana does not re-read this Secret on rotation
+      # — credential rotation requires restarting the Grafana pod
+      # (helm-charts #3679). Documented in plan 0002.
+      admin:
+        existingSecret: grafana-admin
+        userKey: admin-user
+        passwordKey: admin-password
+      persistence:
+        enabled: true
+        type: pvc
+        storageClassName: longhorn
+        accessModes: ["ReadWriteOnce"]
+        size: 5Gi
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+          labelValue: "1"
+          searchNamespace: ALL
+          # Hardening: enforce GitOps-only dashboards at runtime. UI-created
+          # dashboards disappear on restart, and the sidecar refuses to delete
+          # ConfigMap-sourced ones. Per plan 0002.
+          allowUiUpdates: false
+          disableDeletion: true
+
+    # ---- Control-plane scrape targets Talos does not expose ----
+    # Talos hides the static control-plane pods; Cilium replaces kube-proxy on
+    # anton. Leaving these enabled produces four permanently-Down targets and
+    # noises up /api/v1/targets. Disable explicitly.
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
+    # TODO: verify whether Talos exposes etcd metrics on this cluster; if so,
+    # re-enable with the correct endpoint. Disabled for now to keep the smoke
+    # test's target set clean (plan 0002).
+    kubeEtcd:
+      enabled: false
+
+    nodeExporter:
+      enabled: true

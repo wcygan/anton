@@ -1,0 +1,14 @@
+---
+# prometheus-community does publish chart tarballs to
+# oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack, but that mirror
+# is stale as of 2026-04-16 — its latest tag is 41.7.4, while the pinned chart for
+# this install is 83.5.0. Upstream's authoritative source is the traditional Helm
+# repo below. Deviation from the anton OCIRepository preference is upstream-forced;
+# revisit when prometheus-community's OCI mirror catches up.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: prometheus-community
+spec:
+  interval: 15m
+  url: https://prometheus-community.github.io/helm-charts

@@ -19,7 +19,7 @@ Install kube-prometheus-stack in a new `observability` namespace via the Flux 3-
 ## Acceptance criteria
 
 - [ ] `kube-prometheus-stack` HelmRelease `Ready=True` in namespace `observability`, Flux reconciled
-- [ ] Prometheus scrapes kube-apiserver, kubelet, kube-state-metrics, node-exporter, Cilium, Flux, Longhorn, cert-manager, ESO — verified via `/api/v1/targets`
+- [ ] Prometheus scrapes kube-apiserver, kubelet, kube-state-metrics, node-exporter, Cilium, Flux, Longhorn, cert-manager, ESO — verified via `/api/v1/targets` scoped to this expected set (Talos does not expose `kubeControllerManager` / `kubeScheduler` / `kubeProxy`, and `kubeEtcd` is conditional — treat those as out-of-scope for the smoke test)
 - [ ] Grafana reachable on `envoy-internal` via HTTPRoute, admin password sourced from 1Password via `ExternalSecret`, and the committed "cluster health glance" dashboard loads with non-empty panels
 - [ ] PVCs (Prometheus 50Gi, Alertmanager 2Gi, Grafana 5Gi) bound on the `longhorn` SC; baseline RAM/CPU footprint captured under `docs/`
 - [ ] Alertmanager reconciles with **zero routes** (by design — ADR 0007 consequence); revisit gated on Trigger 4
@@ -27,10 +27,12 @@ Install kube-prometheus-stack in a new `observability` namespace via the Flux 3-
 ## Tasks
 
 - [ ] Hand off to `flux-app-author` for the 3-file pattern under `kubernetes/apps/observability/kube-prometheus-stack/` (new namespace `observability`; check if any existing ns fits first)
-- [ ] Pin chart version at scaffold time — re-verify current stable via `upgrade-auditor` before committing; ADR 0007 cites v83.x line
+- [ ] Pin chart version at scaffold time — re-verify current stable via `upgrade-auditor` before committing; ADR 0007 cites v83.x line, latest patch at review is **83.5.0** (Prometheus Operator v0.90.1, Grafana chart 11.6.1 as of 2026-04-16)
+- [ ] CRD lifecycle strategy — enable `crds.upgradeJob.enabled: true` on the HelmRelease values (added in chart 68.4.0) so future operator bumps update CRDs before the Helm upgrade runs; on the HelmRelease itself, set `install.crds: Create` and `upgrade.crds: Skip` to let the job own rollover. Prevents the startup race where the operator silently skips controller registration on un-Established CRDs (prometheus-operator #7459)
 - [ ] HelmRelease values (ADR 0007 §Decision): `prometheus.prometheusSpec.replicas: 1`, retention 15d, PVC 50Gi on `longhorn`; `alertmanager.alertmanagerSpec.replicas: 1`, PVC 2Gi; `grafana.replicas: 1`, PVC 5Gi, SQLite; no Thanos sidecar; no remote-write
-- [ ] Grafana admin password via `ExternalSecret` from 1Password vault `anton` (entry TBD at scaffold time)
-- [ ] Enable Grafana sidecar ConfigMap pattern for dashboards — GitOps'd, not UI-authored
+- [ ] Disable scrape targets Talos does not expose: `kubeControllerManager.enabled: false`, `kubeScheduler.enabled: false`, `kubeProxy.enabled: false` (Cilium replaces kube-proxy). Verify `kubeEtcd` endpoint against the Talos-exposed etcd metrics or disable. Prevents four permanently-down targets from noising up the smoke test
+- [ ] Grafana admin password via `ExternalSecret` from 1Password vault `anton` (entry TBD at scaffold time) — note: Grafana does not re-read the secret on rotation (helm-charts #3679); credential rotation must restart the Grafana pod
+- [ ] Enable Grafana sidecar ConfigMap pattern for dashboards — GitOps'd, not UI-authored. Harden the sidecar provider: `allowUiUpdates: false`, `disableDeletion: true` to enforce GitOps at runtime, not just by convention
 - [ ] Author and commit the "cluster health glance" dashboard — panels: node CPU/RAM/disk, pod restart counts, Flux reconcile state, PVC saturation, Longhorn replica health + degraded-volume count
 - [ ] `HTTPRoute` for Grafana on `envoy-internal` — Prometheus + Alertmanager stay ClusterIP
 - [ ] `conventions-linter` pre-commit; `task configure` to render + validate
@@ -42,6 +44,7 @@ Install kube-prometheus-stack in a new `observability` namespace via the Flux 3-
 ## Log
 
 - 2026-04-16: Plan opened — ADR 0007's install gate formally cleared by plan 0001's Phase 3 baseline. `longhorn` StorageClass is default and smoke-tested (seq-r 219 MB/s, reboot failover 55s, zero data loss). Install path unblocked; next tick hands off to `flux-app-author`.
+- 2026-04-16: Currency review via `/web-research` against upstream chart, operator release notes, and Flux + kps canonical pattern. Chart line confirmed current (83.5.0, appVersion v0.90.1, Grafana 11.6.1). Added explicit tasks for CRD lifecycle (`crds.upgradeJob.enabled: true` + `install.crds: Create` / `upgrade.crds: Skip`), Talos-absent scrape-target disables (`kubeControllerManager` / `kubeScheduler` / `kubeProxy`), sidecar provider hardening (`allowUiUpdates: false`, `disableDeletion: true`), and an existingSecret-rotation caveat. Tightened `/api/v1/targets` acceptance criterion to scope the expected target set.
 
 ## References
 

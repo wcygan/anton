@@ -1,0 +1,5 @@
+- [kps OCI mirror is stale](reference_kps_oci_mirror_stale.md) — ghcr.io/prometheus-community/charts stops at 41.7.4; use HelmRepository for 83.x+
+- [1Password SDK provider key syntax](reference_onepassword_sdk_combined_key.md) — anton's ESO provider is `onepasswordSDK`, so ExternalSecret `remoteRef.key` must be `"<item>/<field>"`, never `property:`
+- [No root apps kustomization](reference_no_root_apps_kustomization.md) — `kubernetes/apps/` has no root kustomization.yaml; Flux discovers namespaces by recursion. Do not create one when adding a namespace
+- [wait: false is the default](feedback_wait_false_default.md) — anton ks.yaml files default to `wait: false`; use `wait: true` only with named downstream consumers, and leave a comment justifying the deviation
+- [kps values gotchas](reference_kps_values_gotchas.md) — must-set/must-not-set value overrides for kube-prometheus-stack on Talos + Cilium + Longhorn clusters (CRD lifecycle, disabled scrape targets, selector nil-handling, GitOps hardening)
