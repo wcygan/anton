@@ -1,2 +1,2 @@
-- [k8s-2 hardware state](project_k8s_2_hardware_state.md) — missing WD_BLACK NVMe since 2026-03-06, 32 reboots in 61 days, OS-disk pinned on CT500P3, reboot pattern is the bigger story
-- 2026-04-12: Re-checked k8s-2 via Tailscale. Drive still missing at PCIe `0000:01:00.0`. Boot count now 32 (was 31 yesterday). Latest spontaneous reboot 2026-04-12 02:40Z (~45h after prior). k8s-1 and k8s-3 both healthy with 3 NVMe each.
+- [k8s-2 hardware state](project_k8s_2_hardware_state.md) — missing WD_BLACK NVMe since 2026-03-06, OS-disk pinned on CT500P3, Mushkin DDR5 is the per-node hardware difference
+- [k8s-2 reboot RCA](project_k8s_2_reboot_rca.md) — 3-agent RCA on 2026-04-15: 32 reboots in 61 days traced to kernel/microcode regression in Talos 1.12.3–1.12.5 × Mushkin DDR5; resolved by 1.12.6 upgrade on 2026-04-12; watch-and-wait through 2026-04-22 to confirm
