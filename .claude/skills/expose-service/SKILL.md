@@ -1,136 +1,86 @@
 ---
 name: expose-service
-description: Expose a service through Anton's envoy gateway. Use to expose service with an HTTPRoute, pick a public URL via cloudflare tunnel route or an internal hostname via k8s-gateway, and handle DNSEndpoint plus certificates for a second domain.
+description: Expose a workload for access. Three paths: envoy-internal (LAN via split-horizon DNS), Tailscale (internal remote access, annotation on Service), envoy-external + Cloudflare tunnel (genuinely public, requires explicit approval). Handles HTTPRoute authoring, DNSEndpoint for secondary domains, and per-domain cert wiring.
 allowed-tools: Read, Write, Edit, Glob, Grep
 ---
 
 # Expose a service
 
-Task skill for routing traffic to a service via the envoy gateways. Architecture deep-dive (traffic flow, component dependencies, debug commands) lives in `kubernetes/apps/network/CLAUDE.md` — read that for the full picture; this skill is the authoring playbook.
+Task skill for routing traffic to a workload. Anton has three supported access paths; architecture deep-dive lives in `kubernetes/apps/network/CLAUDE.md`.
 
-## Gateway choice matrix
+## Exposure policy (ADR 0012)
 
-| Use case | Gateway | parentRef name | Hostname pattern | Reaches |
-| --- | --- | --- | --- | --- |
-| **Public URL** (anyone on internet) | `envoy-external` | `envoy-external` | `<app>.${SECRET_DOMAIN}` | Internet → Cloudflare tunnel → cluster |
-| **Internal hostname** (home network only) | `envoy-internal` | `envoy-internal` | `<app>.${SECRET_DOMAIN}` (split-horizon) | LAN → k8s-gateway DNS → cluster |
-| **Both public + internal** | both | two HTTPRoutes | different subdomains | one HTTPRoute per gateway |
-| **App on second domain** (`${SECRET_DOMAIN_TWO}`) | `envoy-external` | `envoy-external` | `<app>.${SECRET_DOMAIN_TWO}` | **also requires explicit DNSEndpoint — see trap below** |
+Pick by **who needs to reach the workload**, not by what feels easiest:
 
-Both gateways live in namespace `network`. Cross-namespace ref is required: `parentRefs[].namespace: network`. Always set `sectionName: https` to attach to the TLS listener.
+1. **LAN clients only** → `envoy-internal` HTTPRoute. Split-horizon DNS via `k8s-gateway` returns the internal LB to LAN clients.
+2. **Operator / tailnet members, off-LAN** → **Tailscale** annotation on the Service. MagicDNS at `<hostname>.<tailnet>.ts.net`, Tailscale-issued TLS, no public DNS. See `references/tailscale.md`.
+3. **LAN clients AND remote operator access** → `envoy-internal` HTTPRoute **plus** Tailscale annotation on the same Service. LAN users keep the `<app>.${SECRET_DOMAIN}` URL; remote ops use the tailnet hostname. Grafana is the canonical example.
+4. **Genuinely public** (audience that cannot be required to join the tailnet) → `envoy-external` HTTPRoute + Cloudflare tunnel. **Requires explicit user approval** before authoring.
 
-## Workflow A — standalone HTTPRoute file (always works)
+Do **not** pick `envoy-external` to solve "I want to reach this from my laptop off-LAN" — that is what Tailscale is for now (ADR 0012). Shipping something public and pulling it back is irreversible (cached DNS, search engines, external referrers); Tailscale is reversible.
 
-Use this when the chart does not expose a `route:` schema (most charts), or when you want HTTPRoute decoupled from values.
+## Gateway-choice matrix
 
-1. Create `kubernetes/apps/<ns>/<app>/app/httproute.yaml`:
-   ```yaml
-   ---
-   apiVersion: gateway.networking.k8s.io/v1
-   kind: HTTPRoute
-   metadata:
-     name: <app>
-   spec:
-     hostnames: ["<app>.${SECRET_DOMAIN}"]
-     parentRefs:
-       - name: envoy-external          # or envoy-internal
-         namespace: network
-         sectionName: https
-     rules:
-       - backendRefs:
-           - name: <service-name>      # service in your app namespace
-             port: 80
-         matches:
-           - path:
-               type: PathPrefix
-               value: /
-   ```
-2. Add to `app/kustomization.yaml`:
-   ```yaml
-   resources:
-     - ./helmrelease.yaml
-     - ./ocirepository.yaml
-     - ./httproute.yaml
-   ```
-3. `task configure` to validate, then commit + push, then `task reconcile`.
+| Use case | Path | Hostname | Reaches |
+| --- | --- | --- | --- |
+| **LAN only (default)** | `envoy-internal` HTTPRoute | `<app>.${SECRET_DOMAIN}` | LAN → `k8s-gateway` DNS → cluster |
+| **Tailnet (internal remote)** | Tailscale Service annotation | `<hostname>.<tailnet>.ts.net` | Tailnet device → operator proxy → Service |
+| **LAN + tailnet** | HTTPRoute **and** Tailscale annotation | both of the above | either path resolves independently |
+| **Public** (requires approval) | `envoy-external` HTTPRoute | `<app>.${SECRET_DOMAIN}` | Internet → Cloudflare tunnel → cluster |
+| **App on a second domain** (`${SECRET_DOMAIN_TWO}`) | `envoy-external` HTTPRoute | `<app>.${SECRET_DOMAIN_TWO}` | **also needs an explicit `DNSEndpoint` — see `references/secondary-domain.md`** |
 
-## Workflow B — HTTPRoute inside HelmRelease values
+Both envoy gateways live in namespace `network`. HTTPRoutes must set `parentRefs[].namespace: network` (cross-namespace) and `sectionName: https` (attach to the TLS listener, not port 80). Tailscale exposure does **not** use an HTTPRoute — the annotation is on the Service directly.
 
-Use only when the chart explicitly supports a `route:` schema (e.g. bjw-s `app-template`). Saves a file at the cost of coupling.
+## Workflow
 
-```yaml
-spec:
-  values:
-    route:
-      app:
-        hostnames: ["{{ .Release.Name }}.${SECRET_DOMAIN}"]
-        parentRefs:
-          - name: envoy-external
-            namespace: network
-            sectionName: https
-        rules:
-          - backendRefs: [{identifier: app, port: 80}]
-```
-
-## The secondary-domain DNSEndpoint trap
-
-For an app on `${SECRET_DOMAIN_TWO}` (or any non-primary domain), an HTTPRoute alone is **not enough**. external-dns is started with `--gateway-name=envoy-external` and a `domainFilters` list scoped to one domain at a time, so HTTPRoute hostnames on the secondary domain are silently ignored — DNS records never get created.
-
-**Fix:** add an explicit `DNSEndpoint` resource alongside the HTTPRoute. external-dns reads `DNSEndpoint` CRs directly and bypasses the gateway-name filter.
-
-```yaml
----
-apiVersion: externaldns.k8s.io/v1alpha1
-kind: DNSEndpoint
-metadata:
-  name: <app>
-spec:
-  endpoints:
-    - dnsName: "<app>.${SECRET_DOMAIN_TWO}"
-      recordType: CNAME
-      targets: ["external.${SECRET_DOMAIN_TWO}"]
-```
-
-Add `- ./dnsendpoint.yaml` to `app/kustomization.yaml`. Background: `docs/docs/notes/adding-a-2nd-domain.md`.
-
-## Certificates per domain
-
-Each domain needs its own wildcard certificate sourced via cert-manager. The primary domain's cert is already wired up by `kubernetes/apps/network/envoy-gateway/app/certificate.yaml` and consumed by both gateways via the listener `tls.certificateRefs` block. Secret naming convention: `${SECRET_DOMAIN/./-}-production-tls`.
-
-**For a second domain:**
-1. Add a second `Certificate` resource for `${SECRET_DOMAIN_TWO}` next to the primary one (or in a sibling app dir).
-2. Add a second `tls.certificateRefs` entry to the gateway's HTTPS listener pointing at `${SECRET_DOMAIN_TWO/./-}-production-tls`. Without this, the gateway terminates the connection with the primary cert and the browser shows a name-mismatch warning.
-3. Verify: `kubectl get certificate -n network` → both should be `Ready=True`.
+1. **Confirm the path** against the exposure policy above. If `envoy-external` is on the table, verify the user has approved public exposure before writing anything. "I want to reach it off-LAN" is a **Tailscale** reason, not an `envoy-external` reason.
+2. **Author the resource(s):**
+   - **HTTPRoute path** (`envoy-internal` or `envoy-external`) — write `kubernetes/apps/<ns>/<app>/app/httproute.yaml` using the template in `references/authoring-httproute.md`, or use the chart-values variant (Workflow B) if the chart supports it (bjw-s `app-template`).
+   - **Tailscale path** — add `tailscale.com/expose: "true"` and `tailscale.com/hostname: <short-slug>` to the Service's annotations. Prefer the chart's own `service.annotations` values knob over a Kustomize patch. Recipe: `references/tailscale.md`.
+   - **Combined (HTTPRoute + Tailscale)** — do both; they are independent and don't conflict.
+3. **Wire any new manifest file** into `kubernetes/apps/<ns>/<app>/app/kustomization.yaml`. Annotation-only changes via chart values need no kustomization edit.
+4. **If the hostname is on a secondary domain** (not `${SECRET_DOMAIN}`), also add a `DNSEndpoint` resource and verify the gateway's cert listener covers the domain — see `references/secondary-domain.md`. Skipping this is the single most common footgun in this skill. (Does not apply to Tailscale — MagicDNS handles its own.)
+5. **Ship it.** `task configure` (validate + encrypt), commit + push, then `task reconcile` (or wait for the Flux interval).
+6. **Verify.** Run the checks in `references/verify.md`; for the Tailscale path, also verify as documented in `references/tailscale.md`.
 
 ## Pre-commit checklist
 
-- [ ] HTTPRoute `parentRefs[0].name` is `envoy-external` or `envoy-internal` (not a service name)
-- [ ] HTTPRoute `parentRefs[0].namespace: network` is set (cross-namespace)
-- [ ] HTTPRoute `parentRefs[0].sectionName: https` is set (attaches to TLS listener)
-- [ ] `backendRefs[].name` matches an actual `Service` in the app's namespace
-- [ ] If app is on `${SECRET_DOMAIN_TWO}` → `DNSEndpoint` resource present
-- [ ] If new second-domain cert → gateway listener updated with the new `certificateRefs`
-- [ ] HTTPRoute (and DNSEndpoint, if any) listed in `app/kustomization.yaml`
+Common:
+- [ ] Path choice matches policy (LAN-only → internal; internal remote → Tailscale; external only when explicitly approved)
 - [ ] `task configure` passes
 
-## Verify after deploy
+HTTPRoute path:
+- [ ] `parentRefs[0].name` is `envoy-external` or `envoy-internal` (never a Service name)
+- [ ] `parentRefs[0].namespace: network` set (cross-namespace attach is required)
+- [ ] `parentRefs[0].sectionName: https` set (attach to TLS listener, not port 80)
+- [ ] `backendRefs[].name` matches an actual `Service` in the app's namespace
+- [ ] HTTPRoute (and `DNSEndpoint`, if any) listed in `app/kustomization.yaml`
+- [ ] If hostname is on `${SECRET_DOMAIN_TWO}` → `DNSEndpoint` resource present
+- [ ] If a new second-domain cert was added → gateway listener's `tls.certificateRefs` updated
 
-```sh
-kubectl get httproute -A | rg <app>
-kubectl get httproute -n <ns> <app> -o jsonpath='{.status.parents[*].conditions[?(@.type=="Accepted")].status}'
-# expect: True
+Tailscale path:
+- [ ] Annotation is on the Service the chart produces, not on a wrapping resource
+- [ ] `tailscale.com/hostname` is a short slug (no dots, no tailnet name embedded)
+- [ ] No real tailnet name committed anywhere (use `<tailnet-name>.ts.net` placeholder in docs)
 
-# DNS — primary domain via Cloudflare:
-dig <app>.${SECRET_DOMAIN}
+## Canonical in-tree examples
 
-# DNS — internal split-horizon via k8s-gateway:
-dig <app>.${SECRET_DOMAIN} @${cluster_dns_gateway_addr}
+Read the live manifest rather than a frozen copy:
 
-# End-to-end:
-curl -I https://<app>.${SECRET_DOMAIN}
-```
+- **Public, app-template inline `route:` values** (Workflow B) → `kubernetes/apps/default/echo/app/helmrelease.yaml`
+- **Internal, standalone HTTPRoute** (Workflow A) → `kubernetes/apps/observability/kube-prometheus-stack/app/httproute.yaml`
+- **DNSEndpoint shape** (CNAME to tunnel on a secondary domain) → `kubernetes/apps/network/cloudflare-tunnel/app/dnsendpoint.yaml`
 
-If DNS does not resolve for a public URL, check `kubectl logs -n network -l app.kubernetes.io/name=cloudflare-dns`. If the secondary domain returns the wrong cert, the gateway listener is missing the second `certificateRefs` entry.
+## Further reading
+
+| Reference | When to read |
+| --- | --- |
+| `references/authoring-httproute.md` | Writing the HTTPRoute YAML (Workflow A standalone, Workflow B route-in-values) |
+| `references/secondary-domain.md` | Hostname on `${SECRET_DOMAIN_TWO}` or any non-primary domain |
+| `references/verify.md` | After deploy, or when an HTTPRoute exists but the app is unreachable |
+| `references/envoy-gateway.md` | Background on the in-cluster gateway controller (Gateway specs, LB IPs, policies) |
+| `references/cloudflare-tunnel.md` | Background on the public ingress path (`cloudflared`, http2 transport, origin config) |
+| `references/tailscale.md` | What Tailscale does — and does **not** — do in this cluster |
 
 ## Related skills
 
