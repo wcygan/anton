@@ -5,8 +5,13 @@ kind: ExtensionServiceConfig
 name: tailscale
 environment:
   - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
-  # WHY: Store tailscaled state in memory. Persisting to /var/lib/tailscale
-  # triggered a stuck ghost nodekey on Tailscale control plane that couldn't
-  # be cleared. mem: means nodes re-register on reboot (new -1 suffix name);
-  # rename via admin console when this happens. Reboots are rare.
-  - "TS_STATE_DIR=mem:"
+  # Persistent state in /var/lib/tailscale/ survives reboot and upgrade
+  # (Talos 1.8+ EPHEMERAL partition, wiped only by reset). Freshly
+  # initialized 2026-04-15 after clearing stale state from the Apr 2026
+  # tailnet migration via a one-shot machine.files overwrite.
+  - TS_STATE_DIR=/var/lib/tailscale
+  # Only re-auth when state is empty. Prevents re-auth storms that create
+  # duplicate devices. Trade-off: if /var is wiped AND the authkey is
+  # expired/revoked, the node won't re-register until a fresh key is
+  # pushed via SOPS.
+  - TS_AUTH_ONCE=true
