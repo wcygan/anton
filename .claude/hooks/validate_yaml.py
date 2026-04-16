@@ -52,7 +52,7 @@ def main() -> int:
 
     try:
         result = subprocess.run(
-            ["yq", "eval-all", ".", file_path],
+            ["yq", ".", file_path],
             capture_output=True,
             text=True,
             timeout=10,

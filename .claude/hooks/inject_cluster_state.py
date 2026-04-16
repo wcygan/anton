@@ -13,6 +13,8 @@ Tailscale-operator proxy takes ~8s and this hook must run in <1s. For Flux
 status, invoke the `anton-cluster-health` skill or run
 `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A` on demand.
 """
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -48,7 +50,18 @@ def talos_context() -> str:
     return raw.splitlines()[0] if raw else "(unknown)"
 
 
+def export_talosconfig() -> None:
+    # Persist TALOSCONFIG for bare `talosctl` invocations in subsequent Bash
+    # tool calls. The settings.json `env` block does not shell-expand
+    # ${CLAUDE_PROJECT_DIR}, but hooks run with it properly set.
+    env_file = os.environ.get("CLAUDE_ENV_FILE")
+    if env_file and TALOSCONFIG.is_file():
+        with open(env_file, "a") as f:
+            f.write(f"export TALOSCONFIG={shlex.quote(str(TALOSCONFIG))}\n")
+
+
 def main() -> int:
+    export_talosconfig()
     kube_ctx = run(["kubectl", "config", "current-context"])
     talos_ctx = talos_context()
 
