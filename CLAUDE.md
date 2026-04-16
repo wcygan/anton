@@ -18,6 +18,7 @@ Talos Linux cluster managed by GitOps. Makejinja renders Flux, Talos, and bootst
 - `.taskfiles/` — Task targets grouped by subsystem
 - `docs/` — Long-form notes (second-domain setup, etc.)
 - `context/adrs/` — immutable architectural decision records (MADR + anton extensions); index injected at session start
+- `context/hardware.md` — node hardware inventory (MS-01, RAM, part numbers)
 
 ## Specialized work: prefer skills and agents first
 
