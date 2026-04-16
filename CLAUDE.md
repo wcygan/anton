@@ -41,6 +41,9 @@ Before writing code from scratch for a common task, check whether a skill or sub
 - `anton-repo-conventions` — Flux / postBuild / SOPS vs ESO reference
 - `anton-remote-access` — talosctl/kubectl off-LAN via Tailscale MagicDNS
 - `anton-upgrade-audit` — Renovate PR triage and tiered merge order
+- `longhorn-volume-ops` — per-volume Longhorn PVC work (create/resize/clone, replica/locality overrides)
+- `longhorn-node-ops` — Longhorn disk/node operations (disk add/remove, eviction, disk-routing fixes, replaced-node integration)
+- `longhorn-backup-dr` — Longhorn backup target, RecurringJobs, and restore/DR flows
 
 **Subagents** (`.claude/agents/`, invoked via the `Agent` tool):
 
