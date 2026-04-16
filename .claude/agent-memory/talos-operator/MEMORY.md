@@ -1,2 +1,3 @@
 - [k8s-2 hardware state](project_k8s_2_hardware_state.md) — missing WD_BLACK NVMe since 2026-03-06, OS-disk pinned on CT500P3, Mushkin DDR5 is the per-node hardware difference
 - [k8s-2 reboot RCA](project_k8s_2_reboot_rca.md) — 3-agent RCA on 2026-04-15: 32 reboots in 61 days traced to kernel/microcode regression in Talos 1.12.3–1.12.5 × Mushkin DDR5; resolved by 1.12.6 upgrade on 2026-04-12; watch-and-wait through 2026-04-22 to confirm
+- [Longhorn Phase 1 complete (all 3 nodes)](project_longhorn_phase1_k8s2.md) — 2026-04-16 Phase 1 done: 445a99db schematic on k8s-1/k8s-2/k8s-3, 5/5 userVolumes ready, etcd leader migrated k8s-3→k8s-2 (raft term 26). Device renumbering observed on all 3 nodes — serial-first verify protocol validated 3x
