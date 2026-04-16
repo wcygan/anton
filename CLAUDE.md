@@ -29,6 +29,7 @@ Before writing code from scratch for a common task, check whether a skill or sub
 
 - `cluster-intake` — intake gate before adding a new infra/system component; hard vetoes + weighted score + removal-graveyard check; returns add/defer/reject and hands off to `adr`
 - `adr` — author/list/supersede architectural decision records in `context/adrs/`; the durable home for `cluster-intake-gatekeeper` verdicts and any other forward-looking decision
+- `planner` — author/update/close multi-session initiatives in `context/plans/`; ADRs are decisions (why), plans are mutable execution state (what's next). Active plans injected at session start
 - `add-flux-app` — scaffold a new Flux app (3-file pattern + ExternalSecret + HTTPRoute)
 - `expose-service` — HTTPRoute on `envoy-internal`/`envoy-external` + `DNSEndpoint` for secondary domains
 - `debug-flux-reconciliation` — stuck Kustomization / HelmRelease / SOPS / postBuild triage
