@@ -75,6 +75,11 @@ nodes:
                   - bind
                   - rshared
                   - rw
+          nodeLabels:
+            node.longhorn.io/create-default-disk: "config"
+          nodeAnnotations:
+            node.longhorn.io/default-disks-config: |-
+              [{"path":"/var/mnt/longhorn-1","allowScheduling":true},{"path":"/var/mnt/longhorn-2","allowScheduling":true}]
   - hostname: "k8s-2"
     ipAddress: "192.168.1.99"
     installDiskSelector:
@@ -117,6 +122,11 @@ nodes:
                   - bind
                   - rshared
                   - rw
+          nodeLabels:
+            node.longhorn.io/create-default-disk: "config"
+          nodeAnnotations:
+            node.longhorn.io/default-disks-config: |-
+              [{"path":"/var/mnt/longhorn-1","allowScheduling":true}]
   - hostname: "k8s-3"
     ipAddress: "192.168.1.100"
     installDiskSelector:
@@ -174,6 +184,11 @@ nodes:
                   - bind
                   - rshared
                   - rw
+          nodeLabels:
+            node.longhorn.io/create-default-disk: "config"
+          nodeAnnotations:
+            node.longhorn.io/default-disks-config: |-
+              [{"path":"/var/mnt/longhorn-1","allowScheduling":true},{"path":"/var/mnt/longhorn-2","allowScheduling":true}]
 
 # Global patches
 patches:
