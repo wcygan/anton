@@ -193,20 +193,20 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "count(gotk_reconcile_condition{type=\"Ready\", status=\"True\"}) by (kind)",
+              "expr": "count(flux_resource_info{ready=\"True\"}) by (kind)",
               "legendFormat": "{{kind}} Ready",
               "instant": true
             },
             {
               "refId": "B",
-              "expr": "count(gotk_reconcile_condition{type=\"Ready\", status=\"False\"}) by (kind)",
+              "expr": "count(flux_resource_info{ready=\"False\"}) by (kind) or vector(0)",
               "legendFormat": "{{kind}} Not Ready",
               "instant": true
             },
             {
               "refId": "C",
-              "expr": "count(gotk_reconcile_condition{type=\"Stalled\", status=\"True\"}) by (kind)",
-              "legendFormat": "{{kind}} Stalled",
+              "expr": "count(flux_resource_info{suspended=\"True\"}) by (kind) or vector(0)",
+              "legendFormat": "{{kind}} Suspended",
               "instant": true
             }
           ]
