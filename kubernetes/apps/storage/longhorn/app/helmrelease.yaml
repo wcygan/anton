@@ -1,0 +1,38 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: longhorn
+spec:
+  chart:
+    spec:
+      chart: longhorn
+      version: 1.11.1
+      sourceRef:
+        kind: HelmRepository
+        name: longhorn
+      interval: 15m
+  interval: 1h
+  values:
+    namespaceOverride: storage
+
+    # Talos friction: preUpgradeChecker job fails under Talos' read-only rootfs.
+    # Disable per Phase 2 plan tasks (ADR 0005 follow-ups).
+    preUpgradeChecker:
+      jobEnabled: false
+      upgradeVersionCheck: false
+
+    # ADR 0005 defaults. Asymmetric 2+1+2 OSD topology (k8s-1: 2, k8s-2: 1, k8s-3: 2)
+    # means 2-replica + best-effort locality will skew toward k8s-1/k8s-3 until the
+    # k8s-2 second-NVMe followup lands (tracked in context/hardware.md).
+    defaultSettings:
+      defaultReplicaCount: 2
+      defaultDataLocality: best-effort
+      staleReplicaTimeout: 2880
+
+    # Make `longhorn` the cluster's default StorageClass.
+    persistence:
+      defaultClass: true
+      defaultClassReplicaCount: 2
+      defaultDataLocality: best-effort
+      reclaimPolicy: Delete

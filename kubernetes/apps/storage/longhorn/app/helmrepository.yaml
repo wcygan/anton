@@ -1,0 +1,11 @@
+---
+# Longhorn does not publish its chart to an OCI registry — upstream only ships the
+# traditional Helm repo at https://charts.longhorn.io. Deviation from the anton
+# convention of OCIRepository is upstream-forced; revisit if Longhorn adds OCI.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: longhorn
+spec:
+  interval: 15m
+  url: https://charts.longhorn.io

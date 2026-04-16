@@ -17,7 +17,14 @@ REQUIRED = (
     "ks.yaml",
     "app/kustomization.yaml",
     "app/helmrelease.yaml",
+)
+
+# Each app needs exactly one Helm chart source. OCIRepository is the preferred
+# shape, but HelmRepository is accepted when upstream does not publish an OCI
+# chart (e.g. Longhorn ships only the traditional https://charts.longhorn.io).
+SOURCE_ALTERNATIVES = (
     "app/ocirepository.yaml",
+    "app/helmrepository.yaml",
 )
 
 
@@ -64,6 +71,8 @@ def main() -> int:
 
     # Only check if we just created a file inside an app that isn't yet complete.
     missing = [f for f in REQUIRED if not (app_root / f).exists()]
+    if not any((app_root / f).exists() for f in SOURCE_ALTERNATIVES):
+        missing.append(" or ".join(SOURCE_ALTERNATIVES))
     if not missing:
         return 0
 
@@ -72,7 +81,8 @@ def main() -> int:
         f"Flux app at {app_root} is missing required files from the 3-file pattern:\n"
         f"{listing}\n"
         f"→ See kubernetes/apps/CLAUDE.md. Every app needs: ks.yaml, "
-        f"app/kustomization.yaml, app/helmrelease.yaml, app/ocirepository.yaml.",
+        f"app/kustomization.yaml, app/helmrelease.yaml, and an "
+        f"app/ocirepository.yaml (preferred) or app/helmrepository.yaml source.",
         file=sys.stderr,
     )
     return 2

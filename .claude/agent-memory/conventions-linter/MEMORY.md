@@ -1,0 +1,2 @@
+- [Longhorn HelmRepository deviation](longhorn_helmrepo.md) — Longhorn only publishes to charts.longhorn.io (no OCI); 3-file-pattern hook updated to accept .helmrepository.yaml
+- [Longhorn namespaceOverride](longhorn_namespace.md) — Intentional use of `namespaceOverride: storage` in HelmRelease values (chart defaults to `longhorn-system`); aligns with plan 0001 directive
