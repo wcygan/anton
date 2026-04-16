@@ -24,7 +24,7 @@ nodes:
       serial: "24304A343650"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/08086db1d88ea52b2e873f0b0c64562af7ae98f6ed83da5ee478871bbe52abd6
+    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -38,13 +38,50 @@ nodes:
         mtu: 1500
         vip:
           ip: "192.168.1.101"
+    # Longhorn data disks (ADR 0005, plan 0001). Mounted at /var/mnt/<name>.
+    userVolumes:
+      - name: longhorn-1
+        provisioning:
+          diskSelector:
+            match: disk.serial == "251021802186"
+          minSize: 100GB
+          grow: true
+        filesystem:
+          type: ext4
+      - name: longhorn-2
+        provisioning:
+          diskSelector:
+            match: disk.serial == "251021802190"
+          minSize: 100GB
+          grow: true
+        filesystem:
+          type: ext4
+    patches:
+      - |-
+        machine:
+          kubelet:
+            extraMounts:
+              - destination: /var/mnt/longhorn-1
+                type: bind
+                source: /var/mnt/longhorn-1
+                options:
+                  - bind
+                  - rshared
+                  - rw
+              - destination: /var/mnt/longhorn-2
+                type: bind
+                source: /var/mnt/longhorn-2
+                options:
+                  - bind
+                  - rshared
+                  - rw
   - hostname: "k8s-2"
     ipAddress: "192.168.1.99"
     installDiskSelector:
       serial: "24304A23D2F0"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/08086db1d88ea52b2e873f0b0c64562af7ae98f6ed83da5ee478871bbe52abd6
+    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -58,13 +95,35 @@ nodes:
         mtu: 1500
         vip:
           ip: "192.168.1.101"
+    # Longhorn data disks — k8s-2 has only 1 NVMe (2nd slot empty; see context/hardware.md).
+    userVolumes:
+      - name: longhorn-1
+        provisioning:
+          diskSelector:
+            match: disk.serial == "251021802221"
+          minSize: 100GB
+          grow: true
+        filesystem:
+          type: ext4
+    patches:
+      - |-
+        machine:
+          kubelet:
+            extraMounts:
+              - destination: /var/mnt/longhorn-1
+                type: bind
+                source: /var/mnt/longhorn-1
+                options:
+                  - bind
+                  - rshared
+                  - rw
   - hostname: "k8s-3"
     ipAddress: "192.168.1.100"
     installDiskSelector:
       serial: "24304A23705F"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/08086db1d88ea52b2e873f0b0c64562af7ae98f6ed83da5ee478871bbe52abd6
+    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -78,6 +137,43 @@ nodes:
         mtu: 1500
         vip:
           ip: "192.168.1.101"
+    # Longhorn data disks
+    userVolumes:
+      - name: longhorn-1
+        provisioning:
+          diskSelector:
+            match: disk.serial == "251021800405"
+          minSize: 100GB
+          grow: true
+        filesystem:
+          type: ext4
+      - name: longhorn-2
+        provisioning:
+          diskSelector:
+            match: disk.serial == "251021801882"
+          minSize: 100GB
+          grow: true
+        filesystem:
+          type: ext4
+    patches:
+      - |-
+        machine:
+          kubelet:
+            extraMounts:
+              - destination: /var/mnt/longhorn-1
+                type: bind
+                source: /var/mnt/longhorn-1
+                options:
+                  - bind
+                  - rshared
+                  - rw
+              - destination: /var/mnt/longhorn-2
+                type: bind
+                source: /var/mnt/longhorn-2
+                options:
+                  - bind
+                  - rshared
+                  - rw
 
 # Global patches
 patches:
