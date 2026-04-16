@@ -38,6 +38,12 @@ spec:
       defaultDataLocality: best-effort
       staleReplicaTimeout: 2880
 
+    # ServiceMonitor for longhorn-manager metrics (plan 0002 acceptance).
+    # Discovered by kps's cluster-wide ServiceMonitor selector.
+    metrics:
+      serviceMonitor:
+        enabled: true
+
     # Make `longhorn` the cluster's default StorageClass.
     persistence:
       defaultClass: true

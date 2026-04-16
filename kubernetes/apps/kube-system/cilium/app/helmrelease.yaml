@@ -94,9 +94,9 @@ spec:
       dashboards:
         enabled: false
       prometheus:
-        enabled: false
+        enabled: true
         serviceMonitor:
-          enabled: false
+          enabled: true
       replicas: 2
       rollOutPods: true
       resources:
@@ -106,9 +106,9 @@ spec:
           cpu: 10m
           memory: 64Mi
     prometheus:
-      enabled: false
+      enabled: true
       serviceMonitor:
-        enabled: false
+        enabled: true
         trustCRDsExist: true
     rollOutCiliumPods: true
     routingMode: native
