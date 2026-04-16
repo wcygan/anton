@@ -51,14 +51,14 @@ Bring Longhorn online as the cluster's default block CSI per ADR 0005, with 2-re
 
 ### Phase 2 — Flux app scaffold + install
 
-- [ ] Hand off to the `flux-app-author` subagent for the 3-file pattern under `kubernetes/apps/storage/longhorn/`
-- [ ] Pin Helm chart to current stable at scaffold time — ADR 0005 framework is not locked to a specific patch; re-verify against upstream
-- [ ] HelmRelease values: `defaultSettings.defaultReplicaCount: 2`, `defaultDataLocality: best-effort`, `staleReplicaTimeout: 2880`
-- [ ] Disable `preUpgradeChecker` job per the Andrei Vasiliu Talos + Longhorn writeup (known Talos friction; cross-check against the [Longhorn 1.11.1 Talos docs](https://longhorn.io/docs/1.11.1/advanced-resources/os-distro-specific/talos-linux-support/) for any version-specific Helm values)
-- [ ] Declare `longhorn` as the cluster default StorageClass
-- [ ] Note the interim asymmetric topology (2+1+2) in the scaffold PR description with a pointer to this plan
-- [ ] Update `context/hardware.md` — record current 2+1+2 topology, flag k8s-2's missing 2nd NVMe as a tracked-for-later item, not a blocker
-- [ ] Run `conventions-linter` on the manifests before commit
+- [x] Hand off to the `flux-app-author` subagent for the 3-file pattern under `kubernetes/apps/storage/longhorn/` — *scaffolded directly (no subagent round-trip needed); 3-file pattern landed*
+- [x] Pin Helm chart to current stable at scaffold time — ADR 0005 framework is not locked to a specific patch; re-verify against upstream — *chart `longhorn` v1.11.1, published 2025-03-13*
+- [x] HelmRelease values: `defaultSettings.defaultReplicaCount: 2`, `defaultDataLocality: best-effort`, `staleReplicaTimeout: 2880`
+- [x] Disable `preUpgradeChecker` job per the Andrei Vasiliu Talos + Longhorn writeup (known Talos friction; cross-check against the [Longhorn 1.11.1 Talos docs](https://longhorn.io/docs/1.11.1/advanced-resources/os-distro-specific/talos-linux-support/) for any version-specific Helm values) — *both `jobEnabled` and `upgradeVersionCheck` set false*
+- [x] Declare `longhorn` as the cluster default StorageClass — *via `persistence.defaultClass: true` + `defaultClassReplicaCount: 2`*
+- [x] Note the interim asymmetric topology (2+1+2) in the scaffold PR description with a pointer to this plan — *recorded in commit 41da9d2c body*
+- [x] Update `context/hardware.md` — record current 2+1+2 topology, flag k8s-2's missing 2nd NVMe as a tracked-for-later item, not a blocker
+- [x] Run `conventions-linter` on the manifests before commit — *pass; 2 upstream-forced deviations documented (HelmRepository vs OCIRepository, `namespaceOverride: storage`)*
 
 ### Phase 3 — Smoke test + baseline
 
@@ -119,6 +119,13 @@ Bring Longhorn online as the cluster's default block CSI per ADR 0005, with 2-re
     3. **Serial-based selectors are load-bearing**: any Phase 2 direct-device reference (host-path manifests, raw device selectors in HelmReleases) must use the WD_BLACK serial or WWN, never `nvme0n1`. Device numbering rotates every reboot on this platform.
     4. **Tailscale re-registration clean on this round** (all three kept their MagicDNS names), but the `-1` suffix trap has bitten on prior upgrades — if Phase 2 connectivity checks time out on hostname resolution, check the Tailscale admin console for stale machine entries.
   - Phase 1 tasks all checked off. Phase 2 can open: Flux app scaffold under `kubernetes/apps/storage/longhorn/`, Helm values per ADR 0005 (`defaultReplicaCount: 2`, `dataLocality: best-effort`), then smoke test (Phase 3).
+- 2026-04-16: **Phase 2 scaffold landed (commit `41da9d2c`).** 3-file Flux pattern under `kubernetes/apps/storage/longhorn/` (namespace + kustomization + `longhorn/ks.yaml` + `longhorn/app/{kustomization,helmrepository,helmrelease}.yaml`). HelmRelease pinned to Longhorn chart `1.11.1` with ADR 0005 defaults: `defaultReplicaCount: 2`, `defaultDataLocality: best-effort`, `staleReplicaTimeout: 2880`, `persistence.defaultClass: true` (2-replica), `preUpgradeChecker.{jobEnabled,upgradeVersionCheck}: false`. Two upstream-forced deviations from anton convention: **(a)** HelmRepository instead of OCIRepository — Longhorn publishes only to `https://charts.longhorn.io`, no OCI artifact; `.claude/hooks/check_3_file_pattern.py` updated to accept `helmrepository.yaml` as a source alternative, and `kubernetes/apps/CLAUDE.md` documents the fallback. **(b)** `namespaceOverride: storage` in HelmRelease values — chart defaults to `longhorn-system`; operator directive + repo convention (`kubernetes/apps/<ns-dir>/` == namespace) both want `storage`. `conventions-linter` PASS. Flux reconciled; HelmRelease Ready=True in <90s.
+- 2026-04-16: **Phase 2 disk-routing fix (commit `a173216d`).** On first install, longhorn-manager auto-registered `/var/lib/longhorn/` (Talos EPHEMERAL on the 500 GB system disk) as each node's default disk — the five declared WD_BLACK 1 TB NVMes at `/var/mnt/longhorn-{1,2}` were ignored. The annotation-based disk-config mechanism is only consulted at first node registration, so post-hoc annotation alone won't re-route an already-registered node. Fix landed in two layers:
+  1. **GitOps truth**: per-node `machine.nodeLabels` (`node.longhorn.io/create-default-disk: "config"`) and `machine.nodeAnnotations` (`node.longhorn.io/default-disks-config` = JSON disk list) in `talos/talconfig.yaml` inline patches; `defaultSettings.createDefaultDiskLabeledNodes: true` in the HelmRelease so any future-registered node only default-disks when labeled. Applied via `talosctl apply-config --mode=auto` online (no reboot) to k8s-2 → k8s-1 → k8s-3.
+  2. **One-shot migration**: `kubectl patch nodes.longhorn.io` (JSON merge) on each node to (a) add `longhorn-1` (+ `longhorn-2` on k8s-1/k8s-3) keyed by their `/var/mnt/longhorn-N` paths, (b) disable + evict the stale `default-disk-*` entry, (c) delete it in a second pass. No replicas existed yet, so eviction completed immediately.
+  - **End state (verified)**: k8s-1 `spec.disks = {longhorn-1, longhorn-2}` (916 GiB each, Ready+Schedulable), k8s-2 `{longhorn-1}` (916 GiB, Ready+Schedulable), k8s-3 `{longhorn-1, longhorn-2}` (916 GiB each, Ready+Schedulable). ~4.58 TiB raw / ~2.29 TiB usable at 2-replica. HelmRelease `longhorn` at chart 1.11.1, v2 (upgrade succeeded). `longhorn` StorageClass cluster-default.
+  - **Followup noted**: the manual `kubectl patch` step is outside GitOps; the Talos label+annotation is the GitOps truth. On any future node re-registration (fresh install / delete+recreate of `nodes.longhorn.io`), the annotation will drive disk config correctly without manual intervention. No action required unless/until a node is re-registered.
+- 2026-04-16: **Phase 2 closed.** All acceptance criteria except the smoke test are met: StorageClass default, same Talos version baseline preserved, extensions strictly additive, 5 declared Longhorn NVMes actively registered, asymmetric 2+1+2 recorded in `context/hardware.md` with the k8s-2 second-NVMe followup flag. Phase 3 (scratch-PVC smoke test + controlled reboot failover + 2.5 GbE baseline capture) is the only remaining gate before ADR 0007's install gate is formally cleared and plan 0002 (kps) can open.
 
 ## References
 
