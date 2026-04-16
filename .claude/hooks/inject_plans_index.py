@@ -9,6 +9,13 @@ Globs `context/plans/NNNN-*.md`, parses YAML-ish frontmatter, keeps only active
 statuses (Draft / In-progress / Blocked), and prints a trimmed markdown table to
 stdout so it lands in the agent's initial context.
 
+Any plan whose status is NOT in the canonical enum is reported in a separate
+warning block above the table — silent drops were the failure mode that
+motivated the enum-drift hardening.
+
+Canonical enum lives at `.claude/skills/planner/references/statuses.txt`. This
+hook reads it at session start so the enum has a single source of truth.
+
 Fail-open: if no plan files exist or are unreadable, exits 0 with no output.
 Never raises. Capped at MAX_BODY_LINES so it cannot bloat the session context.
 """
@@ -20,7 +27,11 @@ from pathlib import Path
 
 MAX_BODY_LINES = 25
 PLAN_PATTERN = re.compile(r"^(\d{4})-(.+)\.md$")
-ACTIVE_STATUSES = {"draft", "in-progress", "blocked"}
+
+# Fallback used only if statuses.txt is missing or unreadable. Keeps the hook
+# fail-open while still catching the common case. Keep in sync with statuses.txt.
+FALLBACK_ACTIVE = {"draft", "in-progress", "blocked"}
+FALLBACK_TERMINAL = {"done", "abandoned"}
 
 
 def project_root() -> Path:
@@ -30,12 +41,37 @@ def project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def parse_frontmatter(path: Path) -> dict[str, str] | None:
-    """Extract YAML frontmatter fields and the H1 title from a plan file.
+def load_statuses() -> tuple[set[str], set[str]]:
+    """Load (active, terminal) status sets from the canonical enum file.
 
-    Hand-rolls parsing to avoid a pyyaml dependency. Expects the standard
-    frontmatter block delimited by --- lines.
+    The file uses a blank line to separate active (top) from terminal (bottom).
+    Comments (# ...) and empty groups fall back to the hardcoded defaults.
     """
+    path = project_root() / ".claude" / "skills" / "planner" / "references" / "statuses.txt"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return FALLBACK_ACTIVE, FALLBACK_TERMINAL
+
+    groups: list[list[str]] = [[]]
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if line.startswith("#"):
+            continue
+        if not line:
+            if groups[-1]:
+                groups.append([])
+            continue
+        groups[-1].append(line.lower())
+
+    groups = [g for g in groups if g]
+    if len(groups) < 2:
+        return FALLBACK_ACTIVE, FALLBACK_TERMINAL
+    return set(groups[0]), set(groups[1])
+
+
+def parse_frontmatter(path: Path) -> dict[str, str] | None:
+    """Extract YAML frontmatter fields and the H1 title from a plan file."""
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -57,7 +93,6 @@ def parse_frontmatter(path: Path) -> dict[str, str] | None:
             meta[key.strip()] = val.strip()
         i += 1
 
-    # Extract H1 title from the body after frontmatter
     while i < len(lines):
         line = lines[i].strip()
         if line.startswith("# "):
@@ -69,13 +104,19 @@ def parse_frontmatter(path: Path) -> dict[str, str] | None:
     return meta if meta else None
 
 
-def scan_plans() -> list[tuple[str, dict[str, str]]]:
-    """Return (number, metadata) pairs sorted by plan number, active only."""
+def scan_plans(active: set[str], terminal: set[str]) -> tuple[list[tuple[str, dict[str, str]]], list[tuple[str, str, str]]]:
+    """Return (active_plans, drift) where:
+
+    - active_plans is (number, metadata) pairs for plans whose status is active
+    - drift is (number, filename, bad_status) for plans whose status is outside
+      the canonical enum — these were the silent-drop failure mode.
+    """
     plans_dir = project_root() / "context" / "plans"
     if not plans_dir.is_dir():
-        return []
+        return [], []
 
-    results = []
+    active_plans: list[tuple[str, dict[str, str]]] = []
+    drift: list[tuple[str, str, str]] = []
     for p in sorted(plans_dir.iterdir()):
         m = PLAN_PATTERN.match(p.name)
         if not m:
@@ -83,15 +124,18 @@ def scan_plans() -> list[tuple[str, dict[str, str]]]:
         meta = parse_frontmatter(p)
         if meta is None:
             continue
-        status = meta.get("status", "").strip().lower()
-        if status not in ACTIVE_STATUSES:
+        raw_status = meta.get("status", "").strip()
+        status = raw_status.lower()
+        if status in active:
+            active_plans.append((m.group(1), meta))
+        elif status in terminal:
             continue
-        results.append((m.group(1), meta))
-    return results
+        else:
+            drift.append((m.group(1), p.name, raw_status or "(empty)"))
+    return active_plans, drift
 
 
 def review_flag(meta: dict[str, str]) -> str:
-    """Return a warning marker if review-by is past due, else empty."""
     review = meta.get("review-by", "").strip()
     if not review or review.lower() in {"null", "none", ""}:
         return ""
@@ -105,7 +149,6 @@ def review_flag(meta: dict[str, str]) -> str:
 
 
 def build_table(plans: list[tuple[str, dict[str, str]]]) -> list[str]:
-    """Build a markdown table from scanned plan metadata."""
     header = "| # | Title | Status | Opened | Review-by | Related ADRs |"
     sep = "|---|---|---|---|---|---|"
     rows = []
@@ -122,7 +165,6 @@ def build_table(plans: list[tuple[str, dict[str, str]]]) -> list[str]:
 
 
 def trim(lines: list[str]) -> list[str]:
-    """Cap table rows at MAX_BODY_LINES, dropping oldest rows first."""
     preamble = lines[:2]
     rows = lines[2:]
     max_rows = MAX_BODY_LINES - len(preamble) - 1
@@ -135,8 +177,28 @@ def trim(lines: list[str]) -> list[str]:
     return preamble + [marker] + rows[-max_rows:]
 
 
+def print_drift(drift: list[tuple[str, str, str]], active: set[str], terminal: set[str]) -> None:
+    print("## ⚠ Anton plan-status drift (injected at session start)")
+    print()
+    print("The following plan files have non-canonical `status:` values and are")
+    print("being silently excluded from the active-plan index. Fix with `/planner`")
+    print("or edit frontmatter directly.")
+    print()
+    for num, name, bad in drift:
+        print(f"- `{name}` — status: `{bad}`")
+    print()
+    canonical = sorted(active) + sorted(terminal)
+    print(f"Canonical enum: {', '.join(s.capitalize() if s != 'in-progress' else 'In-progress' for s in canonical)}")
+    print()
+
+
 def main() -> int:
-    plans = scan_plans()
+    active, terminal = load_statuses()
+    plans, drift = scan_plans(active, terminal)
+
+    if drift:
+        print_drift(drift, active, terminal)
+
     if not plans:
         return 0
 

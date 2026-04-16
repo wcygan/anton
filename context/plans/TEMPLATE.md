@@ -1,4 +1,6 @@
 ---
+# status enum: Draft | In-progress | Blocked | Done | Abandoned
+# (source of truth: .claude/skills/planner/references/statuses.txt)
 status: In-progress
 opened: YYYY-MM-DD
 closed: null

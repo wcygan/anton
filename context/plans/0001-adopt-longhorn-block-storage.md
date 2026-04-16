@@ -1,5 +1,5 @@
 ---
-status: Completed
+status: Done
 opened: 2026-04-16
 closed: 2026-04-16
 affects: storage

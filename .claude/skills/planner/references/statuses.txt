@@ -1,0 +1,20 @@
+# Canonical plan status enum. Single source of truth.
+# Consumed by:
+#   - .claude/hooks/inject_plans_index.py       (SessionStart — active only)
+#   - .claude/hooks/validate_plan_status.py     (PostToolUse — any status)
+#   - .claude/skills/planner/SKILL.md           (prose reference)
+#   - .claude/skills/planner/references/conventions.md
+#   - context/plans/TEMPLATE.md
+#
+# Format: one status per line. Lines starting with # are comments.
+# Blank lines separate ACTIVE statuses (top) from TERMINAL statuses (bottom).
+# Order within a group is display order.
+
+# Active — surfaced in the SessionStart active-plan index
+Draft
+In-progress
+Blocked
+
+# Terminal — historical, not surfaced in the active-plan index
+Done
+Abandoned

@@ -50,13 +50,15 @@ review-by: <YYYY-MM-DD|null>
 
 ### Status enum
 
+The canonical enum is defined in [`statuses.txt`](statuses.txt) — a single source of truth shared by the `inject_plans_index.py` SessionStart hook, the `validate_plan_status.py` PostToolUse hook, and this reference. Do not add values here without updating that file first.
+
 - **`Draft`** — plan is being shaped; Goal and Acceptance criteria are not yet stable. Counts as active in the index.
 - **`In-progress`** — work is active. Default status for new plans.
 - **`Blocked`** — progress stopped pending a named condition. The Log *must* contain a recent entry naming the blocker and the unblock condition. Counts as active so the blocker stays visible.
 - **`Done`** — all Acceptance criteria met and the plan is closed. Terminal.
 - **`Abandoned`** — work stopped without meeting Acceptance criteria. The Log's final entry must name the reason. Terminal.
 
-Active statuses appear in the SessionStart injection. Terminal statuses are historical and don't show in the active-plan table.
+Active statuses appear in the SessionStart injection. Terminal statuses are historical and don't show in the active-plan table. Off-enum values (e.g. `Completed`, `Closed`) are blocked at write time by the PostToolUse validator and flagged as drift in the SessionStart injection if they slip past it.
 
 ### `affects` category list
 
