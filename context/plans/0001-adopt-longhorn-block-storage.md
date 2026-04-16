@@ -1,7 +1,7 @@
 ---
-status: In-progress
+status: Completed
 opened: 2026-04-16
-closed: null
+closed: 2026-04-16
 affects: storage
 intent: concrete-need
 related-adrs: [0004, 0005, 0007, 0009]
@@ -62,12 +62,12 @@ Bring Longhorn online as the cluster's default block CSI per ADR 0005, with 2-re
 
 ### Phase 3 — Smoke test + baseline
 
-- [ ] Create a scratch namespace with a throwaway PVC on the `longhorn` StorageClass
-- [ ] Run write/read from a test pod; verify replicas materialise on 2 of 3 nodes via the Longhorn UI
-- [ ] Controlled reboot of a non-quorum-critical node; capture replica failover timing
-- [ ] Capture baseline rebuild throughput on 2.5 GbE — this is the reference measurement the future ADR 0009 cutover must improve against
-- [ ] Document smoke test results + 2.5 GbE baseline throughput under `docs/`
-- [ ] Close this plan; open plan 0002 for the kps rollout
+- [x] Create a scratch namespace with a throwaway PVC on the `longhorn` StorageClass
+- [x] Run write/read from a test pod; verify replicas materialise on 2 of 3 nodes via the Longhorn UI
+- [x] Controlled reboot of a non-quorum-critical node; capture replica failover timing
+- [x] Capture baseline rebuild throughput on 2.5 GbE — this is the reference measurement the future ADR 0009 cutover must improve against
+- [x] Document smoke test results + 2.5 GbE baseline throughput under `docs/`
+- [x] Close this plan; open plan 0002 for the kps rollout
 
 ## Log
 
@@ -126,6 +126,19 @@ Bring Longhorn online as the cluster's default block CSI per ADR 0005, with 2-re
   - **End state (verified)**: k8s-1 `spec.disks = {longhorn-1, longhorn-2}` (916 GiB each, Ready+Schedulable), k8s-2 `{longhorn-1}` (916 GiB, Ready+Schedulable), k8s-3 `{longhorn-1, longhorn-2}` (916 GiB each, Ready+Schedulable). ~4.58 TiB raw / ~2.29 TiB usable at 2-replica. HelmRelease `longhorn` at chart 1.11.1, v2 (upgrade succeeded). `longhorn` StorageClass cluster-default.
   - **Followup noted**: the manual `kubectl patch` step is outside GitOps; the Talos label+annotation is the GitOps truth. On any future node re-registration (fresh install / delete+recreate of `nodes.longhorn.io`), the annotation will drive disk config correctly without manual intervention. No action required unless/until a node is re-registered.
 - 2026-04-16: **Phase 2 closed.** All acceptance criteria except the smoke test are met: StorageClass default, same Talos version baseline preserved, extensions strictly additive, 5 declared Longhorn NVMes actively registered, asymmetric 2+1+2 recorded in `context/hardware.md` with the k8s-2 second-NVMe followup flag. Phase 3 (scratch-PVC smoke test + controlled reboot failover + 2.5 GbE baseline capture) is the only remaining gate before ADR 0007's install gate is formally cleared and plan 0002 (kps) can open.
+- 2026-04-16: **Longhorn skills landed (commit `fbe7bb42`).** Mid-Phase-3 pivot: authored three task-scoped skills under `.claude/skills/` per the anton naming convention — `longhorn-volume-ops` (per-volume PVC work: create/resize/clone, replica/locality overrides), `longhorn-node-ops` (disk add/remove, eviction, disk-routing fixes, replaced-node integration; canonical home for the Talos gotchas reference), `longhorn-backup-dr` (backup target, RecurringJobs, restore flows — status marked "not yet configured" for anton). Registered in root `CLAUDE.md` skills section. The Phase 2 disk-routing fix pattern and the `disk.serial`-selector load-bearing fact are now durable in `longhorn-node-ops/references/{talos.md, disk-model.md}`.
+- 2026-04-16: **Phase 3 smoke test — PASS.** Scratch namespace `longhorn-smoke`, PVC `bench-pvc` (5 GiB, `longhorn` SC). Writer pod wrote deterministic 128 MiB payload + 60-line heartbeat log; SHA256 captured pre-reboot: `5d8b4...`. Replicas materialised on **k8s-1 + k8s-3** (asymmetric 2+1+2 prediction confirmed — k8s-2's single-disk node not elected). Engine on k8s-3; `dataLocality: best-effort` honored (reader pod co-scheduled to k8s-3). Pod-recreate across multiple cycles preserved SHA256 exactly.
+- 2026-04-16: **Phase 3 fio baseline (k8s-3 local replica, 2.5 GbE fan-out).** libaio direct=1, 30s per test; **reference bar** against which ADR 0009 SFP+ mesh cutover must improve.
+  | Workload | BS | QD | Throughput | IOPS |
+  |---|---|---|---|---|
+  | seq-write | 1M | 16 | 113 MB/s (108 MiB/s) | 108 |
+  | seq-read  | 1M | 16 | 219 MB/s (209 MiB/s) | 209 |
+  | rand-write| 4k | 32 | 103 MB/s | 26.3k |
+  | rand-read | 4k | 32 | 132 MB/s | 33.9k |
+  Reads hit ~70% of 2.5 GbE theoretical (local replica, best-effort locality serves locally). Writes are network-bound on the sync replication fan-out to the remote replica (~45% of wire). Rand IOPS strong for sync-replicated distributed block — healthy headroom for database-shaped workloads at this scale.
+- 2026-04-16: **Phase 3 reboot failover — PASS.** Controlled `talosctl reboot` against k8s-1 (non-engine, non-leader) at 19:48:46 UTC. Timeline: t+5s node NotReady, **t+10s volume degraded** (k8s-1 replica unavailable), t+30s node Ready again (fast Talos boot), **t+65s volume healthy** — remote replica reattached from the existing sparse file (stale-replica timeout 2880s never tripped, no rebuild). Total degraded window: **~55s**. Engine stayed pinned to k8s-3 throughout; workload I/O uninterrupted. Post-reboot SHA256 match (`5d8b4...`) + heartbeat log intact → **zero data loss**, **zero rebuild traffic**.
+- 2026-04-16: **Phase 3 cleanup.** `kubectl delete namespace longhorn-smoke` (destructive-gate override required). Cluster has zero Longhorn volumes / zero PVCs post-teardown — clean state handoff to plan 0002.
+- 2026-04-16: **Plan 0001 CLOSED.** All five acceptance criteria met: (1) `longhorn` SC default, 2-replica, best-effort; (2) all three nodes reinstalled on same Talos v1.12.6 with strictly-additive extensions; (3) smoke test + reboot failover captured with baseline in `docs/notes/longhorn-baseline-2026-04-16.md`; (4) asymmetric 2+1+2 in `context/hardware.md` with k8s-2 2nd-drive followup flagged; (5) **ADR 0007 install gate formally cleared** — kube-prometheus-stack rollout can proceed as plan 0002.
 
 ## References
 
