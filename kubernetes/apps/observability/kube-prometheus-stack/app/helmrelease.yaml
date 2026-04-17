@@ -103,14 +103,9 @@ spec:
           # ConfigMap-sourced ones. Per plan 0002.
           allowUiUpdates: false
           disableDeletion: true
-      # Remote access via Tailscale operator (ADR 0012). The operator watches
-      # for these annotations and provisions a tailnet-only reverse proxy at
-      # grafana.<tailnet>.ts.net with Tailscale-issued TLS. LAN access continues
-      # through the separate envoy-internal HTTPRoute in this app directory.
-      service:
-        annotations:
-          tailscale.com/expose: "true"
-          tailscale.com/hostname: grafana
+      # Off-LAN access pending Pattern 3 validation on Hubble UI (ADR 0013
+      # follow-up). Until then: `kubectl port-forward` or LAN via
+      # envoy-internal HTTPRoute below.
 
     # ---- Control-plane scrape targets Talos does not expose ----
     # Talos hides the static control-plane pods; Cilium replaces kube-proxy on
