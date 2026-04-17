@@ -2,6 +2,10 @@
 # Grafana sidecar picks this up via `grafana_dashboard=1` label.
 # searchNamespace: ALL in the HelmRelease values means this can live anywhere;
 # it's co-located here so the dashboard and app churn together.
+# Layout: ADR 0013 Phase 1 — header stat strip + 6 collapsible rows,
+# top-2 default-expanded. Preserve `uid: cluster-health-glance` so existing
+# bookmarks keep working. All authoring is in-repo; sidecar has
+# `allowUiUpdates: false` so UI edits are discarded on pod restart.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,10 +26,215 @@ data:
       "uid": "cluster-health-glance",
       "panels": [
         {
+          "id": 100,
+          "type": "stat",
+          "title": "Nodes Ready",
+          "gridPos": { "x": 0, "y": 0, "w": 5, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Count of nodes with Ready=True. Expect 3 on anton.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 2 },
+                  { "color": "green", "value": 3 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 101,
+          "type": "stat",
+          "title": "Pods (non-Running)",
+          "gridPos": { "x": 5, "y": 0, "w": 5, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Pods not in phase=Running. Pending/Failed/Unknown surface here; Succeeded is expected background noise from Jobs.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(kube_pod_status_phase{phase=\"Pending\"})",
+              "legendFormat": "Pending",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "expr": "sum(kube_pod_status_phase{phase=\"Failed\"})",
+              "legendFormat": "Failed",
+              "instant": true
+            },
+            {
+              "refId": "C",
+              "expr": "sum(kube_pod_status_phase{phase=\"Unknown\"})",
+              "legendFormat": "Unknown",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 102,
+          "type": "stat",
+          "title": "Flux Ready %",
+          "gridPos": { "x": 10, "y": 0, "w": 5, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Fraction of flux_resource_info series reporting ready=True. 1.0 means every Kustomization/HelmRelease/source is healthy.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 0.9 },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(flux_resource_info{ready=\"True\"}) / count(flux_resource_info)",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 103,
+          "type": "stat",
+          "title": "API 5xx Rate (5m)",
+          "gridPos": { "x": 15, "y": 0, "w": 5, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "apiserver_request_total 5xx share over the last 5 minutes. Red above 1%.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "decimals": 3,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.001 },
+                  { "color": "red", "value": 0.01 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(apiserver_request_total{code=~\"5..\"}[5m])) / clamp_min(sum(rate(apiserver_request_total[5m])), 1)",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 104,
+          "type": "stat",
+          "title": "Certs Expiring <14d",
+          "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "cert-manager certs whose expiration timestamp is within 14 days of now.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 3 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(certmanager_certificate_expiration_timestamp_seconds - time() < 14*86400) or vector(0)",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 200,
+          "type": "row",
+          "title": "Cluster Capacity",
+          "collapsed": false,
+          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 },
+          "panels": []
+        },
+        {
           "id": 1,
           "type": "timeseries",
           "title": "Node CPU %",
-          "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 },
+          "gridPos": { "x": 0, "y": 5, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -55,7 +264,7 @@ data:
           "id": 2,
           "type": "timeseries",
           "title": "Node Memory %",
-          "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 },
+          "gridPos": { "x": 8, "y": 5, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -85,7 +294,7 @@ data:
           "id": 3,
           "type": "bargauge",
           "title": "Node Filesystem Usage %",
-          "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 },
+          "gridPos": { "x": 16, "y": 5, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -113,188 +322,550 @@ data:
           ]
         },
         {
-          "id": 4,
-          "type": "table",
-          "title": "Top Pod Restarts (24h)",
-          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "id": 201,
+          "type": "gauge",
+          "title": "Cluster CPU Commit",
+          "gridPos": { "x": 0, "y": 13, "w": 12, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": {
-            "defaults": { "custom": { "align": "auto" } },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "Value" },
-                "properties": [
-                  { "id": "displayName", "value": "Restarts" },
-                  { "id": "unit", "value": "short" },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        { "color": "green", "value": null },
-                        { "color": "yellow", "value": 1 },
-                        { "color": "red", "value": 5 }
-                      ]
-                    }
-                  },
-                  { "id": "custom.cellOptions", "value": { "type": "color-background" } }
-                ]
-              }
-            ]
-          },
-          "options": { "showHeader": true, "sortBy": [{ "displayName": "Restarts", "desc": true }] },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "topk(15, sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[24h])) > 0)",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "transformations": [
-            { "id": "organize", "options": { "excludeByName": { "Time": true }, "indexByName": { "namespace": 0, "pod": 1, "Value": 2 } } }
-          ]
-        },
-        {
-          "id": 5,
-          "type": "stat",
-          "title": "Flux Reconcile State",
-          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Sum of pod CPU requests / sum of allocatable CPU. >1.0 means the scheduler has committed more than the cluster has.",
           "fieldConfig": {
             "defaults": {
-              "unit": "short",
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1.5,
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "color": "red", "value": null },
-                  { "color": "green", "value": 1 }
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.7 },
+                  { "color": "red", "value": 0.9 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"cpu\"}) / sum(kube_node_status_allocatable{resource=\"cpu\"})",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 202,
+          "type": "gauge",
+          "title": "Cluster Memory Commit",
+          "gridPos": { "x": 12, "y": 13, "w": 12, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Sum of pod memory requests / sum of allocatable memory. >1.0 means scheduled memory exceeds cluster allocatable.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1.5,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.7 },
+                  { "color": "red", "value": 0.9 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"memory\"}) / sum(kube_node_status_allocatable{resource=\"memory\"})",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 300,
+          "type": "row",
+          "title": "Control Plane (RED)",
+          "collapsed": false,
+          "gridPos": { "x": 0, "y": 19, "w": 24, "h": 1 },
+          "panels": []
+        },
+        {
+          "id": 301,
+          "type": "timeseries",
+          "title": "API-server QPS by Verb",
+          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Request rate per HTTP verb across all apiserver instances.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 }
+            }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (verb)(rate(apiserver_request_total[5m]))",
+              "legendFormat": "{{verb}}"
+            }
+          ]
+        },
+        {
+          "id": 302,
+          "type": "timeseries",
+          "title": "API-server p99 Latency by Verb",
+          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "p99 of apiserver_request_duration_seconds per verb. WATCH verb sits at 60s by design (long-polls); ignore it and watch GET/LIST/POST/PUT/DELETE.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.99, sum by (le,verb)(rate(apiserver_request_duration_seconds_bucket{verb!=\"WATCH\"}[5m])))",
+              "legendFormat": "{{verb}}"
+            }
+          ]
+        },
+        {
+          "id": 303,
+          "type": "timeseries",
+          "title": "API-server Error Rate (5xx vs 4xx)",
+          "gridPos": { "x": 0, "y": 28, "w": 24, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Error rate trend for 4xx and 5xx responses. 4xx is expected (RBAC deny, NotFound). Sustained 5xx above baseline is actionable.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0,
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(apiserver_request_total{code=~\"5..\"}[5m])) / clamp_min(sum(rate(apiserver_request_total[5m])), 1)",
+              "legendFormat": "5xx"
+            },
+            {
+              "refId": "B",
+              "expr": "sum(rate(apiserver_request_total{code=~\"4..\"}[5m])) / clamp_min(sum(rate(apiserver_request_total[5m])), 1)",
+              "legendFormat": "4xx"
+            }
+          ]
+        },
+        {
+          "id": 400,
+          "type": "row",
+          "title": "Nodes (USE)",
+          "collapsed": true,
+          "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 },
+          "panels": [
+            {
+              "id": 401,
+              "type": "state-timeline",
+              "title": "Node Pressure Conditions",
+              "gridPos": { "x": 0, "y": 35, "w": 12, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "MemoryPressure / DiskPressure / PIDPressure per node. 0 = clear, 1 = pressure.",
+              "fieldConfig": {
+                "defaults": {
+                  "custom": { "lineWidth": 0, "fillOpacity": 80 },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": null },
+                      { "color": "red", "value": 1 }
+                    ]
+                  }
+                }
+              },
+              "options": { "mergeValues": true, "showValue": "auto", "rowHeight": 0.9, "legend": { "displayMode": "list", "placement": "bottom" } },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "kube_node_status_condition{condition=~\"MemoryPressure|DiskPressure|PIDPressure\",status=\"true\"}",
+                  "legendFormat": "{{node}} {{condition}}"
+                }
+              ]
+            },
+            {
+              "id": 402,
+              "type": "timeseries",
+              "title": "Per-Node Network Throughput",
+              "gridPos": { "x": 12, "y": 35, "w": 12, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "Physical interface Rx/Tx. Excludes loopback, Cilium-managed virtual interfaces, and veth. On the SFP+ mesh (ADR 0009) bond0 / enp* bonded throughput shows up here.",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "Bps",
+                  "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 }
+                }
+              },
+              "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "rate(node_network_receive_bytes_total{device!~\"lo|cali.*|cilium.*|lxc.*|veth.*|dummy.*\"}[5m])",
+                  "legendFormat": "{{instance}} {{device}} rx"
+                },
+                {
+                  "refId": "B",
+                  "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|cali.*|cilium.*|lxc.*|veth.*|dummy.*\"}[5m])",
+                  "legendFormat": "{{instance}} {{device}} tx"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 500,
+          "type": "row",
+          "title": "Workloads",
+          "collapsed": true,
+          "gridPos": { "x": 0, "y": 35, "w": 24, "h": 1 },
+          "panels": [
+            {
+              "id": 4,
+              "type": "table",
+              "title": "Top Pod Restarts (24h)",
+              "gridPos": { "x": 0, "y": 36, "w": 12, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": {
+                "defaults": { "custom": { "align": "auto" } },
+                "overrides": [
+                  {
+                    "matcher": { "id": "byName", "options": "Value" },
+                    "properties": [
+                      { "id": "displayName", "value": "Restarts" },
+                      { "id": "unit", "value": "short" },
+                      {
+                        "id": "thresholds",
+                        "value": {
+                          "mode": "absolute",
+                          "steps": [
+                            { "color": "green", "value": null },
+                            { "color": "yellow", "value": 1 },
+                            { "color": "red", "value": 5 }
+                          ]
+                        }
+                      },
+                      { "id": "custom.cellOptions", "value": { "type": "color-background" } }
+                    ]
+                  }
                 ]
               },
-              "mappings": []
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byRegexp", "options": ".*Not Ready.*|.*Failed.*|.*Stalled.*" },
-                "properties": [
-                  { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }
-                ]
-              }
-            ]
-          },
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-            "orientation": "horizontal",
-            "textMode": "value_and_name",
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "count(flux_resource_info{ready=\"True\"}) by (kind)",
-              "legendFormat": "{{kind}} Ready",
-              "instant": true
+              "options": { "showHeader": true, "sortBy": [{ "displayName": "Restarts", "desc": true }] },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "topk(15, sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[24h])) > 0)",
+                  "instant": true,
+                  "format": "table"
+                }
+              ],
+              "transformations": [
+                { "id": "organize", "options": { "excludeByName": { "Time": true }, "indexByName": { "namespace": 0, "pod": 1, "Value": 2 } } }
+              ]
             },
             {
-              "refId": "B",
-              "expr": "count(flux_resource_info{ready=\"False\"}) by (kind) or vector(0)",
-              "legendFormat": "{{kind}} Not Ready",
-              "instant": true
+              "id": 501,
+              "type": "timeseries",
+              "title": "Pending Pods by Namespace",
+              "gridPos": { "x": 12, "y": 36, "w": 12, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "kube_pod_status_phase=Pending grouped by namespace. Sustained Pending indicates unschedulable workloads.",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 20 }
+                }
+              },
+              "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max"] } },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum(kube_pod_status_phase{phase=\"Pending\"}) by (namespace)",
+                  "legendFormat": "{{namespace}}"
+                }
+              ]
             },
             {
-              "refId": "C",
-              "expr": "count(flux_resource_info{suspended=\"True\"}) by (kind) or vector(0)",
-              "legendFormat": "{{kind}} Suspended",
-              "instant": true
+              "id": 502,
+              "type": "table",
+              "title": "OOMKilled Events (1h)",
+              "gridPos": { "x": 0, "y": 44, "w": 24, "h": 6 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "Containers terminated with reason=OOMKilled in the last hour. Empty table is the normal case.",
+              "fieldConfig": {
+                "defaults": { "unit": "short", "custom": { "align": "auto" } }
+              },
+              "options": { "showHeader": true, "sortBy": [{ "displayName": "Value", "desc": true }] },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum by (namespace, pod, container) (increase(kube_pod_container_status_terminated_reason{reason=\"OOMKilled\"}[1h])) > 0",
+                  "instant": true,
+                  "format": "table"
+                }
+              ],
+              "transformations": [
+                { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+              ]
             }
           ]
         },
         {
-          "id": 6,
-          "type": "bargauge",
-          "title": "PVC Saturation %",
-          "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "min": 0,
-              "max": 100,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "yellow", "value": 75 },
-                  { "color": "red", "value": 90 }
-                ]
-              }
-            }
-          },
-          "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true },
-          "targets": [
+          "id": 600,
+          "type": "row",
+          "title": "Storage",
+          "collapsed": true,
+          "gridPos": { "x": 0, "y": 36, "w": 24, "h": 1 },
+          "panels": [
             {
-              "refId": "A",
-              "expr": "(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100",
-              "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}",
-              "instant": true
+              "id": 6,
+              "type": "bargauge",
+              "title": "PVC Saturation %",
+              "gridPos": { "x": 0, "y": 37, "w": 12, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": null },
+                      { "color": "yellow", "value": 75 },
+                      { "color": "red", "value": 90 }
+                    ]
+                  }
+                }
+              },
+              "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100",
+                  "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}",
+                  "instant": true
+                }
+              ]
+            },
+            {
+              "id": 7,
+              "type": "stat",
+              "title": "Longhorn Volume Health",
+              "gridPos": { "x": 12, "y": 37, "w": 12, "h": 8 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "Robustness values: 1=Healthy, 2=Degraded, 3=Faulted, 0=Unknown. Counts volumes by status.",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": null },
+                      { "color": "red", "value": 1 }
+                    ]
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": { "id": "byName", "options": "Healthy" },
+                    "properties": [
+                      { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+                "orientation": "horizontal",
+                "textMode": "value_and_name",
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto"
+              },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "count(longhorn_volume_robustness == 1)",
+                  "legendFormat": "Healthy",
+                  "instant": true
+                },
+                {
+                  "refId": "B",
+                  "expr": "count(longhorn_volume_robustness == 2) or vector(0)",
+                  "legendFormat": "Degraded",
+                  "instant": true
+                },
+                {
+                  "refId": "C",
+                  "expr": "count(longhorn_volume_robustness == 3) or vector(0)",
+                  "legendFormat": "Faulted",
+                  "instant": true
+                }
+              ]
+            },
+            {
+              "id": 601,
+              "type": "table",
+              "title": "Longhorn Replicas per Volume",
+              "gridPos": { "x": 0, "y": 45, "w": 24, "h": 6 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "Running replicas per Longhorn volume. Storage class default is 2; a row sitting below 2 is a rebuild window or a replica failure.",
+              "fieldConfig": {
+                "defaults": { "unit": "short", "custom": { "align": "auto" } },
+                "overrides": [
+                  {
+                    "matcher": { "id": "byName", "options": "Value" },
+                    "properties": [
+                      { "id": "displayName", "value": "Replicas" },
+                      {
+                        "id": "thresholds",
+                        "value": {
+                          "mode": "absolute",
+                          "steps": [
+                            { "color": "red", "value": null },
+                            { "color": "yellow", "value": 2 },
+                            { "color": "green", "value": 3 }
+                          ]
+                        }
+                      },
+                      { "id": "custom.cellOptions", "value": { "type": "color-background" } }
+                    ]
+                  }
+                ]
+              },
+              "options": { "showHeader": true, "sortBy": [{ "displayName": "Replicas", "desc": false }] },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "count by (volume) (longhorn_replica_state == 1)",
+                  "instant": true,
+                  "format": "table"
+                }
+              ],
+              "transformations": [
+                { "id": "organize", "options": { "excludeByName": { "Time": true }, "indexByName": { "volume": 0, "Value": 1 } } }
+              ]
             }
           ]
         },
         {
-          "id": 7,
-          "type": "stat",
-          "title": "Longhorn Volume Health",
-          "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Robustness values: 1=Healthy, 2=Degraded, 3=Faulted, 0=Unknown. Counts volumes by status.",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "red", "value": 1 }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "Healthy" },
-                "properties": [
-                  { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }
-                ]
-              }
-            ]
-          },
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-            "orientation": "horizontal",
-            "textMode": "value_and_name",
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto"
-          },
-          "targets": [
+          "id": 700,
+          "type": "row",
+          "title": "Network & CNI",
+          "collapsed": true,
+          "gridPos": { "x": 0, "y": 37, "w": 24, "h": 1 },
+          "panels": [
             {
-              "refId": "A",
-              "expr": "count(longhorn_volume_robustness == 1)",
-              "legendFormat": "Healthy",
-              "instant": true
+              "id": 701,
+              "type": "timeseries",
+              "title": "CoreDNS QPS",
+              "gridPos": { "x": 0, "y": 38, "w": 8, "h": 7 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "Total DNS request rate across all CoreDNS replicas.",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "reqps",
+                  "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 }
+                }
+              },
+              "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum(rate(coredns_dns_requests_total[5m]))",
+                  "legendFormat": "requests/s"
+                }
+              ]
             },
             {
-              "refId": "B",
-              "expr": "count(longhorn_volume_robustness == 2) or vector(0)",
-              "legendFormat": "Degraded",
-              "instant": true
+              "id": 702,
+              "type": "timeseries",
+              "title": "CoreDNS Non-NOERROR Responses",
+              "gridPos": { "x": 8, "y": 38, "w": 8, "h": 7 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "Response rate for any rcode other than NOERROR (NXDOMAIN, SERVFAIL, etc.), broken down by rcode.",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "reqps",
+                  "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": null },
+                      { "color": "yellow", "value": 1 },
+                      { "color": "red", "value": 10 }
+                    ]
+                  }
+                }
+              },
+              "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum by (rcode) (rate(coredns_dns_responses_total{rcode!=\"NOERROR\"}[5m]))",
+                  "legendFormat": "{{rcode}}"
+                }
+              ]
             },
             {
-              "refId": "C",
-              "expr": "count(longhorn_volume_robustness == 3) or vector(0)",
-              "legendFormat": "Faulted",
-              "instant": true
+              "id": 703,
+              "type": "timeseries",
+              "title": "Cilium Packet Forward / Drop Rate",
+              "gridPos": { "x": 16, "y": 38, "w": 8, "h": 7 },
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "description": "Cilium agent packet counters (Hubble flow metrics are not scraped on anton; this is the datapath-level substitute). A sustained non-zero drop rate is actionable.",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "pps",
+                  "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 }
+                }
+              },
+              "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+              "targets": [
+                {
+                  "refId": "A",
+                  "expr": "sum(rate(cilium_forward_count_total[5m]))",
+                  "legendFormat": "forward"
+                },
+                {
+                  "refId": "B",
+                  "expr": "sum(rate(cilium_drop_count_total[5m]))",
+                  "legendFormat": "drop"
+                }
+              ]
             }
           ]
         }

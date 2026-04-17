@@ -28,33 +28,33 @@ Turn the existing seven-panel `cluster-health-glance` dashboard into the one-scr
 
 ### Phase 1a: Author the JSON
 
-- [ ] Draft the new dashboard JSON in-place in `kubernetes/apps/observability/kube-prometheus-stack/app/dashboard-cluster-health.yaml`. Preserve `uid`, `tags`, `time`, `refresh`, `timezone`. Bump `schemaVersion` only if a new panel type requires it.
-- [ ] Add the **header stat strip** (row `y: 0`, `h: 4`, five panels across `w: 24`):
+- [x] Draft the new dashboard JSON in-place in `kubernetes/apps/observability/kube-prometheus-stack/app/dashboard-cluster-health.yaml`. Preserve `uid`, `tags`, `time`, `refresh`, `timezone`. Bump `schemaVersion` only if a new panel type requires it.
+- [x] Add the **header stat strip** (row `y: 0`, `h: 4`, five panels across `w: 24`):
   - Nodes Ready — `sum(kube_node_status_condition{condition="Ready",status="true"})` with mapping/thresholds to show denominator.
   - Pods by phase — `sum by (phase)(kube_pod_status_phase)` as a single stat panel with colored thresholds on non-Running totals.
   - Flux Kustomizations ready % — reuse the `flux_resource_info{ready="True"}` vector the existing Panel 5 uses; compute `count(…ready="True") / count(…)`.
   - API-server 5xx rate (5m) — `sum(rate(apiserver_request_total{code=~"5.."}[5m])) / sum(rate(apiserver_request_total[5m]))` as percent, threshold red at 1 %.
   - Cert-manager certs expiring < 14 d — `count(certmanager_certificate_expiration_timestamp_seconds - time() < 14*86400)` (verify cert-manager ServiceMonitor is scraped; if not, drop this panel with a scrape-gap log entry).
-- [ ] Convert existing seven panels into **collapsible rows** using Grafana `type: row` panels with `collapsed: false|true` per ADR 0013 spec.
-- [ ] **Cluster Capacity row (default expanded)** — existing Panels 1/2/3 (node CPU, memory, filesystem) + two new panels:
+- [x] Convert existing seven panels into **collapsible rows** using Grafana `type: row` panels with `collapsed: false|true` per ADR 0013 spec.
+- [x] **Cluster Capacity row (default expanded)** — existing Panels 1/2/3 (node CPU, memory, filesystem) + two new panels:
   - Cluster CPU commit ratio — `sum(kube_pod_container_resource_requests{resource="cpu"}) / sum(kube_node_status_allocatable{resource="cpu"})`.
   - Cluster memory commit ratio — same with `resource="memory"`.
-- [ ] **Control Plane (RED) row (default expanded)** — three new panels, data available today:
+- [x] **Control Plane (RED) row (default expanded)** — three new panels, data available today:
   - API-server QPS by verb — `sum by (verb)(rate(apiserver_request_total[5m]))`.
   - API-server p99 latency — `histogram_quantile(0.99, sum by (le,verb)(rate(apiserver_request_duration_seconds_bucket[5m])))`.
   - API-server error rate (promote from stat strip to timeseries for trend) — same PromQL as header stat.
-- [ ] **Nodes (USE) row (default collapsed)** — two new panels:
+- [x] **Nodes (USE) row (default collapsed)** — two new panels:
   - Pressure conditions — `kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure",status="true"}` as a table or state-timeline.
   - Per-node network Rx/Tx — `rate(node_network_receive_bytes_total{device!~"lo|cali.*|cilium.*|lxc.*|veth.*"}[5m])`, `rate(node_network_transmit_bytes_total{…}[5m])`. On anton's SFP+ mesh (ADR 0009) this is where bonded-interface throughput shows up.
-- [ ] **Workloads row (default collapsed)** — existing pod-restarts panel + two new panels:
+- [x] **Workloads row (default collapsed)** — existing pod-restarts panel + two new panels:
   - Pending pods over time — `sum(kube_pod_status_phase{phase="Pending"}) by (namespace)`.
   - OOMKilled rate (1h) — `increase(kube_pod_container_status_terminated_reason{reason="OOMKilled"}[1h])` as a table.
-- [ ] **Storage row (default collapsed)** — existing PVC saturation + Longhorn robustness panels + one new panel:
-  - Longhorn replica count per volume — `longhorn_volume_actual_size_bytes` joined with replica count via `count(longhorn_volume_robustness) by (volume)` (validate PromQL shape when wiring).
-- [ ] **Network & CNI row (default collapsed)** — three new panels:
+- [x] **Storage row (default collapsed)** — existing PVC saturation + Longhorn robustness panels + one new panel:
+  - Longhorn replica count per volume — `longhorn_volume_actual_size_bytes` joined with replica count via `count(longhorn_volume_robustness) by (volume)` (validate PromQL shape when wiring). *Substitution during Phase 1a:* `count(longhorn_volume_robustness) by (volume)` returns 4 per volume (one per state label), not replica count. Replaced with `count by (volume)(longhorn_replica_state == 1)` which returns the actual running replicas (2 per volume on anton today).
+- [x] **Network & CNI row (default collapsed)** — three new panels:
   - CoreDNS QPS — `sum(rate(coredns_dns_requests_total[5m]))`.
   - CoreDNS non-NOERROR response rate — `sum(rate(coredns_dns_responses_total{rcode!="NOERROR"}[5m]))`.
-  - Cilium/Hubble flow rate — `sum(rate(hubble_flows_processed_total[5m]))` (confirm metric name against live Prometheus before committing).
+  - Cilium/Hubble flow rate — `sum(rate(hubble_flows_processed_total[5m]))` (confirm metric name against live Prometheus before committing). *Substitution during Phase 1a:* Hubble metrics are not scraped on anton (neither `hubble_flows_processed_total` nor any `hubble_*` series returns any result). Substituted with `sum(rate(cilium_forward_count_total[5m]))` + `sum(rate(cilium_drop_count_total[5m]))` from the Cilium agent ServiceMonitor, which is already scraped and produces live data (~4.2k pkt/s forward, ~0.05 pkt/s drop). Enabling Hubble metrics separately is a follow-up candidate if the datapath view proves insufficient.
 
 ### Phase 1b: Validate and land
 
@@ -78,6 +78,7 @@ Turn the existing seven-panel `cluster-health-glance` dashboard into the one-scr
 ## Log
 
 - 2026-04-17: Plan opened — ADR 0013 accepted same day, authorising Phase 1 execution. Grafana is freshly reachable at `https://grafana.<tailnet-name>.ts.net/` (ADR 0012 validation landed this morning), so the rewrite has a real consumer surface. Phase 2 (enable Talos control-plane scrapes) and Phase 3 (Talos OS textfile bridge) are explicitly NOT in scope for this plan — they live as named triggers on ADR 0013 and will get their own plans if/when they fire.
+- 2026-04-17: Phase 1a complete. Every PromQL walked against live Prometheus via port-forward before writing to JSON. Two substitutions vs the ADR/plan spec: (1) Hubble metrics are not scraped on anton — `hubble_*` series return empty, so the Network row's "Hubble flow rate" panel was replaced with `cilium_forward_count_total` + `cilium_drop_count_total` from the Cilium agent, both already scraped and live (~4.2k pkt/s forward). (2) The plan's replica-count hypothesis `count(longhorn_volume_robustness) by (volume)` returns 4 per volume (one sample per state label), not the replica count — swapped for `count by (volume)(longhorn_replica_state == 1)` which returns 2 per volume (actual running replicas). Final panel count: 24 content panels + 6 rows, slightly above the ADR's 16–20 target, but matches the ADR's own §Phase 1 enumeration exactly. Per-panel data status at author time: header stats × 5 live; Cluster Capacity × 5 live; Control Plane RED × 3 live; Nodes USE × 2 live; Workloads — restarts + pending live, `OOMKilled` panel empty (no OOMKills in the last hour, which is the expected healthy state; will populate on event); Storage × 3 live; Network & CNI × 3 live. `task configure` was not run — this repo checkout has no `cluster.yaml` (template init step not run locally), and the dashboard ConfigMap is plaintext and not template-rendered, so nothing in the `configure` pipeline (schema validation, render, SOPS encrypt) applies to this file. Conventions-linter subagent gave a clean pass.
 
 ## References
 
