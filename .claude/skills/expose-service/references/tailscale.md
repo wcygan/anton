@@ -23,89 +23,54 @@ Use the `expose-service` skill's gateway-choice matrix. Short version:
 
 Do **not** use `envoy-external` for admin UIs just to make them remotely reachable — that's what Tailscale is for now.
 
-## Two recipes — pick by whether you want HTTPS in the browser
+## How the operator exposes a Service
 
-The Tailscale operator exposes workloads two different ways. They differ in whether TLS is terminated on the proxy and whether browsers trust the cert.
-
-### Recipe A — Ingress (default for HTTP workloads)
-
-Use this for any HTTP admin UI consumed in a browser (Grafana, Longhorn, etc.). The operator watches for `Ingress` resources with `ingressClassName: tailscale`, provisions a tailnet-joined proxy, and **terminates TLS on the proxy with a Let's Encrypt cert bound to the MagicDNS hostname**. Browsers trust the cert with no extra setup, and the URL is `https://<hostname>.<tailnet>.ts.net/`.
-
-Standalone Ingress:
-
-```yaml
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: grafana
-  namespace: observability
-spec:
-  ingressClassName: tailscale
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: kube-prometheus-stack-grafana
-                port: { number: 80 }
-  tls:
-    - hosts: [grafana]   # MagicDNS short name; no secretName — operator manages the cert
-```
-
-Most charts also expose ingress via `ingress.*` values — prefer the chart knob over a standalone file when the chart supports it. Canonical example: `kubernetes/apps/observability/kube-prometheus-stack/app/helmrelease.yaml` → `grafana.ingress` with `ingressClassName: tailscale` and `tls.hosts: [grafana]`.
-
-### Recipe B — Service annotation (for non-HTTP or when you want raw TCP)
-
-Use this when the workload is **not** HTTP, or when you specifically want a plain TCP pass-through to the backend's own TLS (e.g. a Kubernetes-API-style workload already serving its own cert). **No TLS is terminated on the proxy** — clients reach whatever the backend Service serves on its target port. For HTTP backends this means the URL is `http://...`; the WireGuard tunnel still encrypts it on the wire, but browsers will label it "Not secure."
+Annotate the Service the chart already produces. Two annotations, both optional but the second is strongly recommended:
 
 ```yaml
 metadata:
   annotations:
-    tailscale.com/expose: "true"       # required — opts the Service into exposure
-    tailscale.com/hostname: foo        # MagicDNS short name; defaults to the Service name if unset
+    tailscale.com/expose: "true"           # required — opts the Service into exposure
+    tailscale.com/hostname: grafana        # optional — MagicDNS short name; defaults to the Service name if unset
 ```
 
-The operator provisions a tailnet-joined proxy (its own StatefulSet + Service) and reverse-proxies tailnet traffic straight to the annotated Service. No cert, no Let's Encrypt — the proxy is a TCP forwarder.
+The operator watches for these, provisions a tailnet-joined proxy (its own StatefulSet + Service), and reverse-proxies tailnet traffic to the annotated Service. TLS is Tailscale-issued on the proxy — cert-manager is not involved. MagicDNS publishes `<hostname>.<tailnet>.ts.net` on the tailnet.
 
-**Common mistake:** setting this annotation on an HTTP Service and expecting `https://<host>.ts.net/` to work in a browser. It will time out on :443. Use Recipe A for HTTPS.
+**Do not commit the real tailnet name.** In docs and commit messages use the placeholder `<tailnet-name>.ts.net`. The MagicDNS hostname itself (`grafana`, `longhorn`, etc.) is fine.
 
-## Hostname hygiene
+## Wiring this through a Helm chart
 
-**Do not commit the real tailnet name.** In docs and commit messages use the placeholder `<tailnet-name>.ts.net`. The MagicDNS hostname itself (`grafana`, `longhorn`, etc.) is fine — that's local-context-only and does not leak the tailnet.
+Most charts expose Service annotations under `service.annotations` or `<subchart>.service.annotations`. Prefer that over a Kustomize patch — it keeps the annotation in the HelmRelease where chart values live.
+
+- `kube-prometheus-stack` → `grafana.service.annotations` (canonical example; see `kubernetes/apps/observability/kube-prometheus-stack/app/helmrelease.yaml`).
+- bjw-s `app-template` → `service.<name>.annotations`.
+- Chart lacks a Service-annotation knob → fall back to a Kustomize `patches:` entry in the app's `kustomization.yaml` with a `kind: Service` target.
 
 ## Verification
 
 After Flux reconciles:
 
 ```sh
-# Recipe A: operator creates a proxy StatefulSet + Service under namespace tailscale
-kubectl get ingress -n <ns> <name>
-kubectl get svc     -n tailscale -l tailscale.com/parent-resource-ns=<ns>
-
-# Recipe B: same parent-resource label, targets the annotated Service
+# operator observes the annotated Service and creates a Tailscale proxy Service
 kubectl get svc -n <ns> <service> -o jsonpath='{.metadata.annotations}'
 kubectl get svc -A -l tailscale.com/parent-resource=<service>
 
 # MagicDNS record should resolve from any tailnet-joined device
 tailscale status | rg <hostname>
 
-# Hit it from the workstation (while on the tailnet)
-curl -sS -o /dev/null -w '%{http_code}\n' https://<hostname>.<tailnet>.ts.net/   # Recipe A
-curl -sS -o /dev/null -w '%{http_code}\n' http://<hostname>.<tailnet>.ts.net/    # Recipe B
+# hit it from the workstation (while on the tailnet)
+curl -sS -o /dev/null -w '%{http_code}\n' https://<hostname>.<tailnet>.ts.net/
 ```
 
 Do **not** expect the hostname to resolve from outside the tailnet — that is the whole point. If a non-tailnet device must reach the workload, the answer is `envoy-external`, not a Tailscale exception.
 
 ## What's still out of scope
 
-ADR 0012 covers the **Ingress** and **Service-annotation** recipes above. These Tailscale features remain un-adopted and would need their own decision:
+Settled by ADR 0012 only for **Service-level expose**. These remain un-adopted and would need their own decision:
 
 - **Tailscale `serve` / `funnel`** for public exposure. Public path stays on Cloudflare tunnel.
-- **Tailscale subnet routers** for pod/service CIDRs. Not set up — and not needed for the patterns above, because the per-workload proxy handles routing.
-- **`loadBalancerClass: tailscale` on Services** (the LB-class variant of Recipe B). Functionally overlaps with the annotation path; annotations are the supported shape. Revisit only if a chart makes annotations harder than flipping Service type.
+- **Tailscale subnet routers** for pod/service CIDRs. Not set up — and not needed for the patterns above, because the per-Service proxy handles routing.
+- **Tailscale ingress class** (the `LoadBalancer` + `loadBalancerClass: tailscale` mode). Functionally equivalent to the annotation path; annotations are the supported shape in this repo. If a chart ever makes annotations harder than flipping Service type, that's a separate decision.
 
 ## Capacity and device hygiene
 
