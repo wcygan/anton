@@ -14,33 +14,10 @@ metadata:
   name: l2-policy
 spec:
   loadBalancerIPs: true
-  # Exclude envoy-internal — it has a dedicated policy pinning it to k8s-3.
-  # Services without the gateway-name label (e.g. k8s-gateway) still match NotIn.
-  serviceSelector:
-    matchExpressions:
-      - key: gateway.networking.k8s.io/gateway-name
-        operator: NotIn
-        values: ["envoy-internal"]
+  # NOTE: interfaces might need to be set if you have more than one active NIC on your hosts
+  # interfaces:
+  #   - ^eno[0-9]+
+  #   - ^eth[0-9]+
   nodeSelector:
     matchLabels:
       kubernetes.io/os: linux
----
-# Pin envoy-internal (192.168.1.103) to k8s-3.
-# WHY: The Mac's Tailscale subnet route for 192.168.1.0/24 is served by k8s-3
-# (primary subnet router, ADR 0010/0012). Cilium LB SNAT cross-node return
-# drops in BPF at nodeport.h:2452 when egressing tailscale0, so the LB VIP
-# holder, the envoy-internal backend pod, and the TS subnet router must all
-# be k8s-3. The EnvoyProxy `envoy-internal` already pins the Deployment here
-# with ETP=Local; this policy completes the alignment at the L2 layer.
-apiVersion: cilium.io/v2alpha1
-kind: CiliumL2AnnouncementPolicy
-metadata:
-  name: l2-policy-envoy-internal
-spec:
-  loadBalancerIPs: true
-  serviceSelector:
-    matchLabels:
-      gateway.networking.k8s.io/gateway-name: envoy-internal
-  nodeSelector:
-    matchLabels:
-      kubernetes.io/hostname: k8s-3
