@@ -60,6 +60,16 @@ Task skill for wiring anton workloads into the metrics stack. The stack itself w
 
 **Validate dashboard queries before committing.** Every panel's `expr` should resolve against live Prometheus — use the probe recipe. A dashboard with broken queries is worse than no dashboard (it hides the fact that no one is watching).
 
+### Anton dashboard shape (established 2026-04-17, ADR 0013 / plan 0003)
+
+The `cluster-health-glance` dashboard is the canonical exemplar — new dashboards extend this shape rather than inventing their own:
+
+- **Header stat strip** at `y: 0, h: 4` — five always-visible stat panels covering subsystem headline numbers (Nodes Ready, Pods non-Running, Flux ready %, API 5xx rate, cert expiries). First impression on page load.
+- **Subsystem rows** (`type: row`) below the header, **all `collapsed: false`** — one row per conceptual subsystem (Capacity, Workload Health, Control Plane RED, Nodes USE, Pod Events, Storage, Network & CNI). Operator preference: show content on load, don't hide behind a click.
+- **Debug surfaces pair a summary stat strip with a detail table.** When the healthy state is an empty table ("no OOMKills", "no restart hotspots"), the table alone reads as "is this broken?" Add a stat tile above with the "0 — healthy" pattern (see `grafana-dashboards.md`). The dashboard's Workload Health row does this for Unhealthy Workloads / Bad Waiting Pods / Restart Hotspots.
+- **Preserve `uid`** across rewrites so existing bookmarks don't break.
+- **One dashboard, one scroll** up to ~30 panels. Split into sibling boards only when a single row outgrows ~6 panels.
+
 ## Standard workflow — add a PrometheusRule
 
 1. Decide: **alerting** (fires a notification) or **recording** (pre-computes an expensive series). See [promql-and-rules](references/promql-and-rules.md) for when to use which.

@@ -132,6 +132,84 @@ Okay as a **starting point** for a complex dashboard:
 
 Do **not** commit a UI export without cleanup — auto UIDs will break the dashboard on the next cluster rebuild.
 
+## Anton patterns (established in `dashboard-cluster-health.yaml`)
+
+These are load-bearing patterns in the exemplar — copy from there rather than re-deriving. File: `kubernetes/apps/observability/kube-prometheus-stack/app/dashboard-cluster-health.yaml`.
+
+### "0 — healthy" stat tile
+
+Empty debug tables ("no OOMKills", "no restart hotspots") look indistinguishable from broken queries. Fix: pair each debug table with a `stat` tile that renders `0` as `"0 — healthy"` on a green background.
+
+```json
+{
+  "type": "stat",
+  "title": "Restart Hotspots (1h)",
+  "fieldConfig": {
+    "defaults": {
+      "unit": "short",
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          { "color": "green", "value": null },
+          { "color": "red", "value": 1 }
+        ]
+      },
+      "mappings": [
+        { "type": "value", "options": { "0": { "text": "0 — healthy" } } }
+      ]
+    }
+  },
+  "options": {
+    "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+    "textMode": "value",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center"
+  },
+  "targets": [{ "refId": "A", "expr": "<count query>", "instant": true }]
+}
+```
+
+Key pieces: `colorMode: "background"` so the whole tile is green when healthy; `mappings` rewrites the literal `"0"` to human text; `graphMode: "none"` suppresses the sparkline that defaults on.
+
+### `or vector(0)` — count queries that survive empty inputs
+
+`count(X > 0)` returns *no result* (not `0`) when nothing matches. Adding two such queries together then produces empty, which Grafana shows as `No data`. Wrap each branch:
+
+```promql
+(count((kube_deployment_spec_replicas - kube_deployment_status_replicas_available) > 0) or vector(0))
+  +
+(count((kube_statefulset_replicas - kube_statefulset_status_replicas_ready) > 0) or vector(0))
+  +
+(count((kube_daemonset_status_desired_number_scheduled - kube_daemonset_status_number_ready) > 0) or vector(0))
+```
+
+Each `or vector(0)` substitutes a literal `0` when its left side is empty. The sum now evaluates to `0` in the all-healthy case — which then triggers the `"0 — healthy"` mapping above.
+
+### Unified multi-source table via `or` + `label_replace`
+
+When a single table needs rows from multiple metric families (e.g. Deployments + StatefulSets + DaemonSets), do **not** use three separate targets — Grafana will emit `Value #A`, `Value #B`, `Value #C` columns and the table is unreadable. Instead, concatenate with `or` and stamp a discriminator label with `label_replace`:
+
+```promql
+(label_replace((kube_deployment_spec_replicas - kube_deployment_status_replicas_available) > 0, "kind", "Deployment", "__name__", ".*"))
+or
+(label_replace((kube_statefulset_replicas - kube_statefulset_status_replicas_ready) > 0, "kind", "StatefulSet", "__name__", ".*"))
+or
+(label_replace((kube_daemonset_status_desired_number_scheduled - kube_daemonset_status_number_ready) > 0, "kind", "DaemonSet", "__name__", ".*"))
+```
+
+Single target → single `Value` column → rename via `fieldConfig.overrides` (`matcher: { id: "byName", options: "Value" }` → `displayName: "Missing Replicas"`). The `kind` label appears as a regular column after the standard `organize` transformation.
+
+### Substitutions that actually work on anton
+
+- **Hubble flow metrics are NOT scraped** (no ServiceMonitor ships by default with the Cilium HelmRelease on anton). Substitute datapath-level Cilium agent counters:
+  ```promql
+  sum(rate(cilium_forward_count_total[5m]))
+  sum(rate(cilium_drop_count_total[5m]))
+  ```
+- **Longhorn replica count per volume** is `count by (volume) (longhorn_replica_state == 1)`, NOT `count(longhorn_volume_robustness) by (volume)` (that returns 4 per volume, one sample per robustness state label).
+- **Flux ready rollup** is `flux_resource_info{ready="True"}`, NOT `gotk_reconcile_condition` (not exported on the current kps chart line — returns empty).
+
 ## Debugging a dashboard that doesn't appear
 
 1. Is the ConfigMap there? `kubectl get cm -A -l grafana_dashboard=1`
