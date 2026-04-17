@@ -478,12 +478,126 @@ data:
           ]
         },
         {
+          "id": 260,
+          "type": "stat",
+          "title": "Unhealthy Workloads",
+          "gridPos": { "x": 0, "y": 28, "w": 8, "h": 3 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Total count of Deployments + StatefulSets + DaemonSets with ready < desired. 0 (green) = everything at full replica count. Non-zero (red) = drill into the Unhealthy Workloads table below.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "0 — healthy" } } }
+              ]
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(count((kube_deployment_spec_replicas - kube_deployment_status_replicas_available) > 0) or vector(0)) + (count((kube_statefulset_replicas - kube_statefulset_status_replicas_ready) > 0) or vector(0)) + (count((kube_daemonset_status_desired_number_scheduled - kube_daemonset_status_number_ready) > 0) or vector(0))",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 261,
+          "type": "stat",
+          "title": "Pods in Bad Waiting State",
+          "gridPos": { "x": 8, "y": 28, "w": 8, "h": 3 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Count of containers currently waiting with a bad reason (CrashLoopBackOff, ImagePullBackOff, ErrImagePull, CreateContainerConfigError). 0 (green) = no stuck containers. Non-zero (red) = drill into the Pods table below.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "0 — healthy" } } }
+              ]
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(kube_pod_container_status_waiting_reason{reason=~\"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError\"} > 0) or vector(0)",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 262,
+          "type": "stat",
+          "title": "Restart Hotspots (1h)",
+          "gridPos": { "x": 16, "y": 28, "w": 8, "h": 3 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Count of containers that restarted at least once in the last hour. 0 (green) = no active incidents. Non-zero (red) = drill into the Restart Hotspots table below.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "0 — healthy" } } }
+              ]
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(sum by (namespace, pod, container)(increase(kube_pod_container_status_restarts_total[1h])) > 0) or vector(0)",
+              "instant": true
+            }
+          ]
+        },
+        {
           "id": 254,
           "type": "table",
           "title": "Unhealthy Workloads (ready < desired)",
-          "gridPos": { "x": 0, "y": 28, "w": 12, "h": 7 },
+          "gridPos": { "x": 0, "y": 31, "w": 12, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Deployments / StatefulSets / DaemonSets with fewer ready replicas than desired. Empty table is the healthy steady state.",
+          "description": "Deployments / StatefulSets / DaemonSets with fewer ready replicas than desired, labelled by kind. Empty table is the healthy steady state — cross-check the 'Unhealthy Workloads' stat above for the green 0.",
           "fieldConfig": {
             "defaults": { "unit": "short", "custom": { "align": "auto" } },
             "overrides": [
@@ -510,19 +624,7 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "label_replace((kube_deployment_spec_replicas - kube_deployment_status_replicas_available) > 0, \"kind\", \"Deployment\", \"__name__\", \".*\")",
-              "instant": true,
-              "format": "table"
-            },
-            {
-              "refId": "B",
-              "expr": "label_replace((kube_statefulset_replicas - kube_statefulset_status_replicas_ready) > 0, \"kind\", \"StatefulSet\", \"__name__\", \".*\")",
-              "instant": true,
-              "format": "table"
-            },
-            {
-              "refId": "C",
-              "expr": "label_replace((kube_daemonset_status_desired_number_scheduled - kube_daemonset_status_number_ready) > 0, \"kind\", \"DaemonSet\", \"__name__\", \".*\")",
+              "expr": "(label_replace((kube_deployment_spec_replicas - kube_deployment_status_replicas_available) > 0, \"kind\", \"Deployment\", \"__name__\", \".*\")) or (label_replace((kube_statefulset_replicas - kube_statefulset_status_replicas_ready) > 0, \"kind\", \"StatefulSet\", \"__name__\", \".*\")) or (label_replace((kube_daemonset_status_desired_number_scheduled - kube_daemonset_status_number_ready) > 0, \"kind\", \"DaemonSet\", \"__name__\", \".*\"))",
               "instant": true,
               "format": "table"
             }
@@ -535,7 +637,7 @@ data:
           "id": 255,
           "type": "table",
           "title": "Pods in Bad Waiting State",
-          "gridPos": { "x": 12, "y": 28, "w": 12, "h": 7 },
+          "gridPos": { "x": 12, "y": 31, "w": 12, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers currently waiting with a bad reason (CrashLoopBackOff, ImagePullBackOff, ErrImagePull, CreateContainerConfigError). ContainerCreating / PodInitializing are filtered out — they're transient by design.",
           "fieldConfig": {
@@ -558,7 +660,7 @@ data:
           "id": 256,
           "type": "table",
           "title": "Container Restart Hotspots (1h)",
-          "gridPos": { "x": 0, "y": 35, "w": 24, "h": 7 },
+          "gridPos": { "x": 0, "y": 38, "w": 24, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers with restarts in the last hour, top 10. This is the ACTIVE incident surface — contrast with the 24h \"Top Pod Restarts\" table below, which shows stable high-churn pods.",
           "fieldConfig": {
@@ -602,14 +704,14 @@ data:
           "type": "row",
           "title": "Control Plane (RED)",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 42, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 45, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 301,
           "type": "timeseries",
           "title": "API-server QPS by Verb",
-          "gridPos": { "x": 0, "y": 43, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 46, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Request rate per HTTP verb across all apiserver instances.",
           "fieldConfig": {
@@ -631,7 +733,7 @@ data:
           "id": 302,
           "type": "timeseries",
           "title": "API-server p99 Latency by Verb",
-          "gridPos": { "x": 12, "y": 43, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 46, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "p99 of apiserver_request_duration_seconds per verb. WATCH verb sits at 60s by design (long-polls); ignore it and watch GET/LIST/POST/PUT/DELETE.",
           "fieldConfig": {
@@ -661,7 +763,7 @@ data:
           "id": 303,
           "type": "timeseries",
           "title": "API-server Error Rate (5xx vs 4xx)",
-          "gridPos": { "x": 0, "y": 51, "w": 24, "h": 6 },
+          "gridPos": { "x": 0, "y": 54, "w": 24, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Error rate trend for 4xx and 5xx responses. 4xx is expected (RBAC deny, NotFound). Sustained 5xx above baseline is actionable.",
           "fieldConfig": {
@@ -690,14 +792,14 @@ data:
           "type": "row",
           "title": "Nodes (USE)",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 57, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 60, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 401,
           "type": "state-timeline",
           "title": "Node Pressure Conditions",
-          "gridPos": { "x": 0, "y": 58, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 61, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "MemoryPressure / DiskPressure / PIDPressure per node. 0 = clear, 1 = pressure.",
           "fieldConfig": {
@@ -725,7 +827,7 @@ data:
           "id": 402,
           "type": "timeseries",
           "title": "Per-Node Network Throughput",
-          "gridPos": { "x": 12, "y": 58, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 61, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Physical interface Rx/Tx. Excludes loopback, Cilium-managed virtual interfaces, and veth. On the SFP+ mesh (ADR 0009) bond0 / enp* bonded throughput shows up here.",
           "fieldConfig": {
@@ -753,14 +855,14 @@ data:
           "type": "row",
           "title": "Pod Events",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 66, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 69, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 4,
           "type": "table",
           "title": "Top Pod Restarts (24h)",
-          "gridPos": { "x": 0, "y": 67, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 70, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Stable high-churn pods over the last 24 hours. Contrast with the 1h restart hotspots above — this surfaces pods that are chronically unstable, not just actively failing.",
           "fieldConfig": {
@@ -804,7 +906,7 @@ data:
           "id": 501,
           "type": "timeseries",
           "title": "Pending Pods by Namespace",
-          "gridPos": { "x": 12, "y": 67, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 70, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "kube_pod_status_phase=Pending grouped by namespace. Sustained Pending indicates unschedulable workloads.",
           "fieldConfig": {
@@ -826,7 +928,7 @@ data:
           "id": 502,
           "type": "table",
           "title": "OOMKilled Events (1h)",
-          "gridPos": { "x": 0, "y": 75, "w": 24, "h": 6 },
+          "gridPos": { "x": 0, "y": 78, "w": 24, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers terminated with reason=OOMKilled in the last hour. Empty table is the normal case.",
           "fieldConfig": {
@@ -850,14 +952,14 @@ data:
           "type": "row",
           "title": "Storage",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 81, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 84, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 6,
           "type": "bargauge",
           "title": "PVC Saturation %",
-          "gridPos": { "x": 0, "y": 82, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 85, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -888,7 +990,7 @@ data:
           "id": 7,
           "type": "stat",
           "title": "Longhorn Volume Health",
-          "gridPos": { "x": 12, "y": 82, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 85, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Robustness values: 1=Healthy, 2=Degraded, 3=Faulted, 0=Unknown. Counts volumes by status.",
           "fieldConfig": {
@@ -944,7 +1046,7 @@ data:
           "id": 601,
           "type": "table",
           "title": "Longhorn Replicas per Volume",
-          "gridPos": { "x": 0, "y": 90, "w": 24, "h": 6 },
+          "gridPos": { "x": 0, "y": 93, "w": 24, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Running replicas per Longhorn volume. Storage class default is 2; a row sitting below 2 is a rebuild window or a replica failure.",
           "fieldConfig": {
@@ -988,14 +1090,14 @@ data:
           "type": "row",
           "title": "Network & CNI",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 96, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 99, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 701,
           "type": "timeseries",
           "title": "CoreDNS QPS",
-          "gridPos": { "x": 0, "y": 97, "w": 8, "h": 7 },
+          "gridPos": { "x": 0, "y": 100, "w": 8, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Total DNS request rate across all CoreDNS replicas.",
           "fieldConfig": {
@@ -1017,7 +1119,7 @@ data:
           "id": 702,
           "type": "timeseries",
           "title": "CoreDNS Non-NOERROR Responses",
-          "gridPos": { "x": 8, "y": 97, "w": 8, "h": 7 },
+          "gridPos": { "x": 8, "y": 100, "w": 8, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Response rate for any rcode other than NOERROR (NXDOMAIN, SERVFAIL, etc.), broken down by rcode.",
           "fieldConfig": {
@@ -1047,7 +1149,7 @@ data:
           "id": 703,
           "type": "timeseries",
           "title": "Cilium Packet Forward / Drop Rate",
-          "gridPos": { "x": 16, "y": 97, "w": 8, "h": 7 },
+          "gridPos": { "x": 16, "y": 100, "w": 8, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Cilium agent packet counters (Hubble flow metrics are not scraped on anton; this is the datapath-level substitute). A sustained non-zero drop rate is actionable.",
           "fieldConfig": {
