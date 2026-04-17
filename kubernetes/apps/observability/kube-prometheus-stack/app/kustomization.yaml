@@ -7,3 +7,4 @@ resources:
   - ./externalsecret.yaml
   - ./httproute.yaml
   - ./dashboard-cluster-health.yaml
+  - ./proxyclass.yaml

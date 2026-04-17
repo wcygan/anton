@@ -111,6 +111,12 @@ spec:
       ingress:
         enabled: true
         ingressClassName: tailscale
+        # Bind to the kernel-mode Tailscale ProxyClass (see proxyclass.yaml)
+        # — userspace netstack caps throughput at ~100 Kbps, which breaks the
+        # Grafana SPA's JS bundle download. Kernel mode + privileged restores
+        # usable throughput. Workaround for the userspace throughput ceiling.
+        annotations:
+          tailscale.com/proxy-class: kernel
         hosts:
           - grafana
         tls:
