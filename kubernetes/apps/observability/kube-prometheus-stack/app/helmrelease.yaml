@@ -103,9 +103,16 @@ spec:
           # ConfigMap-sourced ones. Per plan 0002.
           allowUiUpdates: false
           disableDeletion: true
-      # Off-LAN access pending Pattern 3 validation on Hubble UI (ADR 0013
-      # follow-up). Until then: `kubectl port-forward` or LAN via
-      # envoy-internal HTTPRoute below.
+      # Off-LAN access via the Tailscale operator Ingress recipe. Pattern
+      # validated on Hubble UI 2026-04-17 after the Cilium `devices: enp+`
+      # fix for tailscale/tailscale#12393. See ADR 0012 Consequences.
+      # LAN access remains on envoy-internal via httproute.yaml.
+      ingress:
+        enabled: true
+        ingressClassName: tailscale
+        hosts: [grafana]
+        tls:
+          - hosts: [grafana]
 
     # ---- Control-plane scrape targets Talos does not expose ----
     # Talos hides the static control-plane pods; Cilium replaces kube-proxy on
