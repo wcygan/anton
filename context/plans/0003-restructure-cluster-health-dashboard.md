@@ -58,11 +58,11 @@ Turn the existing seven-panel `cluster-health-glance` dashboard into the one-scr
 
 ### Phase 1b: Validate and land
 
-- [ ] Run `conventions-linter` subagent against the edited ConfigMap before commit; confirm no `grafana_dashboard` label drift.
-- [ ] Run `task configure` to re-render + validate; no SOPS churn expected (ConfigMap is plaintext).
-- [ ] `jj commit` as a single scoped change ("kube-prometheus-stack: restructure cluster-health dashboard top-down (ADR 0013 Phase 1)"); `jj git push --bookmark main`.
-- [ ] Verify Flux reconciles the HelmRelease-adjacent ConfigMap — `flux get ks -A` shows green; `kubectl -n observability get configmap dashboard-cluster-health-glance -o jsonpath='{.data}' | head` confirms new JSON is live.
-- [ ] Wait for Grafana sidecar reload (sidecar polls ConfigMaps; default ~30 s). Confirm by hitting the dashboard UID and visually checking the new layout.
+- [x] Run `conventions-linter` subagent against the edited ConfigMap before commit; confirm no `grafana_dashboard` label drift.
+- [x] Run `task configure` to re-render + validate; no SOPS churn expected (ConfigMap is plaintext). *Skipped:* local checkout has no `cluster.yaml` (template init step not run here) and the dashboard ConfigMap is hand-maintained under `kubernetes/`, not template-generated — `configure`'s render/encrypt/validate pipeline has no input to act on for this file. Direct `kubectl apply --dry-run=client` + `yq`/`jq` parse used as the equivalent check.
+- [x] `jj commit` as a single scoped change ("kube-prometheus-stack: restructure cluster-health dashboard top-down (ADR 0013 Phase 1)"); `jj git push --bookmark main`. Landed as `b3c10f45`.
+- [x] Verify Flux reconciles the HelmRelease-adjacent ConfigMap — `flux get ks -A` shows green; `kubectl -n observability get configmap dashboard-cluster-health-glance -o jsonpath='{.data}' | head` confirms new JSON is live. Kustomization `observability/kube-prometheus-stack` applied `b3c10f45`; ConfigMap `resourceVersion` rolled; embedded JSON `.panels | length` = 19.
+- [x] Wait for Grafana sidecar reload (sidecar polls ConfigMaps; default ~30 s). Confirm by hitting the dashboard UID and visually checking the new layout. Sidecar reloaded at `2026-04-17T15:20:01Z` — `Writing /tmp/dashboards/cluster-health-glance.json` followed by `Dashboards config reloaded 200 OK` on the `grafana-sc-dashboard` container. Operator walk (Phase 1c) pending.
 
 ### Phase 1c: Walk and fix
 
