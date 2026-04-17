@@ -34,15 +34,14 @@ spec:
               # renovate: datasource=docker depName=registry.k8s.io/kubectl
               image: registry.k8s.io/kubectl:v1.35.3
               imagePullPolicy: IfNotPresent
-              command:
-                - /bin/sh
-                - -c
-                - |
-                  set -euo pipefail
-                  kubectl delete pod \
-                    --all-namespaces \
-                    --field-selector=status.phase=Failed \
-                    --ignore-not-found=true
+              # Distroless image — no shell available. Invoke kubectl directly
+              # via the image's default entrypoint with args.
+              args:
+                - delete
+                - pod
+                - --all-namespaces
+                - --field-selector=status.phase=Failed
+                - --ignore-not-found=true
               resources:
                 requests:
                   cpu: 10m
