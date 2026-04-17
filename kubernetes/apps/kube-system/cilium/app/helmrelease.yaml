@@ -84,7 +84,7 @@ spec:
       enabled: true
     loadBalancer:
       algorithm: maglev
-      mode: "snat"
+      mode: "dsr"
     localRedirectPolicies:
       enabled: true
     # WHY: Resource limits for operator prevent runaway memory consumption.
