@@ -21,8 +21,11 @@ spec:
       automount:
         enabled: false
       hostRoot: /sys/fs/cgroup
-    # NOTE: devices might need to be set if you have more than one active NIC on your hosts
-    # devices: eno+ eth+
+    # Constrain KPR device auto-detection to physical NICs so tailscale0 is
+    # excluded — otherwise Cilium propagates the tailnet iface's 1280 MTU to
+    # the whole datapath and craters Tailscale-proxied throughput.
+    # Ref: tailscale/tailscale#12393, ADR 0012 Consequences.
+    devices: enp+
     dashboards:
       enabled: false
     endpointRoutes:
