@@ -1,0 +1,56 @@
+---
+# Deletes cluster-wide pods stuck in status.phase=Failed (tombstones left behind
+# by node drains/reboots, OOMKills, DisruptionTarget evictions) that Kubernetes'
+# built-in PodGC does not clean up until cluster-wide terminated-pod count
+# exceeds --terminated-pod-gc-threshold (anton: 30). See ADR 0014.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pod-gc
+  namespace: kube-system
+spec:
+  schedule: "*/30 * * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          serviceAccountName: pod-gc
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: kubectl
+              # renovate: datasource=docker depName=registry.k8s.io/kubectl
+              image: registry.k8s.io/kubectl:v1.35.3
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -euo pipefail
+                  kubectl delete pod \
+                    --all-namespaces \
+                    --field-selector=status.phase=Failed \
+                    --ignore-not-found=true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]

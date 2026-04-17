@@ -12,6 +12,7 @@ resources:
   - ./coredns/ks.yaml
   - ./hubble-tailscale-ingress/ks.yaml
   - ./metrics-server/ks.yaml
+  - ./pod-gc/ks.yaml
   - ./reloader/ks.yaml
   - ./spegel/ks.yaml
   - ./tailnet-rbac/ks.yaml
