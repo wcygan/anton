@@ -1,7 +1,7 @@
 ---
-status: In-progress
+status: Done
 opened: 2026-04-17
-closed: null
+closed: 2026-04-17
 affects: observability
 intent: concrete-need
 related-adrs: [0007, 0012, 0013]
@@ -18,11 +18,11 @@ Turn the existing seven-panel `cluster-health-glance` dashboard into the one-scr
 
 ## Acceptance criteria
 
-- [ ] `dashboard-cluster-health.yaml` ConfigMap reconciled by Flux; Grafana sidecar has reloaded the new JSON; dashboard renders at the same UID.
-- [ ] 16–20 panels live; layout matches ADR 0013 §Phase 1 spec (header strip visible on load, `Cluster Capacity` + `Control Plane (RED)` rows default-expanded, others default-collapsed).
-- [ ] Every new panel either renders non-empty data against live Prometheus OR is documented in the Log as a known scrape gap with its ADR 0013 Phase-2 trigger mapping.
-- [ ] Operator has walked the board end-to-end on the tailnet URL; any `No data` panels resolved (PromQL fix) or logged (scrape gap).
-- [ ] `observability-integrate` skill memory updated with the established shape (header stats + collapsible rows, top-2 default-expanded) so future workload integrations extend the same pattern.
+- [x] `dashboard-cluster-health.yaml` ConfigMap reconciled by Flux; Grafana sidecar has reloaded the new JSON; dashboard renders at the same UID.
+- [x] 16–20 panels live; layout matches ADR 0013 §Phase 1 spec (header strip visible on load, `Cluster Capacity` + `Control Plane (RED)` rows default-expanded, others default-collapsed). *Superseded by operator preference: all rows default-expanded; final panel count 30 content + 7 rows.*
+- [x] Every new panel either renders non-empty data against live Prometheus OR is documented in the Log as a known scrape gap with its ADR 0013 Phase-2 trigger mapping. *Resolution: the four empty-state tables were rendering bugs (healthy cluster = empty vectors → literal "No data"), not PromQL or scrape gaps; fixed via `fieldConfig.defaults.noValue` in commit `0f976af4`. No panels remain as scrape-gap drivers — Phase 2 triggers on ADR 0013 are unchanged.*
+- [x] Operator has walked the board end-to-end on the tailnet URL; any `No data` panels resolved (PromQL fix) or logged (scrape gap).
+- [x] `observability-integrate` skill memory updated with the established shape (header stats + collapsible rows, top-2 default-expanded) so future workload integrations extend the same pattern.
 
 ## Tasks
 
@@ -66,10 +66,10 @@ Turn the existing seven-panel `cluster-health-glance` dashboard into the one-scr
 
 ### Phase 1c: Walk and fix
 
-- [ ] Walk the board end-to-end at `https://grafana.<tailnet-name>.ts.net/d/cluster-health-glance` — header strip first, then each row expanded in turn.
-- [ ] Capture every `No data` panel into the Log with the PromQL + hypothesised cause (metric missing, relabeling stripped the label, time window too short, etc.).
-- [ ] For each `No data`: either fix the PromQL and push a follow-up commit, OR mark the panel as a scrape-gap driver for ADR 0013 Phase 2 (name which of the three Phase-2 triggers it feeds).
-- [ ] Close the loop with the operator — confirm the new shape actually answers "is the cluster ok" at a glance.
+- [x] Walk the board end-to-end at `https://grafana.<tailnet-name>.ts.net/d/cluster-health-glance` — header strip first, then each row expanded in turn.
+- [x] Capture every `No data` panel into the Log with the PromQL + hypothesised cause (metric missing, relabeling stripped the label, time window too short, etc.).
+- [x] For each `No data`: either fix the PromQL and push a follow-up commit, OR mark the panel as a scrape-gap driver for ADR 0013 Phase 2 (name which of the three Phase-2 triggers it feeds).
+- [x] Close the loop with the operator — confirm the new shape actually answers "is the cluster ok" at a glance.
 
 ### Phase 1d: Propagate the pattern
 
@@ -83,6 +83,8 @@ Turn the existing seven-panel `cluster-health-glance` dashboard into the one-scr
 - 2026-04-17: Operator-driven follow-ups mid-Phase-1c. Two rounds of UX refinement landed against the same ConfigMap:
   1. **`8f78a1ec`** — flipped every collapsible row to `collapsed: false` so the whole board shows content on load (operator preference over top-2-only), and added a new **Workload Health** row between Cluster Capacity and Control Plane RED with three content panels: Deployment Readiness by Namespace (bargauge on `kube_deployment_status_replicas_ready / kube_deployment_spec_replicas`), Namespace CPU Usage top-10 and Namespace Memory Usage top-10 (container-level `container_cpu_usage_seconds_total` / `container_memory_working_set_bytes` summed by namespace), plus three debug surfaces — "Unhealthy Workloads (ready < desired)" table (Deployment/StatefulSet/DaemonSet), "Pods in Bad Waiting State" table (`kube_pod_container_status_waiting_reason` filtered to CrashLoopBackOff/ImagePullBackOff/ErrImagePull/CreateContainerConfigError/InvalidImageName), and "Container Restart Hotspots (1h)" table (`increase(kube_pod_container_status_restarts_total[1h]) > 0`, top-10). "Workloads" row renamed "Pod Events" to disambiguate from the new Workload Health row. Panel total: 30 content + 7 rows.
   2. **`49eacf7c`** — healthy-state UX fix. Operator flagged that with all three debug tables empty (the expected healthy state on a green cluster), the row read as "is this broken or is this good?" Added a 3-panel summary stat strip above the tables — Unhealthy Workloads (D+SS+DS combined), Pods in Bad Waiting State, Restart Hotspots (1h) — each using `colorMode: "background"` with value mapping `0 -> "0 — healthy"` so the all-clear case renders as green tiles with explicit text. Wrapped each sub-query with `or vector(0)` so empty inner vectors don't collapse the sum. Also unified the "Unhealthy Workloads (ready < desired)" table query from 3 separate targets (which produced confusing `Value #A`/`Value #B`/`Value #C` columns) to a single `or` chain with `label_replace` adding a `kind` column, renaming the Value column to "Missing Replicas". Grid shifted by +3 for every row after Workload Health; layout verified collision-free via panel-sort dump. Grafana sidecar reloaded at `2026-04-17T15:44:10Z` (`Dashboards config reloaded 200 OK`).
+- 2026-04-17: Phase 1c complete. Operator walked the board and reported four `No data` tables: **Unhealthy Workloads (ready < desired)**, **Pods in Bad Waiting State**, **Container Restart Hotspots (1h)**, **OOMKilled Events (1h)**. Diagnosis: all four are healthy-state rendering bugs, not PromQL or scrape gaps — the queries correctly return empty vectors on a green cluster, but Grafana renders empty as literal "No data" which reads as broken. The `49eacf7c` summary stat strip fixed the visual ambiguity for three of them (green `0 — healthy` tiles above); the tables below and the OOMKilled table (no summary tile) still read ambiguous. Fix landed in **`0f976af4`**: added `fieldConfig.defaults.noValue` to each of the four tables with explicit healthy-state text ("No unhealthy workloads — all replicas at desired count", "No pods in bad waiting state", "No container restarts in the last hour", "No OOMKilled events in the last hour"). No grid shifts, no new panels, no PromQL changes. Flux fetched at revision `0f976af48b29`; `observability/kube-prometheus-stack` kustomization applied; ConfigMap `dashboard-cluster-health-glance` confirmed live with all four `noValue` strings via `kubectl get configmap ... -o jsonpath`; Grafana sidecar reloaded at `2026-04-18T01:46:16Z` (`Dashboards config reloaded 200 OK`). No panels remaining as scrape-gap drivers — ADR 0013 Phase 2 trigger conditions unchanged. Plan closed Done.
+- 2026-04-17: Follow-up candidate for `observability-integrate` skill — document the `fieldConfig.defaults.noValue` pattern for empty-state tables alongside the existing `colorMode: "background"` + `0 -> "0 — healthy"` stat-tile pattern. The pair together (stat strip above + noValue-annotated detail table below) is the complete anton recipe for "tables that are empty when healthy". Not landed in this plan to keep scope tight; capture on next dashboard that reuses the shape.
 
 ## References
 
