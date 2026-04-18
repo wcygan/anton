@@ -599,7 +599,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Deployments / StatefulSets / DaemonSets with fewer ready replicas than desired, labelled by kind. Empty table is the healthy steady state — cross-check the 'Unhealthy Workloads' stat above for the green 0.",
           "fieldConfig": {
-            "defaults": { "unit": "short", "custom": { "align": "auto" } },
+            "defaults": { "unit": "short", "noValue": "No unhealthy workloads — all replicas at desired count", "custom": { "align": "auto" } },
             "overrides": [
               {
                 "matcher": { "id": "byName", "options": "Value" },
@@ -641,7 +641,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers currently waiting with a bad reason (CrashLoopBackOff, ImagePullBackOff, ErrImagePull, CreateContainerConfigError). ContainerCreating / PodInitializing are filtered out — they're transient by design.",
           "fieldConfig": {
-            "defaults": { "unit": "short", "custom": { "align": "auto" } }
+            "defaults": { "unit": "short", "noValue": "No pods in bad waiting state", "custom": { "align": "auto" } }
           },
           "options": { "showHeader": true },
           "targets": [
@@ -664,7 +664,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers with restarts in the last hour, top 10. This is the ACTIVE incident surface — contrast with the 24h \"Top Pod Restarts\" table below, which shows stable high-churn pods.",
           "fieldConfig": {
-            "defaults": { "unit": "short", "custom": { "align": "auto" } },
+            "defaults": { "unit": "short", "noValue": "No container restarts in the last hour", "custom": { "align": "auto" } },
             "overrides": [
               {
                 "matcher": { "id": "byName", "options": "Value" },
@@ -932,7 +932,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers terminated with reason=OOMKilled in the last hour. Empty table is the normal case.",
           "fieldConfig": {
-            "defaults": { "unit": "short", "custom": { "align": "auto" } }
+            "defaults": { "unit": "short", "noValue": "No OOMKilled events in the last hour", "custom": { "align": "auto" } }
           },
           "options": { "showHeader": true, "sortBy": [{ "displayName": "Value", "desc": true }] },
           "targets": [
