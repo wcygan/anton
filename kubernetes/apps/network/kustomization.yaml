@@ -13,4 +13,5 @@ resources:
   - ./envoy-gateway/ks.yaml
   - ./k8s-gateway/ks.yaml
   - ./multus/ks.yaml
+  - ./storage-vxlan/ks.yaml
   - ./whereabouts/ks.yaml
