@@ -18,7 +18,7 @@ Longhorn replica traffic flows end-to-end over the three DAC links — not the 2
 
 ## Acceptance criteria
 
-- [ ] Multus thick-plugin mode deployed under `kubernetes/apps/network/multus/` via the 3-file Flux pattern and `HelmRelease` reports `Ready`.
+- [ ] Multus thick-plugin mode deployed under `kubernetes/apps/network/multus/` via the 3-file Flux pattern; Flux `Kustomization` reports `Ready` and the Multus DaemonSet has 3/3 pods Running.
 - [ ] All three nodes have `/31` static addresses configured on their SFP+ interfaces via Talos `networkInterfaces`, each node reaches every mesh peer over that address, and `talosctl get links` shows `LINK STATE=true` on all 6 ports.
 - [ ] `iperf3 -P 4` between any two mesh peers (jumbo frames enabled, MTU 9000) achieves **≥9 Gbit/s** sustained.
 - [ ] A `NetworkAttachmentDefinition` named `longhorn-storage` exists in the `longhorn-system` namespace and Longhorn's `defaultSettings.storageNetwork` references it.
@@ -28,9 +28,9 @@ Longhorn replica traffic flows end-to-end over the three DAC links — not the 2
 
 ### Phase 1 — Multus install (depends on ADR 0017)
 
-- [ ] Use `flux-app-author` / `add-flux-app` to scaffold `kubernetes/apps/network/multus/` (3-file pattern, OCI HelmRepository pointing at the k8snetworkplumbingwg Multus chart).
-- [ ] Pin `values.cni.multusConfigFile` for thick-plugin mode; default `clusterNetwork: cilium` so Cilium remains the primary CNI.
-- [ ] Commit, `task reconcile`, verify `HelmRelease` reports `Ready` and the Multus DaemonSet has 3/3 pods Running.
+- [ ] Use `flux-app-author` / `add-flux-app` to scaffold `kubernetes/apps/network/multus/` (3-file pattern: `GitRepository` pointing at `k8snetworkplumbingwg/multus-cni` pinned to a thick-mode release tag, Flux `Kustomization`, and an `app/` overlay rendering `deployments/multus-daemonset-thick.yml`).
+- [ ] Apply kustomize patches: override namespace to `network`, patch the multus ConfigMap to set `clusterNetwork: cilium` so Cilium remains the primary CNI, and pin the image to the matching `ghcr.io/k8snetworkplumbingwg/multus-cni` tag.
+- [ ] Commit, `task reconcile`, verify the Flux `Kustomization` reports `Ready` and the Multus DaemonSet has 3/3 pods Running.
 - [ ] Confirm no Cilium regression — `cilium status` stays green and existing pod networking is unaffected.
 
 ### Phase 2 — Talos `/31` rolling config
@@ -74,6 +74,9 @@ The per-node `/31` assignments (from the DAC topology discovered 2026-04-18, rec
 ## Log
 
 - 2026-04-18: Opened from ADR 0017 (Multus adoption) which is itself a follow-up to ADR 0009 (SFP+ mesh). Prerequisites landed earlier today: mesh cabled and link-up on all 6 ports, per-port MAC mapping discovered via ARP-probe + node-exporter RX counter deltas (recorded in `context/hardware.md`), symmetric 2+2+2 Longhorn topology achieved via k8s-2 `longhorn-2` userVolume (plan 0001 follow-up completed).
+- 2026-04-18: Phase 1 install mechanism pivoted from `HelmRelease` + OCI HelmRepository to `GitRepository` + Flux `Kustomization` + kustomize overlay. Driver: no usable Helm chart exists for Multus v4 thick-plugin mode (evidence in next entry).
+- 2026-04-18: Chart landscape as researched today. (a) Official `k8snetworkplumbingwg/helm-charts/multus` is Chart v0.1.2 / appVersion 0.1.0, image `v3.8` thin-mode only, last meaningful commit 2022; the chart template has no thick-plugin knobs and hardcodes `kube-system`. (b) Bitnami `multus-cni` chart v2.2.22 / appVersion 4.2.2 is OCI-distributed at `oci://registry-1.docker.io/bitnamicharts/multus-cni` but depends on `docker.io/bitnami/multus-cni` which Broadcom paywalled on 2025-08-28 (images moved to `docker.io/bitnamilegacy`, frozen with no CVE fixes unless $50K–$72K/yr BSI subscription); the chart also ships a single-DaemonSet wrapper, not the upstream daemon+shim thick-mode shape. (c) Upstream's supported thick-mode install is `deployments/multus-daemonset-thick.yml` on `k8snetworkplumbingwg/multus-cni`, tagged per release (v4.2.4, Feb 2025). Option chosen: `GitRepository` at that repo + kustomize overlay. Fits anton's 3-file pattern structurally (source + ks + `app/`), keeps Renovate on the git tag.
+- 2026-04-18: ADR 0017's body still reads "installed via its official Helm chart" and a follow-up bullet says "OCI HelmRepository + thick-mode values". Those sentences pre-date this research and are factually incorrect. The ADR's **decision** (adopt Multus thick-plugin chained to Cilium, Longhorn sole consumer, under `kubernetes/apps/network/multus/`) is unchanged, so ADR 0017 is not being superseded. This Log entry is the durable correction pointer per the ADR-vs-plan split: ADRs record *why*, plans record *how / what's next*.
 
 ## References
 
