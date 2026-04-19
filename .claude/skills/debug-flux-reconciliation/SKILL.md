@@ -92,7 +92,7 @@ Checks (in order):
    ```sh
    SOPS_AGE_KEY_FILE=./age.key sops filestatus <path-to-file>
    ```
-   If `unencrypted`, `task configure` will fix it; commit and push.
+   If `unencrypted`, run `SOPS_AGE_KEY_FILE=./age.key sops -e -i <path-to-file>` to encrypt in place, then commit and push.
 
 ## Step 6 — postBuild variable substitution failed
 

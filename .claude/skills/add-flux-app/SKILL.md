@@ -10,32 +10,30 @@ Task skill that scaffolds the 3-file Flux pattern for a new application in `kube
 
 ## What this skill produces
 
-| File | Path | From template |
-| --- | --- | --- |
-| Flux Kustomization (Tier 1) | `kubernetes/apps/<ns>/<app>/ks.yaml` | `templates/ks.yaml.template` |
-| Plain Kustomize (Tier 2) | `kubernetes/apps/<ns>/<app>/app/kustomization.yaml` | `templates/kustomization.yaml.template` |
-| HelmRelease (Tier 3) | `kubernetes/apps/<ns>/<app>/app/helmrelease.yaml` | `templates/helmrelease.yaml.template` |
-| OCIRepository (chart source) | `kubernetes/apps/<ns>/<app>/app/ocirepository.yaml` | `templates/ocirepository.yaml.template` |
-| Optional Namespace + namespace kustomization | `kubernetes/apps/<ns>/namespace.yaml` | `templates/namespace.yaml.template` |
-| Optional ExternalSecret | `kubernetes/apps/<ns>/<app>/app/externalsecret.yaml` | `templates/externalsecret.yaml.template` |
+Field reference for every file's shape: `anton-repo-conventions` skill.
+
+| File | Path |
+| --- | --- |
+| Flux Kustomization (Tier 1) | `kubernetes/apps/<ns>/<app>/ks.yaml` |
+| Plain Kustomize (Tier 2) | `kubernetes/apps/<ns>/<app>/app/kustomization.yaml` |
+| HelmRelease (Tier 3) | `kubernetes/apps/<ns>/<app>/app/helmrelease.yaml` |
+| OCIRepository (chart source) | `kubernetes/apps/<ns>/<app>/app/ocirepository.yaml` |
+| Optional Namespace + namespace kustomization | `kubernetes/apps/<ns>/namespace.yaml` |
+| Optional ExternalSecret | `kubernetes/apps/<ns>/<app>/app/externalsecret.yaml` |
 
 ## Workflow A — add an app to an existing namespace
 
 1. **Pick the namespace.** Confirm it already exists: `ls kubernetes/apps/<ns>/`. If not, jump to Workflow B.
 2. **Check the chart exists** before scaffolding: `helm search repo <repo>/<chart> --versions | head -5` for HelmRepository charts; for OCI, look at the registry directly (`crane ls ghcr.io/<org>/charts/<chart>` or just visit the URL).
 3. **Create the app directory:** `mkdir -p kubernetes/apps/<ns>/<app>/app`
-4. **Render the four core files** by reading `templates/{ks,kustomization,helmrelease,ocirepository}.yaml.template` and substituting:
-   - `{{APP_NAME}}` → e.g. `my-app`
-   - `{{NAMESPACE}}` → e.g. `monitoring`
-   - `{{CHART_URL}}` → e.g. `oci://ghcr.io/example/charts/my-app`
-   - `{{CHART_TAG}}` → pinned semver, e.g. `1.2.3`
+4. **Author the four core files directly** (`ks.yaml`, `app/kustomization.yaml`, `app/helmrelease.yaml`, `app/ocirepository.yaml`). Required fields per file and a working example: see `anton-repo-conventions` (three-file pattern and HelmRelease sources). Copy the closest in-tree app (`kubernetes/apps/<ns>/<similar-app>/`) as a starting point — faster than assembling from scratch.
 5. **Register the app** in the namespace kustomization. Add one line:
    ```sh
    $EDITOR kubernetes/apps/<ns>/kustomization.yaml
    # add: - ./<app>/ks.yaml
    ```
    Apps are NOT auto-discovered. Skipping this means Flux silently never deploys the app.
-6. **Validate and (if any `*.sops.*` files) encrypt:** `task configure`
+6. **If any `*.sops.*` files:** `sops -e -i <file>` to encrypt in place. Verify with `sops filestatus <file>` → `encrypted`.
 7. **Commit and push.** Wait for Flux poll, or force with `task reconcile`.
 8. **Verify:**
    ```sh
@@ -46,7 +44,7 @@ Task skill that scaffolds the 3-file Flux pattern for a new application in `kube
 ## Workflow B — add an app in a new namespace
 
 1. **Create the namespace dir:** `mkdir -p kubernetes/apps/<ns>`
-2. **Render `kubernetes/apps/<ns>/namespace.yaml`** from `templates/namespace.yaml.template`. The annotation `kustomize.toolkit.fluxcd.io/prune: disabled` must stay — it stops Flux from deleting the namespace.
+2. **Author `kubernetes/apps/<ns>/namespace.yaml` directly.** The annotation `kustomize.toolkit.fluxcd.io/prune: disabled` is required — it stops Flux from deleting the namespace. Copy the shape from a neighbor namespace.
 3. **Create the namespace kustomization** at `kubernetes/apps/<ns>/kustomization.yaml`:
    ```yaml
    ---
@@ -63,7 +61,7 @@ Task skill that scaffolds the 3-file Flux pattern for a new application in `kube
 
 ## Variant — chart source other than OCIRepository
 
-OCIRepository is the default and what `templates/ocirepository.yaml.template` produces. Two alternatives, only when the chart is not on OCI:
+OCIRepository is the default. Two alternatives, only when the chart is not on OCI:
 
 **HelmRepository (classic Helm repo).** Replace the OCIRepository file with a HelmRepository, and replace the HelmRelease's `chartRef:` block with `chart.spec.sourceRef`:
 
@@ -101,7 +99,7 @@ Pick one path; do not mix for the same secret.
 
 **Path 1 — ExternalSecret (default for new apps, pulls from 1Password).**
 1. Add the item to the `anton` 1Password vault. Field names are case-sensitive.
-2. Render `templates/externalsecret.yaml.template`, substituting `{{SECRET_NAME}}`, `{{NAMESPACE}}`, `{{ONEPASSWORD_ITEM}}`, `{{ONEPASSWORD_FIELD}}`, `{{K8S_SECRET_KEY}}`.
+2. Author `app/externalsecret.yaml` directly. Template shape and field-mapping rules: `anton-repo-conventions/references/secrets.md`. Copy from an in-tree ExternalSecret (e.g. `kubernetes/apps/network/cloudflare-tunnel/app/externalsecret.yaml`).
 3. Add `- ./externalsecret.yaml` to the app's `kustomization.yaml`.
 4. No encryption step. Verify after deploy:
    ```sh
@@ -112,7 +110,7 @@ Pick one path; do not mix for the same secret.
 
 **Path 2 — SOPS Secret (only for static infra credentials that must exist before ESO).**
 1. Author `app/secret.sops.yaml` in plaintext with `data` or `stringData`.
-2. Run `task configure` — it encrypts in place via SOPS+Age.
+2. Encrypt in place: `sops -e -i app/secret.sops.yaml`.
 3. Verify: `SOPS_AGE_KEY_FILE=./age.key sops filestatus app/secret.sops.yaml` → `encrypted`.
 4. Add `- ./secret.sops.yaml` to the app's `kustomization.yaml`.
 
@@ -128,8 +126,7 @@ That belongs to a different skill. Use `expose-service` for HTTPRoute, gateway c
 - [ ] `ks.yaml` has `postBuild.substituteFrom: [{name: cluster-secrets, kind: Secret}]` if the app uses any `${VAR}`
 - [ ] Namespace kustomization includes `components: [../../components/sops]`
 - [ ] `OCIRepository.metadata.name` matches `HelmRelease.spec.chartRef.name`
-- [ ] `task configure` ran without errors (validates schemas + encrypts SOPS files)
-- [ ] No plaintext secrets: `find . -name '*.sops.*' -exec sops filestatus {} \;` all `encrypted`
+- [ ] All `*.sops.*` files show `encrypted`: `find . -name '*.sops.*' -exec sops filestatus {} \;`
 - [ ] `flux get ks -A | rg <app>` and `flux get hr -A | rg <app>` both show `Ready=True` after `task reconcile`
 
 ## Related skills

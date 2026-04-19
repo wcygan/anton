@@ -44,7 +44,6 @@ For bumping `talosVersion` (the OS image baked into each node).
    ```
 2. **Re-render machine configs** so the new version threads through `talconfig.yaml`:
    ```sh
-   task configure
    task talos:generate-config
    ```
 3. **Roll one node at a time**, control planes first. The rule is **strictly serial** for control planes — you CANNOT lose quorum:
@@ -89,7 +88,7 @@ For bumping `kubernetesVersion`. talhelper handles the rolling upgrade across al
    ```
 2. **Re-render** so the new version reaches talconfig:
    ```sh
-   task configure
+   task talos:generate-config
    ```
 3. **Run the rolling Kubernetes upgrade:**
    ```sh

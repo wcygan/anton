@@ -6,7 +6,7 @@ allowed-tools: Read, Bash, Grep, Glob, WebFetch, WebSearch
 
 # Cluster intake
 
-Read-only decision gate for "should this component join the anton cluster?" Walks hard vetoes first, then a weighted soft score, then returns an add / defer / reject recommendation with an ADR-ready summary. Never scaffolds files, never runs `task configure`, never commits — that is what `add-flux-app` is for, *after* this skill says yes.
+Read-only decision gate for "should this component join the anton cluster?" Walks hard vetoes first, then a weighted soft score, then returns an add / defer / reject recommendation with an ADR-ready summary. Never scaffolds files, never applies manifests, never commits — that is what `add-flux-app` is for, *after* this skill says yes.
 
 ## Why this skill exists
 
@@ -40,7 +40,7 @@ The skill's job is to accept the first two honestly and reject the third honestl
 ## Hard rules
 
 - **Never scaffold files** during intake. The rubric runs *before* any `add-flux-app` invocation. If intake passes, hand off explicitly.
-- **Never run mutating commands** — no `kubectl apply`, `flux reconcile`, `task configure`, `git commit`, `helm install`, `gh pr merge`.
+- **Never run mutating commands** — no `kubectl apply`, `flux reconcile`, `sops -e -i`, `git commit`, `helm install`, `gh pr merge`.
 - **Never recommend adding anything already in the removal graveyard** without the user stating an explicit delta: what changed about the component, what changed about the cluster's need, OR that the intent this time is declared learning (which is itself a valid delta from a prior concrete-need attempt).
 - **Never skip the containment gates.** Gates 1–5 (license, blast radius, reversibility, integration fit, secrets model) apply under every intent. A learning experiment that forks the secrets story or takes out Cilium is still a reject.
 - **Never lecture the user on whether their learning experiment is worthwhile.** The gate's job is containment and honest intent declaration, not judging the educational value of the user's choices. If the user declares honest learning intent with a timebox and an exit plan, your job is to help them run it safely, not to argue them out of it.

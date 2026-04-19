@@ -39,7 +39,7 @@ Use this unless the chart explicitly documents a `route:` schema. It works with 
      - ./httproute.yaml
    ```
 
-3. `task configure` to validate and encrypt, then commit + push, then `task reconcile` (or wait for the Flux interval).
+3. Commit + push, then `task reconcile` (or wait for the Flux interval). HTTPRoutes don't need encryption; if you also authored a `*.sops.*` file, run `sops -e -i <file>` before committing.
 
 ## Workflow B — HTTPRoute inside HelmRelease values
 

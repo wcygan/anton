@@ -47,7 +47,7 @@ Both envoy gateways live in namespace `network`. HTTPRoutes must set `parentRefs
    - **Combined (HTTPRoute + Tailscale Ingress)** — do both; they are independent and don't conflict. Same-PR bundling of Tailscale work with Cilium / gateway / CNI changes is forbidden (ADR 0012).
 3. **Wire any new manifest file** into `kubernetes/apps/<ns>/<app>/app/kustomization.yaml`. Annotation-only changes via chart values need no kustomization edit.
 4. **If the hostname is on a secondary domain** (not `${SECRET_DOMAIN}`), also add a `DNSEndpoint` resource and verify the gateway's cert listener covers the domain — see `references/secondary-domain.md`. Skipping this is the single most common footgun in this skill. (Does not apply to Tailscale — MagicDNS handles its own.)
-5. **Ship it.** `task configure` (validate + encrypt), commit + push, then `task reconcile` (or wait for the Flux interval).
+5. **Ship it.** If any `*.sops.*` files are new, run `sops -e -i <file>` to encrypt. Then commit + push, and `task reconcile` (or wait for the Flux interval).
 6. **Verify.** Run the checks in `references/verify.md`; for the Tailscale path, also verify as documented in `references/tailscale.md`.
 
 ## Pre-commit checklist
@@ -55,7 +55,7 @@ Both envoy gateways live in namespace `network`. HTTPRoutes must set `parentRefs
 Common:
 - [ ] Path choice matches policy (LAN-only → internal; off-LAN HTTP → Tailscale Ingress; off-LAN raw TCP → Tailscale annotation; external only when explicitly approved)
 - [ ] Diff contains Tailscale changes only — no Cilium / gateway / CNI edits in the same commit (ADR 0012)
-- [ ] `task configure` passes
+- [ ] No plaintext secrets: any `*.sops.*` files show `encrypted` via `sops filestatus`
 
 HTTPRoute path:
 - [ ] `parentRefs[0].name` is `envoy-external` or `envoy-internal` (never a Service name)
