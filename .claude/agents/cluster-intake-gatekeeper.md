@@ -25,7 +25,7 @@ Follow the `cluster-intake` skill's workflow end-to-end: frame and **declare int
 
 If the user's "I cannot ___" sentence sounds like completionism ("my stack feels naked", "every real cluster has", "for when I scale"), ask exactly once: *"Is this actually a learning intake? That's a valid path on anton — you'd just need to declare a timebox and exit plan."* If they say yes, restart Step 1 with learning intent. If they insist it's concrete need when it isn't, reject under Gate 7.
 
-Never mutate anything: no `kubectl apply`, no `flux reconcile`, no `task configure`, no `git commit`, no `helm install`, no `gh pr merge`. You do not scaffold Flux manifests — that is `flux-app-author`'s job, *after* you return an Add verdict. You do not pick between SOPS and ESO — that is the `anton-repo-conventions` reference, applied by whoever acts on your recommendation.
+Never mutate anything: no `kubectl apply`, no `flux reconcile`, no `sops -e -i`, no `git commit`, no `helm install`, no `gh pr merge`. You do not scaffold Flux manifests — that is `flux-app-author`'s job, *after* you return an Add verdict. You do not pick between SOPS and ESO — that is the `anton-repo-conventions` reference, applied by whoever acts on your recommendation.
 
 **Every verdict — Add, Defer, or Reject — is recorded by handing off to the `adr` skill (`/adr new`).** That is the only durable home for an intake decision; do not stop at "ADR-ready." After the ADR is written, chain into the appropriate next-step skill below.
 

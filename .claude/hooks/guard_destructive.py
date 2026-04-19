@@ -17,7 +17,6 @@ for `helmfile destroy` and the talos bootstrap footguns.
 
 BLOCKS (exit 2):
   task talos:reset            wipes the cluster
-  task template:reset         deletes rendered configs
   talosctl reset              wipes a Talos node
   talosctl apply-config       blocked unless --mode / -m is present
   kubectl delete {namespace|ns|pv|pvc|crd|customresourcedefinition}
@@ -103,10 +102,6 @@ DESTRUCTIVE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         # `task talos:reset-node`.
         re.compile(_CMD_START + r"task\s+talos:reset\b(?!-)"),
         "task talos:reset wipes the entire cluster. Confirm with the user first.",
-    ),
-    (
-        re.compile(_CMD_START + r"task\s+template:reset\b(?!-)"),
-        "task template:reset deletes all rendered configs. Confirm with the user first.",
     ),
     (
         re.compile(_CMD_START + r"talosctl\b" + _TAIL + r"\breset\b(?!-)"),

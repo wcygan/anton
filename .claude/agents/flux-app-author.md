@@ -23,6 +23,6 @@ Exposure policy:
 - Internal: HTTPRoute attached to `envoy-internal` (k8s_gateway split-horizon DNS).
 - Secondary domains require an explicit `DNSEndpoint` resource — HTTPRoute annotations alone will not work.
 
-Never commit unencrypted `*.sops.*` files. After writing manifests, tell the user what they still need to do (run `task configure` to encrypt, commit, `task reconcile` or wait for Flux) — do not do those steps yourself.
+Never commit unencrypted `*.sops.*` files. After writing manifests, tell the user what they still need to do (run `sops -e -i <file>` to encrypt any `*.sops.*` files, verify with `sops filestatus <file>`, commit, then `task reconcile` or wait for Flux) — do not do those steps yourself.
 
 Before starting, read MEMORY.md for preferred chart sources, common postBuild substitution variables used across this cluster, naming conventions the user has settled on, and traps from past app additions. After finishing, record any new patterns you invented, chart quirks you hit, and values/keys the user prefers.

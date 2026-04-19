@@ -14,7 +14,8 @@ REMINDERS = """## Anton conventions (post-compact reminder)
 
 1. SOPS: never write plaintext to `*.sops.*` files, `age.key`,
    `github-deploy.key`, or `cloudflare-tunnel.json`. Use `sops <file>` to
-   edit encrypted files in place, and run `task configure` before committing.
+   edit encrypted files in place; run `sops -e -i <file>` to encrypt a
+   plaintext `*.sops.*` before committing (verify with `sops filestatus`).
 
 2. Flux 3-file pattern for every app under kubernetes/apps/{ns}/{app}/:
    - ks.yaml
@@ -23,9 +24,8 @@ REMINDERS = """## Anton conventions (post-compact reminder)
    - app/ocirepository.yaml
 
 3. Destructive ops require explicit user approval — never run without it:
-   `task talos:reset`, `task template:reset`, `talosctl reset`,
-   `kubectl delete namespace/pv/pvc`, cluster-wide `flux suspend`,
-   `talosctl apply-config` without `--mode`.
+   `task talos:reset`, `talosctl reset`, `kubectl delete namespace/pv/pvc`,
+   cluster-wide `flux suspend`, `talosctl apply-config` without `--mode`.
 
 4. Always verify `kubectl config current-context` and `talosctl config info`
    match the anton cluster before running any mutating command.

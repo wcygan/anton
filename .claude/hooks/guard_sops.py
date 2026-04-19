@@ -23,9 +23,8 @@ What it blocks (exit 2, reason written to stderr):
 
 What it deliberately ALLOWS (exit 0):
   - Write on a non-existent `*.sops.*` path. This is the intended workflow:
-    author plaintext, then run `task configure` (or `sops -e -i`) to
-    encrypt in place before committing. Blocking new plaintext here would
-    break that flow.
+    author plaintext, then run `sops -e -i <file>` to encrypt in place
+    before committing. Blocking new plaintext here would break that flow.
   - Edit on an existing `*.sops.*` file that has no encryption markers
     (edge case — shouldn't normally exist, but we don't guess).
   - MultiEdit follows the same rules as Edit / Write.
@@ -38,8 +37,8 @@ we would rather let a tool call through than wedge the whole session.
 
 Override: the hook has no env-var bypass. To legitimately modify an
 encrypted file, run `sops <file>` outside of Edit/Write (the Bash tool is
-not intercepted), or run `task configure` to re-encrypt after plaintext
-changes. To disable the hook entirely, remove its entry from
+not intercepted), or decrypt + re-encrypt via `sops -d` / `sops -e -i`.
+To disable the hook entirely, remove its entry from
 `.claude/settings.json` under PreToolUse.
 
 References: `.sops.yaml` (creation_rules); `CLAUDE.md` Secrets Management.

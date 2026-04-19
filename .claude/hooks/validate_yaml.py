@@ -64,7 +64,7 @@ def main() -> int:
     if result.returncode != 0:
         print(
             f"YAML syntax error in {rel}:\n{result.stderr.strip()}\n"
-            f"→ Fix before running `task configure` — Flux will reject this manifest.",
+            f"→ Fix YAML syntax before commit; Flux will reject invalid manifests.",
             file=sys.stderr,
         )
         return 2
