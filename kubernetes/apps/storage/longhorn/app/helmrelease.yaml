@@ -37,9 +37,6 @@ spec:
       defaultReplicaCount: 2
       defaultDataLocality: best-effort
       staleReplicaTimeout: 2880
-      # Routes replica traffic onto the SFP+ mesh via the NAD in longhorn-config/.
-      # Longhorn requires the "<namespace>/<nad>" form, not a bare NAD name.
-      storageNetwork: storage/longhorn-storage
 
     # ServiceMonitor for longhorn-manager metrics (plan 0002 acceptance).
     # Discovered by kps's cluster-wide ServiceMonitor selector.
