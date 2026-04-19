@@ -8,6 +8,8 @@ allowed-tools: Read, Grep, Glob
 
 Reference skill. Read `kubernetes/apps/kube-system/reloader/` first — it is the canonical exemplar for the 3-file pattern.
 
+> **Post-tidy history note.** Older commits, ADRs, and plans reference `task configure` or `task template:*`. Those were archived on 2026-04-19 via `task template:tidy` (commit `50abae87`). `kubernetes/`, `talos/`, and `bootstrap/` are now hand-edited; `*.sops.*` files are round-tripped with `sops <file>` (transparent edit) or `sops -e -i <file>` (encrypt in place). No render step, no `task configure`.
+
 ## Directory layout
 
 ```
@@ -70,11 +72,10 @@ Three source kinds, prefer OCIRepository:
 
 `kubernetes/components/sops/cluster-secrets.sops.yaml` is a SOPS-encrypted Secret named `cluster-secrets` with keys like `SECRET_DOMAIN`, `SECRET_DOMAIN_TWO`, `CLUSTER_POD_CIDR`. Every namespace pulls it in via `components: [../../components/sops]`. Every `ks.yaml` references it via `postBuild.substituteFrom`, so `${SECRET_DOMAIN}` is interpolated at Flux apply time.
 
-Pipeline order:
+Pipeline order (post-tidy — no render step):
 
-1. **Makejinja** renders `{{ var }}` into `${VAR}` at `task configure` time (committed to git)
-2. **Flux postBuild** resolves `${VAR}` at reconcile from `cluster-secrets`
-3. **Helm templating** resolves `{{ .Values.* }}` during install
+1. **Flux postBuild** resolves `${VAR}` at reconcile from `cluster-secrets` (the `${VAR}` is a hand-written literal in the manifest)
+2. **Helm templating** resolves `{{ .Values.* }}` during install
 
 Common failure: a literal `${SECRET_DOMAIN}` appearing in a deployed object → forgot `postBuild.substituteFrom` in `ks.yaml`, or the namespace kustomization is missing `../../components/sops`.
 
@@ -82,7 +83,7 @@ Common failure: a literal `${SECRET_DOMAIN}` appearing in a deployed object → 
 
 | Choose | When | Where it lives |
 | --- | --- | --- |
-| **SOPS Secret** (`*.sops.yaml`) | static, infrastructure-only, rarely rotates, must be in git for bootstrap | `kubernetes/apps/<ns>/<app>/app/secret.sops.yaml`, encrypted by `task configure` |
+| **SOPS Secret** (`*.sops.yaml`) | static, infrastructure-only, rarely rotates, must be in git for bootstrap | `kubernetes/apps/<ns>/<app>/app/secret.sops.yaml`, encrypted in place via `sops -e -i <file>` |
 | **ExternalSecret** (ESO → 1Password, preferred) | rotating credentials, app secrets, large payloads, anything sourced from 1Password | `kubernetes/apps/<ns>/<app>/app/externalsecret.yaml`, no encryption step |
 
 Both share the same Age recipient (defined in `.sops.yaml`); ESO uses the `onepassword-connect` `ClusterSecretStore` against the `anton` 1Password vault. Full templates and field-mapping rules: see `references/secrets.md`.
@@ -95,8 +96,7 @@ Both share the same Age recipient (defined in `.sops.yaml`); ESO uses the `onepa
 - [ ] `ks.yaml` has `postBuild.substituteFrom` if the app uses any `${VAR}`
 - [ ] Namespace kustomization includes `components: [../../components/sops]`
 - [ ] `OCIRepository.metadata.name` matches `HelmRelease.spec.chartRef.name`
-- [ ] `task configure` ran without errors
-- [ ] No plaintext secrets: `find . -name '*.sops.*' -exec sops filestatus {} \;` all encrypted
+- [ ] No plaintext secrets: `find . -name '*.sops.*' -not -path './.private/*' -exec sops filestatus {} \;` all report `encrypted`
 
 ## Related skills
 

@@ -21,7 +21,7 @@ The default for a brand new app secret is **ExternalSecret + 1Password**. Reach 
 
 ## SOPS Secret template
 
-Path: `kubernetes/apps/<ns>/<app>/app/secret.sops.yaml`. Author in plaintext; `task configure` encrypts in place.
+Path: `kubernetes/apps/<ns>/<app>/app/secret.sops.yaml`. Author in plaintext; `sops -e -i <file>` encrypts in place.
 
 ```yaml
 ---
@@ -38,9 +38,7 @@ stringData:
 After editing:
 
 ```sh
-task configure
-# or, manually:
-SOPS_AGE_KEY_FILE=./age.key sops --encrypt --in-place kubernetes/apps/<ns>/<app>/app/secret.sops.yaml
+SOPS_AGE_KEY_FILE=./age.key sops -e -i kubernetes/apps/<ns>/<app>/app/secret.sops.yaml
 ```
 
 Verify encryption status:
@@ -137,4 +135,4 @@ kubectl describe externalsecret -n <ns> my-app-credentials | grep -A5 Status:
 SOPS_AGE_KEY_FILE=./age.key sops kubernetes/components/sops/cluster-secrets.sops.yaml
 ```
 
-After editing, run `task configure` (idempotent — it re-checks SOPS state). Then commit. Apps using new keys will pick them up at the next Flux reconcile.
+`sops <file>` decrypts on open and re-encrypts on save automatically, so no extra step is needed — just save in the editor and commit. Apps using new keys will pick them up at the next Flux reconcile.
