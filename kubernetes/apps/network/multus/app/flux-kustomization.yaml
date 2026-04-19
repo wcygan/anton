@@ -1,0 +1,59 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: multus-upstream
+  namespace: network
+spec:
+  interval: 1h
+  path: ./deployments
+  prune: true
+  wait: true
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: multus-upstream
+    namespace: network
+  targetNamespace: network
+  patches:
+    # Move DaemonSet to the network namespace
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: network
+    # Pin the thick-mode image tag
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/multus-cni
+          value: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick
+    # Move ServiceAccount to the network namespace
+    - target:
+        kind: ServiceAccount
+        name: multus
+      patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: network
+    # Move ConfigMap to the network namespace
+    - target:
+        kind: ConfigMap
+        name: multus-daemon-config
+      patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: network
+    # Re-point ClusterRoleBinding subject to the relocated ServiceAccount
+    - target:
+        kind: ClusterRoleBinding
+        name: multus
+      patch: |-
+        - op: replace
+          path: /subjects/0/namespace
+          value: network
