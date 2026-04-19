@@ -7,9 +7,6 @@
 /github-deploy.key
 /github-deploy.key.pub
 /github-push-token.txt
-# Template config files
-/cluster.yaml
-/nodes.yaml
 # Kubernetes
 kubeconfig
 talosconfig

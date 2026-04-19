@@ -12,6 +12,6 @@ Docusaurus static site that publishes the homelab's long-form notes to `wcygan.g
 
 ## Usage
 
-This directory is self-contained — it does not touch the cluster and is not rendered by `task configure`. Run `bun install` once, then `bun start` for the hot-reload dev server, `bun run build` to validate production output, or `bun run typecheck` before committing config changes. `bun run deploy` pushes to the `gh-pages` branch (use `USE_SSH=true` off-LAN).
+This directory is self-contained — it does not touch the cluster. Run `bun install` once, then `bun start` for the hot-reload dev server, `bun run build` to validate production output, or `bun run typecheck` before committing config changes. `bun run deploy` pushes to the `gh-pages` branch (use `USE_SSH=true` off-LAN).
 
 To add a note, drop a new `.md` file under `docs/docs/notes/` with frontmatter (`sidebar_position`, optional `slug`) — the sidebar picks it up automatically. When linking from a repo CLAUDE.md, use the on-disk path (`docs/docs/notes/<name>.md`) so agents can Read it directly without fetching the rendered site.
