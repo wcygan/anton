@@ -37,6 +37,14 @@ spec:
       defaultReplicaCount: 2
       defaultDataLocality: best-effort
       staleReplicaTimeout: 2880
+      # Routes replica + iSCSI traffic onto the SFP+ mesh via the NAD in
+      # longhorn-config/. Longhorn requires the "<namespace>/<nad>" form,
+      # not a bare NAD name. Host-to-local-pod over this network depends
+      # on the macvlan host-shim provisioned by storage-vxlan (plan 0004
+      # phase 5b); the bare NAD-on-vxlan-parent attempts (macvlan-bridge
+      # in ebe62a5c, ipvlan-L2 in 2a4cd478) both broke iSCSI for the
+      # exact reason that shim solves.
+      storageNetwork: storage/longhorn-storage
 
     # ServiceMonitor for longhorn-manager metrics (plan 0002 acceptance).
     # Discovered by kps's cluster-wide ServiceMonitor selector.
