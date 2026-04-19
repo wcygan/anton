@@ -38,6 +38,21 @@ nodes:
         mtu: 1500
         vip:
           ip: "192.168.1.101"
+      # SFP+ storage mesh (ADR 0009, plan 0004). /31 per DAC, no default route, MTU 9000.
+      # DAC #1 → k8s-2 enp2s0f1np1 (10.100.0.1)
+      - deviceSelector:
+          hardwareAddr: "58:47:ca:79:7c:a0"
+        dhcp: false
+        addresses:
+          - "10.100.0.0/31"
+        mtu: 9000
+      # DAC #2 → k8s-3 enp2s0f1np1 (10.100.0.3)
+      - deviceSelector:
+          hardwareAddr: "58:47:ca:79:7c:a1"
+        dhcp: false
+        addresses:
+          - "10.100.0.2/31"
+        mtu: 9000
     # Longhorn data disks (ADR 0005, plan 0001). Mounted at /var/mnt/<name>.
     userVolumes:
       - name: longhorn-1
@@ -100,6 +115,21 @@ nodes:
         mtu: 1500
         vip:
           ip: "192.168.1.101"
+      # SFP+ storage mesh (ADR 0009, plan 0004). /31 per DAC, no default route, MTU 9000.
+      # DAC #1 → k8s-1 enp2s0f0np0 (10.100.0.0)
+      - deviceSelector:
+          hardwareAddr: "58:47:ca:79:78:b9"
+        dhcp: false
+        addresses:
+          - "10.100.0.1/31"
+        mtu: 9000
+      # DAC #3 → k8s-3 enp2s0f0np0 (10.100.0.5)
+      - deviceSelector:
+          hardwareAddr: "58:47:ca:79:78:b8"
+        dhcp: false
+        addresses:
+          - "10.100.0.4/31"
+        mtu: 9000
     # Longhorn data disks (ADR 0005, plan 0001). Mounted at /var/mnt/<name>.
     # 2nd NVMe reseated 2026-04-18; now symmetric 2+2+2 with k8s-1/k8s-3.
     userVolumes:
@@ -163,6 +193,21 @@ nodes:
         mtu: 1500
         vip:
           ip: "192.168.1.101"
+      # SFP+ storage mesh (ADR 0009, plan 0004). /31 per DAC, no default route, MTU 9000.
+      # DAC #3 → k8s-2 enp2s0f0np0 (10.100.0.4)
+      - deviceSelector:
+          hardwareAddr: "58:47:ca:7a:54:a8"
+        dhcp: false
+        addresses:
+          - "10.100.0.5/31"
+        mtu: 9000
+      # DAC #2 → k8s-1 enp2s0f1np1 (10.100.0.2)
+      - deviceSelector:
+          hardwareAddr: "58:47:ca:7a:54:a9"
+        dhcp: false
+        addresses:
+          - "10.100.0.3/31"
+        mtu: 9000
     # Longhorn data disks
     userVolumes:
       - name: longhorn-1
