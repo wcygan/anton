@@ -2,7 +2,7 @@
 
 High-level "what's running" map for anton. Exact versions live in the manifests and Renovate PRs; this file is for orientation. For the *why* behind each pick, follow the ADR links.
 
-**Last verified:** 2026-04-16
+**Last verified:** 2026-04-19
 
 ## Node layer
 
@@ -47,6 +47,8 @@ SOPS-vs-ESO decision: see `anton-repo-conventions` skill.
 | external-dns (`cloudflare-dns`) | Publishes public records to Cloudflare from HTTPRoutes and `DNSEndpoint` resources. |
 | cloudflared (`cloudflare-tunnel`) | Zero-trust tunnel fronting `envoy-external`; public traffic never hits home WAN directly. |
 | Tailscale operator | Remote kubectl/talosctl access over MagicDNS. Installed out-of-band (not Flux-managed); `tailnet-rbac` binds `wcygan@github` to `cluster-admin`. |
+| Multus + Whereabouts | Secondary CNI for Longhorn replica + iSCSI traffic on the SFP+ mesh. See ADRs 0017 / 0018 and plan 0004. |
+| `storage-vxlan` DaemonSet | Builds the `vxlan-storage` overlay (VNI 100, 10.100.1.0/24) on the SFP+ /31 mesh and adds the `lhnet1-host` macvlan host-shim that lets the host iSCSI initiator reach co-located IM pods. |
 
 Secondary-domain HTTPRoutes require an explicit `DNSEndpoint` — see `kubernetes/apps/network/CLAUDE.md`.
 
@@ -57,19 +59,19 @@ Secondary-domain HTTPRoutes require an explicit `DNSEndpoint` — see `kubernete
 | reloader | Rolls Deployments/StatefulSets when referenced ConfigMaps/Secrets change. |
 | metrics-server | Kubelet metrics for `kubectl top` and HPA. |
 
-## Storage *(planned)*
+## Storage
 
 | Component | Role | Status |
 |---|---|---|
-| Longhorn | Replicated block storage CSI on the 1 TB WD_BLACK NVMes. | Accepted — see [ADR 0005](adrs/0005-adopt-longhorn-as-replicated-block-storage-csi.md). Not yet deployed. |
-| SeaweedFS | S3-compatible object storage. | Accepted — see [ADR 0006](adrs/0006-adopt-seaweedfs-for-object-storage.md). Not yet deployed. |
+| Longhorn | Replicated block storage CSI on the 1 TB WD_BLACK NVMes. | Deployed (chart 1.11.1, plans 0001 + 0004). Replica + iSCSI traffic rides the SFP+ mesh via the `storage/longhorn-storage` NAD on `vxlan-storage` plus the `lhnet1-host` macvlan shim — see plan 0004 Log 2026-04-19. ADR 0005. |
+| SeaweedFS | S3-compatible object storage. | Accepted — see [ADR 0016](adrs/0016-adopt-seaweedfs-today-on-chart-1011-via-embedded-filerspec-s3.md) (supersedes ADR 0006). Deploy pending. |
 | Rook-Ceph | — | Deferred indefinitely, [ADR 0002](adrs/0002-defer-rook-ceph-indefinitely.md). |
 
-## Observability *(planned)*
+## Observability
 
 | Component | Role | Status |
 |---|---|---|
-| kube-prometheus-stack | Metrics (Prometheus + Alertmanager + Grafana). | Accepted — see [ADR 0007](adrs/0007-adopt-kube-prometheus-stack-as-metrics-only-monitoring-pick.md). Not yet deployed (waiting on object storage). |
+| kube-prometheus-stack | Metrics (Prometheus + Alertmanager + Grafana). | Deployed on Longhorn PVCs in the `observability` namespace; ADR 0007. |
 | OpenTelemetry (logs + traces) | Logs and traces pipeline. | Deferred roadmap — see [ADR 0008](adrs/0008-opentelemetry-based-logs-and-traces-roadmap.md). |
 
 ## Tooling (runs on the operator's machine, not the cluster)

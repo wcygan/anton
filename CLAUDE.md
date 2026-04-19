@@ -4,7 +4,7 @@ Guidance for Claude Code when working in the **anton** repo — a Talos Kubernet
 
 ## What this is
 
-Talos Linux cluster managed by GitOps. `kubernetes/`, `talos/`, and `bootstrap/` are hand-edited and committed directly — no render step. The cluster was bootstrapped from onedr0p/cluster-template and tidied on 2026-04-19 (`task template:tidy` moved `templates/`, `makejinja.toml`, `cluster.yaml`, `nodes.yaml`, and `.taskfiles/template/` to `.private/`). Talos configs are rendered by talhelper from `talos/talconfig.yaml` + `talos/talenv.yaml`. Cluster runs Cilium CNI, Flux CD, cert-manager, external-dns, External Secrets Operator, and a Cloudflare tunnel.
+Talos Linux cluster managed by GitOps. `kubernetes/`, `talos/`, and `bootstrap/` are hand-edited and committed directly — no render step. The cluster was bootstrapped from onedr0p/cluster-template and tidied on 2026-04-19 (`task template:tidy` moved `templates/`, `makejinja.toml`, `cluster.yaml`, `nodes.yaml`, and `.taskfiles/template/` to `.private/`). Talos configs are rendered by talhelper from `talos/talconfig.yaml` + `talos/talenv.yaml`. Cluster runs Cilium CNI, Flux CD, cert-manager, external-dns, External Secrets Operator, and a Cloudflare tunnel. Longhorn replicates over a per-node SFP+ mesh via Multus + a `vxlan-storage` overlay DaemonSet — see plan 0004 (closed 2026-04-19) and ADRs 0009 / 0017 / 0018.
 
 ## Directory map
 
@@ -56,7 +56,7 @@ Before writing code from scratch for a common task, check whether a skill or sub
 - `upgrade-auditor` — Renovate PR triage, tiered merge plan, deprecation audit; accrues chart-specific memory
 - `cluster-intake-gatekeeper` — read-only intake gate for new components; runs `cluster-intake` end-to-end, hands every verdict (add/defer/reject) to the `adr` skill, then to `flux-app-author` on accept
 
-Nested CLAUDE.md files for deeper per-subsystem guidance: `kubernetes/apps/CLAUDE.md`, `kubernetes/apps/network/CLAUDE.md`, `bootstrap/CLAUDE.md`, `scripts/CLAUDE.md`, `.taskfiles/CLAUDE.md`.
+Nested CLAUDE.md files for deeper per-subsystem guidance: `kubernetes/apps/CLAUDE.md`, `kubernetes/apps/network/CLAUDE.md`, `kubernetes/apps/storage/CLAUDE.md`, `bootstrap/CLAUDE.md`, `scripts/CLAUDE.md`, `.taskfiles/CLAUDE.md`.
 
 ## Essential commands
 

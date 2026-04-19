@@ -7,7 +7,8 @@ Flux-managed application manifests, grouped one directory per target namespace. 
 - `<namespace>/namespace.yaml` + `<namespace>/kustomization.yaml` — creates the namespace (prune disabled) and lists the namespace's apps plus shared components (e.g. `../../components/sops` for SOPS decryption)
 - `<namespace>/<app>/ks.yaml` — Flux `Kustomization` pointing at `./kubernetes/apps/<namespace>/<app>/app` with `postBuild.substituteFrom: cluster-secrets`
 - `<namespace>/<app>/app/` — `kustomization.yaml` listing the resources, usually `helmrelease.yaml` + `ocirepository.yaml` (preferred) or `helmrelease.yaml` + `helmrepository.yaml` (fallback when upstream does not publish an OCI chart, e.g. Longhorn), plus optional `secret.sops.yaml`, `externalsecret.yaml`, `httproute.yaml`, etc.
-- `network/CLAUDE.md` — deeper guidance on gateways, HTTPRoutes, and the secondary-domain DNSEndpoint requirement
+- `network/CLAUDE.md` — deeper guidance on gateways, HTTPRoutes, the secondary-domain DNSEndpoint requirement, and the Multus + `storage-vxlan` storage-fabric layer
+- `storage/CLAUDE.md` — Longhorn HelmRelease vs `longhorn-config` (NAD) split, the `lhnet1-host` host-shim wiring, and which Longhorn skill owns which task
 
 ## Usage
 

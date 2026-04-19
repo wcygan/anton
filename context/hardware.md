@@ -8,7 +8,7 @@ Node hardware reference for anton's three control planes.
 
 **OS:** Talos Linux (immutable, API-driven; machine configs in `talos/`).
 
-**Last verified:** 2026-04-18
+**Last verified:** 2026-04-19
 
 ## RAM
 
@@ -46,7 +46,7 @@ System disks are pinned by serial in `talos/talconfig.yaml` via `installDiskSele
 
 ## Networking
 
-Each MS-01 ships 2× 2.5 GbE RJ45 + 2× 10G SFP+ (Intel X710-DA2) ports. Today management traffic uses RJ45 port 1 (`enp87s0`) on the `192.168.1.0/24` subnet. SFP+ ports form a dedicated 10 Gbit full-mesh storage overlay per ADR 0009 — **physically cabled and link-up on all 6 ports as of 2026-04-18**; L3 addressing, Multus, and Longhorn `storageNetwork` are pending follow-ups (new plan, TBD).
+Each MS-01 ships 2× 2.5 GbE RJ45 + 2× 10G SFP+ (Intel X710-DA2) ports. Management traffic uses RJ45 port 1 (`enp87s0`) on the `192.168.1.0/24` subnet. SFP+ ports form a dedicated 10 Gbit full-mesh storage fabric per ADR 0009 — physically cabled and link-up on all 6 ports as of 2026-04-18; L3 `/31` addressing, the `vxlan-storage` overlay (10.100.1.0/24, VNI 100), Multus + Whereabouts, and Longhorn `storageNetwork` (`storage/longhorn-storage` NAD on macvlan/bridge over `vxlan-storage`, with the `lhnet1-host` host-shim child for in-host iSCSI) all landed in plan 0004, closed 2026-04-19.
 
 ### Interface map (per node)
 

@@ -1,6 +1,8 @@
 # Longhorn baseline — 2026-04-16
 
-Phase 3 acceptance artifact for [plan 0001 — Adopt Longhorn as replicated block storage](../../../context/plans/0001-adopt-longhorn-block-storage.md). This is the **reference bar** against which the future ADR 0009 SFP+ 10 Gbit cutover must demonstrate improvement.
+Phase 3 acceptance artifact for [plan 0001 — Adopt Longhorn as replicated block storage](../../../context/plans/0001-adopt-longhorn-block-storage.md). This is the **reference bar** against which the ADR 0009 SFP+ 10 Gbit cutover (delivered by [plan 0004](../../../context/plans/0004-sfp-mesh-multus-storagenetwork.md), closed 2026-04-19) demonstrates improvement.
+
+> **Update 2026-04-19 — cutover landed.** Plan 0004 closed today. Longhorn `defaultSettings.storageNetwork: storage/longhorn-storage` is live on a macvlan/bridge NAD over a `vxlan-storage` overlay (VNI 100, 10.100.1.0/24) on the SFP+ /31 mesh, with a `lhnet1-host` macvlan host-shim child that gives the host iSCSI initiator a path to co-located IM pods. Phase 5 throughput burst (10 GiB urandom dd, 2-replica volume): SFP+ ports carried **~790 Mbps TX / ~988 Mbps RX**, 2.5 GbE management interface saw **<2 Mbps** of Longhorn traffic. dd was urandom-bound at **146 MiB/s** (~1.2 Gbps payload, CPU not network) so this isn't the achievable replica ceiling — a non-urandom write source plus the higher-fanout rebuild path are needed to hit the actual SFP+ ceiling. Plan 0004 Log 2026-04-19 has the full forensics, including the two failed NAD plugin attempts (macvlan-on-parent and ipvlan-L2-on-parent) before the host-shim landed.
 
 ## Cluster shape at measurement time
 
@@ -70,6 +72,6 @@ Reads are already NVMe-bound once local, so the cutover won't help seq-read much
 ## Pointers
 
 - Plan: `context/plans/0001-adopt-longhorn-block-storage.md`
-- ADRs: 0005 (Longhorn decision), 0007 (kps install gate — **cleared** by this baseline), 0009 (SFP+ mesh — future)
+- ADRs: 0005 (Longhorn decision), 0007 (kps install gate — **cleared** by this baseline), 0009 (SFP+ mesh — delivered via plan 0004, 2026-04-19), 0017 (Multus adoption), 0018 (install-cni init container)
 - Hardware inventory: `context/hardware.md` (tracks k8s-2 missing 2nd NVMe)
 - Longhorn skill pack: `.claude/skills/longhorn-{volume-ops,node-ops,backup-dr}/`
