@@ -1,0 +1,6 @@
+machine:
+  kernel:
+    modules:
+      # Required for VXLAN overlay (plan 0004 phase 4c, storage-vxlan DaemonSet).
+      # Not compiled into the Talos kernel and not autoloaded; must be declared here.
+      - name: vxlan
