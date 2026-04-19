@@ -100,12 +100,21 @@ nodes:
         mtu: 1500
         vip:
           ip: "192.168.1.101"
-    # Longhorn data disks — k8s-2 has only 1 NVMe (2nd slot empty; see context/hardware.md).
+    # Longhorn data disks (ADR 0005, plan 0001). Mounted at /var/mnt/<name>.
+    # 2nd NVMe reseated 2026-04-18; now symmetric 2+2+2 with k8s-1/k8s-3.
     userVolumes:
       - name: longhorn-1
         provisioning:
           diskSelector:
             match: disk.serial == "251021802221"
+          minSize: 100GB
+          grow: true
+        filesystem:
+          type: ext4
+      - name: longhorn-2
+        provisioning:
+          diskSelector:
+            match: disk.serial == "251021801877"
           minSize: 100GB
           grow: true
         filesystem:
@@ -122,11 +131,18 @@ nodes:
                   - bind
                   - rshared
                   - rw
+              - destination: /var/mnt/longhorn-2
+                type: bind
+                source: /var/mnt/longhorn-2
+                options:
+                  - bind
+                  - rshared
+                  - rw
           nodeLabels:
             node.longhorn.io/create-default-disk: "config"
           nodeAnnotations:
             node.longhorn.io/default-disks-config: |-
-              [{"path":"/var/mnt/longhorn-1","allowScheduling":true}]
+              [{"path":"/var/mnt/longhorn-1","allowScheduling":true},{"path":"/var/mnt/longhorn-2","allowScheduling":true}]
   - hostname: "k8s-3"
     ipAddress: "192.168.1.100"
     installDiskSelector:
