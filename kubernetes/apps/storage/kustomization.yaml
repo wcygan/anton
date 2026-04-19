@@ -10,3 +10,5 @@ resources:
   - ./namespace.yaml
   - ./longhorn/ks.yaml
   - ./longhorn-config/ks.yaml
+  - ./seaweedfs/ks.yaml
+  - ./seaweedfs-config/ks.yaml

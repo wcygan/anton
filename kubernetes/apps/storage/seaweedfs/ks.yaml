@@ -1,0 +1,25 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: seaweedfs
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/storage/seaweedfs/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: storage
+  # `wait: true` so `seaweedfs-config` (via `dependsOn`) waits for the operator
+  # HelmRelease to report Ready=True before the Seaweed CR is applied — that's
+  # the gate we actually want (CRD registered + operator pod Running + webhook
+  # cert generated). Longhorn's sibling uses `wait: false` because
+  # longhorn-config only holds a Multus NAD with no CRD dependency; not a
+  # precedent here.
+  wait: true
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

@@ -1,0 +1,12 @@
+---
+# seaweedfs-operator does not publish an OCI chart — upstream only ships the
+# traditional Helm repo at https://seaweedfs.github.io/seaweedfs-operator/helm.
+# Deviation from the anton convention of OCIRepository is upstream-forced;
+# revisit if seaweedfs-operator adds OCI publishing.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: seaweedfs-operator
+spec:
+  interval: 1h
+  url: https://seaweedfs.github.io/seaweedfs-operator/helm

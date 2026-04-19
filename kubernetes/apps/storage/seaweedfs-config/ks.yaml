@@ -1,0 +1,25 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: seaweedfs-config
+spec:
+  interval: 1h
+  # Gates the Seaweed CR behind the operator HelmRelease going Ready:
+  # CRD present, operator pod Running, webhook cert generated. `wait: true`
+  # on this edge means Flux blocks seaweedfs-config until seaweedfs reports
+  # Ready=True; without that, Flux would race the CRD install and fail.
+  dependsOn:
+    - name: seaweedfs
+  path: ./kubernetes/apps/storage/seaweedfs-config/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: storage
+  wait: true
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

@@ -1,0 +1,39 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: seaweedfs-operator-manager-role-supplement
+  labels:
+    app.kubernetes.io/name: seaweedfs-operator
+    app.kubernetes.io/component: rbac-supplement
+  annotations:
+    # Supplements upstream chart 0.1.14's seaweedfs-operator-manager-role, which
+    # is missing apps/deployments (introduced by controller PR #200 / app 1.0.12
+    # but never hand-synced into deploy/helm/templates/rbac/role.yaml) and gates
+    # monitoring.coreos.com/servicemonitors behind a values flag even though the
+    # controller reflector watches SMs unconditionally. Remove when chart >= 0.1.15
+    # with deploy/helm/templates/rbac/role.yaml regenerated from config/rbac/.
+    anton.cluster/upstream-bug: "seaweedfs/seaweedfs-operator chart 0.1.14 RBAC drift"
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: seaweedfs-operator-manager-role-supplement
+  labels:
+    app.kubernetes.io/name: seaweedfs-operator
+    app.kubernetes.io/component: rbac-supplement
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: seaweedfs-operator-manager-role-supplement
+subjects:
+  - kind: ServiceAccount
+    name: seaweedfs-operator
+    namespace: storage
