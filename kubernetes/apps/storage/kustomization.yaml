@@ -9,3 +9,4 @@ components:
 resources:
   - ./namespace.yaml
   - ./longhorn/ks.yaml
+  - ./longhorn-config/ks.yaml

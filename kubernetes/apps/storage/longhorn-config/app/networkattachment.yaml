@@ -1,0 +1,29 @@
+---
+# macvlan on top of the `vxlan-storage` overlay (provisioned by the
+# storage-vxlan DaemonSet in the network namespace). The overlay is what
+# gives every node a shared 10.100.1.0/24 segment on top of three point-
+# to-point SFP+ /31 DACs.
+#
+# MTU 8950 = 9000 underlay − (VXLAN 8 + UDP 8 + IPv4 20 + Ethernet 14).
+#
+# 10.100.1.0/28 is excluded because .1/.2/.3 are the per-node overlay
+# VTEP addresses owned by the DaemonSet; pods draw .16-.254.
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: longhorn-storage
+  namespace: storage
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "vxlan-storage",
+      "mode": "bridge",
+      "mtu": 8950,
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.100.1.0/24",
+        "exclude": ["10.100.1.0/28"]
+      }
+    }
