@@ -85,11 +85,14 @@ spec:
               ip link set vxlan-storage mtu 8950 up
               ip addr replace "$${NODE_OVERLAY_IP}/24" dev vxlan-storage
 
-              # Head-end replication to both peers. First entry uses `replace`
-              # to clear any stale default fdb row; second uses `append` so it
-              # does not clobber the first.
-              bridge fdb replace 00:00:00:00:00:00 dev vxlan-storage dst "$${PEER1_VTEP}" self
-              bridge fdb append  00:00:00:00:00:00 dev vxlan-storage dst "$${PEER2_VTEP}" self
+              # Head-end replication to both peers. Kernel 6.18 rejects
+              # `bridge fdb replace` on non-unicast entries ("Cannot replace
+              # non-unicast fdb entries"), so idempotency comes from `del
+              # ... || true` followed by `append`.
+              bridge fdb del    00:00:00:00:00:00 dev vxlan-storage dst "$${PEER1_VTEP}" self 2>/dev/null || true
+              bridge fdb del    00:00:00:00:00:00 dev vxlan-storage dst "$${PEER2_VTEP}" self 2>/dev/null || true
+              bridge fdb append 00:00:00:00:00:00 dev vxlan-storage dst "$${PEER1_VTEP}" self
+              bridge fdb append 00:00:00:00:00:00 dev vxlan-storage dst "$${PEER2_VTEP}" self
 
               echo "[storage-vxlan] up on $${NODE_NAME} ($${NODE_OVERLAY_IP})"
               exec sleep infinity
