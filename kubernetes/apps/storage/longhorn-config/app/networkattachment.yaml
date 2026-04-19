@@ -1,8 +1,14 @@
 ---
-# macvlan on top of the `vxlan-storage` overlay (provisioned by the
-# storage-vxlan DaemonSet in the network namespace). The overlay is what
+# ipvlan L2 on top of the `vxlan-storage` overlay (provisioned by the
+# storage-vxlan DaemonSet in the host network namespace). The overlay
 # gives every node a shared 10.100.1.0/24 segment on top of three point-
 # to-point SFP+ /31 DACs.
+#
+# ipvlan L2 (not macvlan): Longhorn's v1 engine publishes its iSCSI
+# target inside the IM pod on lhnet1, but the kernel iscsiadm initiator
+# runs in the host netns. macvlan-bridge intentionally isolates host↔
+# same-host-pod traffic; ipvlan L2 does not, so the host initiator can
+# reach a local IM pod's portal. See plan 0004 Log 2026-04-19.
 #
 # MTU 8950 = 9000 underlay − (VXLAN 8 + UDP 8 + IPv4 20 + Ethernet 14).
 #
@@ -17,9 +23,9 @@ spec:
   config: |
     {
       "cniVersion": "0.3.1",
-      "type": "macvlan",
+      "type": "ipvlan",
       "master": "vxlan-storage",
-      "mode": "bridge",
+      "mode": "l2",
       "mtu": 8950,
       "ipam": {
         "type": "whereabouts",
