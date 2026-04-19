@@ -3,3 +3,4 @@
 - [No root apps kustomization](reference_no_root_apps_kustomization.md) — `kubernetes/apps/` has no root kustomization.yaml; Flux discovers namespaces by recursion. Do not create one when adding a namespace
 - [wait: false is the default](feedback_wait_false_default.md) — anton ks.yaml files default to `wait: false`; use `wait: true` only with named downstream consumers, and leave a comment justifying the deviation
 - [kps values gotchas](reference_kps_values_gotchas.md) — must-set/must-not-set value overrides for kube-prometheus-stack on Talos + Cilium + Longhorn clusters (CRD lifecycle, disabled scrape targets, selector nil-handling, GitOps hardening)
+- [External GitRepository + inner Flux Kustomization](reference_external_gitrepo_patches_pattern.md) — installing an upstream YAML manifest (no Helm chart) via Flux using spec.patches for namespace/image pins; exemplar: network/multus
