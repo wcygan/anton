@@ -1,5 +1,5 @@
 ---
-status: Blocked
+status: In-progress
 opened: 2026-04-18
 closed: null
 affects: networking, storage
@@ -18,7 +18,7 @@ Longhorn replica traffic flows end-to-end over the three DAC links — not the 2
 
 ## Acceptance criteria
 
-- [ ] Multus thick-plugin mode deployed under `kubernetes/apps/network/multus/` via the 3-file Flux pattern; Flux `Kustomization` reports `Ready` and the Multus DaemonSet has 3/3 pods Running.
+- [x] Multus thick-plugin mode deployed under `kubernetes/apps/network/multus/` via the 3-file Flux pattern; Flux `Kustomization` reports `Ready` and the Multus DaemonSet has 3/3 pods Running.
 - [ ] All three nodes have `/31` static addresses configured on their SFP+ interfaces via Talos `networkInterfaces`, each node reaches every mesh peer over that address, and `talosctl get links` shows `LINK STATE=true` on all 6 ports.
 - [ ] `iperf3 -P 4` between any two mesh peers (jumbo frames enabled, MTU 9000) achieves **≥9 Gbit/s** sustained.
 - [ ] A `NetworkAttachmentDefinition` named `longhorn-storage` exists in the `longhorn-system` namespace and Longhorn's `defaultSettings.storageNetwork` references it.
@@ -28,10 +28,10 @@ Longhorn replica traffic flows end-to-end over the three DAC links — not the 2
 
 ### Phase 1 — Multus install (depends on ADR 0017)
 
-- [ ] Use `flux-app-author` / `add-flux-app` to scaffold `kubernetes/apps/network/multus/` (3-file pattern: `GitRepository` pointing at `k8snetworkplumbingwg/multus-cni` pinned to a thick-mode release tag, Flux `Kustomization`, and an `app/` overlay rendering `deployments/multus-daemonset-thick.yml`).
-- [ ] Apply kustomize patches: override namespace to `network` on the DaemonSet, ServiceAccount, ConfigMap, and ClusterRoleBinding subject; pin the image to the matching `ghcr.io/k8snetworkplumbingwg/multus-cni:<tag>-thick`. **Note:** thick-mode ships `multus-daemon-config` with `"multusConfigFile": "auto"`, which auto-discovers Cilium via `/host/etc/cni/net.d`; no explicit `clusterNetwork: cilium` patch is needed (that was a thin-mode concept).
-- [ ] Commit, `task reconcile`, verify the Flux `Kustomization` reports `Ready` and the Multus DaemonSet has 3/3 pods Running.
-- [ ] Confirm no Cilium regression — `cilium status` stays green and existing pod networking is unaffected.
+- [x] Use `flux-app-author` / `add-flux-app` to scaffold `kubernetes/apps/network/multus/` (3-file pattern: `GitRepository` pointing at `k8snetworkplumbingwg/multus-cni` pinned to a thick-mode release tag, Flux `Kustomization`, and an `app/` overlay rendering `deployments/multus-daemonset-thick.yml`).
+- [x] Apply kustomize patches: override namespace to `network` on the DaemonSet, ServiceAccount, ConfigMap, and ClusterRoleBinding subject; pin the image to the matching `ghcr.io/k8snetworkplumbingwg/multus-cni:<tag>-thick`. **Note:** thick-mode ships `multus-daemon-config` with `"multusConfigFile": "auto"`, which auto-discovers Cilium via `/host/etc/cni/net.d`; no explicit `clusterNetwork: cilium` patch is needed (that was a thin-mode concept).
+- [x] Commit, `task reconcile`, verify the Flux `Kustomization` reports `Ready` and the Multus DaemonSet has 3/3 pods Running.
+- [x] Confirm no Cilium regression — `cilium status` stays green and existing pod networking is unaffected.
 
 ### Phase 2 — Talos `/31` rolling config
 
@@ -79,6 +79,7 @@ The per-node `/31` assignments (from the DAC topology discovered 2026-04-18, rec
 - 2026-04-18: ADR 0017's body still reads "installed via its official Helm chart" and a follow-up bullet says "OCI HelmRepository + thick-mode values". Those sentences pre-date this research and are factually incorrect. The ADR's **decision** (adopt Multus thick-plugin chained to Cilium, Longhorn sole consumer, under `kubernetes/apps/network/multus/`) is unchanged, so ADR 0017 is not being superseded. This Log entry is the durable correction pointer per the ADR-vs-plan split: ADRs record *why*, plans record *how / what's next*.
 - 2026-04-18: Phase 1 scaffolded via `flux-app-author`. Files: `kubernetes/apps/network/multus/{ks.yaml,app/kustomization.yaml,app/gitrepository.yaml,app/flux-kustomization.yaml}`. `GitRepository` pinned to `v4.2.4` with Renovate `github-releases` datasource; image pinned to `ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick` (HTTP 200 verified). Inner Flux `Kustomization` `multus-upstream` renders `deployments/multus-daemonset-thick.yml` with four namespace-move patches (DS `kube-multus-ds`, SA `multus`, CM `multus-daemon-config`, CRB `multus` subject[0]). Dual-Kustomization shape is intentional — Flux `Kustomization.spec.patches` is the only way to patch external `GitRepository` content; plain kustomize cannot consume a Flux source. Upstream thick-mode `multus-daemon-config` uses `"multusConfigFile": "auto"` (verified against the v4.2.4 YAML), so the originally planned `clusterNetwork: cilium` patch was dropped as a no-op; auto-discovery picks up Cilium's CNI config at `/host/etc/cni/net.d`. Phase 1 task 2 wording updated to match.
 - 2026-04-18: **Blocked.** Running `task configure` after scaffolding surfaced ~34 files of template drift — the Multus registration added to `kubernetes/apps/network/kustomization.yaml` was silently stripped by the template render, and unrelated hand-edits (Cilium `devices: enp+`, resource limits, Hubble relay config, envoy-gateway, cloudflare-tunnel, spegel, talconfig truncation, a re-materialized `echo-two/`) reverted to their template-rendered shape. Root cause: anton was bootstrapped from the onedr0p cluster-template but `task template:tidy` was never run, so `templates/` remains authoritative and any direct edit under `kubernetes/` that isn't mirrored back into `templates/` is overwritten on the next `task configure`. Scaffolding further Flux apps through the current toolchain (which mandates `task configure` per root CLAUDE.md) will keep clobbering hand-edits. **Unblock condition:** (1) run `task template:tidy` to archive the template machinery to `.private/`; (2) update root CLAUDE.md and `.taskfiles/CLAUDE.md` to drop the "always run `task configure` before commit" rule in favour of direct `kubernetes/` edits; (3) re-scaffold Phase 1 Multus files fresh. Until then, pausing all Phase 1–5 execution. Multus design decisions above remain valid and do not need re-deciding post-tidy.
+- 2026-04-19: **Unblocked → In-progress.** `task template:tidy` landed, root / .taskfiles / agents / skills / hooks were scrubbed of stale `task configure` and `task template:reset` references, and SOPS round-trip was re-verified. Phase 1 re-scaffolded fresh via `flux-app-author` and committed as `c4d4c937` (`feat(network): scaffold Multus v4.2.4 thick-plugin`). Files: `kubernetes/apps/network/multus/{ks.yaml,app/kustomization.yaml,app/gitrepository.yaml,app/flux-kustomization.yaml}` + registration line in `kubernetes/apps/network/kustomization.yaml`. Post-push `task reconcile` applied revision `c4d4c937`; `flux get ks -n network` reports `multus` Ready=True and `multus-upstream` Ready=True at `v4.2.4@sha1:705a59ea`; `kubectl -n network get ds kube-multus-ds` shows 3/3 Running on k8s-1/2/3; `cilium status` green, 64/64 pods managed by Cilium — no CNI regression. Phase 1 acceptance criterion met. Next: Phase 2 Talos `/31` rolling config.
 
 ## References
 
