@@ -1,19 +1,24 @@
 ---
-# ipvlan L2 on top of the `vxlan-storage` overlay (provisioned by the
-# storage-vxlan DaemonSet in the host network namespace). The overlay
+# macvlan-bridge on top of the `vxlan-storage` overlay (provisioned by
+# the storage-vxlan DaemonSet in the host network namespace). The overlay
 # gives every node a shared 10.100.1.0/24 segment on top of three point-
 # to-point SFP+ /31 DACs.
 #
-# ipvlan L2 (not macvlan): Longhorn's v1 engine publishes its iSCSI
-# target inside the IM pod on lhnet1, but the kernel iscsiadm initiator
-# runs in the host netns. macvlan-bridge intentionally isolates host↔
-# same-host-pod traffic; ipvlan L2 does not, so the host initiator can
-# reach a local IM pod's portal. See plan 0004 Log 2026-04-19.
+# Host-to-local-pod path: macvlan-bridge isolates the parent device from
+# its children, but bridge mode allows children to talk to each other
+# without traversing the parent's egress (which, for a vxlan parent,
+# would encapsulate to remote VTEPs and never reach a local child). The
+# storage-vxlan DaemonSet creates a peer child `lhnet1-host` and moves
+# the per-node 10.100.1.X address onto it, so the host's iSCSI initiator
+# is itself a macvlan child and can reach co-located IM pods directly.
+# See plan 0004 Phase 5b. ipvlan L2 was tried first and failed for the
+# same reason macvlan-on-the-parent did: tcpdump showed the host's ARP
+# being encapsulated into the vxlan tunnel rather than delivered locally.
 #
 # MTU 8950 = 9000 underlay − (VXLAN 8 + UDP 8 + IPv4 20 + Ethernet 14).
 #
 # 10.100.1.0/28 is excluded because .1/.2/.3 are the per-node overlay
-# VTEP addresses owned by the DaemonSet; pods draw .16-.254.
+# host-shim addresses owned by the DaemonSet; pods draw .16-.254.
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
@@ -23,9 +28,9 @@ spec:
   config: |
     {
       "cniVersion": "0.3.1",
-      "type": "ipvlan",
+      "type": "macvlan",
       "master": "vxlan-storage",
-      "mode": "l2",
+      "mode": "bridge",
       "mtu": 8950,
       "ipam": {
         "type": "whereabouts",

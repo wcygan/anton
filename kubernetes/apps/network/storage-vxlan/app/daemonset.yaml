@@ -83,7 +83,26 @@ spec:
               ip link show vxlan-storage >/dev/null 2>&1 || \
                 ip link add vxlan-storage type vxlan id 100 local "$${NODE_VTEP}" dstport 4789 nolearning
               ip link set vxlan-storage mtu 8950 up
-              ip addr replace "$${NODE_OVERLAY_IP}/24" dev vxlan-storage
+
+              # Phase 5b: macvlan host-shim child of vxlan-storage. The host's
+              # L3 endpoint for the storage segment moves OFF the bare vxlan
+              # parent and ONTO this shim. Reason: the Longhorn iSCSI initiator
+              # runs in the host netns and must reach IM pods that are also
+              # macvlan children of vxlan-storage. macvlan-bridge isolates
+              # parent<->child but ALLOWS child<->child without traversing the
+              # parent's egress (which, for vxlan, would encapsulate to remote
+              # VTEPs and never reach a local pod). Both NAD-on-parent attempts
+              # (macvlan and ipvlan-L2) failed exactly this gate; see plan 0004
+              # 2026-04-19 forensics.
+              ip link show lhnet1-host >/dev/null 2>&1 || \
+                ip link add lhnet1-host link vxlan-storage type macvlan mode bridge
+              ip link set lhnet1-host mtu 8950 up
+
+              # Migrate the L3 address from the parent to the shim. The `del ||
+              # true` covers both the legacy state (addr on vxlan-storage) and
+              # steady-state restarts (already migrated, del fails harmlessly).
+              ip addr del "$${NODE_OVERLAY_IP}/24" dev vxlan-storage 2>/dev/null || true
+              ip addr replace "$${NODE_OVERLAY_IP}/24" dev lhnet1-host
 
               # Head-end replication to both peers. Kernel 6.18 rejects
               # `bridge fdb replace` on non-unicast entries ("Cannot replace
