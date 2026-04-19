@@ -5,3 +5,4 @@
 - [kps values gotchas](reference_kps_values_gotchas.md) — must-set/must-not-set value overrides for kube-prometheus-stack on Talos + Cilium + Longhorn clusters (CRD lifecycle, disabled scrape targets, selector nil-handling, GitOps hardening)
 - [External GitRepository + inner Flux Kustomization](reference_external_gitrepo_patches_pattern.md) — installing an upstream YAML manifest (no Helm chart) via Flux using spec.patches for namespace/image pins; exemplar: network/multus
 - [whereabouts upstream layout](reference_whereabouts_upstream_layout.md) — doc/crds ships extra node-slice files (ignore-filter), and daemonset-install.yaml uses :latest image (patch-pin required)
+- [Raw-resource Flux app with per-node DaemonSet](reference_raw_daemonset_pattern.md) — SA+ConfigMap+DS only (no chart, no GitRepository); per-node config keyed by NODE_NAME downward API
