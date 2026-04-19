@@ -57,3 +57,27 @@ spec:
         - op: replace
           path: /subjects/0/namespace
           value: network
+    # Install reference CNI plugins (macvlan, ipvlan, vlan, tuning, …) into
+    # /opt/cni/bin on each node. Talos v1.12.6 ships only the "essential"
+    # subset (bridge/firewall/host-local/loopback/portmap); macvlan and the
+    # rest come from this init container. Per ADR 0018 and
+    # https://docs.siderolabs.com/kubernetes-guides/cni/multus. Reuses the
+    # upstream DS's existing `cnibin` hostPath volume — same one the
+    # `install-multus-binary` init container uses.
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        - op: add
+          path: /spec/template/spec/initContainers/-
+          value:
+            name: install-cni
+            # renovate: datasource=docker depName=ghcr.io/siderolabs/install-cni
+            image: ghcr.io/siderolabs/install-cni:v1.7.0
+            command: ["/install-cni.sh"]
+            securityContext:
+              privileged: true
+            volumeMounts:
+              - name: cnibin
+                mountPath: /host/opt/cni/bin
+                mountPropagation: Bidirectional
