@@ -60,9 +60,14 @@ The SFP+ interface names follow the kernel `enp<bus>s<slot>f<func>np<port>` conv
 
 ### SFP+ full-mesh topology (ADR 0009)
 
-Three Cable Matters 10GBASE-CU 1m passive DAC cables form a full mesh:
-- k8s-1 ↔ k8s-2
-- k8s-1 ↔ k8s-3
-- k8s-2 ↔ k8s-3
+Three Cable Matters 10GBASE-CU 1m passive DAC cables form a full mesh. Per-port mapping (discovered 2026-04-18 via ARP-probe + node-exporter RX counter deltas — see Log):
 
-All six SFP+ ports show `OPER STATE=up, LINK STATE=true` in `talosctl get links`. Per-cable port-to-port mapping (which `enp2s0fN` on one node terminates on which `enp2s0fN` on the other) was not recorded during cabling on 2026-04-18 — discover via LLDP or iterative ping when the ADR 0009 follow-up plan assigns the three `/31` subnets.
+| DAC | A side | A MAC | B side | B MAC |
+|---|---|---|---|---|
+| DAC #1 | k8s-1 `enp2s0f0np0` | `58:47:ca:79:7c:a0` | k8s-2 `enp2s0f1np1` | `58:47:ca:79:78:b9` |
+| DAC #2 | k8s-1 `enp2s0f1np1` | `58:47:ca:79:7c:a1` | k8s-3 `enp2s0f1np1` | `58:47:ca:7a:54:a9` |
+| DAC #3 | k8s-2 `enp2s0f0np0` | `58:47:ca:79:78:b8` | k8s-3 `enp2s0f0np0` | `58:47:ca:7a:54:a8` |
+
+All six SFP+ ports show `OPER STATE=up, LINK STATE=true` in `talosctl get links`. The asymmetry of DAC #1 (f0↔f1) vs DAC #2/#3 (f1↔f1, f0↔f0) reflects how the cables were physically routed during 2026-04-18 cabling — it is load-bearing for the plan 0004 `/31` assignments, since each `/31` pairs two specific MACs on two specific interfaces.
+
+**Discovery method (for future reuse):** Talos v1.12 does not ship lldpd and has no LLDP resource. Mapping was derived without cable pulls or temporary IPs by: (1) deploying a `hostNetwork: true` netshoot pod on a candidate node, (2) running `arping -D -c <N> -I <iface> <unused-ip>` to emit raw ARP probes out one specific SFP+ port, (3) observing which remote node's `node_network_receive_packets_total{device="enp2s0f.np."}` counter incremented by `<N>` via the node-exporter/kube-prometheus-stack pipeline. Rinse and repeat for each probe source. Third DAC is forced by elimination (6 ports − 4 mapped = 2 remaining, must be cabled together since all 6 ports are LINK UP).
