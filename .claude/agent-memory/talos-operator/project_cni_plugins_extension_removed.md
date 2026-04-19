@@ -1,0 +1,13 @@
+---
+name: siderolabs/cni-plugins removed from Talos 1.12 factory catalog
+description: The Talos system extension that previously shipped reference CNI plugins (macvlan/ipvlan/vlan/tuning) is absent from the v1.12.6 extensions index. Rolling a schematic that references it fails at image-pull time with factory 400.
+type: project
+---
+
+Plan 0004 Phase 4d assumed the factory extension `siderolabs/cni-plugins` was installable on Talos v1.12.6 to drop `macvlan` into `/opt/cni/bin`. Attempted 2026-04-19 and failed: factory accepted the POST (schematic id `6687487cbac4a3359ffd066996be18a5f589e1d3d857ee7053e663840448bbeb` minted clean), but HEAD to `factory.talos.dev/v2/installer/<sid>/manifests/v1.12.6` returned HTTP 400 with body `error enhancing profile from schematic: official extension "siderolabs/cni-plugins" is not available for Talos version v1.12.6`. Confirmed via the factory extension index at `https://factory.talos.dev/version/v1.12.6/extensions/official` (80+ entries, zero match on `cni`). Confirmed via upstream: `github.com/siderolabs/extensions` release-1.12 branch has no `network/cni-plugins` directory.
+
+**Why:** reference CNI plugin set was previously packaged as a system extension (era: Talos 1.5/1.6); plan author carried forward that assumption. Catalog has since been trimmed — reference plugins removed from the extension list.
+
+**How to apply:** Before committing to an "install a Talos system extension" path for a missing CNI binary, verify the extension name against `https://factory.talos.dev/version/<talosVersion>/extensions/official` OR the `siderolabs/extensions` repo on the matching `release-<minor>` branch. Do not trust plan-layer text alone; the factory will happily mint a schematic with an invalid name and only surface the error at pull time. The sibling-DaemonSet "install binary into /opt/cni/bin" fallback (Option B in the plan) is the working alternative — k8snetworkplumbingwg has `multus-cni`'s `cni-install` DS pattern, and the containernetworking/plugins release tarball drops a ready-to-go macvlan at `/opt/cni/bin`.
+
+**Recovery cost on node-ops failure:** the failed upgrade wrote the bad installer URL into machine config at `STATE` (via the earlier `apply-node MODE=auto`), but never rebooted because the image pull kept failing with 400. Recovered with a second no-reboot `apply-config` carrying the original installer URL; cluster was never unhealthy and no node rebooted. Lesson: `apply-node MODE=auto` is not a no-op for install image changes even when it says "Applied configuration without a reboot" — it persists the new reference and the node will attempt to use it on the next reboot trigger.
