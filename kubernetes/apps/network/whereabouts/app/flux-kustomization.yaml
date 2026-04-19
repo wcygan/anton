@@ -1,0 +1,59 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: whereabouts-upstream
+  namespace: network
+spec:
+  interval: 1h
+  path: ./doc/crds
+  prune: true
+  wait: true
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: whereabouts-upstream
+    namespace: network
+  targetNamespace: network
+  patches:
+    # Move ServiceAccount to the network namespace
+    - target:
+        kind: ServiceAccount
+        name: whereabouts
+      patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: network
+    # Move ConfigMap to the network namespace
+    - target:
+        kind: ConfigMap
+        name: whereabouts-config
+      patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: network
+    # Move DaemonSet to the network namespace
+    - target:
+        kind: DaemonSet
+        name: whereabouts
+      patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: network
+    # Pin the DaemonSet image tag (upstream ships a floating :latest)
+    - target:
+        kind: DaemonSet
+        name: whereabouts
+      patch: |-
+        - op: replace
+          path: /spec/template/spec/containers/0/image
+          # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/whereabouts
+          value: ghcr.io/k8snetworkplumbingwg/whereabouts:v0.9.3
+    # Re-point ClusterRoleBinding subject to the relocated ServiceAccount
+    - target:
+        kind: ClusterRoleBinding
+        name: whereabouts
+      patch: |-
+        - op: replace
+          path: /subjects/0/namespace
+          value: network

@@ -1,0 +1,17 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: whereabouts-upstream
+  namespace: network
+spec:
+  interval: 24h
+  url: https://github.com/k8snetworkplumbingwg/whereabouts
+  ref:
+    # renovate: datasource=github-releases depName=k8snetworkplumbingwg/whereabouts
+    tag: v0.9.3
+  ignore: |
+    /*
+    !/doc/crds/daemonset-install.yaml
+    !/doc/crds/whereabouts.cni.cncf.io_ippools.yaml
+    !/doc/crds/whereabouts.cni.cncf.io_overlappingrangeipreservations.yaml
