@@ -61,34 +61,37 @@ spec:
           command:
             - /bin/bash
             - -c
+          # NOTE: `$$` escapes Flux postBuild substitution so the literal `$`
+          # reaches the container. Flux's envsubst would otherwise strip every
+          # `${VAR}` that is not defined in cluster-secrets.
           args:
             - |
               set -euo pipefail
 
-              NODEMAP="/etc/vxlan-nodemap/${NODE_NAME}.env"
-              if [[ ! -r "${NODEMAP}" ]]; then
-                echo "[storage-vxlan] FATAL: no nodemap entry for ${NODE_NAME} at ${NODEMAP}" >&2
+              NODEMAP="/etc/vxlan-nodemap/$${NODE_NAME}.env"
+              if [[ ! -r "$${NODEMAP}" ]]; then
+                echo "[storage-vxlan] FATAL: no nodemap entry for $${NODE_NAME} at $${NODEMAP}" >&2
                 exit 1
               fi
               # shellcheck disable=SC1090
-              source "${NODEMAP}"
+              source "$${NODEMAP}"
 
-              : "${NODE_VTEP:?}" "${NODE_OVERLAY_IP:?}" "${PEER1_VTEP:?}" "${PEER2_VTEP:?}"
+              : "$${NODE_VTEP:?}" "$${NODE_OVERLAY_IP:?}" "$${PEER1_VTEP:?}" "$${PEER2_VTEP:?}"
 
               # Idempotent: create the VXLAN iface only if absent; always refresh
               # MTU / addr / fdb so pod restarts reconcile drift.
               ip link show vxlan-storage >/dev/null 2>&1 || \
-                ip link add vxlan-storage type vxlan id 100 local "${NODE_VTEP}" dstport 4789 nolearning
+                ip link add vxlan-storage type vxlan id 100 local "$${NODE_VTEP}" dstport 4789 nolearning
               ip link set vxlan-storage mtu 8950 up
-              ip addr replace "${NODE_OVERLAY_IP}/24" dev vxlan-storage
+              ip addr replace "$${NODE_OVERLAY_IP}/24" dev vxlan-storage
 
               # Head-end replication to both peers. First entry uses `replace`
               # to clear any stale default fdb row; second uses `append` so it
               # does not clobber the first.
-              bridge fdb replace 00:00:00:00:00:00 dev vxlan-storage dst "${PEER1_VTEP}" self
-              bridge fdb append  00:00:00:00:00:00 dev vxlan-storage dst "${PEER2_VTEP}" self
+              bridge fdb replace 00:00:00:00:00:00 dev vxlan-storage dst "$${PEER1_VTEP}" self
+              bridge fdb append  00:00:00:00:00:00 dev vxlan-storage dst "$${PEER2_VTEP}" self
 
-              echo "[storage-vxlan] up on ${NODE_NAME} (${NODE_OVERLAY_IP})"
+              echo "[storage-vxlan] up on $${NODE_NAME} ($${NODE_OVERLAY_IP})"
               exec sleep infinity
       volumes:
         - name: nodemap
