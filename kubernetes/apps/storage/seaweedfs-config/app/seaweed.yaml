@@ -16,20 +16,21 @@ spec:
       storage: 100Gi
     storageClassName: longhorn      # default Longhorn SC; no NAD attachment here
     # Phase 1 scratch shakeout showed `replicas: 3` alone does not spread
-    # across nodes (all three landed on k8s-2). Force one-per-node via an
-    # explicit topology constraint. Selector labels verified against operator
-    # source at tag 1.0.12 (internal/controller/controller_volume.go
-    # labelsForVolumeServer): app.kubernetes.io/name=seaweedfs,
-    # app.kubernetes.io/component=volume, app.kubernetes.io/instance=<cr-name>.
-    topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: DoNotSchedule
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/name: seaweedfs
-            app.kubernetes.io/component: volume
-            app.kubernetes.io/instance: seaweedfs
+    # across nodes (all three landed on k8s-2). Chart 0.1.14's Seaweed CRD
+    # does NOT expose `topologySpreadConstraints` on any component, but does
+    # expose `affinity` — use podAntiAffinity with the operator's pod labels
+    # to force one-per-node. Labels verified against operator source at tag
+    # 1.0.12 (internal/controller/controller_volume.go::labelsForVolumeServer):
+    # app.kubernetes.io/name=seaweedfs, component=volume, instance=<cr-name>.
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: seaweedfs
+                app.kubernetes.io/component: volume
+                app.kubernetes.io/instance: seaweedfs
   filer:
     replicas: 2                     # Phase 1 verdict: 2 holds under pod-kill
   s3:
