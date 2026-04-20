@@ -497,6 +497,55 @@ Design resolved in Log 2026-04-19 (Phase 2 pre-draft + open-questions-resolved e
     ```
 
     Label selector values inferred from operator source (`internal/controller/label/` and component naming conventions); `flux-app-author` should verify against live pods in scratch before committing if the plan still has scratch up, or against the production install's first reconcile otherwise.
+- 2026-04-19 (Phase 2 corrections — schema reality + verified pod labels): Two inaccuracies in the earlier Phase 2 entries got caught during scaffolding and first Flux reconcile.
+
+    **(1) Verified volume-pod labels from upstream source.** Before committing, WebFetched `seaweedfs-operator/1.0.12/internal/controller/controller_volume.go`. The canonical `labelsForVolumeServer(name)` produces:
+
+    ```go
+    {
+      label.ManagedByLabelKey: "seaweedfs-operator",    // app.kubernetes.io/managed-by
+      label.NameLabelKey:      "seaweedfs",             // app.kubernetes.io/name
+      label.ComponentLabelKey: "volume",                // app.kubernetes.io/component
+      label.InstanceLabelKey:  name,                    // app.kubernetes.io/instance (= Seaweed CR name)
+    }
+    ```
+
+    The plan's earlier "inferred" selector (`app: seaweedfs`, `seaweed-role: volume`) was wrong. Corrected selector in `seaweed.yaml`:
+
+    ```yaml
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: volume
+      app.kubernetes.io/instance: seaweedfs   # matches metadata.name of production Seaweed CR
+    ```
+
+    **(2) Chart 0.1.14's CRD does NOT expose `topologySpreadConstraints`.** First Flux reconcile of `seaweedfs-config` failed server-side dry-run:
+
+    > `Seaweed/storage/seaweedfs dry-run failed: failed to create typed patch object: .spec.volume.topologySpreadConstraints: field not declared in schema`
+
+    Confirmed via `kubectl get crd seaweeds.seaweed.seaweedfs.com -o json`: `spec.volume.properties` has `affinity`, `nodeSelector`, `tolerations`, `schedulerName`, etc. — but no `topologySpreadConstraints`. Same for master, filer, s3. Plan's "upstream chart exposes per-component topologySpreadConstraints" was wrong.
+
+    **Fix:** use `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution` instead — same one-per-node outcome, schema-legal on chart 0.1.14:
+
+    ```yaml
+    volume:
+      replicas: 3
+      requests: {storage: 100Gi}
+      storageClassName: longhorn
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: seaweedfs
+                  app.kubernetes.io/component: volume
+                  app.kubernetes.io/instance: seaweedfs
+    ```
+
+    Landed as follow-up commit `fix(storage): Seaweed CR uses affinity instead of topologySpreadConstraints` on top of the Phase 2 feat commit. Seaweed CR server-dry-run clean on retry; Flux reconciled cleanly to the fixed revision.
+
+    **Future plan hygiene:** when authoring a field-set for a custom resource, validate against the live CRD (`kubectl get crd X -o json | jq '.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.<field>'`) or at minimum a server-side dry-run before committing — the plan's manifest drafts skipped this gate and both the label-selector values and the `topologySpreadConstraints` vs `affinity` choice would have been caught earlier.
 
     **Updated Phase 2 file list** (delta from earlier cribsheet — one new file under `seaweedfs/app/`):
 
