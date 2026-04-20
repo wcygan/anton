@@ -14,10 +14,9 @@ spec:
       interval: 15m
   interval: 1h
   values:
-    # First-commit dance (plan 0005 Phase 2): admission webhook off so the
-    # operator + CRDs can land without the validating webhook rejecting its
-    # own bootstrap. A follow-up commit flips this to `true` once the
-    # operator is Ready and the certgen Job has completed cleanly.
-    # ADR 0019 preserves 0016's webhook-bootstrap requirement.
+    # Flipped on by plan 0005 Phase 2 second commit after the first-commit
+    # bootstrap landed cleanly (operator Ready, CRDs installed, Seaweed CR
+    # reconciled). Triggers the chart's certgen Job and wires up the
+    # validating + mutating webhooks.
     webhook:
-      enabled: false
+      enabled: true
