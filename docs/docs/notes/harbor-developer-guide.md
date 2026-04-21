@@ -47,20 +47,29 @@ Tailscale hostname.
 ## Push an image
 
 ```sh
-# On-LAN, HTTP:
+# On-LAN, HTTP (requires insecure-registries config above):
 docker login 192.168.1.106
 docker tag myapp:v1 192.168.1.106/library/myapp:v1
 docker push 192.168.1.106/library/myapp:v1
-
-# Over Tailscale, HTTPS:
-docker login registry.<tailnet-name>.ts.net
-docker tag myapp:v1 registry.<tailnet-name>.ts.net/library/myapp:v1
-docker push registry.<tailnet-name>.ts.net/library/myapp:v1
 ```
 
 Both resolve to the same Harbor and the same SeaweedFS `harbor` bucket.
 `library` is the default public project; ask for a new project in the
 Harbor UI if you want auth-gated pulls or per-team separation.
+
+**Direct push to `registry.<tailnet-name>.ts.net` is currently broken.**
+Harbor's auth realm returns an `http://` URL on the tailnet hostname,
+but the Tailscale operator ingress only serves 443. Use port-forward
+as a workaround:
+
+```sh
+kubectl -n registries port-forward svc/harbor 8080:80 &
+docker login localhost:8080 -u admin
+docker tag myapp:v1 localhost:8080/library/myapp:v1
+docker push localhost:8080/library/myapp:v1
+```
+
+Details + fix options: `harbor-registry.md` troubleshooting section.
 
 ## Pull from Kubernetes (no pull secret needed)
 
@@ -102,18 +111,21 @@ docker manifest inspect 192.168.1.106/library/myapp:v1 \
   | jq '.manifests // [{architecture}] | .[].platform // .[].architecture'
 ```
 
-## Off-LAN push — use Tailscale, not port-forward
+## Off-LAN push — use kubectl port-forward until the auth-realm issue is fixed
 
-If you're off-LAN, sign into Tailscale and push to the Tailscale hostname
-directly:
+Off-LAN with a working Tailscale session, the port-forward pattern also
+works since `kubectl` routes through Tailscale:
 
 ```sh
-docker login registry.<tailnet-name>.ts.net
-docker push registry.<tailnet-name>.ts.net/library/myapp:v1
+kubectl -n registries port-forward svc/harbor 8080:80 &
+docker login localhost:8080 -u admin
+docker push localhost:8080/library/myapp:v1
 ```
 
-No `kubectl port-forward` shenanigans needed — the Tailscale operator
-handles TLS termination with a browser-trusted cert.
+The Tailscale hostname direct-push (`registry.<tailnet-name>.ts.net`) is
+currently blocked by a Harbor realm-URL issue documented in
+`harbor-registry.md`. Pulls (anonymous, from in-cluster Pods) are
+unaffected.
 
 ## Troubleshooting
 

@@ -191,6 +191,32 @@ kubectl -n storage run s3-ls --rm --restart=Never \
 
 ## Troubleshooting
 
+### `docker login registry.<tailnet-name>.ts.net` fails with "connection refused" on port 80
+
+Known issue. Harbor's `externalURL` is `http://192.168.1.106`, so when Docker requests a
+token it gets a `WWW-Authenticate` realm of `http://registry.<tailnet-name>.ts.net/service/token` —
+note the `http://` scheme. The Tailscale operator Ingress only serves port 443 (even though
+its `Ingress` object lists `80, 443`), so the realm URL isn't reachable and Docker's auth
+flow stalls.
+
+Workarounds for laptop push until this is fixed:
+
+```sh
+# Option 1 — port-forward (works from anywhere with cluster access):
+kubectl -n registries port-forward svc/harbor 8080:80 &
+docker login localhost:8080 -u admin        # password from harbor-admin-secret
+docker tag myapp:v1 localhost:8080/library/myapp:v1
+docker push localhost:8080/library/myapp:v1
+
+# Option 2 — LAN push (requires Docker Desktop: Settings → Docker Engine →
+# add 192.168.1.106 to insecure-registries, then restart Docker):
+docker login 192.168.1.106
+docker push 192.168.1.106/library/myapp:v1
+```
+
+Anonymous in-cluster pulls are unaffected — they don't hit the auth realm. The issue
+surfaces only for authenticated flows (laptop push, private-project pulls).
+
 ### Pulls hang or fail TLS
 
 Likely the Talos machine-registries patch isn't applied on the node. Check:

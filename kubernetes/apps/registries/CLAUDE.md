@@ -46,6 +46,28 @@ unset ADMIN_PASS
 
 **Clean-install rule:** create the 1Password item **before** the HelmRelease first reconciles.
 
+## Known friction: Tailscale direct docker-push fails on the auth realm
+
+Docker push attempts to `registry.<tailnet-name>.ts.net` will fail with something like
+`dial tcp <ts-ip>:80: connect: connection refused` *after* the HTTPS handshake succeeds.
+Mechanism:
+
+1. Docker does `GET https://registry.<tailnet>.ts.net/v2/` — succeeds (401).
+2. Harbor's `WWW-Authenticate` header returns realm `http://registry.<tailnet>.ts.net/service/token` — note the `http://` scheme. Harbor emits the realm with the Host from the incoming request but keeps the scheme from our `externalURL` (`http://192.168.1.106`).
+3. Docker tries to dial port 80 on the Tailscale ingress. The Tailscale operator only serves 443 even though the `Ingress` object lists `80, 443`. Connection refused.
+
+**Workarounds until this is fixed:**
+
+- `kubectl -n registries port-forward svc/harbor 8080:80` then `docker login localhost:8080` — Docker Desktop treats localhost as insecure-by-default and Harbor's realm URL matches the incoming Host (`http://localhost:8080/service/token`) so the auth flow resolves cleanly.
+- For on-LAN pushes, add `192.168.1.106` to Docker Desktop's `insecure-registries` and push to `192.168.1.106/library/...` directly (realm becomes `http://192.168.1.106/service/token`, reachable from the laptop on LAN).
+
+**Anonymous Kubernetes pulls are unaffected** — they don't exercise the realm URL at all. So the `library` project (anonymous-pull) serves in-cluster containerd consumers fine from either the LAN IP or the Tailscale hostname. This issue only surfaces for *authenticated* flows (laptop push, private-project pulls).
+
+**Proper fix — deferred, choose one:**
+
+- Change `externalURL` to `https://registry.${TAILNET_SUFFIX}.ts.net` and add `TAILNET_SUFFIX` to `cluster-secrets.sops.yaml` (avoids committing the tailnet name). Realm becomes HTTPS and Tailscale ingress serves it. Containerd on LAN still pulls anonymously from `192.168.1.106` because that mirror config is separate from externalURL.
+- Or enable a port-80 redirect listener on the Tailscale ingress.
+
 ## Node-level wiring
 
 - **`talos/patches/global/machine-registries.yaml`** tells containerd to treat `192.168.1.106` as HTTP. Without it, in-cluster pulls fail with TLS errors. Apply via `task talos:apply-node IP=<node>` (non-destructive, no reboot).
