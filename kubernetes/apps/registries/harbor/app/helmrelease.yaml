@@ -13,6 +13,18 @@ spec:
         name: harbor
       interval: 15m
   interval: 1h
+  # Harbor's first-install is genuinely complex (S3 bucket probe, DB
+  # migrations, 7 components racing to Ready). Cluster-apps patches set a
+  # global upgrade.remediation.retries: 2 that we inherit; install
+  # remediation is NOT set globally, so we override here to 5 for
+  # Harbor-specifically. Reduces the "needs a manual flux reconcile"
+  # rate on transient install failures (e.g., the admin-password
+  # bootstrap race we hit 2026-04-21). Upgrade retries stay at the
+  # cluster-wide 2 — revisit if chart bumps start needing manual kicks.
+  install:
+    remediation:
+      retries: 5
+      remediateLastFailure: true
   values:
     # Tailscale ingress (ingress-tailscale.yaml under harbor-config) owns
     # externally-facing TLS at registry.<tailnet>.ts.net. The LoadBalancer

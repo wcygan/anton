@@ -1,0 +1,119 @@
+---
+# Harbor alerting rules. Series names and labels verified live 2026-04-21:
+#   - harbor_health{namespace,pod}                — scalar (1=healthy, 0=unhealthy)
+#   - harbor_up{component,namespace,pod}          — 7 components (core, portal,
+#                                                   jobservice, registry,
+#                                                   registryctl, database, redis)
+#   - harbor_core_http_request_total{code,...}    — request counter
+#   - cnpg_collector_up{cluster,namespace,pod}    — 1 per CNPG instance
+#
+# Metrics emitted by the Harbor exporter + the CNPG-generated PodMonitor.
+# ServiceMonitor enablement: `metrics.serviceMonitor.enabled: true` in the
+# Harbor HelmRelease; CNPG PodMonitor is created by the operator when the
+# Cluster CR sets `monitoring.enablePodMonitor: true`.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: harbor-health
+  labels:
+    app.kubernetes.io/name: harbor
+    app.kubernetes.io/part-of: harbor
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: harbor.rules
+      rules:
+        - alert: HarborHealthCheckFailing
+          expr: harbor_health{namespace="registries"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Harbor /api/v2.0/health reports unhealthy"
+            description: |
+              Harbor's own health check (harbor_health) is 0 for 5 minutes.
+              At least one component is failing its self-check.
+              Investigate:
+                kubectl -n registries exec deploy/harbor-core -- \
+                  curl -s http://127.0.0.1:8080/api/v2.0/health | jq
+                kubectl -n registries get pods
+
+        - alert: HarborComponentDown
+          expr: harbor_up{namespace="registries"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Harbor component {{ $labels.component }} down"
+            description: |
+              Harbor exporter reports {{ $labels.component }} as down for 10m.
+              Check the component's pods and logs:
+                kubectl -n registries get pods -l component={{ $labels.component }}
+                kubectl -n registries logs -l component={{ $labels.component }} --tail=100
+
+        - alert: HarborCore5xxSpike
+          expr: |
+            sum by (code) (
+              rate(harbor_core_http_request_total{code=~"5..",namespace="registries"}[5m])
+            ) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Harbor core serving {{ $value | humanize }} HTTP 5{{ $labels.code }} /s"
+            description: |
+              harbor-core is returning 5xx at >0.1 req/s for 10m.
+              Common causes: S3 backend unreachable, Postgres connection issues,
+              Dragonfly (redis) connection issues. Check core logs:
+                kubectl -n registries logs deploy/harbor-core --tail=200
+
+        - alert: HarborPostgresDegraded
+          expr: |
+            count(cnpg_collector_up{namespace="registries",cluster="harbor-postgres"} == 1)
+              < 3
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Harbor Postgres cluster has {{ $value }}/3 instances reporting up"
+            description: |
+              CNPG cluster harbor-postgres has fewer than 3 instances with
+              cnpg_collector_up=1 for 10m. Expected: 3. Current: {{ $value }}.
+              Investigate:
+                kubectl -n registries get cluster harbor-postgres
+                kubectl -n registries get pods -l cnpg.io/cluster=harbor-postgres
+
+        - alert: HarborPostgresQuorumAtRisk
+          expr: |
+            count(cnpg_collector_up{namespace="registries",cluster="harbor-postgres"} == 1)
+              < 2
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Harbor Postgres quorum at risk ({{ $value }}/3 instances up)"
+            description: |
+              Only {{ $value }} CNPG harbor-postgres instances are reporting
+              up. A primary failure now would leave Harbor without a writable
+              DB. Investigate immediately.
+
+        - alert: HarborPodNotReady
+          # Matches any harbor-* or postgres/redis pod in registries that has
+          # been not-ready for 15m. Filters out completed / job-like pods by
+          # requiring the ready=0 reading to persist.
+          expr: |
+            kube_pod_container_status_ready{
+              namespace="registries",
+              pod=~"harbor-.*|seaweedfs-.*"
+            } == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Harbor pod {{ $labels.pod }} container {{ $labels.container }} not ready"
+            description: |
+              Pod has been not-ready for 15m. Typical causes: ImagePullBackOff,
+              CrashLoopBackOff, liveness probe failing, Secret not resolvable.
+                kubectl -n registries describe pod {{ $labels.pod }}
+                kubectl -n registries logs {{ $labels.pod }} --tail=100

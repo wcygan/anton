@@ -56,7 +56,7 @@ Before writing code from scratch for a common task, check whether a skill or sub
 - `upgrade-auditor` — Renovate PR triage, tiered merge plan, deprecation audit; accrues chart-specific memory
 - `cluster-intake-gatekeeper` — read-only intake gate for new components; runs `cluster-intake` end-to-end, hands every verdict (add/defer/reject) to the `adr` skill, then to `flux-app-author` on accept
 
-Nested CLAUDE.md files for deeper per-subsystem guidance: `kubernetes/apps/CLAUDE.md`, `kubernetes/apps/network/CLAUDE.md`, `kubernetes/apps/storage/CLAUDE.md`, `bootstrap/CLAUDE.md`, `scripts/CLAUDE.md`, `.taskfiles/CLAUDE.md`.
+Nested CLAUDE.md files for deeper per-subsystem guidance: `kubernetes/apps/CLAUDE.md`, `kubernetes/apps/network/CLAUDE.md`, `kubernetes/apps/storage/CLAUDE.md`, `kubernetes/apps/databases/CLAUDE.md` (CNPG + Dragonfly operators as platform), `kubernetes/apps/registries/CLAUDE.md` (Harbor on SeaweedFS S3), `bootstrap/CLAUDE.md`, `scripts/CLAUDE.md`, `.taskfiles/CLAUDE.md`.
 
 ## Essential commands
 

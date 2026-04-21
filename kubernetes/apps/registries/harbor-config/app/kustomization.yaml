@@ -7,3 +7,4 @@ resources:
   - ./externalsecret-admin.yaml
   - ./externalsecret-s3.yaml
   - ./ingress-tailscale.yaml
+  - ./prometheusrule.yaml
