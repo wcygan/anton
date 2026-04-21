@@ -1,6 +1,6 @@
 # SeaweedFS baseline — 2026-04-19
 
-Phase 2 + 3 acceptance artifact for [plan 0005 — Adopt SeaweedFS per ADR 0019](../../../context/plans/0005-adopt-seaweedfs.md). Captures the install shape, the endpoint surface, the credential path, a copy-pasteable smoke test, and the two chart-level surprises we worked around — so future me (or future Harbor) can consume the S3 endpoint without rereading the whole plan log.
+Phase 2 + 3 acceptance artifact for [plan 0005 — Adopt SeaweedFS per ADR 0019](https://github.com/wcygan/anton/blob/main/context/plans/0005-adopt-seaweedfs.md). Captures the install shape, the endpoint surface, the credential path, a copy-pasteable smoke test, and the two chart-level surprises we worked around — so future me (or future Harbor) can consume the S3 endpoint without rereading the whole plan log.
 
 > ADR 0019 supersedes ADR 0016. The install uses the canonical `spec.s3` (standalone S3 Deployment) path, not the deprecated `FilerSpec.S3` subtree 0016 originally targeted.
 
@@ -263,9 +263,9 @@ kubectl -n storage get pvc | grep seaweedfs
 
 ## Pointers
 
-- Decision: [`context/adrs/0019-seaweedfs-on-canonical-spec-s3.md`](../../../context/adrs/0019-seaweedfs-on-canonical-spec-s3.md) (supersedes [0016](../../../context/adrs/0016-adopt-seaweedfs-today-via-filerspec-s3.md))
-- Plan: [`context/plans/0005-adopt-seaweedfs.md`](../../../context/plans/0005-adopt-seaweedfs.md) — full Phase 1 scratch shakeout and Phase 2 reconcile diagnostics
+- Decision: [`context/adrs/0019-seaweedfs-on-canonical-spec-s3.md`](https://github.com/wcygan/anton/blob/main/context/adrs/0019-seaweedfs-on-canonical-spec-s3.md) (supersedes [0016](https://github.com/wcygan/anton/blob/main/context/adrs/0016-adopt-seaweedfs-today-via-filerspec-s3.md))
+- Plan: [`context/plans/0005-adopt-seaweedfs.md`](https://github.com/wcygan/anton/blob/main/context/plans/0005-adopt-seaweedfs.md) — full Phase 1 scratch shakeout and Phase 2 reconcile diagnostics
 - Skill: `.claude/skills/seaweedfs-docs/` — upstream reference (architecture, CLI, operator CRD schema, S3 API coverage). Auto-loads on `seaweedfs`, `weed shell`, `Seaweed CRD`, etc.
 - Release notes: https://github.com/seaweedfs/seaweedfs-operator/releases/tag/1.0.12
 - Controller source (labels + RBAC markers): https://github.com/seaweedfs/seaweedfs-operator/tree/1.0.12
-- Harbor consumer anchor: [ADR 0015](../../../context/adrs/0015-adopt-harbor-as-in-cluster-registry.md) — the successor plan that turns this baseline into a production dependency
+- Harbor consumer anchor: [ADR 0015](https://github.com/wcygan/anton/blob/main/context/adrs/0015-adopt-harbor-as-in-cluster-registry.md) — the successor plan that turns this baseline into a production dependency

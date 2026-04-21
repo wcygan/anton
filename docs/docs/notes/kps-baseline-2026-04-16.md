@@ -1,6 +1,6 @@
 # kube-prometheus-stack baseline — 2026-04-16
 
-Acceptance artifact for [plan 0002 — Install kube-prometheus-stack](../../../context/plans/0002-install-kube-prometheus-stack.md) and [ADR 0007 — Adopt kube-prometheus-stack](../../../context/adrs/0007-adopt-kube-prometheus-stack.md). Documents the metrics-only stack at install time so future right-sizing, alert-rule work, or upgrade regressions have a reference line to compare against.
+Acceptance artifact for [plan 0002 — Install kube-prometheus-stack](https://github.com/wcygan/anton/blob/main/context/plans/0002-install-kube-prometheus-stack.md) and [ADR 0007 — Adopt kube-prometheus-stack](https://github.com/wcygan/anton/blob/main/context/adrs/0007-adopt-kube-prometheus-stack.md). Documents the metrics-only stack at install time so future right-sizing, alert-rule work, or upgrade regressions have a reference line to compare against.
 
 ## Cluster shape at measurement time
 
