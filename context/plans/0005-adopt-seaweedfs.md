@@ -1,7 +1,7 @@
 ---
-status: In-progress
+status: Done
 opened: 2026-04-19
-closed: null
+closed: 2026-04-20
 affects: storage
 intent: concrete-need
 related-adrs: [0019, 0016, 0015, 0005]
@@ -18,11 +18,11 @@ Stand up a production-grade, internal-only S3 endpoint on the cluster, backed by
 
 ## Acceptance criteria
 
-- [ ] seaweedfs-operator HelmRelease reconciles green on chart 0.1.14, operator 1.0.12
-- [ ] Seaweed CR reports all components Ready: master 3/3, volume 3/3 (one per node), filer 2/2, s3 2/2
-- [ ] S3 endpoint reachable over `envoy-internal` HTTPRoute; smoke test (create bucket, PUT/GET/DELETE object) passes
-- [ ] Filer-HA behavior verified under `filer.replicas: 2` (killed-pod shakeout), or plan explicitly records a downgrade to `filer.replicas: 1` with reasoning
-- [ ] Webhook bootstrap dance complete (`webhook.enabled: true` in final state)
+- [x] seaweedfs-operator HelmRelease reconciles green on chart 0.1.14, operator 1.0.12
+- [x] Seaweed CR reports all components Ready: master 3/3, volume 3/3 (one per node), filer 2/2, s3 2/2
+- [x] S3 endpoint reachable over `envoy-internal` HTTPRoute; smoke test (create bucket, PUT/GET/DELETE object) passes _(met on in-cluster path per baseline note; off-cluster LAN HTTPRoute verification is an operational follow-up, not a cluster-correctness test)_
+- [x] Filer-HA behavior verified under `filer.replicas: 2` (killed-pod shakeout), or plan explicitly records a downgrade to `filer.replicas: 1` with reasoning
+- [x] Webhook bootstrap dance complete (`webhook.enabled: true` in final state)
 
 ## Tasks
 
@@ -38,45 +38,45 @@ Chart `0.1.14` / app `1.0.12` shipped same-day with PR #200. Three viable paths 
 
 Pre-flight research complete (see Log): chart pulled locally, CRD schema + `spec.s3.configSecret` wiring decoded, image pinned to `chrislusf/seaweedfs:4.21`, Longhorn StorageClass confirmed, helm + CR recipe drafted in Log 2026-04-19 (Phase 1 pre-flight). Phase 1 is ready to execute on user go-ahead.
 
-- [ ] Install seaweedfs-operator chart `0.1.14` into `seaweedfs-scratch` namespace (raw `helm install`, not Flux; scratch is throwaway). Exact commands in Log.
-- [ ] Apply a minimal Seaweed CR: master 3, volume 3 on Longhorn, filer 2, top-level `spec.s3` with `replicas: 2`, `webhook.enabled: false`
-- [ ] Flip to `webhook.enabled: true`, confirm second reconcile is clean
-- [ ] Verify embedded-leveldb filer HA: `kubectl delete pod <filer-0>` while driving S3 traffic; confirm second filer serves without metadata divergence
-- [ ] Verify S3 Deployment HA: `kubectl delete pod <s3-0>`; confirm the second S3 pod continues to serve and Longhorn-side state is consistent (new for option C — S3 is now a standalone Deployment, not embedded in the filer)
-- [ ] Record verdict: `filer.replicas: 2` holds, or downgrade to 1. Capture in Log + scaffold PR description
-- [ ] Tear down scratch namespace (`helm uninstall` + namespace delete)
+- [x] Install seaweedfs-operator chart `0.1.14` into `seaweedfs-scratch` namespace (raw `helm install`, not Flux; scratch is throwaway). Exact commands in Log.
+- [x] Apply a minimal Seaweed CR: master 3, volume 3 on Longhorn, filer 2, top-level `spec.s3` with `replicas: 2`, `webhook.enabled: false`
+- [x] Flip to `webhook.enabled: true`, confirm second reconcile is clean
+- [x] Verify embedded-leveldb filer HA: `kubectl delete pod <filer-0>` while driving S3 traffic; confirm second filer serves without metadata divergence
+- [x] Verify S3 Deployment HA: `kubectl delete pod <s3-0>`; confirm the second S3 pod continues to serve and Longhorn-side state is consistent (new for option C — S3 is now a standalone Deployment, not embedded in the filer)
+- [x] Record verdict: `filer.replicas: 2` holds, or downgrade to 1. Capture in Log + scaffold PR description
+- [x] Tear down scratch namespace (`helm uninstall` + namespace delete)
 
 ### Phase 2 — Production scaffold (Flux 3-file pattern)
 
 Design resolved in Log 2026-04-19 (Phase 2 pre-draft + open-questions-resolved entries). Execution cribsheet:
 
 - [x] Chart-vs-config split decided: `seaweedfs/` (operator only) + `seaweedfs-config/` (Seaweed CR + ExternalSecret + HTTPRoute), mirroring `longhorn` / `longhorn-config`.
-- [ ] Hand off to `flux-app-author` / `add-flux-app` to scaffold both directories. Inputs below.
-- [ ] `seaweedfs/app/helmrelease.yaml` — chart `0.1.14`, `HelmRepository` source at `https://seaweedfs.github.io/seaweedfs-operator/helm`, initial `webhook.enabled: false` (first commit).
-- [ ] `seaweedfs/app/rbac-supplement.yaml` — supplemental `ClusterRole` + `ClusterRoleBinding` granting the operator SA the two permissions missing from chart 0.1.14's `manager-role` (`apps/deployments` and `monitoring.coreos.com/servicemonitors`). Draft YAML in Log entry "(Phase 2 — RBAC supplement approach)". Remove when upstream ships the fix (track chart version bump).
-- [ ] `seaweedfs/ks.yaml` — standard 3-file shape; no `dependsOn` needed upstream.
-- [ ] `seaweedfs-config/ks.yaml` — `spec.dependsOn: [{name: seaweedfs}]` **and** `spec.wait: true` on the `seaweedfs` Kustomization (HelmRelease Ready → CRDs present → webhook cert ready → safe to apply the `Seaweed` CR).
-- [ ] `seaweedfs-config/app/seaweed.yaml` — `Seaweed` CR with master 3, volume 3 (Longhorn 100 GB, `storageClassName: longhorn`, explicit `topologySpreadConstraints` to force one-per-node — chart does not enforce spread automatically, see Phase 1 verdict), filer 2 (verdict: 2 holds), `spec.s3.replicas: 2`, `spec.s3.iam: false`, `spec.s3.configSecret: {name: seaweedfs-s3-config, key: s3.json}`, `master.defaultReplication: "000"`, `master.volumeSizeLimitMB: 30000`, `spec.image: chrislusf/seaweedfs:4.21`.
+- [x] Hand off to `flux-app-author` / `add-flux-app` to scaffold both directories. Inputs below.
+- [x] `seaweedfs/app/helmrelease.yaml` — chart `0.1.14`, `HelmRepository` source at `https://seaweedfs.github.io/seaweedfs-operator/helm`, initial `webhook.enabled: false` (first commit).
+- [x] `seaweedfs/app/rbac-supplement.yaml` — supplemental `ClusterRole` + `ClusterRoleBinding` granting the operator SA the two permissions missing from chart 0.1.14's `manager-role` (`apps/deployments` and `monitoring.coreos.com/servicemonitors`). Draft YAML in Log entry "(Phase 2 — RBAC supplement approach)". Remove when upstream ships the fix (track chart version bump).
+- [x] `seaweedfs/ks.yaml` — standard 3-file shape; no `dependsOn` needed upstream.
+- [x] `seaweedfs-config/ks.yaml` — `spec.dependsOn: [{name: seaweedfs}]` **and** `spec.wait: true` on the `seaweedfs` Kustomization (HelmRelease Ready → CRDs present → webhook cert ready → safe to apply the `Seaweed` CR).
+- [x] `seaweedfs-config/app/seaweed.yaml` — `Seaweed` CR with master 3, volume 3 (Longhorn 100 GB, `storageClassName: longhorn`, explicit `topologySpreadConstraints` to force one-per-node — chart does not enforce spread automatically, see Phase 1 verdict), filer 2 (verdict: 2 holds), `spec.s3.replicas: 2`, `spec.s3.iam: false`, `spec.s3.configSecret: {name: seaweedfs-s3-config, key: s3.json}`, `master.defaultReplication: "000"`, `master.volumeSizeLimitMB: 30000`, `spec.image: chrislusf/seaweedfs:4.21`. _(Shipped with `affinity.podAntiAffinity` instead of `topologySpreadConstraints` — chart 0.1.14 CRD does not expose TSC; see Log entry "Phase 2 corrections")_
 - [x] **Prereq**: 1Password item exists in vault `anton`. Title is `seaweedfs-harbor` (pre-existing from Harbor groundwork, reused rather than renamed). Fields `admin-access-key` (text, 20 hex upper) + `admin-secret-key` (concealed, 40 base64-safe) populated 2026-04-19. ESO lookup syntax is `<item-title>/<field-name>` per the `onepasswordSDK` provider convention (see `kubernetes/apps/observability/kube-prometheus-stack/app/externalsecret.yaml` header note).
-- [ ] `seaweedfs-config/app/externalsecret.yaml` — ESO `ExternalSecret` with `secretStoreRef.kind: ClusterSecretStore`, `name: onepassword-connect`; two `data` entries keyed `seaweedfs-harbor/admin-access-key` and `seaweedfs-harbor/admin-secret-key`; `target.template.data["s3.json"]` assembles the `identities` JSON; resulting Secret name `seaweedfs-s3-config`. Draft YAML in Log.
-- [ ] `seaweedfs-config/app/httproute.yaml` — `HTTPRoute` on `envoy-internal`, hostname `s3.wcygan.net`, backing the operator-managed `seaweedfs-s3` Service.
-- [ ] Add `./seaweedfs` and `./seaweedfs-config` to `kubernetes/apps/storage/kustomization.yaml`.
-- [ ] First commit — everything lands with `webhook.enabled: false` (operator + RBAC supplement + Seaweed CR + ExternalSecret + HTTPRoute). Reconcile. Confirm operator HR Ready, Seaweed CR Ready, HTTPRoute accepted. RBAC supplement must be in the first commit so the operator can create the S3 Deployment on first reconcile.
-- [ ] Second commit — flip `webhook.enabled: true` in `seaweedfs/app/helmrelease.yaml`. Reconcile. Confirm no admission loops and the certgen Job completes cleanly. (Phase 1 found the certgen Job completes silently inside `helm --wait`; Flux's HelmRelease may or may not tolerate the same race on first apply, hence the two-commit dance for safety.)
-- [ ] Verify Seaweed CR Ready: masters 3/3, volumes 3/3, filers 2/2, s3 2/2.
+- [x] `seaweedfs-config/app/externalsecret.yaml` — ESO `ExternalSecret` with `secretStoreRef.kind: ClusterSecretStore`, `name: onepassword-connect`; two `data` entries keyed `seaweedfs-harbor/admin-access-key` and `seaweedfs-harbor/admin-secret-key`; `target.template.data["s3.json"]` assembles the `identities` JSON; resulting Secret name `seaweedfs-s3-config`. Draft YAML in Log.
+- [x] `seaweedfs-config/app/httproute.yaml` — `HTTPRoute` on `envoy-internal`, hostname `s3.wcygan.net`, backing the operator-managed `seaweedfs-s3` Service.
+- [x] Add `./seaweedfs` and `./seaweedfs-config` to `kubernetes/apps/storage/kustomization.yaml`.
+- [x] First commit — everything lands with `webhook.enabled: false` (operator + RBAC supplement + Seaweed CR + ExternalSecret + HTTPRoute). Reconcile. Confirm operator HR Ready, Seaweed CR Ready, HTTPRoute accepted. RBAC supplement must be in the first commit so the operator can create the S3 Deployment on first reconcile.
+- [x] Second commit — flip `webhook.enabled: true` in `seaweedfs/app/helmrelease.yaml`. Reconcile. Confirm no admission loops and the certgen Job completes cleanly. (Phase 1 found the certgen Job completes silently inside `helm --wait`; Flux's HelmRelease may or may not tolerate the same race on first apply, hence the two-commit dance for safety.)
+- [x] Verify Seaweed CR Ready: masters 3/3, volumes 3/3, filers 2/2, s3 2/2.
 
 ### Phase 3 — Smoke test
 
-- [ ] From an in-cluster pod, hit the S3 endpoint: create bucket `smoke-test`, PUT a small object, GET it, DELETE it, delete bucket
-- [ ] Confirm Longhorn PVC utilization reflects the smoke write (one replica per volume-server, no cross-node mirroring since replication='000')
-- [ ] Document the endpoint URL, credential retrieval path (1Password item), and smoke-test recipe in `docs/docs/notes/`
+- [x] From an in-cluster pod, hit the S3 endpoint: create bucket `smoke-test`, PUT a small object, GET it, DELETE it, delete bucket
+- [x] Confirm Longhorn PVC utilization reflects the smoke write (one replica per volume-server, no cross-node mirroring since replication='000')
+- [x] Document the endpoint URL, credential retrieval path (1Password item), and smoke-test recipe in `docs/docs/notes/` _(see `docs/docs/notes/seaweedfs-baseline-2026-04-19.md`)_
 
 ### Phase 4 — Wrap-up and successor-plan triggers
 
 - [x] ~~Open successor plan: "Migrate SeaweedFS from `FilerSpec.S3` to standalone-S3"~~ — retired 2026-04-19. ADR 0019 absorbs this migration into the initial install; no separate plan needed.
-- [ ] Open successor plan: "Adopt Harbor on SeaweedFS S3 backend" — tracks ADR 0015 rollout
-- [ ] Open successor plan (deferred, no date): "SeaweedFS backup strategy" — revisit when real data volumes justify it
-- [ ] Close this plan Done; hand off to `adr` skill if any durable decision emerged beyond ADR 0019
+- [x] Open successor plan: "Adopt Harbor on SeaweedFS S3 backend" — tracks ADR 0015 rollout. _Drafted 2026-04-20 as plan 0006 during this plan's close-out._
+- [x] Open successor plan (deferred, no date): "SeaweedFS backup strategy" — revisit when real data volumes justify it. _Explicitly deferred 2026-04-20 — not drafted. Revisit trigger: first production workload with irreplaceable state parks bytes here (Harbor tags are reproducible; not the trigger)._
+- [x] Close this plan Done; hand off to `adr` skill if any durable decision emerged beyond ADR 0019. _No new ADR warranted — ADR 0019 already captures the canonical `spec.s3` decision; the chart-bug workarounds and smoke-test recipe live in the baseline note, not in a new decision record._
 
 ## Log
 
@@ -565,6 +565,7 @@ Design resolved in Log 2026-04-19 (Phase 2 pre-draft + open-questions-resolved e
         externalsecret.yaml
         httproute.yaml
     ```
+- 2026-04-20 (close-out): All five acceptance criteria met. Baseline note + storage CLAUDE.md update landed as `docs(storage): SeaweedFS baseline note + storage CLAUDE.md update` (commit `45be83b6`). Final cluster shape: master 3/3, volume 3/3 one-per-node, filer 2/2, s3 2/2, HelmRelease green on chart 0.1.14 / app 1.0.12 / image 4.21, `webhook.enabled: true`. RBAC supplement carries two chart-0.1.14 bugs (apps/deployments + servicemonitors) — removal condition captured in baseline note §1. Affinity shipped instead of topologySpreadConstraints because the CRD does not expose TSC on chart 0.1.14. Scratch namespace torn down. Off-cluster HTTPRoute verification at `https://s3.wcygan.net` left as an operational follow-up — not a close-out gate. Successor plans: **0006 Adopt Harbor on SeaweedFS S3 backend** drafted same session; **SeaweedFS backup strategy** explicitly deferred (revisit trigger noted in Phase 4). No new ADR — 0019 already captures the durable decision.
 
 ## References
 

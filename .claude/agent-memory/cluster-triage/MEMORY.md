@@ -1,0 +1,2 @@
+- [k8s-2 reboot saga](project_k8s2_reboots.md) — k8s-2 rebooted 9+ times Apr 13-20 2026; Longhorn DaemonSet unmount deadlock suspected; Tier 1 logging not yet in place
+- [Zombie pods post-reboot](project_zombie_pods_longhorn.md) — Longhorn/SeaweedFS/KPS pods on k8s-2 stick in Unknown phase for hours after node reboot
