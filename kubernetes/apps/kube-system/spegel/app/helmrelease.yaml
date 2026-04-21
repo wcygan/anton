@@ -22,6 +22,16 @@ spec:
         - https://registry.k8s.io
         - https://quay.io
         - https://mcr.microsoft.com
+        # Harbor LAN LB (plan 0006). Listed so Spegel manages its hosts.toml
+        # entry; combined with prependExisting below, Spegel prepends its
+        # P2P layer while preserving the Talos-level mirror as fallback.
+        - http://192.168.1.106
+      # Preserve Talos-managed containerd mirror configs (the 192.168.1.106
+      # entry from talos/patches/global/machine-registries.yaml). Without
+      # this, Spegel backs up and removes non-Spegel host configs from
+      # /etc/cri/conf.d/hosts/ on each reconcile, which broke Harbor pulls
+      # after every node reset pre-reset (commit 12f48802 context).
+      prependExisting: true
     service:
       registry:
         hostPort: 29999

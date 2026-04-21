@@ -1,0 +1,28 @@
+# Containerd registry config for Harbor at 192.168.1.106 (plan 0006 Phase 5).
+#
+# This patch tells containerd that pulls targeting `192.168.1.106/<image>`
+# should use HTTP (not HTTPS). Harbor exposes its LAN interface on HTTP
+# because the in-cluster side does not need TLS, and because the Docker
+# token-auth realm has historically been brittle to TLS mismatches
+# (pre-reset incident noted in harbor-registry.md).
+#
+# Scope: kubelet / containerd registry config only. No credentials embedded
+# (ADR 0015 Decision: project `library` is anonymous-pull). No service-
+# cluster-IP aliasing (the pre-reset `harbor.harbor.svc.cluster.local` +
+# `extraHostEntries` workaround from commit 45690784^ is intentionally NOT
+# reproduced — it was brittle to Service ClusterIP changes and required
+# committing robot-account creds to Talos machineconfig; see plan 0006
+# Log 2026-04-21 for rationale).
+#
+# Activation gate: this file exists but is NOT referenced from
+# talconfig.yaml `patches:` list. To activate: add
+# `- "@./patches/global/machine-registries.yaml"` under `patches:` in
+# talconfig.yaml, run `task talos:generate-config`, and apply per-node
+# via `task talos:apply-node IP=<ip> MODE=auto`. No reboot required —
+# containerd re-reads registry config on config apply.
+machine:
+  registries:
+    mirrors:
+      "192.168.1.106":
+        endpoints:
+          - "http://192.168.1.106"
