@@ -1,0 +1,22 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: dragonfly-operator
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/databases/dragonfly-operator/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: databases
+  # `wait: true` so downstream apps (Harbor's Dragonfly CR) can `dependsOn`
+  # this Kustomization and block until the operator Deployment is Ready and
+  # the `dragonflies.dragonflydb.io` CRD is Established.
+  wait: true
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

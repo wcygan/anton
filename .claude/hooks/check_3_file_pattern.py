@@ -30,10 +30,14 @@ BASE_REQUIRED = (
 
 # In Helm mode, each app needs exactly one chart source. OCIRepository is
 # the preferred shape; HelmRepository is accepted when upstream does not
-# publish an OCI chart (e.g. Longhorn ships only https://charts.longhorn.io).
+# publish an OCI chart (e.g. Longhorn ships only https://charts.longhorn.io);
+# GitRepository is accepted when upstream ships the chart inside a git repo
+# with no Helm repo or OCI registry (e.g. dragonflydb/dragonfly-operator
+# under /charts/).
 SOURCE_ALTERNATIVES = (
     "app/ocirepository.yaml",
     "app/helmrepository.yaml",
+    "app/gitrepository.yaml",
 )
 
 

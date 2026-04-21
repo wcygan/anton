@@ -1,0 +1,11 @@
+---
+# cloudnative-pg does not publish an OCI chart — upstream ships the traditional
+# Helm repo at https://cloudnative-pg.github.io/charts. Deviation from anton's
+# OCIRepository preference is upstream-forced; revisit if CNPG adds OCI publishing.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: cloudnative-pg
+spec:
+  interval: 1h
+  url: https://cloudnative-pg.github.io/charts

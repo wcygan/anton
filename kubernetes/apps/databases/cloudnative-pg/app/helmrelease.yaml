@@ -1,0 +1,29 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cloudnative-pg
+spec:
+  chart:
+    spec:
+      chart: cloudnative-pg
+      version: 0.28.0
+      sourceRef:
+        kind: HelmRepository
+        name: cloudnative-pg
+      interval: 15m
+  interval: 1h
+  values:
+    # Operator resource budget — sized for the platform case where CNPG is
+    # expected to manage multiple Postgres Clusters across namespaces. Bump if
+    # cluster count grows into the dozens or CNPG recommends more.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+    # Emit a PodMonitor so kube-prometheus-stack scrapes the operator itself.
+    # The operator in turn generates PodMonitors for managed Clusters.
+    monitoring:
+      podMonitorEnabled: true
