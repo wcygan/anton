@@ -8,3 +8,12 @@ machine:
     net.ipv4.neigh.default.gc_thresh2: "8192"  # Prevent ARP cache overflows
     net.ipv4.neigh.default.gc_thresh3: "16384" # Prevent ARP cache overflows
     user.max_user_namespaces: "11255"          # User Namespaces
+    kernel.panic: "10"                         # Auto-reboot 10s after panic; leaves a boot marker. Plan 0007
+    kernel.panic_on_oops: "1"                  # Promote BUG()s to panics. Plan 0007
+    # NOTE: kernel.hardlockup_panic and kernel.softlockup_panic cannot be set on
+    # Talos — its Linux 6.18.18 kernel is built without CONFIG_HARDLOCKUP_DETECTOR /
+    # CONFIG_SOFTLOCKUP_DETECTOR, so /proc/sys/kernel/{hardlockup,softlockup,
+    # watchdog,nmi_watchdog,watchdog_thresh} do not exist. Talos silently accepts
+    # the config but the writes are no-ops. Discovered 2026-04-20 during plan 0007
+    # Phase 2 verification. Do not re-add without a Talos kernel rebuild with those
+    # CONFIGs enabled.
