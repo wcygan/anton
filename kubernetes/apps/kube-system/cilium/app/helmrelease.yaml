@@ -138,12 +138,19 @@ spec:
     socketLB:
       enabled: true
       hostNamespaceOnly: true
-    # WHY: Resource limits for cilium agents prevent runaway memory consumption.
-    # Current usage: cilium agents ~750Mi per node
-    # Limits set at ~2x current usage with headroom for BPF map growth.
+    # WHY: Resource limits for cilium agents prevent runaway memory consumption,
+    # but the previous 1536Mi was too tight — k8s-2 hit the limit and was
+    # OOMKilled (exit 137) at 2026-04-20T22:45:56Z. Mechanism analysis in plan
+    # 0007 session 2 Log: page-cache accumulation inside the cilium-agent cgroup
+    # from BPF-ELF reloads + state-file re-reads compounds across agent
+    # restarts, so once any node OOMs once, the restart cycle tends to recur.
+    # Raising to 2560Mi gives ~1.7x the observed k8s-2 peak (1775Mi pod-total
+    # WSS in the 48h trend) so working set has room to breathe before OOM.
+    # Peers (k8s-1, k8s-3) currently run at ~190Mi cilium-agent WSS — the new
+    # limit is not tight for them either.
     resources:
       limits:
-        memory: 1536Mi
+        memory: 2560Mi
       requests:
         cpu: 100m
         memory: 512Mi
