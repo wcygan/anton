@@ -1,0 +1,104 @@
+---
+# Temporary Talos log receiver — Phase 3 of plan 0007. Torn down in Phase 5.
+# Scope is narrow: capture service logs (via machine.logging.destinations) and
+# kernel dmesg (via the talos.logging.kernel kernel cmdline) to a file on
+# Longhorn, read on demand via kubectl exec + tail. No Loki, no Grafana wiring,
+# no OTel collector — those are ADR 0008's deferred logging platform, which
+# this instrument must not expand into.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: talos-log-sink
+spec:
+  chart:
+    spec:
+      chart: vector
+      version: 0.51.0
+      sourceRef:
+        kind: HelmRepository
+        name: vector
+      interval: 15m
+  interval: 1h
+
+  values:
+    role: Aggregator
+    replicas: 1
+
+    # Keep the sink off the node under investigation so a k8s-2 reboot does not
+    # take the receiver with it. Hard-exclude k8s-2; scheduler picks k8s-1 or k8s-3.
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [k8s-2]
+
+    # PVC at /vector-data-dir — the chart's built-in persistence mount point;
+    # the file sink writes its rotating log file there.
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClassName: longhorn
+      accessModes: [ReadWriteOnce]
+
+    # Single Service with both TCP listeners. Pinned LB IP so the Talos
+    # machineconfig reference stays stable across Service recreates.
+    service:
+      enabled: true
+      type: LoadBalancer
+      loadBalancerIP: 192.168.1.105
+      ports:
+        - name: talos-service
+          port: 6000
+          protocol: TCP
+          targetPort: 6000
+        - name: talos-kernel
+          port: 6001
+          protocol: TCP
+          targetPort: 6001
+
+    # Vector config — two TCP sources, two tagging transforms, one file sink.
+    # JSON-lines format is required by Talos service logs; kernel logs arrive
+    # as free-form text and get wrapped into JSON by the file sink encoder.
+    customConfig:
+      data_dir: /vector-data-dir
+      api:
+        enabled: false
+      sources:
+        talos_service:
+          type: socket
+          mode: tcp
+          address: 0.0.0.0:6000
+          decoding:
+            codec: json
+        talos_kernel:
+          type: socket
+          mode: tcp
+          address: 0.0.0.0:6001
+      transforms:
+        tag_service:
+          type: remap
+          inputs: [talos_service]
+          source: |
+            .source = "service"
+        tag_kernel:
+          type: remap
+          inputs: [talos_kernel]
+          source: |
+            .source = "kernel"
+      sinks:
+        file:
+          type: file
+          inputs: [tag_service, tag_kernel]
+          path: /vector-data-dir/talos-sink-%Y-%m-%d.log
+          encoding:
+            codec: json
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
