@@ -1,0 +1,25 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: harbor
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/registries/harbor/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: registries
+  # Harbor's chart references external Postgres, Dragonfly, and the S3-creds
+  # + admin-password Secrets — all authored by `harbor-config`. Block the chart
+  # install until those land so we don't hit a restart-loop waiting on missing
+  # backends or secrets.
+  dependsOn:
+    - name: harbor-config
+  wait: false
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

@@ -1,0 +1,22 @@
+---
+apiVersion: dragonflydb.io/v1alpha1
+kind: Dragonfly
+metadata:
+  name: harbor-redis
+spec:
+  replicas: 3
+  image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.38.0
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  args:
+    # Harbor's redis usage is light (session + cache); 256MB is plenty.
+    - --maxmemory=256mb
+    # Single proactor thread is adequate for Harbor's traffic pattern.
+    - --proactor_threads=1

@@ -1,0 +1,21 @@
+---
+# Tailscale-operator Ingress for Harbor's web UI and OCI API. Resolves to
+# registry.<tailnet-name>.ts.net with browser-trusted TLS provisioned by
+# the operator on first access. Internal-remote access per ADR 0012
+# (Tailscale ingress for private workloads, Cloudflare tunnel reserved for
+# genuinely public). The LB IP 192.168.1.106 remains for in-cluster/on-LAN
+# traffic (Docker-auth realm needs a stable IP).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: registry-tailscale
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: harbor
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - registry

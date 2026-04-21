@@ -1,0 +1,27 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: harbor-config
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/registries/harbor-config/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: registries
+  # harbor-config authors resources that consume two CRDs installed by the
+  # operators in the `databases` namespace (CNPG `Cluster` and DragonflyDB
+  # `Dragonfly`). Block reconcile until both operators are Ready.
+  dependsOn:
+    - name: cloudnative-pg
+      namespace: databases
+    - name: dragonfly-operator
+      namespace: databases
+  wait: true
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

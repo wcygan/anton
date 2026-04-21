@@ -1,0 +1,154 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: harbor
+spec:
+  chart:
+    spec:
+      chart: harbor
+      version: 1.18.3
+      sourceRef:
+        kind: HelmRepository
+        name: harbor
+      interval: 15m
+  interval: 1h
+  values:
+    # Tailscale ingress (ingress-tailscale.yaml under harbor-config) owns
+    # externally-facing TLS at registry.<tailnet>.ts.net. The LoadBalancer
+    # below is the LAN IP that containerd and in-cluster pods talk to — HTTP
+    # is intentional since nothing in the cluster needs Harbor TLS, and
+    # Docker-auth redirect reliability historically hinged on externalURL
+    # matching the LB IP (pre-reset incident).
+    expose:
+      type: loadBalancer
+      tls:
+        enabled: false
+      loadBalancer:
+        name: harbor
+        ports:
+          httpPort: 80
+          httpsPort: 443
+        annotations:
+          lbipam.cilium.io/ips: "192.168.1.106"
+
+    # externalURL governs the Docker WWW-Authenticate token realm. Setting
+    # this to the LB IP keeps containerd's auth flow local (same pre-reset
+    # workaround). The Tailscale ingress serves the web UI on
+    # registry.<tailnet>.ts.net separately — Harbor tolerates the mismatch.
+    externalURL: http://192.168.1.106
+
+    internalTLS:
+      enabled: false
+
+    persistence:
+      enabled: true
+      resourcePolicy: keep
+      persistentVolumeClaim:
+        # jobservice.jobLog is the only component that still needs a PVC
+        # after the S3 backend takes over the registry and chartmuseum
+        # volumes. jobservice.replicas=1 (per ADR 0015) keeps this RWO on
+        # Longhorn; scale beyond 1 would require RWX which this cluster has
+        # no replicated filesystem for.
+        jobservice:
+          jobLog:
+            storageClass: longhorn
+            accessMode: ReadWriteOnce
+            size: 1Gi
+      imageChartStorage:
+        # disableredirect: SeaweedFS S3 does not support pre-signed-URL
+        # redirects for blobs (like MinIO), so the registry must proxy.
+        disableredirect: true
+        type: s3
+        s3:
+          region: us-east-1
+          bucket: harbor
+          regionendpoint: http://seaweedfs-s3.storage.svc.cluster.local:8333
+          secure: false
+          skipverify: true
+          # keys in this Secret: REGISTRY_STORAGE_S3_ACCESSKEY and
+          # REGISTRY_STORAGE_S3_SECRETKEY — produced by
+          # harbor-config/externalsecret-s3.yaml from 1Password
+          # `seaweedfs-harbor`.
+          existingSecret: harbor-s3-creds
+
+    # Admin password — sourced from 1Password item `harbor-admin` via
+    # harbor-config/externalsecret-admin.yaml. Key is HARBOR_ADMIN_PASSWORD.
+    existingSecretAdminPassword: harbor-admin-secret
+    existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
+
+    portal:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+
+    core:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    jobservice:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+
+    registry:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    trivy:
+      enabled: false
+
+    database:
+      type: external
+      external:
+        host: harbor-postgres-rw.registries.svc.cluster.local
+        port: "5432"
+        username: harbor
+        coreDatabase: registry
+        sslmode: require
+        # CNPG auto-generates `harbor-postgres-app` with key "password"
+        # from the Cluster CR's bootstrap.initdb.owner/database.
+        existingSecret: harbor-postgres-app
+
+    redis:
+      type: external
+      external:
+        addr: harbor-redis.registries.svc.cluster.local:6379
+        coreDatabaseIndex: "0"
+        jobserviceDatabaseIndex: "1"
+        registryDatabaseIndex: "2"
+        trivyAdapterIndex: "5"
+        # Dragonfly has no password auth in our CR; leave addr-only.
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+
+    log:
+      level: info
+
+    notary:
+      enabled: false
+
+    cache:
+      enabled: true
+      expireHours: 24

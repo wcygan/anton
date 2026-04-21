@@ -1,0 +1,10 @@
+---
+# goharbor/harbor publishes its chart at https://helm.goharbor.io (no OCI
+# chart upstream as of chart 1.18.3). Revisit if Harbor adds OCI publishing.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: harbor
+spec:
+  interval: 1h
+  url: https://helm.goharbor.io
