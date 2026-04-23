@@ -10,15 +10,17 @@ spec:
   interval: 1h
   values:
     autoDirectNodeRoutes: true
-    # WHY: cleanState rebuilds cilium-agent's BPF maps from scratch on every
-    # restart rather than inheriting them from the previous (possibly corrupted)
-    # cgroup. Pairs with the 3584Mi limit below; together they are the
-    # upstream-recommended remediation for cilium/cilium #42007 (BPF map entry
-    # corruption under pod-churn near the memory limit). ADR 0021.
-    # Cost: ~10-20 s datapath blip on the restarted node per cilium-agent
-    # restart. Accepted as the cost of preventing the 2026-04-23 cascade
-    # mechanism from recurring.
-    cleanState: true
+    # NOTE: cleanState was tried 2026-04-23 as part of ADR 0021's original
+    # remediation for cilium/cilium #42007, but reverted same-day when
+    # rolling restarts deadlocked — the init container's safety check
+    # "Agent should not be running when cleaning up / Found pidfile
+    # /var/run/cilium/cilium.pid" blocks the new pod because the host's
+    # /var/run/cilium/ still holds the departing agent's pidfile during a
+    # DaemonSet rolling update. cleanState is a manual one-shot recovery
+    # flag upstream, not a permanent value. The 3584Mi memory bump below
+    # is the durable half of the #42007 remediation and stands on its own.
+    # If BPF-state corruption ever needs a one-shot wipe, flip cleanState
+    # to true, apply, delete the pod, then flip back — do NOT leave it on.
     bpf:
       masquerade: true
       # Ref: https://github.com/siderolabs/talos/issues/10002
