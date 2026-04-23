@@ -16,7 +16,7 @@ spec:
         containers:
           app:
             image:
-              repository: harbor.${SECRET_DOMAIN}/bakery/server
+              repository: 192.168.1.106/bakery/server
               tag: main-6f4f16b
               digest: sha256:819393fb99a606f869811763a5c61d4ae057704e9f10aa004b375e0f47d79c0d
             probes:
