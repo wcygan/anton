@@ -17,8 +17,8 @@ spec:
           app:
             image:
               repository: 192.168.1.106/bakery/server
-              tag: main-6f4f16b
-              digest: sha256:819393fb99a606f869811763a5c61d4ae057704e9f10aa004b375e0f47d79c0d
+              tag: main-static-fdc0e8c
+              digest: sha256:9ccff874114e1de34af2aa1fdca540fba6878ced3d82b8b77ec5b3b999424bfe
             probes:
               liveness: &probes
                 enabled: true
