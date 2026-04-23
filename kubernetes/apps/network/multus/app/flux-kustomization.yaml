@@ -92,7 +92,7 @@ spec:
           value:
             name: install-cni
             # renovate: datasource=docker depName=ghcr.io/siderolabs/install-cni
-            image: ghcr.io/siderolabs/install-cni:v1.7.0
+            image: ghcr.io/siderolabs/install-cni:v1.9.0
             command: ["/install-cni.sh"]
             securityContext:
               privileged: true
