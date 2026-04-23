@@ -53,3 +53,16 @@ spec:
         ports:
           http:
             port: *port
+    persistence:
+      cache:
+        type: emptyDir
+        advancedMounts:
+          server:
+            app:
+              - path: /var/cache/nginx
+      run:
+        type: emptyDir
+        advancedMounts:
+          server:
+            app:
+              - path: /var/run
