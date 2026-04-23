@@ -301,6 +301,7 @@ patches:
   - "@./patches/global/machine-files.yaml"
   - "@./patches/global/machine-kernel.yaml"
   - "@./patches/global/machine-kubelet.yaml"
+  - "@./patches/global/machine-logging.yaml"
   - "@./patches/global/machine-network.yaml"
   - "@./patches/global/machine-registries.yaml"
   - "@./patches/global/machine-sysctls.yaml"

@@ -5,15 +5,15 @@
 # diagnostic instrument only.
 #
 # service logs: machine.logging.destinations writes Talos service-layer JSON
-# lines over TCP to the Vector sink at 192.168.1.105:6000.
+# lines (controller-runtime, kubelet, machined) over TCP to the Vector sink
+# at 192.168.1.105:6000.
 #
-# kernel logs: machine.install.extraKernelArgs adds the talos.logging.kernel
-# kernel cmdline arg so the kernel dmesg stream is forwarded to Vector at
-# 192.168.1.105:6001. This arg requires a reboot per node to take effect.
+# Kernel dmesg streaming is NOT enabled here. Talos v1.12 boots with
+# grubUseUKICmdline=true (UKI seals the cmdline), so install.extraKernelArgs
+# is rejected. The kernel-logging arm (talos.logging.kernel=tcp://...) would
+# need runtime injection via the META partition (talosctl meta write) per
+# node. Deferred — service logs alone give us the pre-reboot lead-up.
 machine:
-  install:
-    extraKernelArgs:
-      - talos.logging.kernel=tcp://192.168.1.105:6001
   logging:
     destinations:
       - endpoint: "tcp://192.168.1.105:6000"
