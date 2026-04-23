@@ -1,11 +1,11 @@
 ---
-status: Accepted
+status: Superseded-by 0021
 date: 2026-04-21
 deciders: ['@wcygan']
 affects: networking
 intent: concrete-need
 supersedes: []
-superseded-by: null
+superseded-by: 0021
 retrospective: false
 ---
 

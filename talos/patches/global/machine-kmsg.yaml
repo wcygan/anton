@@ -1,0 +1,20 @@
+---
+# Kernel dmesg streaming to the Vector sink on 192.168.1.105:6001 (file
+# "talos-kernel" source, tagged source=kernel). This is the kernel-side
+# complement to machine-logging.yaml (which handles service-layer logs on
+# :6000) and is Phase 1 of plan 0009 — we need kernel-level visibility to
+# catch the lead-up to the silent reboots on k8s-2 and k8s-3.
+#
+# Why a KmsgLogConfig document instead of .machine.install.extraKernelArgs:
+# Talos v1.12 boots with grubUseUKICmdline=true which seals the kernel
+# cmdline in the UKI; install.extraKernelArgs is rejected at apply time.
+# KmsgLogConfig is the supported runtime surface, applies without a reboot,
+# and is documented for v1.12+.
+#
+# Teardown: this patch goes away in Phase 6 of plan 0009 (together with the
+# plan 0007 Phase 5 scope). ADR 0008 still defers the logging platform —
+# this file is a diagnostic instrument, not the beginning of Loki.
+apiVersion: v1alpha1
+kind: KmsgLogConfig
+name: vector-sink
+url: tcp://192.168.1.105:6001/

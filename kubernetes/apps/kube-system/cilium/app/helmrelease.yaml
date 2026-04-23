@@ -10,6 +10,15 @@ spec:
   interval: 1h
   values:
     autoDirectNodeRoutes: true
+    # WHY: cleanState rebuilds cilium-agent's BPF maps from scratch on every
+    # restart rather than inheriting them from the previous (possibly corrupted)
+    # cgroup. Pairs with the 3584Mi limit below; together they are the
+    # upstream-recommended remediation for cilium/cilium #42007 (BPF map entry
+    # corruption under pod-churn near the memory limit). ADR 0021.
+    # Cost: ~10-20 s datapath blip on the restarted node per cilium-agent
+    # restart. Accepted as the cost of preventing the 2026-04-23 cascade
+    # mechanism from recurring.
+    cleanState: true
     bpf:
       masquerade: true
       # Ref: https://github.com/siderolabs/talos/issues/10002
@@ -138,19 +147,20 @@ spec:
     socketLB:
       enabled: true
       hostNamespaceOnly: true
-    # WHY: Resource limits for cilium agents prevent runaway memory consumption,
-    # but the previous 1536Mi was too tight — k8s-2 hit the limit and was
-    # OOMKilled (exit 137) at 2026-04-20T22:45:56Z. Mechanism analysis in plan
-    # 0007 session 2 Log: page-cache accumulation inside the cilium-agent cgroup
-    # from BPF-ELF reloads + state-file re-reads compounds across agent
-    # restarts, so once any node OOMs once, the restart cycle tends to recur.
-    # Raising to 2560Mi gives ~1.7x the observed k8s-2 peak (1775Mi pod-total
-    # WSS in the 48h trend) so working set has room to breathe before OOM.
-    # Peers (k8s-1, k8s-3) currently run at ~190Mi cilium-agent WSS — the new
-    # limit is not tight for them either.
+    # WHY: Memory limit sized against cgroup WSS (RSS + active page cache),
+    # not process RSS. History of this setting:
+    #   - chart default 1536Mi: too tight; k8s-2 OOM-killed 2026-04-20 (ADR 0020)
+    #   - 2560Mi (ADR 0020, 2026-04-21): closed the cgroup-OOM face, but the
+    #     2026-04-23 20:45-20:47Z two-node cascade hit with cilium-agents at
+    #     ~30% of that ceiling — the mechanism's second face is cilium/cilium
+    #     #42007 (BPF map corruption under pod-churn, doesn't require OOM)
+    #   - 3584Mi (ADR 0021, current): +1 GiB above observed peak per #42007
+    #     remediation. 4.7x k8s-1 steady state; still ~3.7% of node RAM.
+    # Paired with cleanState: true above — the two changes together are the
+    # upstream-recommended remediation. Plan 0009 Phase 2.
     resources:
       limits:
-        memory: 2560Mi
+        memory: 3584Mi
       requests:
         cpu: 100m
         memory: 512Mi

@@ -1171,6 +1171,39 @@ data:
               "legendFormat": "drop"
             }
           ]
+        },
+        {
+          "id": 704,
+          "type": "timeseries",
+          "title": "Cilium-agent WSS per Node (24h) — ADR 0021 + plan 0009 Phase 3",
+          "gridPos": { "x": 0, "y": 107, "w": 24, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Working-set bytes of the cilium-agent container per node. Two horizontal threshold lines mirror the PrometheusRule alerts: 2048 MiB (CiliumAgentMemoryHigh, 5m warning) and 3072 MiB (CiliumAgentMemoryCritical, 2m critical). The ADR 0021 limit is 3584 MiB; anything approaching it is the #42007 BPF-corruption zone. A cluster-wide step-increase (all three lines rising together on a single node churn event) is the #37935 signature that preceded the 2026-04-23 20:45Z cascade. Default 24h window so a churn-triggered trajectory is visible at a glance.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "lineWidth": 2 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 2147483648 },
+                  { "color": "red", "value": 3221225472 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "container_memory_working_set_bytes{container=\"cilium-agent\",namespace=\"kube-system\"}",
+              "legendFormat": "{{node}}"
+            }
+          ]
         }
       ]
     }

@@ -1,0 +1,72 @@
+---
+# Plan 0009 Phase 3 — cluster-wide cilium-agent memory alerting.
+#
+# Two tiers sized against the 3584 MiB limit set by ADR 0021:
+#   - warning  at > 2048 MiB WSS for 5m (57% of limit) — early lead-up signal
+#   - critical at > 3072 MiB WSS for 2m (86% of limit, 512 MiB headroom)
+#
+# The warning threshold is deliberately below the pre-cascade k8s-1 steady
+# state times 10; it fires on the cluster-wide step-increase pattern from
+# cilium/cilium #37935 (node-churn expansion) before the #42007 BPF-corruption
+# zone is reached. The critical threshold fires fast (2m) because at 3072 MiB
+# WSS there is only 512 MiB of headroom until the OOM-killer triggers, so the
+# operator has minutes, not tens of minutes, to act.
+#
+# Replaces the ad-hoc operator-session cilium-memory cron (memory pattern
+# `ba4b7418`) that ran during plan 0007. Prometheus is now canonical for this
+# signal — delete the cron pattern from agent memory once these alerts fire
+# through to Alertmanager.
+#
+# Label shape matches the other PrometheusRule CRs installed by
+# kube-prometheus-stack (release=kube-prometheus-stack) so rule-based
+# dashboards and Alertmanager routing treat it identically.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cilium-agent-memory
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cilium-agent-memory
+      interval: 30s
+      rules:
+        - alert: CiliumAgentMemoryHigh
+          expr: |
+            container_memory_working_set_bytes{container="cilium-agent",namespace="kube-system"}
+              > 2048 * 1024 * 1024
+          for: 5m
+          labels:
+            severity: warning
+            component: cilium
+          annotations:
+            summary: "cilium-agent WSS > 2048 MiB on {{ $labels.node }}"
+            description: |
+              cilium-agent working set on node {{ $labels.node }} has been above
+              2048 MiB for 5 minutes. This is the early signal for the cluster-wide
+              step-increase pattern described in cilium/cilium #37935 and the
+              lead-up zone for #42007 (BPF map corruption under pod churn near
+              the memory limit). Check: is any node churning (drain, reboot,
+              scheduled cohort)? If yes, watch WSS on the other two nodes —
+              #37935 expands all three cilium-agents together.
+            runbook_url: "https://github.com/cilium/cilium/issues/42007"
+        - alert: CiliumAgentMemoryCritical
+          expr: |
+            container_memory_working_set_bytes{container="cilium-agent",namespace="kube-system"}
+              > 3072 * 1024 * 1024
+          for: 2m
+          labels:
+            severity: critical
+            component: cilium
+          annotations:
+            summary: "cilium-agent WSS > 3072 MiB on {{ $labels.node }} — OOM zone"
+            description: |
+              cilium-agent working set on node {{ $labels.node }} has been above
+              3072 MiB for 2 minutes. The ADR 0021 limit is 3584 MiB, so the pod
+              has ~512 MiB of headroom before the cgroup OOM-killer triggers and
+              restarts it (which, with cleanState: true, causes a ~10-20 s
+              datapath blip on that node). Act fast: identify the churn source
+              and consider cordoning the affected node to stop further
+              pod-scheduling pressure.
+            runbook_url: "https://github.com/cilium/cilium/issues/42007"
