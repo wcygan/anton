@@ -1,0 +1,40 @@
+---
+# ServiceAccount + narrowly-scoped Role/RoleBinding used by the
+# talos-log-sink-rotate CronJob (see cronjob.yaml) to exec into the
+# rotator sidecar on talos-log-sink-vector-0 and delete old log files.
+# Scope is a Role (not ClusterRole) on a specific pod name so the
+# CronJob cannot exec into anything else in the namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: talos-log-sink-rotate
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: talos-log-sink-rotate
+  namespace: observability
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    resourceNames: [talos-log-sink-vector-0]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    resourceNames: [talos-log-sink-vector-0]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: talos-log-sink-rotate
+  namespace: observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: talos-log-sink-rotate
+subjects:
+  - kind: ServiceAccount
+    name: talos-log-sink-rotate
+    namespace: observability

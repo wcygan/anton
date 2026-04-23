@@ -1,0 +1,66 @@
+---
+# Rotates the vector sink's daily log files (talos-sink-YYYY-MM-DD.log on the
+# 5 Gi PVC) by keeping only the newest 10 and deleting the rest. 10 * ~380 MB
+# = ~3.8 GiB, leaves ~1.2 GiB headroom on the PVC.
+#
+# Implementation: the vector container is distroless and has no shell, so the
+# CronJob invokes `kubectl exec` into the busybox `rotator` sidecar defined in
+# helmrelease.yaml (extraContainers). RBAC in rbac.yaml restricts the SA to
+# pods/exec on the one vector pod.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: talos-log-sink-rotate
+  namespace: observability
+spec:
+  schedule: "17 3 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          serviceAccountName: talos-log-sink-rotate
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: kubectl
+              # renovate: datasource=docker depName=registry.k8s.io/kubectl
+              image: registry.k8s.io/kubectl:v1.35.3
+              imagePullPolicy: IfNotPresent
+              # Distroless kubectl invokes directly via args (no shell); the
+              # shell command runs inside the `rotator` busybox sidecar on the
+              # vector pod, which mounts the same /vector-data-dir PVC.
+              args:
+                - exec
+                - --namespace=observability
+                - talos-log-sink-vector-0
+                - -c
+                - rotator
+                - --
+                - sh
+                - -c
+                - |
+                  cd /vector-data-dir && \
+                  ls -1t talos-sink-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
