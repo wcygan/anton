@@ -1,0 +1,112 @@
+---
+# Plan 0010 — k8s-2 staged rejoin abort signals.
+#
+# These rules are intentionally narrow and k8s-2-specific. They do not prove
+# root cause; they tell the operator when a staged rejoin has left the safe
+# observation envelope and k8s-2 should be re-cordoned while evidence is fresh.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: k8s-2-rejoin-abort
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: k8s-2-rejoin-abort
+      interval: 30s
+      rules:
+        - alert: K8s2UnexpectedReboot
+          expr: |
+            changes(node_boot_time_seconds{instance="192.168.1.99:9100"}[10m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: node
+            node: k8s-2
+          annotations:
+            summary: "k8s-2 boot time changed"
+            description: |
+              k8s-2 rebooted or node-exporter reported a new boot epoch within
+              the last 10 minutes. Re-cordon k8s-2, stop staged scheduling, and
+              preserve Vector/Talos kernel logs before running any cleanup.
+        - alert: K8s2ApiserverMemoryRapidGrowth
+          expr: |
+            max(
+              delta(container_memory_working_set_bytes{
+                node="k8s-2",
+                namespace="kube-system",
+                pod="kube-apiserver-k8s-2",
+                container="kube-apiserver"
+              }[20m])
+            ) > 384 * 1024 * 1024
+          for: 2m
+          labels:
+            severity: warning
+            component: apiserver
+            node: k8s-2
+          annotations:
+            summary: "k8s-2 kube-apiserver WSS grew rapidly"
+            description: |
+              kube-apiserver on k8s-2 grew by more than 384 MiB over 20 minutes.
+              The 2026-04-23 pre-reboot window showed +456 MiB WSS after
+              cAdvisor scrape dedupe. Treat this as an abort/watch signal during
+              staged rejoin and inspect apiserver watch/longrunning metrics.
+        - alert: K8s2ApiserverLongrunningJump
+          expr: |
+            delta(
+              sum(apiserver_longrunning_requests{
+                job="apiserver",
+                instance="192.168.1.99:6443"
+              })[10m:]
+            ) > 40
+          for: 2m
+          labels:
+            severity: warning
+            component: apiserver
+            node: k8s-2
+          annotations:
+            summary: "k8s-2 kube-apiserver longrunning request count jumped"
+            description: |
+              k8s-2 apiserver longrunning requests increased by more than 40
+              over 10 minutes. The corrected 04-23 investigation found the
+              apiserver mover was watch/longrunning-related, so this is a
+              staged-rejoin abort/watch signal.
+        - alert: K8s2ApiserverWatchEventBurst
+          expr: |
+            sum(
+              rate(apiserver_watch_events_total{
+                job="apiserver",
+                instance="192.168.1.99:6443"
+              }[5m])
+            ) > 20
+          for: 5m
+          labels:
+            severity: warning
+            component: apiserver
+            node: k8s-2
+          annotations:
+            summary: "k8s-2 kube-apiserver watch event burst"
+            description: |
+              k8s-2 apiserver watch event rate has exceeded 20 events/s for 5
+              minutes. During staged rejoin, correlate with new workloads,
+              controllers, and pod churn before continuing.
+        - alert: K8s2ApiserverFlowcontrolQueue
+          expr: |
+            sum(
+              apiserver_flowcontrol_current_inqueue_requests{
+                instance="192.168.1.99:6443"
+              }
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: apiserver
+            node: k8s-2
+          annotations:
+            summary: "k8s-2 apiserver APF queue is non-empty"
+            description: |
+              API Priority and Fairness has queued requests on the k8s-2
+              apiserver for 5 minutes. This is not automatically a root cause,
+              but during staged rejoin it is a pressure signal that should stop
+              further scheduling expansion until attributed.

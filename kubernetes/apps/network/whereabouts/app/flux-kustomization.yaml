@@ -49,6 +49,22 @@ spec:
           path: /spec/template/spec/containers/0/image
           # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/whereabouts
           value: ghcr.io/k8snetworkplumbingwg/whereabouts:v0.9.3
+    # Keep IPAM available during pod-creation bursts. The 2026-04-23 incident
+    # did not prove whereabouts OOMKilled, but the pod restarted 10x around the
+    # k8s-2 reset and is part of the CNI critical path.
+    - target:
+        kind: DaemonSet
+        name: whereabouts
+      patch: |-
+        - op: add
+          path: /spec/template/spec/priorityClassName
+          value: system-node-critical
+        - op: replace
+          path: /spec/template/spec/containers/0/resources/requests/memory
+          value: 128Mi
+        - op: replace
+          path: /spec/template/spec/containers/0/resources/limits/memory
+          value: 512Mi
     # Re-point ClusterRoleBinding subject to the relocated ServiceAccount
     - target:
         kind: ClusterRoleBinding

@@ -1,0 +1,86 @@
+---
+# Plan 0010 — CNI plumbing restart, OOM, and memory headroom alerts.
+#
+# These rules watch the small DaemonSets that sit on the pod-admission path:
+# Multus, Whereabouts, and the storage-vxlan helper. They are intentionally
+# separate from the cilium-agent rules because the 2026-04-23 incident showed
+# Multus/CNI plumbing restarts even when cilium-agent memory was not the driver.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cni-plumbing
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cni-plumbing
+      interval: 30s
+      rules:
+        - alert: CniDaemonSetRestartSpike
+          expr: |
+            sum by (namespace, pod, container) (
+              increase(kube_pod_container_status_restarts_total{
+                namespace="network",
+                container=~"kube-multus|whereabouts|vxlan"
+              }[10m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: cni
+          annotations:
+            summary: "CNI plumbing restart on {{ $labels.pod }} / {{ $labels.container }}"
+            description: |
+              {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }}
+              restarted within the last 10 minutes. During the 2026-04-23
+              Harbor drain, CNI DaemonSet restarts correlated with pod creation
+              failures and k8s-2 reboot risk. Check recent pod churn, node
+              drains, and previous container termination state.
+        - alert: CniDaemonSetOOMKilled
+          expr: |
+            sum by (namespace, pod, container) (
+              increase(kube_pod_container_status_terminated_reason{
+                namespace="network",
+                reason="OOMKilled",
+                container=~"kube-multus|whereabouts|vxlan"
+              }[15m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: cni
+          annotations:
+            summary: "CNI plumbing OOMKilled on {{ $labels.pod }} / {{ $labels.container }}"
+            description: |
+              {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }}
+              was OOMKilled within the last 15 minutes. Stop voluntary pod churn
+              or node drains and inspect CNI memory usage before re-admitting
+              k8s-2 or continuing rollout work.
+        - alert: CniDaemonSetMemoryNearLimit
+          expr: |
+            (
+              container_memory_working_set_bytes{namespace="network",container="kube-multus"}
+                > 400 * 1024 * 1024
+            )
+            or
+            (
+              container_memory_working_set_bytes{namespace="network",container="whereabouts"}
+                > 400 * 1024 * 1024
+            )
+            or
+            (
+              container_memory_working_set_bytes{namespace="network",container="vxlan"}
+                > 96 * 1024 * 1024
+            )
+          for: 2m
+          labels:
+            severity: warning
+            component: cni
+          annotations:
+            summary: "CNI plumbing memory near limit on {{ $labels.pod }} / {{ $labels.container }}"
+            description: |
+              {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }}
+              has been near its plan-0010 memory headroom threshold for 2
+              minutes. Inspect pod churn and recent node drains before the
+              CNI path starts rejecting new pod sandboxes.

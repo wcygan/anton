@@ -199,7 +199,10 @@ nodes:
                   - rshared
                   - rw
           nodeLabels:
+            anton.io/rejoin: "k8s-2"
             node.longhorn.io/create-default-disk: "config"
+          nodeTaints:
+            anton.io/rejoin: "k8s-2:NoSchedule"
           nodeAnnotations:
             node.longhorn.io/default-disks-config: |-
               [{"path":"/var/mnt/longhorn-1","allowScheduling":true},{"path":"/var/mnt/longhorn-2","allowScheduling":true}]
@@ -313,4 +316,3 @@ patches:
 controlPlane:
   patches:
     - "@./patches/controller/cluster.yaml"
-

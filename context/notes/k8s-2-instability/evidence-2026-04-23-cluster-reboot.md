@@ -150,3 +150,166 @@ New candidate:
    It was written after 45h+ of stability; the two-node cascade shows
    the memory bump *extended* stability but did not eliminate the
    failure mode. Add a correction note to ADR 0020.
+
+---
+
+## Addendum — 2026-04-24 measurement-source correction
+
+**The "cilium cgroup" numbers in this file are node-level, not cilium-specific.**
+
+The pre-reboot and post-reboot figures throughout this document (e.g.
+"k8s-2 WSS 2048→2334 MiB in 10 min, Cache +593 MiB"; the post-reboot
+table showing k8s-2 WSS=2042 / Cache=2828 and k8s-3 WSS=2391 /
+Cache=2442) were gathered by the session `/loop` monitor via:
+
+```
+kubectl exec <cilium-agent-pod> -- cat /sys/fs/cgroup/memory.stat
+```
+
+Cilium bind-mounts `/sys/fs/cgroup` from the host for BPF and cgroup
+operations, so reads against `/sys/fs/cgroup/memory.stat` inside
+`cilium-agent` return the **host root cgroup stats, not cilium's
+container cgroup**. Confirmed 2026-04-24 14:24Z by observing
+`/proc/self/cgroup` return `0::/` and `memory.max` being absent at
+that path.
+
+Container-scoped measurements at 2026-04-24 14:24Z (uncorrupted source
+— `kubectl top pod -n kube-system -l k8s-app=cilium --containers`,
+which reads through metrics-server from the container's own cgroup on
+the host):
+
+| Node  | cilium-agent actual memory | % of 3584 Mi limit |
+|-------|----------------------------|--------------------|
+| k8s-1 | **213 MiB**                | 6 %                |
+| k8s-2 | **174 MiB**                | 5 %                |
+| k8s-3 | **172 MiB**                | 5 %                |
+
+### What changes about the 04-23 analysis
+
+1. The "pre-reboot cilium WSS+cache spike on k8s-2" was a node-level
+   memory rise during pod churn (cilium-operator + 4 CSI pods +
+   seaweedfs-volume-1 landing at ~20:36Z; reboot at 20:47Z). 2334 MiB
+   anon on a 96 GB node is 2.4% utilization — not memory pressure.
+2. The cilium `/proc/.../memory.stat`-based oscillation band "1640-1894
+   MiB over 33h" captured by the 2026-04-22 monitoring run was also
+   node-level. Treat it as a node-level baseline, not a cilium
+   runtime-state signal.
+3. **The pod-churn ↔ reboot correlation is still real** — node anon
+   memory *did* rise +500 MiB in 10 min and two nodes *did* reboot —
+   but the correlation is mediated by **something else the pod churn
+   triggered** (CSI registration, Multus/whereabouts IPAM, Longhorn
+   engine attach, seaweedfs volume registration, kernel subsystem
+   load), not by cilium cgroup pressure.
+4. The cilium/cilium #42007 upstream bug (near-limit + churn → BPF
+   entry corruption) remains a real upstream issue. ADR 0021 is a
+   sensible preventive measure on its own merit, but we do **not**
+   have evidence it was the 04-23 trigger. If Phase 4's controlled
+   re-admission experiment repeats the cascade with cilium cgroup
+   memory flat, #42007 is falsified as the 04-23 mechanism.
+5. ADR 0020 stands — the 04-20 cilium-agent exit-137 OOMKill on the
+   old 1536 Mi limit was measured via Prometheus `container_memory_*`
+   (container-scoped), which is correct. That OOM loop was real and
+   the 1536 → 2560 Mi bump did close it.
+
+### What to do with this document
+
+Keep the body as-is for historical fidelity. **Treat every "WSS=" and
+"Cache=" figure above as node-level unless explicitly labelled
+`container_memory_*` from Prometheus.** Re-do future monitoring via
+Prometheus container-scoped metrics or `kubectl top pod --containers`.
+
+### Monitoring approach going forward
+
+Phase 3 of plan 0009 (PrometheusRule + Grafana panel) already uses
+`container_memory_working_set_bytes{container="cilium-agent"}`, which
+is correct. No change needed there. For ad-hoc inspection, use
+`kubectl top pod -n kube-system -l k8s-app=cilium --containers`.
+The in-container `memory.stat` method is forbidden for cilium
+specifically, and suspect for any DaemonSet that bind-mounts
+`/sys/fs/cgroup` from the host (almost all CNI agents, node-exporter,
+kubelet-adjacent pods).
+
+---
+
+## Addendum #2 — 2026-04-24 (later) cascade framing retracted
+
+**The two-node cascade described in this document did not happen.**
+Peer-agent review on 2026-04-24 verified plan 0006 Log line 115:
+
+> 2026-04-23: Controlled-reboot acceptance test — passed. [...] Reboot
+> issued via `talosctl -e 100.100.217.100 -n 100.100.217.100 reboot`
+> at 20:44:37Z; k8s-3 back to Ready,SchedulingDisabled by 20:49:42Z.
+
+**k8s-3's 20:45Z reboot was an operator-initiated Harbor controlled-
+reboot acceptance test under plan 0006, not a silent crash.**
+This investigation's monitor detected it as "uptime decrease" but
+had no way to distinguish intentional reboots from silent ones,
+so the original incident report treated them as a cascade.
+
+### What actually happened on 2026-04-23
+
+- 20:35:41Z — operator cordoned k8s-3 for Harbor drain test (plan 0006)
+- 20:35:57Z — drain started; Harbor pods rescheduled onto k8s-1 and k8s-2
+- ~20:36:18-41:00Z — Multus OOMKilled 4× on k8s-1 under pod-creation
+  burst (documented in plan 0006 Log, NOT this document's body)
+- 20:37:50Z — CNPG promoted `harbor-postgres-2`; former primary
+  `harbor-postgres-1` accepted by k8s-2 as last-resort placement
+  despite the `PreferNoSchedule` taint (soft)
+- 20:44:37Z — operator issued `talosctl reboot` against k8s-3
+- 20:45Z — k8s-3 kernel boot (normal reboot, ~5 min total)
+- **20:47Z — k8s-2 silent reboot (exit 255) — THIS is the only
+  unexplained event on 2026-04-23**
+- 20:49:42Z — k8s-3 back Ready per the operator's plan 0006 monitoring
+- 20:52:01Z — operator uncordoned k8s-3
+
+### What this changes
+
+1. **k8s-3 has never silently rebooted during the investigation.**
+   The "k8s-3 is now involved, single-unit hardware defect weakened"
+   conclusion in the body of this document is void. Hardware defect
+   hypothesis stays live.
+2. **Total silent-reboot count is 2, not 3**: 2026-04-21 20:34Z and
+   2026-04-23 20:47Z. Both on k8s-2. Both unexplained.
+3. **Pre-reboot memory trajectory on k8s-2 was dominated by
+   kube-apiserver, not the re-admission cohort.** Peer review of
+   Prometheus `topk(10, sum by (pod,container) (container_memory_
+   working_set_bytes{node="k8s-2"}))` shows kube-apiserver WSS rose
+   from ~1.70 GiB at 20:30Z to ~2.65 GiB at 20:46Z (+950 MiB). The
+   re-admission cohort (cilium-operator + CSI + harbor-postgres-1)
+   contributed only ~500-600 MiB aggregate. The mechanism that drove
+   kube-apiserver's +950 MiB growth is a new, untested thread — could
+   be list-watch storm from the Harbor drain, audit log volume, or
+   an etcd-interaction effect.
+4. **BIOS split k8s-1 (1.26) vs k8s-2/k8s-3 (1.22) is confirmed** but
+   **runtime microcode is identical on all three nodes (0x00006134)**,
+   so the specific "Intel 0x12B Vmin-shift mitigation is present on
+   k8s-1 but not k8s-2/k8s-3" claim is wrong. The BIOS version
+   difference may still matter (C-state defaults, IRQ routing, power
+   management firmware) but not via microcode content. Phase 5 BIOS
+   flash still reasonable as generic firmware-currency hardening.
+
+### What the body of this document still gets right
+
+- The silent-reboot signature on k8s-2 (exit 255, ~30s network silence
+  via etcd peer timeouts, clean cold boot with no kernel trace) is
+  accurate and this is the primary feature to watch for in future
+  events
+- Phase 1 netconsole activation is still the right diagnostic for the
+  next silent event
+- Kernel-config-induced silent hang (hypothesis #2) is still live and
+  now relatively stronger by elimination
+
+### What this document's body gets wrong (do NOT act on these)
+
+- "Two-node cascade" framing (everywhere)
+- "k8s-3 first, then k8s-2" timeline — k8s-3 was intentional
+- "single-unit hardware defect weakened by k8s-3 involvement" —
+  hardware defect re-strengthened by k8s-3 NOT being involved
+- Cilium/Multus WSS figures measured via in-container `memory.stat`
+  (already corrected in Addendum #1 above)
+- The "strongest recommendation: netconsole + 3584 Mi cilium + BIOS
+  flash" — netconsole and BIOS flash still reasonable; 3584 Mi cilium
+  bump (ADR 0021) was deployed but not demonstrated as the 04-23 fix
+
+Plan 0009 and the README hypothesis ranking are being updated in the
+same pass that produced this addendum.

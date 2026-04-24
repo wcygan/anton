@@ -33,25 +33,34 @@ spec:
           path: /spec/template/spec/containers/0/image
           # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/multus-cni
           value: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick
-    # Raise Multus cgroup memory limit 50Mi → 256Mi. Upstream default is
+    # Raise Multus cgroup memory limit 50Mi → 512Mi. Upstream default is
     # tuned for pod-creation rates that small clusters rarely see; anton
     # hits the limit during bursts because Multus invokes `cilium-cni` as
     # a sub-process per pod and each invocation briefly accounts ~6MB RSS
     # against the cgroup. With `memory.oom.group set`, a single OOM kills
     # multus-daemon + every in-flight cilium-cni child. Same class of bug
     # as plan 0007 hypothesis #4 (cilium-agent OOM), different process.
-    # The 256Mi ceiling gives ~40 concurrent cilium-cni invocations of
-    # headroom and matches the plan 0007 5x bump ratio.
+    # The 2026-04-23 Harbor drain still OOMKilled the 256Mi k8s-1 Multus
+    # pod, so keep this as CNI hardening independent of the k8s-2 reset
+    # root cause.
     - target:
         kind: DaemonSet
         name: kube-multus-ds
       patch: |-
         - op: replace
           path: /spec/template/spec/containers/0/resources/requests/memory
-          value: 256Mi
+          value: 512Mi
         - op: replace
           path: /spec/template/spec/containers/0/resources/limits/memory
-          value: 256Mi
+          value: 512Mi
+    # CNI plumbing must survive node pressure ahead of ordinary workloads.
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        - op: add
+          path: /spec/template/spec/priorityClassName
+          value: system-node-critical
     # Move ServiceAccount to the network namespace
     - target:
         kind: ServiceAccount

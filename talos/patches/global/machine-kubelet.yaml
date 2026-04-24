@@ -2,6 +2,18 @@ machine:
   kubelet:
     extraConfig:
       serializeImagePulls: false
+      systemReserved:
+        cpu: 500m
+        memory: 2Gi
+      kubeReserved:
+        cpu: 500m
+        memory: 2Gi
+      evictionHard:
+        memory.available: 2Gi
+        nodefs.available: 10%
+        nodefs.inodesFree: 5%
+        imagefs.available: 15%
+        imagefs.inodesFree: 5%
     nodeIP:
       validSubnets:
         - 192.168.1.0/24
