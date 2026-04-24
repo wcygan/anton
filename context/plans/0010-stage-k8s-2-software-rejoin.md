@@ -36,7 +36,7 @@ Return k8s-2 to serving compute capacity without touching hardware yet, while re
 ### Phase 1: Scheduling Guardrails
 
 - [x] Add a persistent k8s-2 rejoin label and hard taint in Git-managed node config, e.g. `anton.io/rejoin=k8s-2` and `anton.io/rejoin=k8s-2:NoSchedule`.
-- [ ] Verify the rendered Talos config and live Kubernetes node state agree after apply; do not rely on an imperative taint that disappears after reset/rejoin.
+- [x] Verify the rendered Talos config and live Kubernetes node state agree after apply; do not rely on an imperative taint that disappears after reset/rejoin.
 - [x] Define the first tolerated workload cohort: low-risk compute only, no Harbor, CNPG, Dragonfly, SeaweedFS, Longhorn replica placement, observability singletons, or cluster-critical controllers.
 - [ ] Add or verify topology spread / anti-affinity on high-churn stateful components so a drain cannot pile replicas or sidecars onto k8s-2 in one burst.
 
@@ -48,7 +48,7 @@ Return k8s-2 to serving compute capacity without touching hardware yet, while re
 - [x] Raise `storage-vxlan` from `32Mi/64Mi` to `64Mi/128Mi`, then verify its manifest renders cleanly.
 - [x] Add `priorityClassName` to Multus, Whereabouts, storage-vxlan, and any required CNI-adjacent DaemonSets after checking rendered manifests.
 - [x] Add kubelet reservations in `talos/patches/global/machine-kubelet.yaml`: initial target `systemReserved.memory=2Gi`, `kubeReserved.memory=2Gi`, `evictionHard.memory.available=2Gi`, plus conservative CPU reservations.
-- [ ] Apply Talos kubelet reservation changes per node with etcd quorum checks and record pre/post allocatable memory.
+- [x] Apply Talos kubelet reservation changes per node with etcd quorum checks and record pre/post allocatable memory.
 
 ### Phase 3: Observability and Abort Signals
 
@@ -84,6 +84,7 @@ Return k8s-2 to serving compute capacity without touching hardware yet, while re
 - 2026-04-24: Stale-state recheck recorded in `context/notes/k8s-2-instability/evidence-2026-04-24-plan0010-stale-state.md`. Current 04-20-style blocker is gone: no `Unknown` or `ContainerCreating` pods, and Talos/containerd has no non-ready sandbox/container states. Reset/rejoin is deferred before Stage A because the remaining Longhorn stopped replica CRs are a storage/full-rejoin gate, not a limited compute-only blocker.
 - 2026-04-24: Added `prometheusrule-k8s-2-rejoin-abort.yaml` with k8s-2-specific abort/watch alerts: boot-time change, apiserver WSS growth over 384MiB/20m, apiserver longrunning jump, watch-event burst, and APF queue. PromQL expressions parsed successfully against live Prometheus. Abort criteria for Stage A/B: immediately re-cordon k8s-2 and stop staged scheduling if any critical abort alert fires, any CNI restart/OOM alert fires, Vector/Talos kernel stream is missing, Longhorn reports degraded/failed volume or rebuild storm tied to k8s-2, or kube-apiserver WSS/watch alerts coincide with new pod churn.
 - 2026-04-24: Scheduling gates recorded in `context/notes/k8s-2-instability/evidence-2026-04-24-plan0010-scheduling-gates.md`. Freeze is active for unrelated high-churn work. Stage A cohort is low-risk stateless compute/test pods only, preferably a purpose-built `playground/k8s-2-rejoin-smoke` Deployment with 5-10 replicas, no PVCs, ordinary Cilium networking, explicit `anton.io/rejoin` toleration, and required k8s-2 placement. Existing stateful/storage/observability/control-plane workloads remain excluded until Stage C/full rejoin.
+- 2026-04-24: Phase 2 Talos rolling apply of commit `1918ca07` complete across all three control planes in order k8s-2 → k8s-3 → k8s-1, each `--mode=auto` returning `Applied configuration without a reboot`. etcd quorum 3/3 held with leader k8s-1 and raft term 29 unchanged throughout; allocatable dropped cleanly to capacity − 6 GiB on all nodes (k8s-1 92279416Ki, k8s-2 92286412Ki, k8s-3 92239116Ki). k8s-2 now carries the persistent `anton.io/rejoin=k8s-2` label and `anton.io/rejoin=k8s-2:NoSchedule` taint on the live Node object in addition to the pre-existing cordon. No pod eviction storm, Flux all-Ready. Evidence: `context/notes/k8s-2-instability/evidence-2026-04-24-plan0010-talos-apply.md`. Stage A uncordon remains a separate later gate.
 
 ## References
 
