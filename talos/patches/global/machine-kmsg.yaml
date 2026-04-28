@@ -1,15 +1,22 @@
 ---
-# Kernel dmesg streaming to the Vector sink on 192.168.1.105:6001 (file
-# "talos-kernel" source, tagged source=kernel). This is the kernel-side
-# complement to machine-logging.yaml (which handles service-layer logs on
-# :6000) and is Phase 1 of plan 0009 — we need kernel-level visibility to
-# catch the lead-up to the silent reboots on k8s-2 and k8s-3.
+# Kernel dmesg streaming to the Vector sink at 192.168.1.105 — paired
+# TCP + UDP targets, file "talos-kernel" source tagged source=kernel.
+#
+# Two transports on purpose (plan 0009 + plan 0010 Stage A abort):
+#   - TCP (:6001) keeps lossless ordered delivery during normal operation.
+#   - UDP (:6002) bypasses TCP keepalive smear when the node hard-stops.
+#     The 2026-04-28 four-agent synthesis showed that the talos_service
+#     TCP stream cliffs ~35–40 s before each silent reboot — that gap is
+#     keepalive lag, not the moment of death. UDP datagrams are flushed
+#     onto the wire at write-time, so any kmsg the kernel emits in the
+#     final ms before reset has a fighting chance of reaching the sink
+#     even if the TCP source has not yet closed.
 #
 # Why a KmsgLogConfig document instead of .machine.install.extraKernelArgs:
 # Talos v1.12 boots with grubUseUKICmdline=true which seals the kernel
 # cmdline in the UKI; install.extraKernelArgs is rejected at apply time.
 # KmsgLogConfig is the supported runtime surface, applies without a reboot,
-# and is documented for v1.12+.
+# and is documented for v1.12+. UDP and TCP are both supported url schemes.
 #
 # Teardown: this patch goes away in Phase 6 of plan 0009 (together with the
 # plan 0007 Phase 5 scope). ADR 0008 still defers the logging platform —
@@ -18,3 +25,8 @@ apiVersion: v1alpha1
 kind: KmsgLogConfig
 name: vector-sink
 url: tcp://192.168.1.105:6001/
+---
+apiVersion: v1alpha1
+kind: KmsgLogConfig
+name: vector-sink-udp
+url: udp://192.168.1.105:6002/

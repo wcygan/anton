@@ -10,6 +10,7 @@ machine:
     user.max_user_namespaces: "11255"          # User Namespaces
     kernel.panic: "10"                         # Auto-reboot 10s after panic; leaves a boot marker. Plan 0007
     kernel.panic_on_oops: "1"                  # Promote BUG()s to panics. Plan 0007
+    kernel.printk_devkmsg: "on"                # Remove ratelimit on /dev/kmsg writes — paired with the UDP KmsgLogConfig target so a final-flush from any userspace caller (machined, kubelet) is not dropped by the ratelimiter on its way to the kernel ring buffer. Plan 0009
     # NOTE: kernel.hardlockup_panic and kernel.softlockup_panic cannot be set on
     # Talos — its Linux 6.18.18 kernel is built without CONFIG_HARDLOCKUP_DETECTOR /
     # CONFIG_SOFTLOCKUP_DETECTOR, so /proc/sys/kernel/{hardlockup,softlockup,

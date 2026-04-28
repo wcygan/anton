@@ -43,8 +43,10 @@ spec:
       storageClassName: longhorn
       accessModes: [ReadWriteOnce]
 
-    # Single Service with both TCP listeners. Pinned LB IP so the Talos
-    # machineconfig reference stays stable across Service recreates.
+    # Single Service with mixed TCP + UDP listeners. Pinned LB IP so the
+    # Talos machineconfig reference stays stable across Service recreates.
+    # Mixed-protocol Services are GA since k8s 1.26 (we're on 1.35) and
+    # supported by Cilium L2-announcement.
     service:
       enabled: true
       type: LoadBalancer
@@ -58,10 +60,22 @@ spec:
           port: 6001
           protocol: TCP
           targetPort: 6001
+        # Plan 0009 / plan 0010 abort follow-up: UDP kernel target pairs
+        # with the TCP one on :6001. UDP datagrams flush at write-time and
+        # bypass the ~37 s TCP-keepalive cliff observed on every silent
+        # reboot — best-effort capture of kernel last words.
+        - name: talos-kernel-udp
+          port: 6002
+          protocol: UDP
+          targetPort: 6002
 
-    # Vector config — two TCP sources, two tagging transforms, one file sink.
-    # JSON-lines format is required by Talos service logs; kernel logs arrive
-    # as free-form text and get wrapped into JSON by the file sink encoder.
+    # Vector config — three sources (TCP service, TCP kernel, UDP kernel),
+    # three tagging transforms, one file sink. JSON-lines format is required
+    # by Talos service logs; kernel logs arrive as free-form text and get
+    # wrapped into JSON by the file sink encoder. Each kernel record carries
+    # a `transport` field so post-mortem analysis can tell whether the last
+    # pre-reboot record arrived via the keepalive-smeared TCP path or the
+    # write-time-flushed UDP path.
     customConfig:
       data_dir: /vector-data-dir
       api:
@@ -77,6 +91,10 @@ spec:
           type: socket
           mode: tcp
           address: 0.0.0.0:6001
+        talos_kernel_udp:
+          type: socket
+          mode: udp
+          address: 0.0.0.0:6002
       transforms:
         tag_service:
           type: remap
@@ -88,10 +106,17 @@ spec:
           inputs: [talos_kernel]
           source: |
             .source = "kernel"
+            .transport = "tcp"
+        tag_kernel_udp:
+          type: remap
+          inputs: [talos_kernel_udp]
+          source: |
+            .source = "kernel"
+            .transport = "udp"
       sinks:
         file:
           type: file
-          inputs: [tag_service, tag_kernel]
+          inputs: [tag_service, tag_kernel, tag_kernel_udp]
           path: /vector-data-dir/talos-sink-%Y-%m-%d.log
           encoding:
             codec: json
