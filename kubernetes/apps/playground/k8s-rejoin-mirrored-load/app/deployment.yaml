@@ -1,0 +1,199 @@
+---
+# Suspended/unwired workload-control payload.
+#
+# This creates identical pod shapes on k8s-1 and k8s-2. It is intentionally
+# heavier than the busybox heartbeat control: each pod creates a Cilium
+# endpoint, attaches the Multus storage NAD, performs light DNS/API probes,
+# touches tmpfs memory, and burns short CPU bursts. It still avoids PVCs and
+# stateful services. The k8s-2 deployment tolerates only anton.io/rejoin, not
+# node.kubernetes.io/unschedulable, so cordon still blocks it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-1-mirrored-load
+  labels:
+    app.kubernetes.io/name: k8s-rejoin-mirrored-load
+    app.kubernetes.io/component: k8s-1-control
+    app.kubernetes.io/part-of: plan-0009
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-rejoin-mirrored-load
+      app.kubernetes.io/component: k8s-1-control
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: storage/longhorn-storage
+      labels:
+        app.kubernetes.io/name: k8s-rejoin-mirrored-load
+        app.kubernetes.io/component: k8s-1-control
+        app.kubernetes.io/part-of: plan-0009
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - k8s-1
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: load
+          image: docker.io/library/busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              while true; do
+                echo "load tick $(date -Iseconds) pod=${POD_NAME} node=${NODE_NAME}"
+                nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1 || true
+                wget -q -T 2 -O /dev/null https://kubernetes.default.svc >/dev/null 2>&1 || true
+                dd if=/dev/zero of=/work/blob bs=1M count=64 >/dev/null 2>&1 || true
+                rm -f /work/blob
+                sha256sum /dev/zero >/dev/null &
+                pid="$!"
+                sleep 5
+                kill "$pid" >/dev/null 2>&1 || true
+                wait "$pid" >/dev/null 2>&1 || true
+                sleep 10
+              done
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-2-mirrored-load
+  labels:
+    app.kubernetes.io/name: k8s-rejoin-mirrored-load
+    app.kubernetes.io/component: k8s-2-candidate
+    app.kubernetes.io/part-of: plan-0009
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-rejoin-mirrored-load
+      app.kubernetes.io/component: k8s-2-candidate
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: storage/longhorn-storage
+      labels:
+        app.kubernetes.io/name: k8s-rejoin-mirrored-load
+        app.kubernetes.io/component: k8s-2-candidate
+        app.kubernetes.io/part-of: plan-0009
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - k8s-2
+      tolerations:
+        - key: anton.io/rejoin
+          operator: Equal
+          value: k8s-2
+          effect: NoSchedule
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: load
+          image: docker.io/library/busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              while true; do
+                echo "load tick $(date -Iseconds) pod=${POD_NAME} node=${NODE_NAME}"
+                nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1 || true
+                wget -q -T 2 -O /dev/null https://kubernetes.default.svc >/dev/null 2>&1 || true
+                dd if=/dev/zero of=/work/blob bs=1M count=64 >/dev/null 2>&1 || true
+                rm -f /work/blob
+                sha256sum /dev/zero >/dev/null &
+                pid="$!"
+                sleep 5
+                kill "$pid" >/dev/null 2>&1 || true
+                wait "$pid" >/dev/null 2>&1 || true
+                sleep 10
+              done
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi

@@ -18,7 +18,7 @@ spec:
       rules:
         - alert: K8s2UnexpectedReboot
           expr: |
-            changes(node_boot_time_seconds{instance="192.168.1.99:9100"}[10m]) > 0
+            changes(node_boot_time_seconds{instance="192.168.1.99:9100"}[6h]) > 0
           for: 0m
           labels:
             severity: critical
@@ -28,8 +28,10 @@ spec:
             summary: "k8s-2 boot time changed"
             description: |
               k8s-2 rebooted or node-exporter reported a new boot epoch within
-              the last 10 minutes. Re-cordon k8s-2, stop staged scheduling, and
-              preserve Vector/Talos kernel logs before running any cleanup.
+              the last 6 hours. The wider lookback intentionally catches reboots
+              that happen while the operator loop is paused. Re-cordon k8s-2,
+              stop staged scheduling, and preserve Vector/Talos kernel logs
+              before running any cleanup.
         - alert: K8s2ApiserverMemoryRapidGrowth
           expr: |
             max(

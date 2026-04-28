@@ -21,16 +21,18 @@ All four were run with `--read-only` posture (no `apply`, no `reset`, no
 
 ## Executive summary
 
-All four investigators converged on the same conclusion: the silent reboots
-of `k8s-2` are explained by **a hardware or firmware fault below the
-in-cluster observation horizon**, not by software or workload pressure.
+All four investigators converged on the same narrower conclusion: the silent
+reboots of `k8s-2` are most consistent with **a hardware or firmware fault
+below the in-cluster observation horizon**, not with any currently observed
+software or workload-pressure signal.
 Specifically:
 
-- The kernel never produces last words before any reboot — no panic, oops,
+- The kernel stream never captures last words before any reboot — no panic, oops,
   BUG, MCE, EDAC, OOM, RCU stall, NMI, watchdog, NVMe timeout, or `kernel:
   reboot:` line. Vector's `talos_service` stream cliffs ~35–40 s before each
   boot, then a fresh `Linux version` reappears ~36–40 s later. The cliff is
-  TCP-keepalive lag on Vector's socket, **not** a graceful shutdown.
+  not a graceful shutdown; it is currently attributed to lag in the
+  TCP/Vector/Talos service-log path, but the exact mechanism was not measured.
 - All coded abort criteria (apiserver WSS Δ20m, APF queue, longrunning jump,
   watch burst) were **absent at T-1m on every reboot**. The cilium-agent
   plateau on k8s-2 (~760 MiB) is well below its 3584 MiB ADR-0022 limit and
@@ -92,14 +94,15 @@ NVMe behaviour.
 **Cross-reboot signature.** The single signature that fires in 5 of 5
 inspectable reboots is: **service stream cliff at boot − 35–40 s, with no
 kernel-stream output at all in the last 5 minutes before boot.** The ~36–40 s
-"silent then `Linux version`" gap is consistent with TCP-keepalive on
-Vector's `talos_service` socket source taking that long to surface a
-connection drop after the node stops processing.
+"silent then `Linux version`" gap is consistent with lag in the TCP service-log
+path, such as keepalive or socket buffering, but this synthesis did not measure
+the actual TCP keepalive settings or rule out Talos-side buffering.
 
-**Conclusion.** The kernel never gets to write a final message — k8s-2 dies
-from a hard-stop event (CPU/microcode wedge, firmware NMI/MCE that never
-reaches kmsg, BMC-less platform reset, kernel hang inside an unforwarded
-code path) and reboots. The absence of any unmount, `kernel: reboot:`,
+**Conclusion.** The available kernel stream has not captured a final message,
+so the leading interpretation is that k8s-2 dies from a hard-stop event
+(CPU/microcode wedge, firmware NMI/MCE that never reaches kmsg, BMC-less
+platform reset, kernel hang inside an unforwarded code path) and reboots. The
+absence of any unmount, `kernel: reboot:`,
 panic banner, RCU stall, soft-lockup, MCE, or even a single warning in the
 5-min pre-window across **all five observable reboots** strongly excludes:
 
@@ -219,11 +222,18 @@ The hypothesis is **moderately supported, not proven** — the same pattern
 could be produced by an older BIOS's memory-training or power-management
 bug independent of the DIMM SKU.
 
+No memtest-equivalent stress run or DIMM swap has been performed yet, so the
+DIMM-SKU mismatch remains a concrete correlation and the top hardware hook,
+not a localized root cause.
+
 **Recommended in-band probes (no physical access required):**
 
 1. **Pin the smoke workload to k8s-1** as a negative control. If k8s-1
-   stays up while running an identical pod set, the workload itself is
-   excluded as a trigger and the k8s-2-uniqueness is reinforced.
+   stays up while running an identical pod set, the busybox smoke workload
+   itself is excluded as a trigger and the k8s-2-uniqueness is reinforced.
+   This does **not** exclude a heavier real-workload trigger involving Cilium
+   endpoint churn, Multus secondary CNI, Longhorn storage-network paths, or
+   pod-creation pressure.
 2. Add a **netconsole / UDP kmsg forwarder** so the next reboot has a
    chance to surface kernel last words even if TCP buffering eats them.
 3. Optionally: run a memtest-equivalent stress on k8s-2 during a
@@ -326,7 +336,9 @@ positions can both be true.
 ## Open questions the team could not close
 
 1. **What was happening in the last ~30 s before each kernel cliff.**
-   Vector's TCP-keepalive on `talos_service` smears the death moment.
+   The current TCP service-log path smears the death moment; the specific
+   mechanism could be keepalive behavior, socket buffering, Talos-side buffering,
+   or Vector batching.
    Nothing in-cluster sees sub-30 s pre-death state.
 2. **Whether the DIMM-SKU mismatch is causal**, or just correlated. The
    same MS-01 board with the same CPU is shared with k8s-1/k8s-3; the
@@ -339,19 +351,21 @@ positions can both be true.
 
 ## Recommendations, ordered by cost
 
-1. **Negative control on k8s-1 (cheapest falsifier).** Scaffold a
+1. **Negative control on k8s-1 (cheapest narrow falsifier).** Scaffold a
    `k8s-1-rejoin-control` Deployment of identical shape to the k8s-2
    smoke, pinned to k8s-1, and watch it for 48 h. If k8s-1 stays up
-   while running the same workload, the workload itself is excluded as
-   a trigger, and the k8s-2-specificity is reinforced. **Cost:** one
+   while running the same workload, the smoke workload itself is excluded as
+   a trigger, and the k8s-2-specificity is reinforced. It does not falsify
+   broader workload-driven causes. **Cost:** one
    draft manifest committed unwired; one Flux reconcile when wired.
    **Mutation surface:** repo only at draft; `playground/kustomization
    .yaml` append at wire time (no node mutation).
-2. **Capture last words on the next reboot.** TCP-buffered Vector loses
-   the final ~30 s. Add Talos `printk.devkmsg=on` plus a UDP
+2. **Capture last words on the next reboot.** The current TCP path loses
+   visibility into the final ~30 s for an unmeasured reason. Add Talos
+   `printk.devkmsg=on` plus a UDP
    netconsole target pointed at the same Vector pod, *or* wire a
    USB-serial cable to k8s-2's COM header (MS-01 has no BMC). Either
-   gives kmsg-over-UDP independent of TCP keepalive. **Cost:** Talos
+   gives kmsg-over-UDP independent of the observed TCP path. **Cost:** Talos
    config patch + apply on k8s-2 only; no etcd-quorum risk if applied
    `--mode=auto`.
 3. **BIOS reflash to current MS-01 firmware on k8s-2.** Closes the

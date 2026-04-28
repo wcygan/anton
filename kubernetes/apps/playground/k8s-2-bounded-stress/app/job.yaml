@@ -1,0 +1,96 @@
+---
+# Suspended/unwired generic k8s-2 stress probe.
+#
+# This is deliberately bounded by cgroup limits and activeDeadlineSeconds. It
+# stresses CPU and memory without PVCs or privileged access. It tolerates only
+# anton.io/rejoin, not node.kubernetes.io/unschedulable, so cordon still blocks
+# scheduling until an operator explicitly uncordons k8s-2.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k8s-2-bounded-stress
+  labels:
+    app.kubernetes.io/name: k8s-2-bounded-stress
+    app.kubernetes.io/part-of: plan-0009
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8s-2-bounded-stress
+        app.kubernetes.io/part-of: plan-0009
+    spec:
+      restartPolicy: Never
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - k8s-2
+      tolerations:
+        - key: anton.io/rejoin
+          operator: Equal
+          value: k8s-2
+          effect: NoSchedule
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: stress
+          image: docker.io/library/busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              echo "bounded stress start $(date -Iseconds) node=${NODE_NAME}"
+              for worker in 1 2; do
+                (
+                  while true; do
+                    dd if=/dev/zero bs=1M count=64 2>/dev/null | sha256sum >/dev/null
+                  done
+                ) &
+              done
+              for round in $(seq 1 30); do
+                echo "stress round ${round} $(date -Iseconds)"
+                dd if=/dev/zero of=/stress/blob bs=1M count=384 >/dev/null 2>&1 || true
+                rm -f /stress/blob
+                sleep 30
+              done
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: stress
+              mountPath: /stress
+      volumes:
+        - name: stress
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
