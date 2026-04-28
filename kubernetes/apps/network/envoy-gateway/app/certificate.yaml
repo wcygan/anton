@@ -22,3 +22,15 @@ spec:
     kind: ClusterIssuer
   commonName: "${SECRET_DOMAIN_TWO}"
   dnsNames: ["${SECRET_DOMAIN_TWO}", "*.${SECRET_DOMAIN_TWO}"]
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: "${SECRET_DOMAIN_THREE/./-}-production"
+spec:
+  secretName: "${SECRET_DOMAIN_THREE/./-}-production-tls"
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  commonName: "${SECRET_DOMAIN_THREE}"
+  dnsNames: ["${SECRET_DOMAIN_THREE}", "*.${SECRET_DOMAIN_THREE}"]
