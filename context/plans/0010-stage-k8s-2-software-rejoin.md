@@ -1,12 +1,21 @@
 ---
-status: In-progress
+status: Done
 opened: 2026-04-24
-closed: null
+closed: 2026-04-28
 affects: compute
 intent: concrete-need
 related-adrs: [0005, 0017, 0018, 0020, 0021, 0022]
 review-by: 2026-05-15
 ---
+
+> **Closed by abort, not by completion (2026-04-28).** Stage A passed its
+> 24 h watch window cleanly, then k8s-2 produced 6 silent reboots in the
+> following ~63 h with no in-cluster trigger. Software-side hardening
+> spaced the failures out but did not suppress them. Per Phase 5's
+> closing bullet, the abort handoff goes to plan 0009 (hypothesis
+> ranking now leads with a k8s-2-specific DDR5/BIOS hardware delta) and
+> a future physical-access plan. Multi-agent synthesis is at
+> `context/notes/k8s-2-instability/evidence-2026-04-28-plan0010-four-agent-synthesis.md`.
 
 # 0010 — stage k8s-2 software rejoin
 
@@ -67,11 +76,11 @@ Return k8s-2 to serving compute capacity without touching hardware yet, while re
 
 ### Phase 5: Staged Rejoin
 
-- [ ] Stage A: uncordon k8s-2 while keeping the hard rejoin taint; schedule 5-10 low-risk tolerated compute pods and observe for 24h.
-- [ ] Stage B: allow selected compute workloads to tolerate k8s-2 for 48h; keep stateful/storage/observability-critical workloads excluded.
-- [ ] Stage C: remove or relax the hard rejoin taint only after Stage A/B pass and the operator accepts the residual risk.
-- [ ] Burn in for 7 consecutive days after normal scheduling resumes.
-- [ ] If any abort criterion fires, immediately re-cordon k8s-2, preserve evidence, and decide whether recurrence belongs to plan 0009 or a new physical-access plan.
+- [x] Stage A: uncordon k8s-2 while keeping the hard rejoin taint; schedule 5-10 low-risk tolerated compute pods and observe for 24h. — **Stage A passed cleanly. Launched 2026-04-24T18:31:52Z; 8 smoke pods on k8s-2; 24 h watch closed 2026-04-25T18:31:52Z with zero abort signals. Reboots resumed ~60 min after window close — see Phase 5 abort bullet below.**
+- [ ] Stage B: allow selected compute workloads to tolerate k8s-2 for 48h; keep stateful/storage/observability-critical workloads excluded. — *Not reached; aborted before Stage B.*
+- [ ] Stage C: remove or relax the hard rejoin taint only after Stage A/B pass and the operator accepts the residual risk. — *Not reached.*
+- [ ] Burn in for 7 consecutive days after normal scheduling resumes. — *Not reached.*
+- [x] If any abort criterion fires, immediately re-cordon k8s-2, preserve evidence, and decide whether recurrence belongs to plan 0009 or a new physical-access plan. — **Fired 2026-04-28T~14:59Z. Abort action executed: `kubectl cordon k8s-2`; Flux-managed smoke Deployment left wired as forensic evidence; abort note `evidence-2026-04-28-plan0010-stage-a-abort.md`; four-agent synthesis `evidence-2026-04-28-plan0010-four-agent-synthesis.md`. Recurrence handed off to plan 0009 and a future hardware-access plan.**
 
 ## Log
 
@@ -87,6 +96,7 @@ Return k8s-2 to serving compute capacity without touching hardware yet, while re
 - 2026-04-24: Phase 2 Talos rolling apply of commit `1918ca07` complete across all three control planes in order k8s-2 → k8s-3 → k8s-1, each `--mode=auto` returning `Applied configuration without a reboot`. etcd quorum 3/3 held with leader k8s-1 and raft term 29 unchanged throughout; allocatable dropped cleanly to capacity − 6 GiB on all nodes (k8s-1 92279416Ki, k8s-2 92286412Ki, k8s-3 92239116Ki). k8s-2 now carries the persistent `anton.io/rejoin=k8s-2` label and `anton.io/rejoin=k8s-2:NoSchedule` taint on the live Node object in addition to the pre-existing cordon. No pod eviction storm, Flux all-Ready. Evidence: `context/notes/k8s-2-instability/evidence-2026-04-24-plan0010-talos-apply.md`. Stage A uncordon remains a separate later gate.
 - 2026-04-24: Phase 3 Vector/Talos kernel stream liveness re-verified for k8s-2 before uncordon: 15 `source:kernel` records from `192.168.1.99` in the last ~50 MB of the sink file, last burst captured the Talos apply's kubelet-restart sequence at `2026-04-24T17:49:{10,11,12}Z`. Pipe healthy.
 - 2026-04-24: Phase 5 Stage A launched at 18:31:52Z. Wire step was a single-line append of `./k8s-2-rejoin-smoke/ks.yaml` to `kubernetes/apps/playground/kustomization.yaml` (commit `f69f6507`); cluster-apps rejected it with "namespace not specified" because the playground namespace kustomization was missing the top-level `namespace: playground` directive — fixed in `d8ae298d`. `kubectl uncordon k8s-2` dropped only the cordon taint; `anton.io/rejoin=k8s-2:NoSchedule` persisted. 8 smoke pods transitioned Pending → ContainerCreating → Running within seconds, all on k8s-2 with distinct Cilium IPs in 10.42.2.0/24. k8s-2 `node_boot_time_seconds` unchanged, no CNI restart spike, zero abort-relevant alerts active. Stage A 24 h watch window runs to 2026-04-25T18:31:52Z. Evidence: `context/notes/k8s-2-instability/evidence-2026-04-24-plan0010-stage-a.md`.
+- 2026-04-28: **Stage A abort fired and plan closed.** Stage A's 24 h watch window passed cleanly, but k8s-2 began rebooting silently ~60 min after window close and produced **6 silent reboots in ~63 h** (mean inter-reboot 10.5 h, dispersed in time-of-day; k8s-1 and k8s-3 had zero reboots in the same window). Trigger fired during a `/loop` tick: `changes(node_boot_time_seconds[3d])` reported 6 for k8s-2 vs 0 for k8s-1/k8s-3, and k8s-2 uptime was only 4.35 h. Abort action executed per the plan and per the standing `/loop` instruction: `kubectl cordon k8s-2` (cordon taint added 14:59:37Z; persistent `anton.io/rejoin=k8s-2:NoSchedule` retained). Flux-managed smoke Deployment **left wired** as forensic evidence; smoke pods all show 6 restarts with `lastTermination.reason=Unknown` synchronous with each boot. Abort evidence note: `context/notes/k8s-2-instability/evidence-2026-04-28-plan0010-stage-a-abort.md`. Spawned four read-only investigators (kernel-log miner against the Vector sink; Prometheus metric correlator; cluster-triage hardware/Talos angle; temporal pattern analyst); all four converged on hardware/firmware below the in-cluster observation horizon, with a k8s-2-only DDR5 SKU/speed delta (Mushkin 5200 MT/s vs Crucial 5600 MT/s on k8s-1/k8s-3) and BIOS AHWSA.1.22 as the strongest hooks. Synthesis: `context/notes/k8s-2-instability/evidence-2026-04-28-plan0010-four-agent-synthesis.md`. Plan status moves to `Done`; recurrence ownership moves to plan 0009 (hypothesis ranking updated there) and to a future physical-access plan once cheap in-band falsifiers (k8s-1 negative control + UDP netconsole) have run.
 
 ## References
 

@@ -1,0 +1,77 @@
+---
+# Negative control for plan-0009 hardware-hypothesis falsification.
+# Identical pod shape to k8s-2-rejoin-smoke; pinned to k8s-1 instead of
+# k8s-2 and without the anton.io/rejoin toleration.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-1-rejoin-control
+  labels:
+    app.kubernetes.io/name: k8s-1-rejoin-control
+    app.kubernetes.io/part-of: plan-0009
+spec:
+  replicas: 8
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-1-rejoin-control
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8s-1-rejoin-control
+        app.kubernetes.io/part-of: plan-0009
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - k8s-1
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: heartbeat
+          image: docker.io/library/busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                echo "heartbeat $(date -Iseconds) pod=${POD_NAME} node=${NODE_NAME}"
+                sleep 60
+              done
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

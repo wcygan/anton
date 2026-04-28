@@ -1,0 +1,28 @@
+---
+# UNWIRED — plan 0009 / plan 0010 Stage A abort follow-up.
+#
+# Negative control for the k8s-2 silent-reboot investigation. An identical
+# heartbeat workload to k8s-2-rejoin-smoke, but pinned to k8s-1 with no
+# anton.io/rejoin toleration (k8s-1 is not tainted). The hypothesis under
+# test: if k8s-1 stays up for 48 h running this workload while k8s-2
+# (cordoned) does not, the workload itself is excluded as a trigger and
+# the failure is k8s-2-specific.
+#
+# This Kustomization is intentionally NOT included in
+# kubernetes/apps/playground/kustomization.yaml. To start the negative
+# control, append `./k8s-1-rejoin-control/ks.yaml` to that file and let
+# Flux reconcile. To stop it, drop the line; prune: true cleans up.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: k8s-1-rejoin-control
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/playground/k8s-1-rejoin-control/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: playground
+  wait: false
