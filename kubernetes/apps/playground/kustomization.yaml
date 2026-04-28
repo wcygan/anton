@@ -6,3 +6,4 @@ namespace: playground
 resources:
   - ./namespace.yaml
   - ./k8s-2-rejoin-smoke/ks.yaml
+  - ./k8s-1-rejoin-control/ks.yaml
