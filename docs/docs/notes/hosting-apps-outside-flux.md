@@ -127,6 +127,23 @@ A few details worth understanding:
 - `parentRefs[].namespace: network` is required — the gateway lives in the `network` namespace, the route in `scratch`.
 - The `DNSEndpoint`'s `targets` field references a CNAME target that the cluster's tunnel `DNSEndpoint` resource has already published — that resolves the chain `<app>.<domain>` → `external.<domain>` → `<tunnel-uuid>.cfargotunnel.com`.
 
+## Pre-flight: check for stale DNS records
+
+`external-dns` runs with `policy: sync` and identifies records it owns via a `k8s.cname-<host>` TXT marker. It refuses to overwrite foreign records (no marker), and the skip is logged at debug level only. This means a hostname that was previously bound to a different (now-decommissioned) tunnel can silently absorb your deploy and route requests into a black hole — Cloudflare error 1033.
+
+Before you `kubectl apply` for a brand-new hostname, run:
+
+```sh
+TOKEN=$(kubectl -n network get secret cloudflare-dns-secret -o jsonpath='{.data.api-token}' | base64 -d)
+ZONE_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones?name=example.com" | jq -r '.result[0].id')
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=hello.example.com" \
+  | jq '.result[] | {type, name, content, proxied}'
+```
+
+If non-empty and `content` is anything other than `external.<your-domain>`, you've found the conflict before it bites. Recovery and full triage in [cloudflare-tunnel-dns-conflicts.md](./cloudflare-tunnel-dns-conflicts.md).
+
 ## Workflow
 
 ```sh
@@ -180,4 +197,5 @@ If the experimental hostname needs a domain the cluster has *not* yet onboarded,
 ## Related notes
 
 - [Adding a 2nd domain](./adding-a-2nd-domain.md) — full domain onboarding flow; prerequisite for new top-level zones
+- [Cloudflare Tunnel DNS conflicts](./cloudflare-tunnel-dns-conflicts.md) — what to do when the public hostname returns Cloudflare 1033 / HTTP 530 despite a healthy in-cluster deploy
 - [Exposing workloads through Tailscale](./exposing-workloads-through-tailscale.md) — alternative path for off-LAN HTTP UIs without going public
