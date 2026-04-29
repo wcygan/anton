@@ -12,6 +12,12 @@ This document describes the architecture and implementation for hosting multiple
 - Maintain GitOps workflow with SOPS-encrypted secrets
 - Template-driven configuration for easy domain addition/removal
 
+## Status (April 2026)
+
+The Jinja template pipeline described under "Implementation Details" below was archived on 2026-04-19 — the templates, `cluster.yaml`, and the `task configure` flow now live under `.private/`, and the rendered manifests under `kubernetes/`, `talos/`, and `bootstrap/` are hand-edited and committed directly. The conceptual model (cluster-secrets → external-dns → cert-manager → envoy-gateway → cloudflare-tunnel) is unchanged; only the rendering step is gone.
+
+For the current end-to-end recipe see "[Walkthrough — adding a third domain (direct-edit flow)](#walkthrough--adding-a-third-domain-direct-edit-flow)" below. The legacy Jinja sections are kept for historical context.
+
 ## System Architecture
 
 ```mermaid
@@ -619,6 +625,154 @@ Envoy Gateway expects specific certificate Secret names:
 - Example: `example-com-production-tls`
 - Must update references when adding domains
 
+## Walkthrough — adding a third domain (direct-edit flow)
+
+This is the recipe used to onboard a third Cloudflare-managed domain end-to-end, including extending the existing Cloudflare Tunnel to serve it. Throughout, the new domain is referred to as `example3.com` and the variable name as `SECRET_DOMAIN_THREE`; substitute the actual values for your case.
+
+### Prerequisite — Cloudflare account and API token scope
+
+Before touching the repo, confirm two things in Cloudflare:
+
+1. **The new zone is in the same Cloudflare account as the existing tunnel.** Tunnels are account-scoped; any zone in the same account can `CNAME` to `<tunnel-uuid>.cfargotunnel.com`. Verify with `cloudflared tunnel list` (after `cloudflared tunnel login` and selecting your primary zone) — the running tunnel should appear with active connections. Then check the Cloudflare dashboard's account selector: the new zone must show under the same account.
+2. **The Cloudflare API token used by cert-manager and external-dns is authorized for the new zone.** This is the single most common failure mode (see [Troubleshooting](#troubleshooting)). The least-effort fix is to edit the existing token in **My Profile → API Tokens** and either add `Zone:DNS:Edit` for the new zone or change scope to **All zones from an account**. The token *value* doesn't change, so no SOPS edits or pod restarts are needed; cert-manager and external-dns retry within ~1 minute.
+
+If the new zone lives in a different Cloudflare account, either move it (dashboard → remove + re-add → re-verify nameservers) or stand up a second tunnel — the recipe below assumes single-account.
+
+### Step 1 — add the secret
+
+Edit the SOPS-encrypted cluster secret non-interactively:
+
+```sh
+SOPS_AGE_KEY_FILE=./age.key sops --set \
+  '["stringData"]["SECRET_DOMAIN_THREE"] "example3.com"' \
+  kubernetes/components/sops/cluster-secrets.sops.yaml
+
+# verify it stayed encrypted
+SOPS_AGE_KEY_FILE=./age.key sops filestatus \
+  kubernetes/components/sops/cluster-secrets.sops.yaml
+# {"encrypted":true}
+```
+
+`task reconcile` (or the next Flux interval) applies the updated `cluster-secrets` Secret in `flux-system`; downstream Kustomizations pick up the new `${SECRET_DOMAIN_THREE}` substitution variable on their next reconcile.
+
+### Step 2 — extend the platform manifests
+
+Six small additions across the network and cert-manager stacks:
+
+| File | Change |
+|---|---|
+| `kubernetes/apps/network/cloudflare-dns/app/helmrelease.yaml` | append to `domainFilters` |
+| `kubernetes/apps/cert-manager/cert-manager/app/clusterissuer.yaml` | append to `dnsZones` |
+| `kubernetes/apps/network/envoy-gateway/app/certificate.yaml` | append a third `Certificate` block, mirroring the existing two, with `${SECRET_DOMAIN_THREE/./-}-production` |
+| `kubernetes/apps/network/envoy-gateway/app/envoy.yaml` | append cert ref on **both** `envoy-external` and `envoy-internal` listener TLS blocks (matches existing pattern; internal cert ref is harmless even though split-horizon DNS is primary-only) |
+| `kubernetes/apps/network/cloudflare-tunnel/app/helmrelease.yaml` | append apex + wildcard ingress rules (see "Tunnel ingress order" below) |
+| `kubernetes/apps/network/cloudflare-tunnel/app/dnsendpoint.yaml` | append `external.${SECRET_DOMAIN_THREE}` `CNAME` to the existing tunnel UUID |
+
+#### Tunnel ingress order
+
+Inside `cloudflare-tunnel/app/helmrelease.yaml`, the `ingress:` list under `configMaps.config.data."config.yaml"` is **order-sensitive**:
+
+- The **apex** entry (`example3.com`) must come **before** the **wildcard** entry (`*.example3.com`) — wildcards do not match the bare apex.
+- The catch-all `service: http_status:404` must remain the last entry.
+
+The new pair is appended just before the catch-all:
+
+```yaml
+              # ... existing entries for SECRET_DOMAIN and SECRET_DOMAIN_TWO ...
+              - hostname: "${SECRET_DOMAIN_THREE}"
+                originRequest:
+                  http2Origin: true
+                  originServerName: external.${SECRET_DOMAIN_THREE}
+                service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
+              - hostname: "*.${SECRET_DOMAIN_THREE}"
+                originRequest:
+                  http2Origin: true
+                  originServerName: external.${SECRET_DOMAIN_THREE}
+                service: https://envoy-external.{{ .Release.Namespace }}.svc.cluster.local:443
+              - service: http_status:404
+```
+
+The existing `reloader.stakater.com/auto: true` annotation on the cloudflare-tunnel deployment automatically rolls the pod when the rendered ConfigMap changes — no manual restart needed.
+
+#### Tunnel DNSEndpoint
+
+The existing `cloudflare-tunnel/app/dnsendpoint.yaml` already lists `external.${SECRET_DOMAIN}` and `external.${SECRET_DOMAIN_TWO}` as `CNAME`s to the tunnel target. Append a third entry with the same target — **read the target from the existing file** rather than hard-coding it:
+
+```yaml
+    - dnsName: "external.${SECRET_DOMAIN_THREE}"
+      recordType: CNAME
+      targets: ["<tunnel-uuid>.cfargotunnel.com"]
+```
+
+### Step 3 — commit, push, reconcile
+
+A single commit for all seven platform files keeps the change atomic and easy to revert:
+
+```sh
+git add kubernetes/components/sops/cluster-secrets.sops.yaml \
+        kubernetes/apps/cert-manager/cert-manager/app/clusterissuer.yaml \
+        kubernetes/apps/network/cloudflare-dns/app/helmrelease.yaml \
+        kubernetes/apps/network/cloudflare-tunnel/app/dnsendpoint.yaml \
+        kubernetes/apps/network/cloudflare-tunnel/app/helmrelease.yaml \
+        kubernetes/apps/network/envoy-gateway/app/certificate.yaml \
+        kubernetes/apps/network/envoy-gateway/app/envoy.yaml
+git commit -m "feat(network): onboard SECRET_DOMAIN_THREE across platform"
+git push
+task reconcile
+```
+
+### Step 4 — verify
+
+```sh
+kubectl get certificate -n network <new-domain-with-dashes>-production -w
+# READY=True within ~2 min once the API token is correct
+
+kubectl get dnsendpoint -A | grep -E '<new-domain>|external'
+kubectl get configmap -n network cloudflare-tunnel -o jsonpath='{.data.config\.yaml}'
+
+dig +short TXT _acme-challenge.<new-domain> @1.1.1.1
+dig +short external.<new-domain> @1.1.1.1
+dig +short <some-app>.<new-domain> @1.1.1.1
+curl -sI https://<some-app>.<new-domain>/
+```
+
+If the certificate sits at `False` for more than ~5 minutes with `Reason: Found no Zones for domain ...` in `kubectl describe challenge`, the API token does not have the new zone — return to the prerequisite step.
+
+## Walkthrough — exposing an existing app on the new domain
+
+When an app already runs on the primary domain (e.g. `echo.${SECRET_DOMAIN}`), prefer the **Multi-Domain App** pattern (described under [Deploying Apps on Secondary Domain](#deploying-apps-on-secondary-domain) above) over cloning the workload — same backend, two public hostnames, one extra DNS record.
+
+For the bjw-s `app-template` chart pattern used by most anton apps, this is two changes:
+
+1. In the app's HelmRelease `values.route.<route-name>.hostnames`, append the new hostname:
+
+   ```yaml
+       route:
+         app:
+           hostnames:
+             - "{{ .Release.Name }}.${SECRET_DOMAIN}"
+             - "{{ .Release.Name }}.${SECRET_DOMAIN_THREE}"
+   ```
+
+2. Add a sibling `dnsendpoint.yaml` to the app's `app/` directory and list it in `app/kustomization.yaml`:
+
+   ```yaml
+   ---
+   apiVersion: externaldns.k8s.io/v1alpha1
+   kind: DNSEndpoint
+   metadata:
+     name: <app-name>
+   spec:
+     endpoints:
+       - dnsName: "<app-name>.${SECRET_DOMAIN_THREE}"
+         recordType: CNAME
+         targets: ["external.${SECRET_DOMAIN_THREE}"]
+   ```
+
+The `DNSEndpoint` resource is required for any non-primary domain because external-dns is invoked with `--gateway-name=envoy-external` — that filter forces all `HTTPRoute`s to inherit the gateway's DNS annotation and ignore HTTPRoute-level annotations. `DNSEndpoint` records are picked up via `--crd-source-kind=DNSEndpoint` and bypass the gateway filter.
+
+For an app that does **not** yet exist, scaffold it via the `add-flux-app` skill (3-file Flux pattern) and add the multi-hostname route + DNSEndpoint as part of that scaffold.
+
 ## Adding Additional Domains
 
 ```mermaid
@@ -852,6 +1006,46 @@ curl -I https://example.com
 - Both domains (primary and secondary) need explicit apex rules if using Cloudflare Tunnel
 - Uses `${SECRET_DOMAIN}` variables so no domain names are committed to git
 - Tunnel pod automatically restarts when ConfigMap changes (via reloader annotation)
+
+### Empty `${SECRET_DOMAIN_*}` substitution after adding a new domain
+
+**Symptom**: After committing the new domain, some manifests render the variable correctly while others render it as an empty string. Common signal: `kubectl -n network get configmap cloudflare-tunnel -o jsonpath='{.data.config\.yaml}'` shows `hostname: ""` and `originServerName: external.` for the new domain block, and the new tunnel pod enters CrashLoopBackOff with an ingress-validation error.
+
+**Root cause**: A race during the first reconcile after the SOPS edit — a Kustomization rendered its `postBuild.substituteFrom: cluster-secrets` *before* the `cluster-secrets` Secret object was actually applied with the new key. The `HelmRelease`'s `.spec.values` ends up with the correct value, but the rendered chart output (e.g. the tunnel ConfigMap) is stale.
+
+**Diagnosis**:
+
+```sh
+# is the new key actually in the in-cluster Secret?
+kubectl -n flux-system get secret cluster-secrets -o jsonpath='{.data}' | jq 'keys'
+
+# is the HR spec correct (i.e. just the rendered output is stale)?
+kubectl -n network get hr cloudflare-tunnel -o jsonpath='{.spec.values.configMaps.config.data}' | jq -r '.["config.yaml"]'
+```
+
+**Fix**: force a re-reconcile of the affected `HelmRelease`. The next reconcile re-substitutes against the now-current Secret and the chart re-renders:
+
+```sh
+flux -n network reconcile helmrelease cloudflare-tunnel
+```
+
+The `reloader.stakater.com/auto: true` annotation on the deployment automatically rolls the pod once the ConfigMap is updated.
+
+### Stale ACME order after a Cloudflare token permission fix
+
+**Symptom**: The Cloudflare API token was missing access to the new zone when the cert-manager `Order` was first created. After granting access, the cert remains `Ready=False` indefinitely. `kubectl describe challenge` shows the first challenge has `Presented: true` but the second never advances; only one TXT record is visible authoritatively (e.g. `dig TXT _acme-challenge.<new-domain> @1.1.1.1` returns one entry, but the wildcard certificate request needs two distinct TXT values at the same name).
+
+**Root cause**: cert-manager retries the *existing* `Order` after the token fix, but the `Challenge` resources can be left in a state where the second one never re-attempts the DNS-01 `Present` step. The fastest recovery is to recycle the order entirely.
+
+**Fix**:
+
+```sh
+kubectl get order,challenge -n network | grep <new-domain-with-dashes>
+kubectl delete order -n network <new-domain-with-dashes>-production-1-<hash>
+kubectl delete challenge -n network <challenge-1> <challenge-2>
+```
+
+cert-manager creates a fresh `Order` and `Challenge` resources within seconds. Both DNS-01 presents succeed against the corrected token, the wildcard verifies, and the certificate becomes `Ready` in ~90 seconds. The user-facing `Certificate` object remains untouched — only its in-flight `Order` is recycled.
 
 ## References
 
