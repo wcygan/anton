@@ -65,6 +65,7 @@ Two hypotheses dismissed earlier: cilium-envoy restart trigger (restart count ju
 | [`evidence-2026-04-24-plan0010-staged-hardening.md`](evidence-2026-04-24-plan0010-staged-hardening.md) | Plan 0010 repo-side hardening: persistent k8s-2 rejoin taint/label, CNI memory/priority changes, kubelet reservations, and CNI alert rule validation |
 | [`evidence-2026-04-24-plan0010-stale-state.md`](evidence-2026-04-24-plan0010-stale-state.md) | Plan 0010 stale-state recheck: no current `Unknown`/`ContainerCreating` pods, clean containerd statuses, remaining Longhorn stopped replica CRs, and reset/rejoin judgment |
 | [`evidence-2026-04-24-plan0010-scheduling-gates.md`](evidence-2026-04-24-plan0010-scheduling-gates.md) | Plan 0010 scheduling gates: rejoin freeze, Stage A cohort definition, and topology/anti-affinity review |
+| [`evidence-2026-04-29-memtester-stage2.md`](evidence-2026-04-29-memtester-stage2.md) | Stage 2 in-OS memtester pass on k8s-2 (32 GiB mlock'd, 92 min, clean) — what it falsifies, what it does NOT falsify, and why Stage 3 (multi-core load/thermal) and Stage 4 (boot-time memtest86+) remain uncovered |
 | Rollout / execution state | [`../../plans/0007-k8s-2-remote-diagnostic-rollout.md`](../../plans/0007-k8s-2-remote-diagnostic-rollout.md) for diagnostic rollout/teardown; [`../../plans/0010-stage-k8s-2-software-rejoin.md`](../../plans/0010-stage-k8s-2-software-rejoin.md) for staged k8s-2 rejoin |
 
 ## Next files expected
