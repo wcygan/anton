@@ -1,0 +1,14 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: homepage
+spec:
+  imageRepositoryRef:
+    name: homepage
+  filterTags:
+    pattern: '^main-(?P<sha>[a-f0-9]+)$'
+    extract: '$sha'
+  policy:
+    alphabetical:
+      order: asc
