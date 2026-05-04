@@ -9,4 +9,3 @@ components:
 resources:
   - ./namespace.yaml
   - ./kube-prometheus-stack/ks.yaml
-  - ./talos-log-sink/ks.yaml

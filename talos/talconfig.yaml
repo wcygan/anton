@@ -199,10 +199,7 @@ nodes:
                   - rshared
                   - rw
           nodeLabels:
-            anton.io/rejoin: "k8s-2"
             node.longhorn.io/create-default-disk: "config"
-          nodeTaints:
-            anton.io/rejoin: "k8s-2:NoSchedule"
           nodeAnnotations:
             node.longhorn.io/default-disks-config: |-
               [{"path":"/var/mnt/longhorn-1","allowScheduling":true},{"path":"/var/mnt/longhorn-2","allowScheduling":true}]
@@ -305,7 +302,6 @@ patches:
   - "@./patches/global/machine-kernel.yaml"
   - "@./patches/global/machine-kmsg.yaml"
   - "@./patches/global/machine-kubelet.yaml"
-  - "@./patches/global/machine-logging.yaml"
   - "@./patches/global/machine-network.yaml"
   - "@./patches/global/machine-registries.yaml"
   - "@./patches/global/machine-sysctls.yaml"
