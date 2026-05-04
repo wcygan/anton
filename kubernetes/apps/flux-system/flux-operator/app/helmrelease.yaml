@@ -11,3 +11,11 @@ spec:
   values:
     serviceMonitor:
       create: true
+    # Disable the chart's web NetworkPolicy — it only opens 8080/9080 and
+    # leaves :8081 (health probes) blocked. Pre-k8s-1.36, kubelet probes
+    # bypassed NP enforcement on this cluster; post-upgrade they don't,
+    # which sent flux-operator into perma-CrashLoopBackOff. flux-system
+    # has no default-deny policy, so removing the chart NP is safe.
+    web:
+      networkPolicy:
+        create: false
