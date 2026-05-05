@@ -1,0 +1,61 @@
+---
+# Single-replica ntfy server. ADR 0026: hand-authored manifests, no chart.
+# Image is pinned (Renovate-tracked); upstream is a tiny Go binary so chart
+# overhead would exceed manifest overhead.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ntfy
+  labels:
+    app.kubernetes.io/name: ntfy
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # cache PVC is RWO; rolling update would deadlock on volume attach
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ntfy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ntfy
+    spec:
+      containers:
+        - name: ntfy
+          image: docker.io/binwiederhier/ntfy:v2.14.0
+          args: ["serve", "--config", "/etc/ntfy/server.yml"]
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          # /v1/health returns {"healthy":true}; default port 80.
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ntfy
+              readOnly: true
+            - name: cache
+              mountPath: /var/cache/ntfy
+      volumes:
+        - name: config
+          configMap:
+            name: ntfy
+        - name: cache
+          persistentVolumeClaim:
+            claimName: ntfy-cache

@@ -59,12 +59,24 @@ spec:
                   storage: 50Gi
 
     # ---- Alertmanager ----
-    # No routes configured — intentional per ADR 0007. Alerts go nowhere until
-    # Trigger 4 fires and a destination is chosen. Do NOT add `.alertmanager.config`
-    # here without first writing the corresponding ADR.
+    # Trigger 4 from ADR 0007 fired on 2026-05-04 — destination is now
+    # self-hosted ntfy per ADR 0026. Routes are wired via AlertmanagerConfig
+    # CRs (e.g. kubernetes/apps/observability/ntfy/app/alertmanagerconfig.yaml),
+    # not via .alertmanager.config inline here, so the chart upgrade path stays
+    # clean. Do NOT add an inline `.alertmanager.config` block — use an AC CR.
     alertmanager:
       alertmanagerSpec:
         replicas: 1
+        # alertmanagerConfigMatcherStrategy.type=None is required for our
+        # current single-AC pattern: the prometheus-operator default
+        # ("OnNamespace") would auto-scope each AC's route matchers to its own
+        # namespace, which silently breaks cluster-wide routing (e.g. our
+        # `severity=critical` route would only match alerts from the
+        # observability namespace, not anywhere else). Switching to None lets
+        # the AlertmanagerConfig CRs use matchers as authored. Future ACs can
+        # still scope themselves via explicit `namespace =` matchers.
+        alertmanagerConfigMatcherStrategy:
+          type: None
         storage:
           volumeClaimTemplate:
             spec:

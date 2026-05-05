@@ -1,2 +1,3 @@
 - [S3 shortlist Apr 2026](project_s3_shortlist_apr2026.md) — verified upstream status of SeaweedFS/Garage/MinIO/Rook; Garage retraction and re-verification discipline
 - [Monitoring decision Apr 2026](project_monitoring_decision_apr2026.md) — kube-prometheus-stack won on Kubernetes-native grounds; ADRs 0007/0008 record metrics install + OTel-based logs/traces roadmap; ADR 0006 decoupled, not superseded
+- [Intake history 2026](intake_history_2026.md) — running log of intake verdicts; ntfy 2026-05-04 Add (concrete need, ADR 0007 Trigger 4)

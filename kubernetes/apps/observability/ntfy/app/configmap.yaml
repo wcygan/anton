@@ -1,0 +1,17 @@
+---
+# ntfy server.yml. Mounted at /etc/ntfy/ via the Deployment.
+# `${TAILNET_SUFFIX}` (e.g. `<tailnet>.ts.net`) is supplied by `cluster-secrets`
+# via Flux postBuild substitution — do not append `.ts.net` separately.
+# See ADR 0026 for upstream-base-url rationale (iOS push relay via ntfy.sh —
+# only message IDs transit; bodies stay on cluster).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy
+data:
+  server.yml: |
+    base-url: "https://ntfy.${TAILNET_SUFFIX}"
+    upstream-base-url: "https://ntfy.sh"
+    cache-file: "/var/cache/ntfy/cache.db"
+    cache-duration: "12h"
+    behind-proxy: true

@@ -1,0 +1,14 @@
+---
+# 1 GiB cache for ntfy's SQLite store. Throwaway per ADR 0026 — losing it
+# costs at most 12h of unread alert history; no recovery runbook required.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ntfy-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi

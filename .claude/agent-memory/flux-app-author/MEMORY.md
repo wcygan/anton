@@ -6,3 +6,6 @@
 - [External GitRepository + inner Flux Kustomization](reference_external_gitrepo_patches_pattern.md) — installing an upstream YAML manifest (no Helm chart) via Flux using spec.patches for namespace/image pins; exemplar: network/multus
 - [whereabouts upstream layout](reference_whereabouts_upstream_layout.md) — doc/crds ships extra node-slice files (ignore-filter), and daemonset-install.yaml uses :latest image (patch-pin required)
 - [Raw-resource Flux app with per-node DaemonSet](reference_raw_daemonset_pattern.md) — SA+ConfigMap+DS only (no chart, no GitRepository); per-node config keyed by NODE_NAME downward API
+- [cluster-secrets keys (current)](reference_cluster_secrets_keys.md) — only SECRET_DOMAIN{,_TWO,_THREE} + TAILNET_SUFFIX exist; add new keys via `sops set` (never decrypt-to-tmp)
+- [AlertmanagerConfig is v1alpha1 only](reference_alertmanagerconfig_v1alpha1.md) — anton's Prometheus Operator ships only v1alpha1; matchers are object-form, urlSecret available
+- [Tailscale Ingress: short slug only](reference_tailscale_ingress_no_fqdn.md) — `tls.hosts: [<slug>]` — operator builds the FQDN; do not embed ${TAILNET_SUFFIX} there

@@ -1,0 +1,46 @@
+---
+# Alertmanager → ntfy wiring. This is the destination ADR 0007 Trigger 4
+# was waiting on, formalised by ADR 0026.
+#
+# CRD version: v1alpha1 only is installed in this cluster (Prometheus
+# Operator from kube-prometheus-stack 83.5.0). v1beta1 is upstream-stable
+# but not present here; switch when the operator publishes it.
+#
+# Selector: kube-prometheus-stack ships `alertmanagerConfigSelector: {}`
+# (match-all). The `release: kube-prometheus-stack` label matches the
+# convention used by every PrometheusRule in this directory and stays
+# correct if a future selector tightens to release-scoped match.
+#
+# Initial route shape per ADR 0026: severity=critical only. Easier to
+# broaden than to silence; the new ClusterPodCrashLoopBackOffCritical rule
+# (commit 6ba53610) is critical, so it gets through. Re-evaluate one week
+# after deploy and consider widening to "everything except info".
+#
+# Webhook URL contains the secret topic — sourced from the ntfy-topic
+# Secret's `url` key (templated by externalsecret.yaml from the 1Password
+# `ntfy/topic` field). Using urlSecret instead of url keeps the topic out
+# of the manifest entirely.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: ntfy
+  labels:
+    release: kube-prometheus-stack
+spec:
+  route:
+    receiver: ntfy
+    groupBy: ["alertname", "namespace"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    matchers:
+      - name: severity
+        value: critical
+        matchType: "="
+  receivers:
+    - name: ntfy
+      webhookConfigs:
+        - sendResolved: true
+          urlSecret:
+            name: ntfy-topic
+            key: url

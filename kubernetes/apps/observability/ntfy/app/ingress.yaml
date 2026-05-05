@@ -1,0 +1,21 @@
+---
+# Tailscale Ingress per ADR 0012 Recipe A. The operator builds the FQDN
+# `ntfy.<tailnet>.ts.net` from `tls.hosts[0]` plus the cluster's tailnet
+# suffix, and provisions a browser-trusted Let's Encrypt cert via MagicDNS.
+# Do NOT embed the tailnet name in this file — it would be a literal-tailnet
+# leak. The iPhone ntfy app polls this URL on tap to fetch message bodies
+# (the publish leg from Alertmanager goes via the cluster-internal Service).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ntfy
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: ntfy
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - ntfy
