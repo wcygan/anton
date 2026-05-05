@@ -37,9 +37,19 @@ spec:
 
     # PVC at /vector-data-dir — the chart's built-in persistence mount point;
     # the file sink writes its rotating log file there.
+    # 2026-05-05: bumped 5Gi→30Gi after KubePersistentVolumeFillingUp fired at
+    # 6:25 PM CDT (PVC at 2.3% free). Restored kernel sink (commit 35533bdb)
+    # generates ~1Gi/day of dmesg + service logs across 3 nodes; 5Gi was sized
+    # before the kernel sink restore. 30Gi gives ~30d headroom; rotate CronJob
+    # in cronjob.yaml prunes files older than 7d.
+    # NOTE: changing persistence.size mutates the StatefulSet's volumeClaimTemplate
+    # which is immutable — Helm upgrade will fail unless the STS is first deleted
+    # with `kubectl delete sts talos-log-sink-vector -n observability --cascade=orphan`,
+    # which leaves the pod and PVC in place. The live PVC was patched directly
+    # via Longhorn online-expand; this HR edit is the source-of-truth alignment.
     persistence:
       enabled: true
-      size: 5Gi
+      size: 30Gi
       storageClassName: longhorn
       accessModes: [ReadWriteOnce]
 

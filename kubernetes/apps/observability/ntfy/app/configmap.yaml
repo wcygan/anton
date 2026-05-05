@@ -15,3 +15,14 @@ data:
     cache-file: "/var/cache/ntfy/cache.db"
     cache-duration: "12h"
     behind-proxy: true
+    # 2026-05-05: enable attachments. ntfy hard-caps inline message body at
+    # ~5KiB; larger messages are auto-spilled to attachments. With attachments
+    # disabled (the prior default), Alertmanager webhook payloads carrying 2+
+    # grouped alerts (e.g. duplicate KubePersistentVolumeFillingUp series)
+    # exceeded the inline cap and ntfy returned 40014 "attachments not allowed",
+    # which then triggered AlertmanagerClusterFailedToSendAlerts in a loop.
+    # 1Gi cache PVC has plenty of room; ntfy auto-prunes after cache-duration.
+    attachment-cache-dir: "/var/cache/ntfy/attachments"
+    attachment-total-size-limit: "200M"
+    attachment-file-size-limit: "5M"
+    attachment-expiry-duration: "12h"

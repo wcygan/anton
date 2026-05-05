@@ -34,20 +34,33 @@ spec:
       interval: 30s
       rules:
         - alert: NodeUnexpectedReboot
+          # 2026-05-05: switched from `changes(node_boot_time_seconds[6h]) > 0`
+          # to `time() - node_boot_time_seconds < 1800`. The original expression
+          # produced a false positive at 6:24 PM CDT — a node-exporter series
+          # reset (caused by today's Vector StatefulSet rollout via the talos
+          # log sink) created what `changes()` interpreted as a boot-time
+          # transition, even though the actual boot epoch was unchanged. The
+          # uptime-based form is series-reset-immune: a fresh node-exporter
+          # series reports the host's true `boot_time_seconds`, so this fires
+          # only when the host was actually booted in the last 30 minutes.
+          # Tradeoff vs the 6h lookback: if Alertmanager is down for >30min
+          # spanning a reboot we miss the alert. Worth it; the 6h form was
+          # paging on every node-exporter restart.
           expr: |
-            changes(node_boot_time_seconds{job="node-exporter"}[6h]) > 0
-          for: 0m
+            time() - node_boot_time_seconds{job="node-exporter"} < 1800
+          for: 1m
           labels:
             severity: critical
             component: node
           annotations:
             summary: "Node {{ $labels.instance }} reboot detected"
             description: |
-              node-exporter on {{ $labels.instance }} reported a new boot epoch
-              within the last 6 hours. This rule fires on every node-exporter
-              instance (3 nodes × cluster-internal + ts-* per-node series), so
-              expect possible duplicate alerts per reboot — the load-bearing
-              signal is "any reboot, anywhere."
+              node-exporter on {{ $labels.instance }} reports a host uptime
+              of less than 30 minutes — the node was recently booted. This
+              rule fires on every node-exporter instance (3 nodes ×
+              cluster-internal + ts-* per-node series), so expect possible
+              duplicate alerts per reboot — the load-bearing signal is
+              "any reboot, anywhere."
               First moves: confirm via `talosctl read /proc/sys/kernel/random/boot_id`
               against the suspected node, then preserve the kernel ring buffer
               via `talosctl dmesg --tail` and any Vector kernel-sink logs
