@@ -1,0 +1,55 @@
+---
+# Postmortem 2026-05-05 follow-up — generalize the existing K8s2UnexpectedReboot
+# alert into a per-node `NodeUnexpectedReboot` family so the cluster's own
+# alerting can catch a reboot of any node, not just k8s-2.
+#
+# Background: `K8s2UnexpectedReboot` (in prometheusrule-k8s-2-rejoin-abort.yaml)
+# was authored as a plan-0010 staged-rejoin signal and is keyed to the k8s-2
+# instance. It works correctly but, by name and label, only fires on k8s-2.
+# When k8s-1 + k8s-3 dual silent-rebooted on 2026-05-05, the cluster's in-
+# cluster alerting was structurally blind to the event; detection came from a
+# bastion-side cron loop running for unrelated reasons (BIOS-flash watch).
+#
+# This rule fires per-instance against the same `node_boot_time_seconds[6h]`
+# expression as `K8s2UnexpectedReboot`. The 6h lookback is intentional: it
+# matches the staged-rejoin rule and ensures the alert still surfaces a reboot
+# even if the operator loop or Alertmanager were briefly unavailable across
+# the event.
+#
+# `K8s2UnexpectedReboot` remains in place for backwards-compatibility; both
+# rules will fire on a k8s-2 reboot until the staged-rejoin rule is retired
+# (plan 0010 is closed; the apiserver-related signals in that file are still
+# useful in steady state, but the reboot signal is now redundant with this
+# generalized rule).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-node-reboot
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cluster-node-reboot
+      interval: 30s
+      rules:
+        - alert: NodeUnexpectedReboot
+          expr: |
+            changes(node_boot_time_seconds{job="node-exporter"}[6h]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            component: node
+          annotations:
+            summary: "Node {{ $labels.instance }} reboot detected"
+            description: |
+              node-exporter on {{ $labels.instance }} reported a new boot epoch
+              within the last 6 hours. This rule fires on every node-exporter
+              instance (3 nodes × cluster-internal + ts-* per-node series), so
+              expect possible duplicate alerts per reboot — the load-bearing
+              signal is "any reboot, anywhere."
+              First moves: confirm via `talosctl read /proc/sys/kernel/random/boot_id`
+              against the suspected node, then preserve the kernel ring buffer
+              via `talosctl dmesg --tail` and any Vector kernel-sink logs
+              before triggering recovery actions.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md"

@@ -1,0 +1,77 @@
+---
+# Postmortem 2026-05-05 follow-up — surface pods stuck in Unknown phase before
+# the next node reboot exposes them as a hard outage.
+#
+# An `Unknown` pod phase means the kubelet has stopped sending status updates
+# for that specific pod to the API server, but the kubelet has not been
+# confirmed dead. Kubernetes counts Unknown pods as "exists, will be back" and
+# does not create replacements. Meanwhile, the actual containers may continue
+# running on containerd serving traffic — until that node reboots, at which
+# point the workload disappears while the API still records Unknown and
+# ReplicaSets / StatefulSets / DaemonSets do not produce replacement pods.
+#
+# The 2026-05-05 dual silent reboot found ~50 pods on k8s-1 in Unknown phase
+# with ages ranging 42 h to 4 d 15 h. cloudflare-tunnel (4 d 15 h), envoy-
+# external × 2, envoy-gateway, and the Tailscale operator pod (4 d 15 h) were
+# all in this state at the moment k8s-1 rebooted, which is why public ingress
+# went down despite 3-node cluster redundancy. See the postmortem for the
+# full mechanism.
+#
+# Two tiers: a warning at 10m for early triage, and a critical at 1h that
+# signals the latent-failure window has lasted long enough to warrant
+# immediate intervention. Both fire per-pod (via kube_pod_status_phase
+# labels) so the operator gets a precise pointer to the affected workload.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-pod-phase-unknown
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cluster-pod-phase-unknown
+      interval: 30s
+      rules:
+        - alert: PodPhaseUnknownWarning
+          expr: |
+            kube_pod_status_phase{phase="Unknown"} > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: pod-health
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} stuck in Unknown phase"
+            description: |
+              Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in `Unknown`
+              phase for >10 minutes. Unknown means the kubelet stopped reporting
+              its status to the API but the kubelet has not been confirmed dead;
+              the actual container may still be running on containerd. If the
+              hosting node reboots while pods are in this state, replicas do not
+              get re-created automatically — see the 2026-05-05 postmortem for
+              the cascade pattern.
+              Triage: `kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }}`
+              to find the hosting node and last-known status, then check that
+              node's kubelet health via `talosctl service kubelet`. Recovery
+              when needed: `kubectl delete pod -n {{ $labels.namespace }} {{ $labels.pod }} --force --grace-period=0`.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md"
+        - alert: PodPhaseUnknownCritical
+          expr: |
+            kube_pod_status_phase{phase="Unknown"} > 0
+          for: 1h
+          labels:
+            severity: critical
+            component: pod-health
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} stuck in Unknown phase >1 h"
+            description: |
+              Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in `Unknown`
+              phase for >1 hour. The cluster is now operating with a latent
+              failure: this pod's replica counts as alive to its controller, so
+              no replacement will be created if the hosting node reboots. The
+              2026-05-05 incident found pods that had been in this state for up
+              to 4 d 15 h.
+              Recovery: force-delete the ghost pod so its ReplicaSet /
+              StatefulSet / DaemonSet creates a fresh replacement.
+              `kubectl delete pod -n {{ $labels.namespace }} {{ $labels.pod }} --force --grace-period=0`
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md"
