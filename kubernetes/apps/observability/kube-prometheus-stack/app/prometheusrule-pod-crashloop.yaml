@@ -1,0 +1,56 @@
+---
+# Postmortem 2026-05-04 follow-up — fast critical signal for any pod entering
+# CrashLoopBackOff cluster-wide.
+#
+# Complements the upstream `KubePodCrashLooping` rule that kube-prometheus-stack
+# already ships (severity=warning, for=15m). That upstream rule fired correctly
+# during the 2026-05-01 → 2026-05-04 flux-operator incident, but it routed to
+# Alertmanager's null receiver (resolved separately, see following commit) and
+# the operator never saw it. This rule adds a CRITICAL tier with a short `for`
+# window so even a single pod stuck in CrashLoopBackOff for >2 minutes pages
+# loud as soon as routing exists.
+#
+# Why critical/2m and not warning/2m: 2 minutes is a deliberately tight window
+# that should never tolerate a steady-state false positive in this homelab.
+# Healthy pods do not sit in CrashLoopBackOff; if one does, that's an
+# ops-grade failure and the operator needs to know now, not in 15 minutes.
+#
+# Why we don't ALSO add a restart-rate alert: flux-operator's actual restart
+# rate during the 3.5-day incident was ~0.005/s (one restart per ~3.5 min back-
+# off cycle). A `rate(... [15m])` threshold high enough to avoid false
+# positives wouldn't have fired on it. The CrashLoopBackOff state alert is the
+# load-bearing one — it fires on the symptom directly. Restart-rate alerts
+# would mostly add noise from healthy pods that crash once during normal
+# rollout and recover.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-pod-health
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cluster-pod-health
+      interval: 30s
+      rules:
+        - alert: ClusterPodCrashLoopBackOffCritical
+          expr: |
+            kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} >= 1
+          for: 2m
+          labels:
+            severity: critical
+            component: pod-health
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) in CrashLoopBackOff"
+            description: |
+              Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }}
+              has been in CrashLoopBackOff for at least 2 minutes. This is the
+              signal that the upstream `KubePodCrashLooping` warning (15-minute
+              tolerance) was too slow to surface during the 2026-05-04
+              flux-operator incident — see
+              `context/postmortems/2026-05-04-flux-operator-networkpolicy-blocked-probes.md`.
+              First diagnostic moves: `kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }}`
+              for the most recent termination state, then `kubectl -n {{ $labels.namespace }} logs --previous {{ $labels.pod }}` for the
+              crashing container's last output.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/postmortems/2026-05-04-flux-operator-networkpolicy-blocked-probes.md"

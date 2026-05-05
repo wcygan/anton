@@ -928,7 +928,7 @@ data:
           "id": 502,
           "type": "table",
           "title": "OOMKilled Events (1h)",
-          "gridPos": { "x": 0, "y": 78, "w": 24, "h": 6 },
+          "gridPos": { "x": 0, "y": 78, "w": 12, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers terminated with reason=OOMKilled in the last hour. Empty table is the normal case.",
           "fieldConfig": {
@@ -945,6 +945,43 @@ data:
           ],
           "transformations": [
             { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+          ]
+        },
+        {
+          "id": 503,
+          "type": "table",
+          "title": "CrashLoopBackOff (now) — postmortem 2026-05-04",
+          "gridPos": { "x": 12, "y": 78, "w": 12, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Pods currently in CrashLoopBackOff. Empty table is the normal case. The 2026-05-04 flux-operator incident sat at 1455 restarts for 3.5 days because no panel surfaced this state at a glance.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "noValue": "No pods in CrashLoopBackOff",
+              "custom": { "align": "auto" },
+              "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Value" },
+                "properties": [
+                  { "id": "displayName", "value": "Crashlooping" },
+                  { "id": "custom.cellOptions", "value": { "type": "color-background" } }
+                ]
+              }
+            ]
+          },
+          "options": { "showHeader": true, "sortBy": [{ "displayName": "Crashlooping", "desc": true }] },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"} >= 1",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true, "endpoint": true, "instance": true, "job": true, "service": true, "uid": true, "reason": true, "__name__": true }, "indexByName": { "namespace": 0, "pod": 1, "container": 2, "Value": 3 } } }
           ]
         },
         {

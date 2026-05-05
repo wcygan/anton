@@ -10,3 +10,4 @@ resources:
   - ./prometheusrule-cilium-memory.yaml
   - ./prometheusrule-cni-plumbing.yaml
   - ./prometheusrule-k8s-2-rejoin-abort.yaml
+  - ./prometheusrule-pod-crashloop.yaml
