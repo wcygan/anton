@@ -2,7 +2,7 @@
 # Grafana sidecar picks this up via `grafana_dashboard=1` label.
 # searchNamespace: ALL in the HelmRelease values means this can live anywhere;
 # it's co-located here so the dashboard and app churn together.
-# Layout: ADR 0013 Phase 1 — header stat strip + 7 rows (all default-expanded).
+# Layout: ADR 0013 Phase 1 — header stat strip + 8 rows (all default-expanded).
 # Preserve `uid: cluster-health-glance` so existing bookmarks keep working.
 # All authoring is in-repo; sidecar has `allowUiUpdates: false` so UI edits
 # are discarded on pod restart.
@@ -1239,6 +1239,169 @@ data:
               "refId": "A",
               "expr": "container_memory_working_set_bytes{container=\"cilium-agent\",namespace=\"kube-system\"}",
               "legendFormat": "{{node}}"
+            }
+          ]
+        },
+        {
+          "id": 800,
+          "type": "row",
+          "title": "Hardware Health — plan 0009",
+          "collapsed": false,
+          "gridPos": { "x": 0, "y": 115, "w": 24, "h": 1 },
+          "panels": []
+        },
+        {
+          "id": 801,
+          "type": "timeseries",
+          "title": "CPU Package Temperature",
+          "gridPos": { "x": 0, "y": 116, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Intel digital thermal sensor on the CPU package (coretemp_0 temp1). Throttle begins ≈100 °C, hard-shutdown ≈105 °C. The nct6775 Super-I/O ghost values (107–113 °C on unconnected pins) are excluded by the chip filter. Added 2026-05-05 for plan 0009 silent-reboot triage.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 85 },
+                  { "color": "red", "value": 95 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_hwmon_temp_celsius{chip=\"platform_coretemp_0\",sensor=\"temp1\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 802,
+          "type": "timeseries",
+          "title": "CPU Throttle Events (5m)",
+          "gridPos": { "x": 12, "y": 116, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Counter increments on either thermal or power-budget throttle. A spike just before a node reboot is a primary suspect for the silent-reboot investigation in plan 0009.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "increase(node_cpu_package_throttles_total[5m])",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 803,
+          "type": "timeseries",
+          "title": "ECC Memory Errors (1h)",
+          "gridPos": { "x": 0, "y": 124, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Uncorrected ECC faults trigger kernel panic / hardware reset and are the most likely silent-reboot cause to come from RAM. A rising correctable rate often precedes catastrophic failure of the same DIMM.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "increase(node_edac_correctable_errors_total[1h])",
+              "legendFormat": "correctable {{instance}} ctrl{{controller}}"
+            },
+            {
+              "refId": "B",
+              "expr": "increase(node_edac_uncorrectable_errors_total[1h])",
+              "legendFormat": "UNCORRECTABLE {{instance}} ctrl{{controller}}"
+            }
+          ]
+        },
+        {
+          "id": 804,
+          "type": "timeseries",
+          "title": "NVMe Composite Temperature",
+          "gridPos": { "x": 12, "y": 124, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Composite NVMe temperature (sensor temp2 from each nvme_nvme* hwmon chip — the throttle/composite sensor on these drives). Three NVMe drives per node feed the Longhorn replica + storage-vxlan hot path. Consumer NVMe firmware typically throttles ≈75–82 °C.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 80 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_hwmon_temp_celsius{chip=~\"nvme_.*\",sensor=\"temp2\"}",
+              "legendFormat": "{{instance}} {{chip}}"
+            }
+          ]
+        },
+        {
+          "id": 805,
+          "type": "timeseries",
+          "title": "Fan RPM per Node",
+          "gridPos": { "x": 0, "y": 132, "w": 24, "h": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "MS-01 chassis fan RPMs (nct6775 Super-I/O). Unconnected fan headers report 0 and are filtered out — a connected fan reading 0 is a stall, which lets temps run away before coretemp ever crosses its threshold.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "rpm",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "min"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_hwmon_fan_rpm{chip=\"platform_nct6775_2592\"} > 0",
+              "legendFormat": "{{instance}} {{sensor}}"
             }
           ]
         }
