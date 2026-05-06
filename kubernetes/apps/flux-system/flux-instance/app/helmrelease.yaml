@@ -27,6 +27,13 @@ spec:
         url: "https://github.com/wcygan/anton.git"
         ref: "refs/heads/main"
         path: kubernetes/flux/cluster
+        # Attaches `spec.secretRef.name` to the managed flux-system
+        # GitRepository so image-automation-controller can push image bumps
+        # back to the repo (per ADR 0024 / plan 0012). Source-controller still
+        # clones anonymously since the repo is public; auth is only consulted
+        # on push. The Secret is materialised by the ExternalSecret in this
+        # same Kustomization (externalsecret.yaml).
+        pullSecret: flux-system-git-auth
       commonMetadata:
         labels:
           app.kubernetes.io/name: flux
