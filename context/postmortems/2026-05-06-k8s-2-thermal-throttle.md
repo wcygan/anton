@@ -108,6 +108,25 @@ Direct verification after rollout:
 - The incident exposed a k8s-2-specific cooling margin problem that still needs
   physical inspection.
 
+## Post-Mitigation False Alarm
+
+After mitigation, Grafana's `Node CPU %` panel briefly showed all nodes around
+50-75% CPU. This was not real host load. It was caused by rolling
+`node-exporter` during the RAPL/NVMe telemetry rollout: in-cluster Prometheus
+had old and new pod-labeled `node_cpu_seconds_total` series for the same
+`instance` inside the panel's 5-minute `rate()` window, so idle time was
+undercounted and CPU percent was inflated.
+
+Cross-checks:
+
+- `kubectl top nodes` stayed low: roughly k8s-1 1%, k8s-2 13%, k8s-3 3%.
+- Betty's stable off-cluster scrape never showed the >50% spike.
+- The exact Grafana query normalized once the 5-minute rate window filled.
+
+Actionable lesson: after node-exporter restarts, treat short CPU panel spikes
+with suspicion and cross-check against `kubectl top nodes` or betty before
+assuming workload CPU is actually high.
+
 ## Prevention
 
 - [ ] Add a post-rollout verification step for any CPU idle/power mitigation:
