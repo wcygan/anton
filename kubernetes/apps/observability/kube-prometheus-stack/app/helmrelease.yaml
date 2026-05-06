@@ -175,3 +175,12 @@ spec:
           mountPath: /host/textfile_collector
           readOnly: true
           mountPropagation: HostToContainer
+      # RAPL energy_uj sysfs files are mode 0400 root since the 5.10
+      # PLATYPUS-attack mitigation (CVE-2020-8694). node-exporter normally
+      # runs as nobody and gets EACCES on every read — `node_scrape_collector_success{collector="rapl"} 0`.
+      # CAP_DAC_READ_SEARCH lets the (still-non-root) process bypass the
+      # DAC check on the read, without giving it write access or any other
+      # privilege. Smallest viable elevation; alternative would be runAsUser:0.
+      containerSecurityContext:
+        capabilities:
+          add: [DAC_READ_SEARCH]

@@ -81,10 +81,11 @@ spec:
                 for d in /dev/nvme[0-9] /dev/nvme[0-9][0-9]; do
                   [ -e "$d" ] || continue
                   dev=$(basename "$d")
-                  # `nvme get-feature -f 0x02` prints "Current value: 0xN" for
-                  # the active NPSS index. Strip the 0x prefix and validate
-                  # numeric before emitting.
-                  raw=$(nvme get-feature -f 0x02 "$d" 2>/dev/null | awk '/Current value/ {print $NF}' | sed 's/^0x//')
+                  # nvme-cli prints "Current value:0xNNNNNNNN" with NO space
+                  # after the colon, so awk $NF returns "value:0x..." not
+                  # "0x...". Use sed with an anchored capture group to extract
+                  # just the hex literal, then printf %d to convert to decimal.
+                  raw=$(nvme get-feature -f 0x02 "$d" 2>/dev/null | sed -n 's/.*Current value:[[:space:]]*0x\([0-9a-fA-F][0-9a-fA-F]*\).*/\1/p')
                   case "$raw" in
                     ''|*[!0-9a-fA-F]*) continue ;;
                   esac
