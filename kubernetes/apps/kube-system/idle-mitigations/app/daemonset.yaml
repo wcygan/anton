@@ -51,6 +51,11 @@ spec:
               memory: 8Mi
             limits:
               memory: 32Mi
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           volumeMounts:
             - name: dev-cpu-dma-latency
               mountPath: /dev/cpu_dma_latency
@@ -74,14 +79,22 @@ spec:
               echo "[idle-mitigations] starting on $(hostname)"
 
               # ----- Op 1: PM-QoS C-state cap (the primary mitigation) -----
-              # Hold /dev/cpu_dma_latency open with 0 µs latency tolerance.
               # Linux PM-QoS aggregates all open requests with min(); the kernel
-              # will not enter idle states with exit latency > 0 µs while we
-              # hold this. C0/C1 only — removes the C8 / MWAIT 0x60 failure
-              # surface entirely.
+              # will not enter idle states with exit latency above the value we
+              # hold here. On the MS-01, 0 µs admits POLL only. k8s-2 runs a
+              # thermal canary at 1 µs so C1_ACPI/MWAIT 0x0 can be used while
+              # C2/C3, including the C3_ACPI/MWAIT 0x60 failure surface, remain
+              # blocked.
+              PM_QOS_LATENCY_US=0
+              PM_QOS_LATENCY_BYTES='\000\000\000\000'
+              if [ "${NODE_NAME}" = "k8s-2" ]; then
+                PM_QOS_LATENCY_US=1
+                PM_QOS_LATENCY_BYTES='\001\000\000\000'
+              fi
+
               exec 200>/dev/cpu_dma_latency
-              printf '\0\0\0\0' >&200
-              echo "[idle-mitigations] [ok] PM-QoS C-state cap held: /dev/cpu_dma_latency = 0 µs"
+              printf "${PM_QOS_LATENCY_BYTES}" >&200
+              echo "[idle-mitigations] [ok] PM-QoS C-state cap held: /dev/cpu_dma_latency = ${PM_QOS_LATENCY_US} µs"
 
               # ----- Op 2: Disable PCIe ASPM globally -----
               # Iter #8: i226-V management NIC is the dominant wake source and
