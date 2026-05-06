@@ -157,7 +157,16 @@ spec:
     #     live NVMe NPSS power state (which requires `nvme get-feature`, not
     #     available to node-exporter directly).
     prometheus-node-exporter:
+      # extraArgs replaces (does not append to) the parent chart's defaults,
+      # so the filesystem.mount-points-exclude and fs-types-exclude entries
+      # below must mirror kube-prometheus-stack 83.5.0's
+      # prometheus-node-exporter.extraArgs defaults verbatim. Without them,
+      # node-exporter scrapes containerd/kubelet bind-mounts and emits a
+      # cardinality storm of node_filesystem_* series. Last two args are the
+      # only net additions for plan 0009/0013 telemetry.
       extraArgs:
+        - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containerd/.+|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+        - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs)$
         - --collector.rapl
         - --collector.textfile.directory=/host/textfile_collector
       extraHostVolumeMounts:
