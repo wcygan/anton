@@ -1,11 +1,11 @@
 ---
-status: Active
+status: Mitigated
 opened: 2026-05-06T14:20Z
 detected-at: 2026-05-06T13:40Z
 event-at: 2026-05-06T12:27Z
 severity: SEV-3 (single-node thermal/package throttle; cluster serving)
 related-plans: [0013, 0015]
-related-postmortem: null
+related-postmortem: ../postmortems/2026-05-06-k8s-2-thermal-throttle.md
 ---
 
 # 2026-05-06 - k8s-2 thermal/package throttle after idle mitigation rollout
@@ -60,12 +60,12 @@ Betty/vmsingle showed:
   it needs physical inspection later, but it is not required for the software
   mitigation.
 
-## Mitigation In Progress
+## Mitigation
 
-Canary k8s-2 only:
+Applied by commit `f7b8cafc` and reconciled by Flux:
 
-- Change PM-QoS from `0 us` to `1 us` on k8s-2.
-- Keep k8s-1 and k8s-3 at `0 us`.
+- Changed PM-QoS from `0 us` to `1 us` on k8s-2.
+- Kept k8s-1 and k8s-3 at `0 us`.
 - Keep HMB disabled.
 - Keep NVMe APST disabled.
 - Do not re-enable deep idle states.
@@ -74,21 +74,22 @@ Expected result: k8s-2 can enter `C1_ACPI` / `MWAIT 0x0` while `C2_ACPI` and
 `C3_ACPI` / `MWAIT 0x60` remain blocked. Throttle rate and CPU/NVMe temps
 should drop without reopening the plan 0013 deep-idle failure surface.
 
-## Watch Criteria
+## Watch Result
 
-Mitigated if, after the canary rollout:
+Mitigated. Ten-minute watch after rollout:
 
 - `rate(node_cpu_package_throttles_total{instance="192.168.1.99:9100"}[5m])`
-  falls to zero or near-zero and stays there.
+  fell to zero and stayed there.
 - `rate(node_cpu_core_throttles_total{instance="192.168.1.99:9100"}[5m])`
-  falls to zero or near-zero and stays there.
-- CPU package temperature drops materially from the 80-90 C band.
-- `nvme_nvme1` Sensor 1 trends down from the high-80s/low-90s C band.
-- k8s-2 remains Ready with no reboot.
+  fell to zero and stayed there.
+- CPU package temperature fell from the 80-90 C band to roughly 57-69 C during
+  the watch.
+- `nvme_nvme1` Sensor 1 lagged but started trending down, from about 88.85 C
+  to 87.85 C by the final sample.
+- k8s-2 stayed Ready and did not reboot.
 
 ## Follow-Ups
 
-- If the canary works, update plan 0013 and write a postmortem.
 - Consider expanding `1 us` to all nodes only after the k8s-2 watch is clean.
 - Inspect k8s-2 fan/tach and chassis airflow physically when convenient.
 - Continue plan 0015 BIOS/power-profile work as the durable hardware baseline.
