@@ -223,18 +223,73 @@ data:
           ]
         },
         {
+          "id": 105,
+          "type": "timeseries",
+          "title": "Node Uptime — sawtooth resets at every reboot",
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Time since last kernel boot per node (`time() - node_boot_time_seconds`). The line drops to ~0 at every host reboot — the x-coordinate of the drop is the exact reboot moment, and hovering the trough reads the timestamp. Pinned at the top for at-a-glance triage; the full sawtooth + last-boot table pair lives below in the Hardware Health row.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max by (instance) (time() - node_boot_time_seconds)",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 106,
+          "type": "timeseries",
+          "title": "CPU Package Temperature",
+          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Intel digital thermal sensor on the CPU package (coretemp_0 temp1). Throttle begins ≈100 °C, hard-shutdown ≈105 °C. The nct6775 Super-I/O ghost values (107–113 °C on unconnected pins) are excluded by the chip filter. Pinned at the top for at-a-glance triage; the full panel lives below in the Hardware Health row.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 85 },
+                  { "color": "red", "value": 95 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_hwmon_temp_celsius{chip=\"platform_coretemp_0\",sensor=\"temp1\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
           "id": 200,
           "type": "row",
           "title": "Cluster Capacity",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 12, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 1,
           "type": "timeseries",
           "title": "Node CPU %",
-          "gridPos": { "x": 0, "y": 5, "w": 8, "h": 8 },
+          "gridPos": { "x": 0, "y": 13, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -264,7 +319,7 @@ data:
           "id": 2,
           "type": "timeseries",
           "title": "Node Memory %",
-          "gridPos": { "x": 8, "y": 5, "w": 8, "h": 8 },
+          "gridPos": { "x": 8, "y": 13, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -294,7 +349,7 @@ data:
           "id": 3,
           "type": "bargauge",
           "title": "Node Filesystem Usage %",
-          "gridPos": { "x": 16, "y": 5, "w": 8, "h": 8 },
+          "gridPos": { "x": 16, "y": 13, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -325,7 +380,7 @@ data:
           "id": 201,
           "type": "gauge",
           "title": "Cluster CPU Commit",
-          "gridPos": { "x": 0, "y": 13, "w": 12, "h": 6 },
+          "gridPos": { "x": 0, "y": 21, "w": 12, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Sum of pod CPU requests / sum of allocatable CPU. >1.0 means the scheduler has committed more than the cluster has.",
           "fieldConfig": {
@@ -361,7 +416,7 @@ data:
           "id": 202,
           "type": "gauge",
           "title": "Cluster Memory Commit",
-          "gridPos": { "x": 12, "y": 13, "w": 12, "h": 6 },
+          "gridPos": { "x": 12, "y": 21, "w": 12, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Sum of pod memory requests / sum of allocatable memory. >1.0 means scheduled memory exceeds cluster allocatable.",
           "fieldConfig": {
@@ -398,14 +453,14 @@ data:
           "type": "row",
           "title": "Workload Health",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 19, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 27, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 251,
           "type": "bargauge",
           "title": "Deployment Readiness by Namespace",
-          "gridPos": { "x": 0, "y": 20, "w": 8, "h": 8 },
+          "gridPos": { "x": 0, "y": 28, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Ready replicas / desired replicas, rolled up per namespace. A namespace below 1.0 has at least one Deployment with unavailable replicas.",
           "fieldConfig": {
@@ -437,7 +492,7 @@ data:
           "id": 252,
           "type": "timeseries",
           "title": "Namespace CPU Usage (top 10)",
-          "gridPos": { "x": 8, "y": 20, "w": 8, "h": 8 },
+          "gridPos": { "x": 8, "y": 28, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "cAdvisor container_cpu_usage_seconds_total rolled up per namespace. Shows actual CPU consumption, not requests.",
           "fieldConfig": {
@@ -459,7 +514,7 @@ data:
           "id": 253,
           "type": "timeseries",
           "title": "Namespace Memory Usage (top 10)",
-          "gridPos": { "x": 16, "y": 20, "w": 8, "h": 8 },
+          "gridPos": { "x": 16, "y": 28, "w": 8, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "cAdvisor container_memory_working_set_bytes rolled up per namespace. Working set is what kube-scheduler's OOMKiller looks at.",
           "fieldConfig": {
@@ -481,7 +536,7 @@ data:
           "id": 260,
           "type": "stat",
           "title": "Unhealthy Workloads",
-          "gridPos": { "x": 0, "y": 28, "w": 8, "h": 3 },
+          "gridPos": { "x": 0, "y": 36, "w": 8, "h": 3 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Total count of Deployments + StatefulSets + DaemonSets with ready < desired. 0 (green) = everything at full replica count. Non-zero (red) = drill into the Unhealthy Workloads table below.",
           "fieldConfig": {
@@ -519,7 +574,7 @@ data:
           "id": 261,
           "type": "stat",
           "title": "Pods in Bad Waiting State",
-          "gridPos": { "x": 8, "y": 28, "w": 8, "h": 3 },
+          "gridPos": { "x": 8, "y": 36, "w": 8, "h": 3 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Count of containers currently waiting with a bad reason (CrashLoopBackOff, ImagePullBackOff, ErrImagePull, CreateContainerConfigError). 0 (green) = no stuck containers. Non-zero (red) = drill into the Pods table below.",
           "fieldConfig": {
@@ -557,7 +612,7 @@ data:
           "id": 262,
           "type": "stat",
           "title": "Restart Hotspots (1h)",
-          "gridPos": { "x": 16, "y": 28, "w": 8, "h": 3 },
+          "gridPos": { "x": 16, "y": 36, "w": 8, "h": 3 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Count of containers that restarted at least once in the last hour. 0 (green) = no active incidents. Non-zero (red) = drill into the Restart Hotspots table below.",
           "fieldConfig": {
@@ -595,7 +650,7 @@ data:
           "id": 254,
           "type": "table",
           "title": "Unhealthy Workloads (ready < desired)",
-          "gridPos": { "x": 0, "y": 31, "w": 12, "h": 7 },
+          "gridPos": { "x": 0, "y": 39, "w": 12, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Deployments / StatefulSets / DaemonSets with fewer ready replicas than desired, labelled by kind. Empty table is the healthy steady state — cross-check the 'Unhealthy Workloads' stat above for the green 0.",
           "fieldConfig": {
@@ -637,7 +692,7 @@ data:
           "id": 255,
           "type": "table",
           "title": "Pods in Bad Waiting State",
-          "gridPos": { "x": 12, "y": 31, "w": 12, "h": 7 },
+          "gridPos": { "x": 12, "y": 39, "w": 12, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers currently waiting with a bad reason (CrashLoopBackOff, ImagePullBackOff, ErrImagePull, CreateContainerConfigError). ContainerCreating / PodInitializing are filtered out — they're transient by design.",
           "fieldConfig": {
@@ -660,7 +715,7 @@ data:
           "id": 256,
           "type": "table",
           "title": "Container Restart Hotspots (1h)",
-          "gridPos": { "x": 0, "y": 38, "w": 24, "h": 7 },
+          "gridPos": { "x": 0, "y": 46, "w": 24, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers with restarts in the last hour, top 10. This is the ACTIVE incident surface — contrast with the 24h \"Top Pod Restarts\" table below, which shows stable high-churn pods.",
           "fieldConfig": {
@@ -704,14 +759,14 @@ data:
           "type": "row",
           "title": "Control Plane (RED)",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 45, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 53, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 301,
           "type": "timeseries",
           "title": "API-server QPS by Verb",
-          "gridPos": { "x": 0, "y": 46, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 54, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Request rate per HTTP verb across all apiserver instances.",
           "fieldConfig": {
@@ -733,7 +788,7 @@ data:
           "id": 302,
           "type": "timeseries",
           "title": "API-server p99 Latency by Verb",
-          "gridPos": { "x": 12, "y": 46, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 54, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "p99 of apiserver_request_duration_seconds per verb. WATCH verb sits at 60s by design (long-polls); ignore it and watch GET/LIST/POST/PUT/DELETE.",
           "fieldConfig": {
@@ -763,7 +818,7 @@ data:
           "id": 303,
           "type": "timeseries",
           "title": "API-server Error Rate (5xx vs 4xx)",
-          "gridPos": { "x": 0, "y": 54, "w": 24, "h": 6 },
+          "gridPos": { "x": 0, "y": 62, "w": 24, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Error rate trend for 4xx and 5xx responses. 4xx is expected (RBAC deny, NotFound). Sustained 5xx above baseline is actionable.",
           "fieldConfig": {
@@ -792,14 +847,14 @@ data:
           "type": "row",
           "title": "Nodes (USE)",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 60, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 68, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 401,
           "type": "state-timeline",
           "title": "Node Pressure Conditions",
-          "gridPos": { "x": 0, "y": 61, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 69, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "MemoryPressure / DiskPressure / PIDPressure per node. 0 = clear, 1 = pressure.",
           "fieldConfig": {
@@ -827,7 +882,7 @@ data:
           "id": 402,
           "type": "timeseries",
           "title": "Per-Node Network Throughput",
-          "gridPos": { "x": 12, "y": 61, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 69, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Physical interface Rx/Tx. Excludes loopback, Cilium-managed virtual interfaces, and veth. On the SFP+ mesh (ADR 0009) bond0 / enp* bonded throughput shows up here.",
           "fieldConfig": {
@@ -855,14 +910,14 @@ data:
           "type": "row",
           "title": "Pod Events",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 69, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 77, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 4,
           "type": "table",
           "title": "Top Pod Restarts (24h)",
-          "gridPos": { "x": 0, "y": 70, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 78, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Stable high-churn pods over the last 24 hours. Contrast with the 1h restart hotspots above — this surfaces pods that are chronically unstable, not just actively failing.",
           "fieldConfig": {
@@ -906,7 +961,7 @@ data:
           "id": 501,
           "type": "timeseries",
           "title": "Pending Pods by Namespace",
-          "gridPos": { "x": 12, "y": 70, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 78, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "kube_pod_status_phase=Pending grouped by namespace. Sustained Pending indicates unschedulable workloads.",
           "fieldConfig": {
@@ -928,7 +983,7 @@ data:
           "id": 502,
           "type": "table",
           "title": "OOMKilled Events (1h)",
-          "gridPos": { "x": 0, "y": 78, "w": 12, "h": 6 },
+          "gridPos": { "x": 0, "y": 86, "w": 12, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Containers terminated with reason=OOMKilled in the last hour. Empty table is the normal case.",
           "fieldConfig": {
@@ -951,7 +1006,7 @@ data:
           "id": 503,
           "type": "table",
           "title": "CrashLoopBackOff (now) — postmortem 2026-05-04",
-          "gridPos": { "x": 12, "y": 78, "w": 12, "h": 6 },
+          "gridPos": { "x": 12, "y": 86, "w": 12, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Pods currently in CrashLoopBackOff. Empty table is the normal case. The 2026-05-04 flux-operator incident sat at 1455 restarts for 3.5 days because no panel surfaced this state at a glance.",
           "fieldConfig": {
@@ -989,14 +1044,14 @@ data:
           "type": "row",
           "title": "Storage",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 84, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 92, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 6,
           "type": "bargauge",
           "title": "PVC Saturation %",
-          "gridPos": { "x": 0, "y": 85, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 93, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": {
@@ -1027,7 +1082,7 @@ data:
           "id": 7,
           "type": "stat",
           "title": "Longhorn Volume Health",
-          "gridPos": { "x": 12, "y": 85, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 93, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Robustness values: 1=Healthy, 2=Degraded, 3=Faulted, 0=Unknown. Counts volumes by status.",
           "fieldConfig": {
@@ -1083,7 +1138,7 @@ data:
           "id": 601,
           "type": "table",
           "title": "Longhorn Replicas per Volume",
-          "gridPos": { "x": 0, "y": 93, "w": 24, "h": 6 },
+          "gridPos": { "x": 0, "y": 101, "w": 24, "h": 6 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Running replicas per Longhorn volume. Storage class default is 2; a row sitting below 2 is a rebuild window or a replica failure.",
           "fieldConfig": {
@@ -1127,14 +1182,14 @@ data:
           "type": "row",
           "title": "Network & CNI",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 99, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 107, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 701,
           "type": "timeseries",
           "title": "CoreDNS QPS",
-          "gridPos": { "x": 0, "y": 100, "w": 8, "h": 7 },
+          "gridPos": { "x": 0, "y": 108, "w": 8, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Total DNS request rate across all CoreDNS replicas.",
           "fieldConfig": {
@@ -1156,7 +1211,7 @@ data:
           "id": 702,
           "type": "timeseries",
           "title": "CoreDNS Non-NOERROR Responses",
-          "gridPos": { "x": 8, "y": 100, "w": 8, "h": 7 },
+          "gridPos": { "x": 8, "y": 108, "w": 8, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Response rate for any rcode other than NOERROR (NXDOMAIN, SERVFAIL, etc.), broken down by rcode.",
           "fieldConfig": {
@@ -1186,7 +1241,7 @@ data:
           "id": 703,
           "type": "timeseries",
           "title": "Cilium Packet Forward / Drop Rate",
-          "gridPos": { "x": 16, "y": 100, "w": 8, "h": 7 },
+          "gridPos": { "x": 16, "y": 108, "w": 8, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Cilium agent packet counters (Hubble flow metrics are not scraped on anton; this is the datapath-level substitute). A sustained non-zero drop rate is actionable.",
           "fieldConfig": {
@@ -1213,7 +1268,7 @@ data:
           "id": 704,
           "type": "timeseries",
           "title": "Cilium-agent WSS per Node (24h) — ADR 0021 + plan 0009 Phase 3",
-          "gridPos": { "x": 0, "y": 107, "w": 24, "h": 8 },
+          "gridPos": { "x": 0, "y": 115, "w": 24, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Working-set bytes of the cilium-agent container per node. Two horizontal threshold lines mirror the PrometheusRule alerts: 2048 MiB (CiliumAgentMemoryHigh, 5m warning) and 3072 MiB (CiliumAgentMemoryCritical, 2m critical). The ADR 0021 limit is 3584 MiB; anything approaching it is the #42007 BPF-corruption zone. A cluster-wide step-increase (all three lines rising together on a single node churn event) is the #37935 signature that preceded the 2026-04-23 20:45Z cascade. Default 24h window so a churn-triggered trajectory is visible at a glance.",
           "fieldConfig": {
@@ -1247,14 +1302,14 @@ data:
           "type": "row",
           "title": "Hardware Health — plan 0009",
           "collapsed": false,
-          "gridPos": { "x": 0, "y": 115, "w": 24, "h": 1 },
+          "gridPos": { "x": 0, "y": 123, "w": 24, "h": 1 },
           "panels": []
         },
         {
           "id": 801,
           "type": "timeseries",
           "title": "CPU Package Temperature",
-          "gridPos": { "x": 0, "y": 116, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 124, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Intel digital thermal sensor on the CPU package (coretemp_0 temp1). Throttle begins ≈100 °C, hard-shutdown ≈105 °C. The nct6775 Super-I/O ghost values (107–113 °C on unconnected pins) are excluded by the chip filter. Added 2026-05-05 for plan 0009 silent-reboot triage.",
           "fieldConfig": {
@@ -1284,7 +1339,7 @@ data:
           "id": 802,
           "type": "timeseries",
           "title": "CPU Throttle Events (5m)",
-          "gridPos": { "x": 12, "y": 116, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 124, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Counter increments on either thermal or power-budget throttle. A spike just before a node reboot is a primary suspect for the silent-reboot investigation in plan 0009.",
           "fieldConfig": {
@@ -1313,7 +1368,7 @@ data:
           "id": 803,
           "type": "timeseries",
           "title": "ECC Memory Errors (1h)",
-          "gridPos": { "x": 0, "y": 124, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 132, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Uncorrected ECC faults trigger kernel panic / hardware reset and are the most likely silent-reboot cause to come from RAM. A rising correctable rate often precedes catastrophic failure of the same DIMM.",
           "fieldConfig": {
@@ -1347,7 +1402,7 @@ data:
           "id": 804,
           "type": "timeseries",
           "title": "NVMe Composite Temperature",
-          "gridPos": { "x": 12, "y": 124, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 132, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Composite NVMe temperature (sensor temp1 — the SMART-relevant overall drive temperature used by the firmware for thermal-throttle decisions). Three NVMe drives per node feed the Longhorn replica + storage-vxlan hot path. Consumer NVMe firmware typically throttles ≈75–82 °C on Composite. NOTE 2026-05-06: this panel previously queried sensor=\"temp2\" which is actually \"Sensor 1\" (controller hot-spot, runs 20-30 °C above Composite without indicating a problem). The hot-spot view now lives in panel 816.",
           "fieldConfig": {
@@ -1377,7 +1432,7 @@ data:
           "id": 805,
           "type": "timeseries",
           "title": "Fan RPM per Node",
-          "gridPos": { "x": 0, "y": 132, "w": 24, "h": 7 },
+          "gridPos": { "x": 0, "y": 140, "w": 24, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "MS-01 chassis fan RPMs (nct6775 Super-I/O). Unconnected fan headers report 0 and are filtered out — a connected fan reading 0 is a stall, which lets temps run away before coretemp ever crosses its threshold.",
           "fieldConfig": {
@@ -1409,7 +1464,7 @@ data:
           "id": 806,
           "type": "timeseries",
           "title": "SFP+ Storage-Mesh Throughput per Node Port — plan 0009",
-          "gridPos": { "x": 0, "y": 139, "w": 24, "h": 8 },
+          "gridPos": { "x": 0, "y": 147, "w": 24, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Per-port byte rate on each node's two SFP+ interfaces (enp2s0f0np0, enp2s0f1np1). The cluster's storage-replication mesh runs over three /31 DAC links forming a triangle: DAC #1 k8s-1↔k8s-2, DAC #2 k8s-1↔k8s-3, DAC #3 k8s-2↔k8s-3 (per ADR 0009). A flat-line drop to 0 B/s on a port indicates a link/peer failure; a sustained spike preceding a node reboot is the per-DAC anomaly the 2026-05-05 sequential cascade (k8s-3 19:07:13Z, then k8s-1 ~19:33Z, ~26 min apart) would have surfaced. Solid lines are RX, dashed are TX.",
           "fieldConfig": {
@@ -1447,7 +1502,7 @@ data:
           "id": 807,
           "type": "timeseries",
           "title": "CPU Package Power per Node — RAPL",
-          "gridPos": { "x": 0, "y": 148, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 156, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Intel RAPL package energy counter rate. Direct measurement of CPU power draw — surfaces the post-2026-05-06 idle-mitigations thermal floor (~+15-25 W per node) that CPU% can no longer show because cores hold C0/C1 instead of C8. Pair with panel 801 (CPU package temp) and panel 810 (overlay) when triaging throttle events.",
           "fieldConfig": {
@@ -1477,7 +1532,7 @@ data:
           "id": 808,
           "type": "stat",
           "title": "Cluster Total Power (CPU+DRAM)",
-          "gridPos": { "x": 12, "y": 148, "w": 6, "h": 4 },
+          "gridPos": { "x": 12, "y": 156, "w": 6, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Sum of RAPL package watts across all nodes (plus DRAM if exposed — MS-01 firmware does not expose intel-rapl:1, so this is package-only on anton). At-a-glance whole-cluster draw; baseline established post-idle-mitigations (2026-05-06).",
           "fieldConfig": {
@@ -1513,7 +1568,7 @@ data:
           "id": 809,
           "type": "stat",
           "title": "7-day Energy (kWh)",
-          "gridPos": { "x": 18, "y": 148, "w": 6, "h": 4 },
+          "gridPos": { "x": 18, "y": 156, "w": 6, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Trailing 7-day cluster energy from RAPL package (DRAM domain absent on MS-01 firmware; excludes NVMe, NICs, fans, PSU loss). Multiply by your local $/kWh × 4.3 weeks/month for a rough monthly cost. Wall-power smart plugs would catch the missing ~30-50 W.",
           "fieldConfig": {
@@ -1548,7 +1603,7 @@ data:
           "id": 810,
           "type": "timeseries",
           "title": "CPU Watts vs Package Temp — correlation",
-          "gridPos": { "x": 12, "y": 152, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 160, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Twin-axis: RAPL package watts (left, watt) vs coretemp package temp (right, °C). Answers the throttle-counter question — if a panel-802 spike correlates with a watts spike, it is a power-budget (PL1/PL2) throttle; if temp leads watts, it is thermal. Per-instance overrides set right-axis assignment for the temperature series.",
           "fieldConfig": {
@@ -1594,7 +1649,7 @@ data:
           "id": 811,
           "type": "timeseries",
           "title": "NVMe Live Power State (NPSS)",
-          "gridPos": { "x": 0, "y": 156, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 164, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Current NVMe NPSS state (0 = highest power = PS0, higher index = lower power). Surfaced by nvme-power-collector via `nvme get-feature -f 0x02` → textfile collector → node-exporter. Validates plan-0013 idle-mitigations: post-rollout drives should sit pinned at 0 (PS0) because APST is disabled. Any drive that drops to PS3/PS4 means the sysfs APST-disable write did not take effect on that drive.",
           "fieldConfig": {
@@ -1628,7 +1683,7 @@ data:
           "id": 812,
           "type": "stat",
           "title": "NVMe Wear (Percentage Used)",
-          "gridPos": { "x": 12, "y": 160, "w": 6, "h": 4 },
+          "gridPos": { "x": 12, "y": 168, "w": 6, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "smartctl SMART attribute — vendor-reported lifetime consumed. 0% = new, 100% = end of warranted endurance. NVMe drives keep working past 100% but with no endurance guarantee. Per-drive panel; max() reduces to the worst drive in the cluster.",
           "fieldConfig": {
@@ -1667,7 +1722,7 @@ data:
           "id": 813,
           "type": "timeseries",
           "title": "NVMe Thermal-Mgmt Transitions (rate)",
-          "gridPos": { "x": 18, "y": 160, "w": 6, "h": 4 },
+          "gridPos": { "x": 18, "y": 168, "w": 6, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Rate of NVMe thermal-management state transitions (T1/T2). Non-zero rate means the drive entered firmware-driven Thermal Management — i.e. it is actively throttling to cool itself. The smoking-gun precursor for the k8s-2 throttle-counter incident under investigation in plan 0013.",
           "fieldConfig": {
@@ -1697,7 +1752,7 @@ data:
           "id": 814,
           "type": "state-timeline",
           "title": "Throttle Active (heatmap by node)",
-          "gridPos": { "x": 0, "y": 164, "w": 24, "h": 4 },
+          "gridPos": { "x": 0, "y": 172, "w": 24, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Boolean package-throttle window per node. Uses rate(node_cpu_package_throttles_total[1m]) > bool 0 so throttle windows render as solid bars instead of the bursty 5m integer spikes in panel 802.",
           "fieldConfig": {
@@ -1742,7 +1797,7 @@ data:
           "id": 815,
           "type": "timeseries",
           "title": "Throttle Why — overlay",
-          "gridPos": { "x": 0, "y": 168, "w": 24, "h": 9 },
+          "gridPos": { "x": 0, "y": 176, "w": 24, "h": 9 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Correlates the panel-814 throttle band with average CPU clock, package temperature, RAPL package watts, and node load. Thermal throttle: temp leads. PL1/power-budget throttle: load leads while watts are pinned and frequency falls. External PROCHOT: frequency collapses without matching temp/watt lead. Added after the 2026-05-06 k8s-2 episode: 0.73 GHz / 15.5 W / 65 °C with 9000+ throttle events in the prior hour while peer nodes held ~2.9 GHz / 30 W / 69 °C and zero throttles.",
           "fieldConfig": {
@@ -1841,7 +1896,7 @@ data:
           "id": 816,
           "type": "timeseries",
           "title": "NVMe Controller Hot-spot (Sensor 1 / Sensor 2)",
-          "gridPos": { "x": 0, "y": 178, "w": 24, "h": 8 },
+          "gridPos": { "x": 0, "y": 186, "w": 24, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Per-drive controller / NAND hot-spot temperatures (sensor=temp2 = Sensor 1 = controller hot-spot, sensor=temp3 = Sensor 2 = secondary hot-spot, typically NAND or another internal location). These run 20-30 °C above the Composite reading (panel 804) without indicating a problem — drives are designed for it. Only worry if Composite (panel 804) crosses the throttle threshold (~75-82 °C) OR if the gap between Sensor 1 and Composite exceeds ~40 °C (suggests airflow over the controller is critically constrained). Added 2026-05-06 after the panel-804 query was corrected from temp2 to temp1.",
           "fieldConfig": {
@@ -1879,7 +1934,7 @@ data:
           "id": 817,
           "type": "timeseries",
           "title": "Node Uptime — sawtooth resets at every reboot",
-          "gridPos": { "x": 0, "y": 186, "w": 12, "h": 8 },
+          "gridPos": { "x": 0, "y": 194, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Time since last kernel boot per node (`time() - node_boot_time_seconds`). The line drops to ~0 at every host reboot — the x-coordinate of the drop is the exact reboot moment, and hovering the trough reads the timestamp. The boot timestamp is set by the kernel and read from `/proc/stat`, so the dashboard's 30 s scrape interval does not bound resolution: the *value* of `node_boot_time_seconds` is itself the precise (per-second) boot time. `max by (instance)` collapses any duplicate node-exporter pod series after a daemonset rotation. Cross-reference the throttle / ECC / SFP+ panels above for *why* a reboot fired. Added 2026-05-06 for plan 0009 silent-reboot triage.",
           "fieldConfig": {
@@ -1904,7 +1959,7 @@ data:
           "id": 818,
           "type": "table",
           "title": "Last Boot Time per Node",
-          "gridPos": { "x": 12, "y": 186, "w": 12, "h": 8 },
+          "gridPos": { "x": 12, "y": 194, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "One row per node showing the kernel-reported last boot time (`node_boot_time_seconds`, rendered as ISO timestamp) and current uptime. Ground truth for 'which node came up when' — independent of scrape interval, because the metric value itself is the boot timestamp captured to the second. `max by (instance)` collapses transient duplicate series from node-exporter pod rotations. Added 2026-05-06.",
           "fieldConfig": {
