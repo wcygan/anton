@@ -107,20 +107,29 @@ spec:
               fi
 
               # ----- Op 3: Disable NVMe APST (autonomous power-state transitions) -----
-              # Iter #15 single-write refinement: try the module parameter first
-              # (cluster-wide), fall back to per-drive pm_qos if the module param
-              # is read-only on this kernel build.
+              # Iter #15 — corrected 2026-05-06: the original implementation
+              # tried the module-param first and only fell back to per-drive if
+              # the module-param was read-only. That was wrong: the module-param
+              # write succeeds on Talos kernels, but it ONLY governs new bind
+              # events. Drives that bound at boot keep their inherited default
+              # of 100,000 µs in pm_qos_latency_tolerance_us, so APST stayed
+              # effectively enabled cluster-wide (see plan 0013 log,
+              # 2026-05-06 iter-15 entry). Both writes must happen on every
+              # pod start: module-param for NEW binds (defensive against
+              # hot-plug or driver re-bind), AND per-drive for already-bound
+              # drives. Belt-and-suspenders pairs with the kernel cmdline
+              # `nvme_core.default_ps_max_latency_us=0` in talconfig.yaml,
+              # which closes the boot-window gap before this DaemonSet runs.
               if [ -w /sys/module/nvme_core/parameters/default_ps_max_latency_us ]; then
                 echo 0 > /sys/module/nvme_core/parameters/default_ps_max_latency_us
-                echo "[idle-mitigations] [ok] nvme_core.default_ps_max_latency_us = 0 (cluster-wide)"
-              else
-                for d in /sys/class/nvme/nvme*/power/pm_qos_latency_tolerance_us; do
-                  [ -f "$d" ] || continue
-                  if echo 0 > "$d" 2>/dev/null; then
-                    echo "[idle-mitigations] [ok] $d = 0"
-                  fi
-                done
+                echo "[idle-mitigations] [ok] nvme_core.default_ps_max_latency_us = 0 (default for new binds)"
               fi
+              for d in /sys/class/nvme/nvme*/power/pm_qos_latency_tolerance_us; do
+                [ -f "$d" ] || continue
+                if echo 0 > "$d" 2>/dev/null; then
+                  echo "[idle-mitigations] [ok] $d = 0 (per-drive)"
+                fi
+              done
 
               # ----- Op 4: Disable HMB on WD_BLACK SN7100 drives -----
               # Iter #27/#28: HMB on IOMMU-enabled nodes (BIOS 1.27 — k8s-2,
