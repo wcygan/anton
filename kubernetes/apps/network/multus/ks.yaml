@@ -16,4 +16,9 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: network
-  wait: false
+  # `wait: true` so downstream apps that author NetworkAttachmentDefinitions
+  # (notably `longhorn-config`'s `longhorn-storage` NAD) can `dependsOn` this
+  # Kustomization and block until Multus and the NAD CRD are installed. Without
+  # this flip, longhorn-config's NAD apply races the CRD on cold-start. See
+  # plan 0016 and ADR 0017.
+  wait: true

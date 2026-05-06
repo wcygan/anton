@@ -12,6 +12,13 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: storage
+  # The `longhorn-storage` NetworkAttachmentDefinition authored here consumes
+  # the `network-attachment-definitions.k8s.cni.cncf.io` CRD installed by the
+  # `multus` Kustomization. Block this reconcile on multus being Ready so the
+  # NAD apply doesn't race the CRD on a cold-start. See plan 0016 and ADR 0017.
+  dependsOn:
+    - name: multus
+      namespace: network
   wait: false
   postBuild:
     substituteFrom:

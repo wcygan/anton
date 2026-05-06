@@ -4,8 +4,16 @@ kind: Kustomization
 metadata:
   name: flux-instance
 spec:
+  # `flux-operator` brings up the FluxInstance CRD owner. The `envoy-gateway`
+  # and `external-secrets` deps gate the HTTPRoute and ExternalSecret authored
+  # under `app/` so manifest applies don't race those CRDs on a cold-start.
+  # See plan 0016.
   dependsOn:
     - name: flux-operator
+    - name: envoy-gateway
+      namespace: network
+    - name: external-secrets
+      namespace: external-secrets
   interval: 1h
   path: ./kubernetes/apps/flux-system/flux-instance/app
   postBuild:

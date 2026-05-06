@@ -18,4 +18,10 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: default
+  # Authors a DNSEndpoint on the secondary domain. Block this reconcile on
+  # external-dns (DNSEndpoint CRD owner) being Ready so the manifest apply
+  # doesn't race the CRD on a cold-start. See plan 0016.
+  dependsOn:
+    - name: cloudflare-dns
+      namespace: network
   wait: false

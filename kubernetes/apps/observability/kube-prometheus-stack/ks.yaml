@@ -12,7 +12,18 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: observability
-  wait: false
+  # `wait: true` so downstream observability apps (smartctl-exporter,
+  # nvme-power-collector) that already `dependsOn` kube-prometheus-stack get a
+  # `Ready` signal — without this flip, those edges resolve at ks-applied (not
+  # Ready) and ServiceMonitor applies race the CRD on cold-start.
+  # `dependsOn` adds: `envoy-gateway` for the HTTPRoute under `app/`, and
+  # `external-secrets` for the ExternalSecret under `app/`. See plan 0016.
+  dependsOn:
+    - name: envoy-gateway
+      namespace: network
+    - name: external-secrets
+      namespace: external-secrets
+  wait: true
   postBuild:
     substituteFrom:
       - name: cluster-secrets

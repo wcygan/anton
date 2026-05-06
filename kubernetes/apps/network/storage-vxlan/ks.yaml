@@ -16,4 +16,10 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: network
-  wait: false
+  # `wait: true` so longhorn can `dependsOn` this Kustomization and block until
+  # the `storage-vxlan` DaemonSet has rolled out — including the per-node
+  # `lhnet1-host` macvlan-bridge child that the host's iSCSI initiator uses to
+  # reach co-located Longhorn IM pods. There is no Flux-native way to express
+  # "DaemonSet has settled on every node," so `wait: true` on this Kustomization
+  # is the best available proxy. See plan 0016 and `network/CLAUDE.md`.
+  wait: true
