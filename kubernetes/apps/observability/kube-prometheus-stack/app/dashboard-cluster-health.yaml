@@ -1692,6 +1692,150 @@ data:
               "legendFormat": "{{instance}} {{device}} {{attribute_name}}"
             }
           ]
+        },
+        {
+          "id": 814,
+          "type": "state-timeline",
+          "title": "Throttle Active (heatmap by node)",
+          "gridPos": { "x": 0, "y": 164, "w": 24, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Boolean package-throttle window per node. Uses rate(node_cpu_package_throttles_total[1m]) > bool 0 so throttle windows render as solid bars instead of the bursty 5m integer spikes in panel 802.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "max": 1,
+              "custom": { "lineWidth": 0, "fillOpacity": 100 },
+              "mappings": [
+                {
+                  "options": {
+                    "0": { "color": "green", "index": 0, "text": "clear" },
+                    "1": { "color": "red", "index": 1, "text": "throttle" }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "mergeValues": true,
+            "showValue": "never",
+            "rowHeight": 0.9,
+            "legend": { "displayMode": "list", "placement": "bottom" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(rate(node_cpu_package_throttles_total[1m]) > bool 0)",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 815,
+          "type": "timeseries",
+          "title": "Throttle Why — overlay",
+          "gridPos": { "x": 0, "y": 168, "w": 24, "h": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Correlates the panel-814 throttle band with average CPU clock, package temperature, RAPL package watts, and node load. Thermal throttle: temp leads. PL1/power-budget throttle: load leads while watts are pinned and frequency falls. External PROCHOT: frequency collapses without matching temp/watt lead. Added after the 2026-05-06 k8s-2 episode: 0.73 GHz / 15.5 W / 65 °C with 9000+ throttle events in the prior hour while peer nodes held ~2.9 GHz / 30 W / 69 °C and zero throttles.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 5, "lineWidth": 2 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "^freq .*" },
+                "properties": [
+                  { "id": "unit", "value": "short" },
+                  { "id": "decimals", "value": 2 },
+                  { "id": "custom.axisPlacement", "value": "left" },
+                  { "id": "custom.axisLabel", "value": "GHz" },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "^temp .*" },
+                "properties": [
+                  { "id": "unit", "value": "celsius" },
+                  { "id": "custom.axisPlacement", "value": "right" },
+                  { "id": "custom.axisLabel", "value": "°C" },
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "^watts .*" },
+                "properties": [
+                  { "id": "unit", "value": "watt" },
+                  { "id": "custom.axisPlacement", "value": "left" },
+                  { "id": "custom.axisLabel", "value": "W" },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "^load1 .*" },
+                "properties": [
+                  { "id": "unit", "value": "short" },
+                  { "id": "custom.axisPlacement", "value": "right" },
+                  { "id": "custom.axisLabel", "value": "load1" },
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [3, 6] } },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "^throttle .*" },
+                "properties": [
+                  { "id": "unit", "value": "short" },
+                  { "id": "min", "value": 0 },
+                  { "id": "max", "value": 1 },
+                  { "id": "custom.axisPlacement", "value": "hidden" },
+                  { "id": "custom.drawStyle", "value": "bars" },
+                  { "id": "custom.fillOpacity", "value": 18 },
+                  { "id": "custom.lineWidth", "value": 0 },
+                  { "id": "custom.hideFrom", "value": { "legend": true, "tooltip": false, "viz": false } },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "min", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "avg by (instance) (node_cpu_scaling_frequency_hertz) / 1e9",
+              "legendFormat": "freq {{instance}}"
+            },
+            {
+              "refId": "B",
+              "expr": "node_hwmon_temp_celsius{chip=\"platform_coretemp_0\",sensor=\"temp1\"}",
+              "legendFormat": "temp {{instance}}"
+            },
+            {
+              "refId": "C",
+              "expr": "rate(node_rapl_package_joules_total[1m])",
+              "legendFormat": "watts {{instance}}"
+            },
+            {
+              "refId": "D",
+              "expr": "node_load1",
+              "legendFormat": "load1 {{instance}}"
+            },
+            {
+              "refId": "E",
+              "expr": "(rate(node_cpu_package_throttles_total[1m]) > bool 0)",
+              "legendFormat": "throttle {{instance}}"
+            }
+          ]
         }
       ]
     }
