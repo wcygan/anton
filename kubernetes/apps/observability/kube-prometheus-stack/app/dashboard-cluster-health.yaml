@@ -1349,7 +1349,7 @@ data:
           "title": "NVMe Composite Temperature",
           "gridPos": { "x": 12, "y": 124, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Composite NVMe temperature (sensor temp2 from each nvme_nvme* hwmon chip — the throttle/composite sensor on these drives). Three NVMe drives per node feed the Longhorn replica + storage-vxlan hot path. Consumer NVMe firmware typically throttles ≈75–82 °C.",
+          "description": "Composite NVMe temperature (sensor temp1 — the SMART-relevant overall drive temperature used by the firmware for thermal-throttle decisions). Three NVMe drives per node feed the Longhorn replica + storage-vxlan hot path. Consumer NVMe firmware typically throttles ≈75–82 °C on Composite. NOTE 2026-05-06: this panel previously queried sensor=\"temp2\" which is actually \"Sensor 1\" (controller hot-spot, runs 20-30 °C above Composite without indicating a problem). The hot-spot view now lives in panel 816.",
           "fieldConfig": {
             "defaults": {
               "unit": "celsius",
@@ -1368,7 +1368,7 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "node_hwmon_temp_celsius{chip=~\"nvme_.*\",sensor=\"temp2\"}",
+              "expr": "node_hwmon_temp_celsius{chip=~\"nvme_.*\",sensor=\"temp1\"}",
               "legendFormat": "{{instance}} {{chip}}"
             }
           ]
@@ -1834,6 +1834,44 @@ data:
               "refId": "E",
               "expr": "(rate(node_cpu_package_throttles_total[1m]) > bool 0)",
               "legendFormat": "throttle {{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 816,
+          "type": "timeseries",
+          "title": "NVMe Controller Hot-spot (Sensor 1 / Sensor 2)",
+          "gridPos": { "x": 0, "y": 178, "w": 24, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Per-drive controller / NAND hot-spot temperatures (sensor=temp2 = Sensor 1 = controller hot-spot, sensor=temp3 = Sensor 2 = secondary hot-spot, typically NAND or another internal location). These run 20-30 °C above the Composite reading (panel 804) without indicating a problem — drives are designed for it. Only worry if Composite (panel 804) crosses the throttle threshold (~75-82 °C) OR if the gap between Sensor 1 and Composite exceeds ~40 °C (suggests airflow over the controller is critically constrained). Added 2026-05-06 after the panel-804 query was corrected from temp2 to temp1.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 90 },
+                  { "color": "red", "value": 100 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_hwmon_temp_celsius{chip=~\"nvme_.*\",sensor=\"temp2\"}",
+              "legendFormat": "Sensor 1 {{instance}} {{chip}}"
+            },
+            {
+              "refId": "B",
+              "expr": "node_hwmon_temp_celsius{chip=~\"nvme_.*\",sensor=\"temp3\"}",
+              "legendFormat": "Sensor 2 {{instance}} {{chip}}"
             }
           ]
         }
