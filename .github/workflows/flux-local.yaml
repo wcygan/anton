@@ -37,7 +37,13 @@ jobs:
       - name: Run flux-local test
         uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
         with:
-          args: test --enable-helm --all-namespaces --path /github/workspace/kubernetes/flux/cluster -v
+          # `--skip-invalid-kustomization-paths` skips path validation on
+          # Kustomizations whose path resolves into a `GitRepository` source
+          # rather than the local repo (multus-upstream, whereabouts-upstream).
+          # flux-local does not pull GitRepository contents during test, so
+          # the path check is a false-positive on these. Upstream issue:
+          # allenporter/flux-local#1068, exposed in CLI form since v8.x.
+          args: test --enable-helm --all-namespaces --skip-invalid-kustomization-paths --path /github/workspace/kubernetes/flux/cluster -v
 
   diff:
     name: Flux Local Diff
@@ -76,6 +82,7 @@ jobs:
             --limit-bytes 10000
             --all-namespaces
             --sources "flux-system"
+            --skip-invalid-kustomization-paths
             --output-file diff.patch
 
       - name: Generate Diff
