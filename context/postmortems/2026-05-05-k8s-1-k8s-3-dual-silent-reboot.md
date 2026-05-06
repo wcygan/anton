@@ -9,13 +9,28 @@ severity: SEV-2
 duration-public-impact: ~62 min (2026-05-05T19:33Z event → 2026-05-05T20:35Z `<public-site-A>` 200; first site `<public-site-B>` recovered at ~20:02Z, ~29 min)
 ---
 
-# Postmortem — 2026-05-05 k8s-1 + k8s-3 dual silent reboot
+# Postmortem — 2026-05-05 k8s-1 + k8s-3 sequential silent reboot
 
-> Two of three Talos control-plane nodes silent-rebooted simultaneously while the third (the historically-fragile node under active investigation) held cleanly. The reboot itself was small; the disproportionate public impact came from a 4-day-old latent ghost-pod accumulation that the reboot exposed.
+> Two of three Talos control-plane nodes silent-rebooted **sequentially, ~26 min apart** (originally framed as "simultaneous within ~28 s" — this was wrong, see Correction below) while the third (the historically-fragile node under active investigation) held cleanly. The reboot itself was small; the disproportionate public impact came from a 4-day-old latent ghost-pod accumulation that the reboot exposed.
+
+## ⚠ Correction — 2026-05-05 evening
+
+The original Summary and Timeline below claimed a **simultaneous within ~28 s** dual reboot at 19:33:54Z (k8s-3) → 19:34:22Z (k8s-1). Verification on the live cluster (`/proc/uptime` via privileged exec into the cilium-agent on each node, plus `Node.Ready.lastTransitionTime` from the API) shows the k8s-3 timestamp was wrong by ~26 minutes:
+
+| Node | Original claim | Verified | Source |
+|---|---|---|---|
+| k8s-3 | 19:33:54Z | **19:07:13Z** | live `/proc/uptime`, boot ID `e55639d4…` |
+| k8s-1 (silent) | 19:34:22Z | ~19:33Z (unverifiable; overwritten by 20:29Z reboot) | original estimate retained |
+| k8s-1 (graceful) | 20:29Z | **20:29:07Z** | live `/proc/uptime`, boot ID `65fc58fd…` |
+| k8s-2 | did not reboot | did not reboot | `/proc/uptime` confirms boot 2026-05-04T01:47:06Z |
+
+The actual pattern is **sequential cascade with a ~26 min gap, k8s-3 first, k8s-1 second**. This materially changes the analysis: a "simultaneous external trigger" hypothesis (e.g., shared power, single DAC failure, single cluster-wide stimulus) does not fit sequential failures separated by 26 minutes. A **cascade** hypothesis (k8s-3 failure stresses something that takes 26 min to propagate to k8s-1) fits better.
+
+**The Root Cause and Lessons sections below were written under the simultaneity framing and have not been re-derived.** Conclusions in those sections that lean on the simultaneity claim need re-examination. See `../incidents/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md` Correction section for the verified timeline.
 
 ## Summary
 
-At 2026-05-05T19:33:54Z, k8s-3 unexpectedly rebooted, followed ~28 s later by k8s-1 at 19:34:22Z. k8s-2, the node we had been watching for the past 41 h after a BIOS flash on 2026-05-04, did not reboot. Both rebooted nodes returned to `Ready` cleanly at the Talos / Kubernetes layer within ~50 min.
+At 2026-05-05T19:07:13Z, k8s-3 unexpectedly rebooted (verified via `/proc/uptime`). Roughly 26 minutes later at ~19:33Z, k8s-1 also unexpectedly rebooted. k8s-2, the node we had been watching for the past 41 h after a BIOS flash on 2026-05-04, did not reboot. Both rebooted nodes returned to `Ready` cleanly at the Talos / Kubernetes layer within ~50 min of their respective events.
 
 The rebooted-node API records contained a large set of pods stuck in `Unknown` phase (~50 pods, ages ranging 42 h to 4 d 15 h). These pods had stopped reporting to the API but their containers had continued serving traffic on containerd. When containerd reset during the reboots, the workloads disappeared while the Kubernetes ReplicaSets / StatefulSets / DaemonSets continued to count them as existing replicas. Public ingress (cloudflare-tunnel, envoy-external, envoy-gateway) and the Tailscale operator API proxy were among the affected pods; both critical paths went down.
 
@@ -105,8 +120,8 @@ This matches the plan 0007 day-1 finding: containerd state can become wedged in 
 |---|---|
 | 2026-05-04T01:46Z | k8s-2 second post-flash boot (anchor for the BIOS-flash watch baseline that ran for the next 41 h) |
 | 2026-05-04T15:30Z | T+14h checkpoint — Vector kernel sink torn down (commit `4037deec`); explicit trade-off note |
-| 2026-05-05T19:33:54Z | **k8s-3 boots** (earliest post-reboot dmesg) |
-| 2026-05-05T19:34:22Z | **k8s-1 boots** (~28 s after k8s-3) |
+| ~~2026-05-05T19:33:54Z~~ → **2026-05-05T19:07:13Z** | **k8s-3 boots** (corrected from live `/proc/uptime`; original recovery-time dmesg estimate was wrong by ~26 min) |
+| 2026-05-05T19:33Z (approx) | **k8s-1 silent-rebooted** (~26 min after k8s-3, **not** ~28 s; original 19:34:22Z claim was the recovery-time dmesg estimate and is approximately when k8s-1 finished its silent-reboot boot) |
 | 2026-05-05T19:54Z | Bastion watch loop fires its 30-min tick, catches boot-ID diff, escalates and stops; appends paragraph to plan 0009 Log |
 | 2026-05-05T19:54-20:00Z | Operator triages: kubectl-via-Tailscale times out, generates direct kubeconfig, confirms etcd 3/3 healthy, identifies ghost-pod recovery deadlock |
 | 2026-05-05T20:01Z | Recovery **batch 1** — force-delete ingress + Tailscale-operator ghosts |

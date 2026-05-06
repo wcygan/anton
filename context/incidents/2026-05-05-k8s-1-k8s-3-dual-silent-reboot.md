@@ -2,15 +2,47 @@
 status: Active
 opened: 2026-05-05T19:54Z
 detected-at: 2026-05-05T19:54Z (T+41h watch tick caught boot-ID diff)
-event-at: 2026-05-05T19:33Z (per /proc/uptime + earliest dmesg timestamp on k8s-1 and k8s-3)
+event-at: 2026-05-05T19:07Z (k8s-3) and ~19:33Z (k8s-1) — sequential, not simultaneous; corrected 2026-05-05 evening
 severity: SEV-2 (public services unreachable; cluster control plane healthy; data plane intact)
 related-plans: [0009]
 related-postmortem: ../postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md
 ---
 
-# 2026-05-05 — k8s-1 + k8s-3 simultaneous silent reboot
+# 2026-05-05 — k8s-1 + k8s-3 sequential silent reboot
 
-> Dual unplanned silent reboot of k8s-1 and k8s-3 (within ~28 s) while k8s-2 held cleanly. Public ingress dropped because cloudflare-tunnel and envoy-external pods are stuck as `Unknown` ghosts on k8s-1 with no replacement scheduling.
+> Sequential silent reboot of k8s-3 (~19:07Z) and k8s-1 (~19:33Z) — **~26 min apart, not simultaneous as originally framed** — while k8s-2 held cleanly. Public ingress dropped because cloudflare-tunnel and envoy-external pods were stuck as `Unknown` ghosts on k8s-1 with no replacement scheduling.
+
+## ⚠ Correction — 2026-05-05 evening
+
+The original timeline below claimed a **simultaneous within ~28 s** dual reboot at 19:33:54Z (k8s-3) → 19:34:22Z (k8s-1). Cross-verification on the live cluster shows this is **wrong** by ~26 minutes for k8s-3:
+
+| Node | Original claim | Verified boot time | Method |
+|---|---|---|---|
+| k8s-3 | 2026-05-05T19:33:54Z | **2026-05-05T19:07:13Z** | live `/proc/uptime` via cilium-agent privileged exec; boot ID `e55639d4…` matches the watch-loop record |
+| k8s-1 (silent reboot) | 2026-05-05T19:34:22Z | ~19:33Z (not independently verifiable; overwritten by 20:29Z graceful reboot) | original dmesg-based estimate retained |
+| k8s-1 (graceful reboot) | 2026-05-05T20:29Z | **2026-05-05T20:29:07Z** | live `/proc/uptime` confirms |
+| k8s-2 | did not reboot | **did not reboot** (boot 2026-05-04T01:47:06Z) | confirmed via `/proc/uptime`; consistent with `Node.Ready.lastTransitionTime` 2026-05-04T01:47:18Z |
+
+**Corroborating evidence found post-correction**:
+- k8s-2 dmesg shows both SFP+ NICs dropping at 19:06:32Z (≈40 s before k8s-3's 19:07:13Z boot — consistent with k8s-3 going down then booting back)
+- k8s-3 mass container exit=255 at 19:07:25Z (kubelet rebuilding post-boot)
+- KCM + scheduler leadership transferred to k8s-2 at 19:07:36Z (k8s-3 had been holding leases)
+- k8s-3 whereabouts `i/o timeout to 10.43.0.1:443` at 19:08:01Z (still recovering)
+
+**Why the original claim was wrong**: the postmortem's "earliest post-reboot dmesg" timestamps for both nodes were collected during recovery (~T+50 min). The k8s-3 dmesg at that time started at 19:33:54Z because the node had cycled through its full Talos boot sequence and the early dmesg lines had aged out of the ring buffer by the time recovery began. The boot-ID watch loop had captured the actual reboot earlier but the timestamp was not cross-referenced.
+
+**What this implies for plan 0009**:
+
+- The "simultaneous within ~28s" pattern is *not real*. The actual pattern is **sequential, ~26 min apart, with k8s-3 going first**.
+- The "cluster-wide trigger that takes 2 nodes down at once" hypothesis is **weaker** than it looked — sequential failures with a multi-minute gap are more consistent with cascade (one node's failure stresses the cluster, and that stress eventually breaks a second node) than with a simultaneous external trigger.
+- Hypotheses needing re-examination in light of this correction:
+  - The "k8s-1 ↔ k8s-3 SFP+ DAC #2 simultaneous failure" hypothesis (cf. evidence-note candidate #2) — if k8s-3 failed alone first and k8s-1 failed 26 min later, a *single* DAC failure cannot explain both
+  - The "shared power topology" hypothesis (postmortem candidate 2) — same reasoning; sequential failures don't fit a power event unless the events are independent
+  - The "cluster-wide kernel-level mechanism" hypothesis (evidence-note candidate #1) — *strengthened*; a kernel mechanism that takes time to propagate or to fire on a second node fits a 26-min gap well
+
+The analysis sections below were written under the simultaneous-within-28s framing and have **not been rewritten**. Treat conclusions in those sections that depend on the simultaneity claim with skepticism.
+
+---
 
 ## Impact
 
@@ -63,10 +95,17 @@ Recovery: force-delete the ghost pods so ReplicaSets can re-create them and the 
 
 ## Timeline
 
-- **T-0 (2026-05-05T19:33:54Z)** — k8s-3 boots (earliest post-reboot dmesg)
-- **T+0:28 (2026-05-05T19:34:22Z)** — k8s-1 boots
-- **T+~21 min (2026-05-05T19:54Z)** — bastion watch loop tick detects boot-ID diff; loop escalates and stops
-- **T+~50 min (2026-05-05T20:24Z)** — operator triages; identifies ghost-pod recovery deadlock; authorizes force-delete recovery and incident-file authoring
+> Corrected 2026-05-05 evening — see Correction section above. Original simultaneous-within-28s framing struck through; verified timestamps marked ✓.
+
+- ✓ **T-0 (2026-05-05T19:07:13Z)** — k8s-3 silent-reboot boot completes (boot ID `e55639d4…`, verified via live `/proc/uptime`). k8s-2 dmesg shows SFP+ NICs dropping at 19:06:32Z (~40 s earlier).
+- ✓ **T+0:12 (2026-05-05T19:07:25Z)** — k8s-3 kubelet rebuilds containers (mass exit=255 cascade)
+- ✓ **T+0:23 (2026-05-05T19:07:36Z)** — KCM + scheduler leadership transfers to k8s-2 (k8s-3 had been holding leases)
+- ✓ **T+0:48 (2026-05-05T19:08:01Z)** — k8s-3 whereabouts `i/o timeout to 10.43.0.1:443`; node still unstable
+- ~~**T+0:28 (2026-05-05T19:34:22Z)** — k8s-1 boots~~ — **corrected**: this was the original "k8s-1 boots" claim from recovery dmesg; the actual silent-reboot moment is ~19:33Z (cannot independently verify from current state since the 20:29Z graceful reboot overwrote `/proc/uptime`)
+- **T+~26 min (2026-05-05T~19:33Z)** — k8s-1 silent-rebooted (postmortem timestamp; not independently verifiable)
+- **T+~21 min from k8s-3 (2026-05-05T19:54Z)** — bastion watch loop tick detects 2-of-3 boot-ID diff (loop's cadence is 30 min, so this is the next tick after both reboots); loop escalates and stops
+- **T+~77 min (2026-05-05T20:24Z)** — operator triages; identifies ghost-pod recovery deadlock; authorizes force-delete recovery and incident-file authoring
+- ✓ **2026-05-05T20:29:07Z** — k8s-1 graceful reboot completes (boot ID `65fc58fd…`, verified via live `/proc/uptime`)
 
 ## Recovery actions (will append as executed)
 

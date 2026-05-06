@@ -1404,6 +1404,44 @@ data:
               "legendFormat": "{{instance}} {{sensor}}"
             }
           ]
+        },
+        {
+          "id": 806,
+          "type": "timeseries",
+          "title": "SFP+ Storage-Mesh Throughput per Node Port — plan 0009",
+          "gridPos": { "x": 0, "y": 139, "w": 24, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Per-port byte rate on each node's two SFP+ interfaces (enp2s0f0np0, enp2s0f1np1). The cluster's storage-replication mesh runs over three /31 DAC links forming a triangle: DAC #1 k8s-1↔k8s-2, DAC #2 k8s-1↔k8s-3, DAC #3 k8s-2↔k8s-3 (per ADR 0009). A flat-line drop to 0 B/s on a port indicates a link/peer failure; a sustained spike preceding a node reboot is the per-DAC anomaly the 2026-05-05 sequential cascade (k8s-3 19:07:13Z, then k8s-1 ~19:33Z, ~26 min apart) would have surfaced. Solid lines are RX, dashed are TX.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 5, "lineWidth": 2 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "^.* tx$" },
+                "properties": [
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(node_network_receive_bytes_total{device=~\"enp2s0f.*\"}[2m])",
+              "legendFormat": "{{instance}} {{device}} rx"
+            },
+            {
+              "refId": "B",
+              "expr": "rate(node_network_transmit_bytes_total{device=~\"enp2s0f.*\"}[2m])",
+              "legendFormat": "{{instance}} {{device}} tx"
+            }
+          ]
         }
       ]
     }

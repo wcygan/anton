@@ -1,9 +1,27 @@
-# Evidence: 2026-05-05 dual silent reboot of k8s-1 + k8s-3 (k8s-2 held)
+# Evidence: 2026-05-05 sequential silent reboot of k8s-3 then k8s-1 (k8s-2 held)
 
 **Date:** 2026-05-05
-**Event:** 2026-05-05T19:33:54Z (k8s-3 first dmesg) → 2026-05-05T19:34:22Z (k8s-1 first dmesg). Δ ≈ 28 s.
+**Event (corrected 2026-05-05 evening):** 2026-05-05T**19:07:13Z** (k8s-3, verified via live `/proc/uptime`, boot ID `e55639d4…`) → 2026-05-05T**~19:33Z** (k8s-1 silent-reboot, postmortem estimate, not independently verifiable since overwritten by graceful reboot at 20:29:07Z). Δ ≈ **26 min**, **not** 28 s.
 **Scope:** Re-cut the k8s-2-instability hypothesis space in light of an event whose signature is the inverse of every prior reboot in the investigation. This note is the closing evidence artifact for the BIOS-flash branch of plan-0009 Stage 4 and the opening evidence for whatever supersedes it.
 **Operator:** wcygan (remote, off-LAN)
+
+## ⚠ Correction — 2026-05-05 evening
+
+This note was originally written under a **simultaneous within ~28 s** framing (k8s-3 19:33:54Z → k8s-1 19:34:22Z). That framing is **wrong**. Verified on the live cluster:
+
+- k8s-3 actually booted **2026-05-05T19:07:13Z** (live `/proc/uptime`; boot ID `e55639d4…` matches the watch-loop's record)
+- k8s-1 silent-rebooted at ~19:33Z (cannot independently verify; overwritten by 20:29:07Z graceful reboot which IS verified)
+- k8s-2 did not reboot (still on the 2026-05-04T01:47:06Z BIOS-flash boot)
+
+The actual pattern is **sequential, ~26 min apart, k8s-3 going first**. Hypothesis re-ranking implications:
+
+- DAC #2 / shared-power / single-cluster-wide-stimulus hypotheses are **weaker** — a 26-min gap doesn't fit a single shared trigger
+- "Kernel-level mechanism, cluster-wide-in-principle" (candidate #2 below) is **strengthened** — slow propagation between nodes fits a 26-min cascade
+- New hypothesis: **k8s-3's failure was the trigger that broke k8s-1 26 min later** — investigate what state change on k8s-3 (kubelet/API blip recovery, etcd churn, network re-convergence) could have stressed k8s-1 during the gap
+
+The candidate ranking and "checkable next" sections below were written before this correction. Re-evaluate before acting.
+
+---
 
 > The full operational record lives in [`../../incidents/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md`](../../incidents/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md) and is interpreted in [`../../postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md`](../../postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md). This file is intentionally narrower: it is the evidence-side bookkeeping that the k8s-2-instability investigation needs in order to know what happened, what is now falsified, and what should be tested next.
 
