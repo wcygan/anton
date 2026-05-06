@@ -1,0 +1,31 @@
+---
+# prometheus-community/prometheus-smartctl-exporter
+#
+# Per-drive NVMe (and SATA) telemetry via smartctl: percent_used wear, error
+# counts, power-on hours, thermal-management transition counts. Complements
+# node-exporter's `node_hwmon_temp_celsius` (current temperature only) with
+# health/wear data, and complements nvme-power-collector (live NPSS state).
+#
+# Reuses the existing `prometheus-community` HelmRepository defined under
+# kube-prometheus-stack/app/helmrepository.yaml — chart `prometheus-smartctl-exporter`
+# ships from the same repo, so no new HelmRepository needed.
+#
+# DependsOn kube-prometheus-stack so the ServiceMonitor CRD and the
+# match-all selectors are in place before this app is reconciled — otherwise
+# the chart's ServiceMonitor manifest fails to apply on a cold install.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: smartctl-exporter
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/observability/smartctl-exporter/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: observability
+  wait: false
+  dependsOn:
+    - name: kube-prometheus-stack

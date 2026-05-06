@@ -1,0 +1,14 @@
+---
+# prometheus-community shipped charts. The kube-prometheus-stack app already
+# owns a HelmRepository with name `prometheus-community` in this same namespace,
+# so this one uses a distinct name to avoid the collision. Same upstream URL.
+# OCI mirror at ghcr.io/prometheus-community/charts is stale (per the note in
+# kube-prometheus-stack/app/helmrepository.yaml as of 2026-04-16) — falling back
+# to the traditional Helm repo is upstream-forced.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: prometheus-community-smartctl
+spec:
+  interval: 15m
+  url: https://prometheus-community.github.io/helm-charts

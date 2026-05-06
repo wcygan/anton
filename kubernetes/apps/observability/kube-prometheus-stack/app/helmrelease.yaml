@@ -144,3 +144,25 @@ spec:
 
     nodeExporter:
       enabled: true
+
+    # Sub-chart values for prometheus-community/prometheus-node-exporter.
+    # kube-prometheus-stack passes these straight through under this top-level
+    # key (matching the sub-chart name). Two collectors are wired here:
+    #   - rapl: Intel Running Average Power Limit. Exposes per-package CPU and
+    #     DRAM energy counters from /sys/class/powercap (already mounted via the
+    #     chart's default /sys hostPath). Surfaces the post-`idle-mitigations`
+    #     thermal floor as actual watts, not just degrees.
+    #   - textfile: reads .prom files from a host directory and merges them
+    #     into /metrics. Used by the nvme-power-collector DaemonSet to surface
+    #     live NVMe NPSS power state (which requires `nvme get-feature`, not
+    #     available to node-exporter directly).
+    prometheus-node-exporter:
+      extraArgs:
+        - --collector.rapl
+        - --collector.textfile.directory=/host/textfile_collector
+      extraHostVolumeMounts:
+        - name: textfile-collector
+          hostPath: /var/lib/node_exporter/textfile_collector
+          mountPath: /host/textfile_collector
+          readOnly: true
+          mountPropagation: HostToContainer

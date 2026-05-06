@@ -1,0 +1,9 @@
+---
+# Minimal RBAC. The collector does no Kubernetes API access — sysfs / device
+# reads + textfile writes only. ServiceAccount exists so privileged pod
+# security policy attaches to a named identity, not `default`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nvme-power-collector
+  namespace: observability

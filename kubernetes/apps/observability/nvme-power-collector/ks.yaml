@@ -1,0 +1,38 @@
+---
+# nvme-power-collector — privileged DaemonSet that polls each NVMe drive every
+# 30s for its current NPSS power state via `nvme get-feature -f 0x02`, writing
+# the result as a Prometheus textfile that node-exporter merges into its
+# /metrics endpoint.
+#
+# Why a custom DaemonSet rather than smartctl_exporter: smartctl exposes wear,
+# error counts, and thermal-management transitions, but does NOT expose the
+# live NPSS state (PS0..PS4). PS state is only readable via `nvme get-feature
+# -f 0x02 /dev/nvme*`, which requires a character-device ioctl. The textfile
+# output flows through node-exporter so the metric inherits the same
+# `instance="192.168.1.x:9100"` labels — both in-cluster Prometheus and betty
+# (off-cluster vmsingle) see it without scrape-config changes.
+#
+# Pairs with plan 0013 idle-mitigations: the collector validates that APST is
+# actually disabled (drives should sit at PS0). If a drive drops to PS3/PS4
+# the sysfs write didn't take.
+#
+# DependsOn kube-prometheus-stack so the textfile collector flag (added by
+# the same plan to the node-exporter HelmRelease) is in place before this
+# DaemonSet starts writing files — otherwise the .prom files accumulate but
+# nothing reads them.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: nvme-power-collector
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/observability/nvme-power-collector/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: observability
+  wait: false
+  dependsOn:
+    - name: kube-prometheus-stack

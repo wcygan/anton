@@ -1,0 +1,110 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvme-power-collector
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: nvme-power-collector
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nvme-power-collector
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nvme-power-collector
+    spec:
+      serviceAccountName: nvme-power-collector
+      priorityClassName: system-node-critical
+      hostPID: false
+      # 3-node all-control-plane cluster: tolerate the control-plane taint so
+      # the DS schedules on every node. Mirrors idle-mitigations.
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: collector
+          # Alpine + nvme-cli installed at startup. ~5s init penalty per pod
+          # (one apk add fetch), then a tight sleep loop. Avoids a custom
+          # image-build pipeline; if the apk fetch becomes flaky we can
+          # promote to a built image via the deploy-owned-app pipeline.
+          # renovate: datasource=docker depName=alpine
+          image: alpine:3.20.3
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Privileged required for /dev/nvme* ioctl (NVMe admin commands
+            # need CAP_SYS_ADMIN + CAP_SYS_RAWIO; full privileged is the
+            # simplest path on Talos's SELinux-enforced kernel surface).
+            privileged: true
+            runAsNonRoot: false
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+            - name: textfile
+              mountPath: /tf
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+
+              echo "[nvme-power-collector] starting on $(hostname)"
+
+              # Install nvme-cli at runtime. Cached on subsequent restarts via
+              # the alpine package layer if the image is in spegel; cold cache
+              # adds ~5s. Failure here is fatal — without nvme-cli we can't
+              # read PS state, and the textfile would silently stay empty.
+              apk add --no-cache nvme-cli >/dev/null
+              echo "[nvme-power-collector] nvme-cli ready"
+
+              # Atomic-write loop: each iteration writes a .tmp file then
+              # renames it over .prom so node-exporter never reads a partial
+              # file. 30 s cadence matches betty's scrape interval.
+              while true; do
+                tmp=/tf/nvme_power.prom.tmp
+                : > "$tmp"
+                printf '# HELP node_nvme_power_state Current NVMe NPSS power state (lower index = higher power draw)\n' >> "$tmp"
+                printf '# TYPE node_nvme_power_state gauge\n' >> "$tmp"
+
+                for d in /dev/nvme[0-9] /dev/nvme[0-9][0-9]; do
+                  [ -e "$d" ] || continue
+                  dev=$(basename "$d")
+                  # `nvme get-feature -f 0x02` prints "Current value: 0xN" for
+                  # the active NPSS index. Strip the 0x prefix and validate
+                  # numeric before emitting.
+                  raw=$(nvme get-feature -f 0x02 "$d" 2>/dev/null | awk '/Current value/ {print $NF}' | sed 's/^0x//')
+                  case "$raw" in
+                    ''|*[!0-9a-fA-F]*) continue ;;
+                  esac
+                  ps=$(printf '%d' "0x$raw" 2>/dev/null) || continue
+                  printf 'node_nvme_power_state{device="%s"} %s\n' "$dev" "$ps" >> "$tmp"
+                done
+
+                mv "$tmp" /tf/nvme_power.prom
+                sleep 30
+              done
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: textfile
+          hostPath:
+            # Same path the kube-prometheus-stack sub-chart mounts read-only
+            # at /host/textfile_collector via the textfile collector arg.
+            # DirectoryOrCreate so the first DaemonSet pod on a fresh node
+            # creates the directory; subsequent pods reuse it.
+            path: /var/lib/node_exporter/textfile_collector
+            type: DirectoryOrCreate

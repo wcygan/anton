@@ -1,0 +1,44 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: smartctl-exporter
+spec:
+  chart:
+    spec:
+      chart: prometheus-smartctl-exporter
+      # renovate: registryUrl=https://prometheus-community.github.io/helm-charts
+      version: 0.16.0
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community-smartctl
+      interval: 15m
+  interval: 1h
+  values:
+    # Privileged DaemonSet that mounts /dev to read SMART data via ioctl.
+    # Default chart already runs as a DaemonSet; we only override what's needed
+    # for Talos: privileged container + tolerate the control-plane taint so
+    # the DS schedules on every node in this 3-node all-control-plane cluster.
+    securityContext:
+      privileged: true
+      runAsUser: 0
+      runAsNonRoot: false
+
+    # ServiceMonitor: kube-prometheus-stack has match-all selectors
+    # (serviceMonitorSelectorNilUsesHelmValues=false), so this is auto-discovered.
+    serviceMonitor:
+      enabled: true
+      interval: 60s
+
+    # Tolerate control-plane taint — anton has 3 control-plane nodes, no workers.
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi

@@ -1442,6 +1442,256 @@ data:
               "legendFormat": "{{instance}} {{device}} tx"
             }
           ]
+        },
+        {
+          "id": 807,
+          "type": "timeseries",
+          "title": "CPU Package Power per Node — RAPL",
+          "gridPos": { "x": 0, "y": 148, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Intel RAPL package energy counter rate. Direct measurement of CPU power draw — surfaces the post-2026-05-06 idle-mitigations thermal floor (~+15-25 W per node) that CPU% can no longer show because cores hold C0/C1 instead of C8. Pair with panel 801 (CPU package temp) and panel 810 (overlay) when triaging throttle events.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 50 },
+                  { "color": "red", "value": 80 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(node_rapl_package_joules_total[1m])",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 808,
+          "type": "stat",
+          "title": "Cluster Total Power (CPU+DRAM)",
+          "gridPos": { "x": 12, "y": 148, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Sum of RAPL package + DRAM watts across all nodes. At-a-glance whole-cluster draw; baseline established post-idle-mitigations (2026-05-06).",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 150 },
+                  { "color": "red", "value": 240 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(node_rapl_package_joules_total[1m])) + sum(rate(node_rapl_dram_joules_total[1m]))",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 809,
+          "type": "stat",
+          "title": "7-day Energy (kWh)",
+          "gridPos": { "x": 18, "y": 148, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Trailing 7-day cluster energy from RAPL (CPU + DRAM only — excludes NVMe, NICs, fans, PSU loss). Multiply by your local $/kWh × 4.3 weeks/month for a rough monthly cost. Wall-power smart plugs would catch the missing ~30-40 W.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "kwatth",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(increase(node_rapl_package_joules_total[7d])) + sum(increase(node_rapl_dram_joules_total[7d]))) / 3.6e6",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 810,
+          "type": "timeseries",
+          "title": "CPU Watts vs Package Temp — correlation",
+          "gridPos": { "x": 12, "y": 152, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Twin-axis: RAPL package watts (left, watt) vs coretemp package temp (right, °C). Answers the throttle-counter question — if a panel-802 spike correlates with a watts spike, it is a power-budget (PL1/PL2) throttle; if temp leads watts, it is thermal. Per-instance overrides set right-axis assignment for the temperature series.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "^temp .*" },
+                "properties": [
+                  { "id": "unit", "value": "celsius" },
+                  { "id": "custom.axisPlacement", "value": "right" },
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "^watts .*" },
+                "properties": [
+                  { "id": "unit", "value": "watt" },
+                  { "id": "custom.axisPlacement", "value": "left" }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(node_rapl_package_joules_total[1m])",
+              "legendFormat": "watts {{instance}}"
+            },
+            {
+              "refId": "B",
+              "expr": "node_hwmon_temp_celsius{chip=\"platform_coretemp_0\",sensor=\"temp1\"}",
+              "legendFormat": "temp {{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 811,
+          "type": "timeseries",
+          "title": "NVMe Live Power State (NPSS)",
+          "gridPos": { "x": 0, "y": 156, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Current NVMe NPSS state (0 = highest power = PS0, higher index = lower power). Surfaced by nvme-power-collector via `nvme get-feature -f 0x02` → textfile collector → node-exporter. Validates plan-0013 idle-mitigations: post-rollout drives should sit pinned at 0 (PS0) because APST is disabled. Any drive that drops to PS3/PS4 means the sysfs APST-disable write did not take effect on that drive.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "max": 5,
+              "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 5, "lineWidth": 2 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "node_nvme_power_state",
+              "legendFormat": "{{instance}} {{device}}"
+            }
+          ]
+        },
+        {
+          "id": 812,
+          "type": "stat",
+          "title": "NVMe Wear (Percentage Used)",
+          "gridPos": { "x": 12, "y": 160, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "smartctl SMART attribute — vendor-reported lifetime consumed. 0% = new, 100% = end of warranted endurance. NVMe drives keep working past 100% but with no endurance guarantee. Per-drive panel; max() reduces to the worst drive in the cluster.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 60 },
+                  { "color": "red", "value": 85 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "smartctl_device_percentage_used",
+              "legendFormat": "{{instance}} {{device}}",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 813,
+          "type": "timeseries",
+          "title": "NVMe Thermal-Mgmt Transitions (rate)",
+          "gridPos": { "x": 18, "y": 160, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Rate of NVMe thermal-management state transitions (T1/T2). Non-zero rate means the drive entered firmware-driven Thermal Management — i.e. it is actively throttling to cool itself. The smoking-gun precursor for the k8s-2 throttle-counter incident under investigation in plan 0013.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 20 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.001 },
+                  { "color": "red", "value": 0.01 }
+                ]
+              }
+            }
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(smartctl_device_attribute{attribute_name=~\"thermal_mgmt_t._trans_count|temperature_(1|2)_transition_count\"}[5m])",
+              "legendFormat": "{{instance}} {{device}} {{attribute_name}}"
+            }
+          ]
         }
       ]
     }
