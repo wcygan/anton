@@ -36,7 +36,7 @@ The rebooted-node API records contained a large set of pods stuck in `Unknown` p
 
 Recovery required ~62 min of operator action: force-deleting the ghost pods in five batches, generating a direct kubeconfig to bypass the unreachable Tailscale-operator proxy, cordoning k8s-1 to escape a kubelet wedge, and a second graceful reboot of k8s-1 to clear stale containerd sandbox-name reservations. Both public sites returned 200 by T+62 min.
 
-The trigger event — the simultaneous silent reboot — produced no kernel-side trace because the Vector kernel sink had been torn down ~30 h earlier as part of a planned tidy-up after the BIOS flash. The plan-0009 BIOS-fix hypothesis is materially weakened by this event: k8s-1 silent-rebooted for the first time in 190 days while still on the un-flashed BIOS version, and k8s-2 (the historically-fragile node) was the one that held.
+The trigger events — both silent reboots — produced no kernel-side trace because the Vector kernel sink had been torn down ~30 h earlier as part of a planned tidy-up after the BIOS flash. The plan-0009 BIOS-fix hypothesis is materially weakened by this event: k8s-1 silent-rebooted for the first time in 190 days while still on the un-flashed BIOS version, and k8s-2 (the historically-fragile node) was the one that held.
 
 ## Impact
 
@@ -65,7 +65,9 @@ The standard in-cluster reboot alert is `K8s2UnexpectedReboot` — by name and l
 
 Two distinct failures stacked, with the second producing the public impact:
 
-### 1. The trigger — simultaneous silent reboot of k8s-1 and k8s-3 (root cause **unknown**)
+### 1. The trigger — sequential silent reboots of k8s-3 and k8s-1 (~26 min apart, root cause **unknown**)
+
+> Originally written under "simultaneous within ~28 s" framing; corrected in-place per the banner above. The k8s-3 boot timestamp was wrong by ~26 min; the actual signature is a sequential cascade.
 
 No kernel trace was captured. The Vector kernel sink that was set up specifically for this purpose had been torn down at 2026-05-04T~02:00Z (commit `4037deec`, plan 0007 Phase 5 file-side teardown), about 30 hours before the event. The trade-off was explicit at the time and is documented in plan 0009 Log entry "T+14h checkpoint — Vector sink torn down": *"if a silent reboot fires before the 2026-05-07T12:00Z watch ends, we lose the kernel-trace channel and fall back to Prometheus reboot detection + ring-buffer post-mortem on the next-up node — same forensic posture as before plan 0009 Phase 1 was applied. Acceptable trade given current >14 h clean uptime on k8s-2 and >14 h on k8s-3."*
 
@@ -75,7 +77,7 @@ What we *can* say from the data we have:
 - **k8s-1 had never silent-rebooted in 190 days of cluster age** — this is its first event
 - **k8s-1 is on BIOS 1.26**, untouched by the 2026-05-04 flash; **k8s-3 is on BIOS 1.27** (post-flash); **k8s-2 is also on BIOS 1.27** (post-flash)
 - The two rebooted nodes span both BIOS versions; the held node shares a BIOS version with one of the rebooted nodes — **BIOS version is not predictive of susceptibility**
-- The reboots were within **~28 s** of each other — close enough to suggest a shared trigger rather than two independent random events
+- ~~The reboots were within **~28 s** of each other — close enough to suggest a shared trigger rather than two independent random events~~ **Corrected:** the reboots were **~26 min apart** (k8s-3 19:07:13Z, k8s-1 ~19:33Z). Too long for a single instantaneous trigger; plausibly a cascade where k8s-3's failure stresses something that takes ~26 min to escalate to k8s-1
 - k8s-2 (the historical reboot leader) **held cleanly** — the inverse of every prior silent-reboot incident in plan 0007 / 0009 / 0010
 
 The plan 0009 hypothesis ranking ("single-unit k8s-2 hardware defect" at #1) is materially falsified by this event. New leading candidates given the 2026-05-05 signature:
@@ -156,7 +158,7 @@ This matches the plan 0007 day-1 finding: containerd state can become wedged in 
 6. **Anti-affinity assumption defeated by ghost pods.** `envoy-external`'s 2-replica anti-affinity didn't protect us because both running pods ended up on k8s-1 with their previous-node replicas as Unknown ghosts.
 7. **k8s-1 needed a second reboot.** The first (silent) reboot left containerd in a state the kubelet couldn't drain. Plan 0007 day-1 history said this was possible, but we did not anticipate it during recovery and lost ~20 min on it.
 8. **The push notification was suppressed.** The operator was actively in-session so the notification stayed silent. If the operator had been away from the terminal but with the session open, this would have been a worse outcome.
-9. **Plan 0009's narrative is materially weakened.** The dual-node simultaneous reboot with k8s-1 (un-flashed BIOS, never-rebooted-before) and k8s-2 (post-flash, historically fragile) holding is not predicted by any of the plan's existing top-3 hypotheses. We may have spent significant effort on a fix that addresses at most a subset of the actual mechanism.
+9. **Plan 0009's narrative is materially weakened.** The cross-node sequential reboot with k8s-1 (un-flashed BIOS, never-rebooted-before) and k8s-2 (post-flash, historically fragile) holding is not predicted by any of the plan's existing top-3 hypotheses. We may have spent significant effort on a fix that addresses at most a subset of the actual mechanism.
 
 ## Action items
 
