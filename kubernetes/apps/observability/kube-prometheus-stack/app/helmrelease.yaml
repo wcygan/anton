@@ -178,9 +178,14 @@ spec:
       # RAPL energy_uj sysfs files are mode 0400 root since the 5.10
       # PLATYPUS-attack mitigation (CVE-2020-8694). node-exporter normally
       # runs as nobody and gets EACCES on every read — `node_scrape_collector_success{collector="rapl"} 0`.
-      # CAP_DAC_READ_SEARCH lets the (still-non-root) process bypass the
-      # DAC check on the read, without giving it write access or any other
-      # privilege. Smallest viable elevation; alternative would be runAsUser:0.
+      # CAP_DAC_READ_SEARCH was tried first (smallest elevation) but the
+      # Talos kernel's RAPL mitigation rejects non-root regardless of DAC,
+      # so we need uid=0. runAsUser:0 is preferred over CAP_SYS_ADMIN —
+      # narrower attack surface (root in a non-privileged container only
+      # gains DAC bypass on the read; no SYS_ADMIN-class operations).
+      podSecurityContext:
+        runAsUser: 0
+        runAsNonRoot: false
       containerSecurityContext:
-        capabilities:
-          add: [DAC_READ_SEARCH]
+        runAsUser: 0
+        runAsNonRoot: false

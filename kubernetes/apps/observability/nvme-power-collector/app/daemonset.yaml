@@ -89,7 +89,13 @@ spec:
                   case "$raw" in
                     ''|*[!0-9a-fA-F]*) continue ;;
                   esac
-                  ps=$(printf '%d' "0x$raw" 2>/dev/null) || continue
+                  # NVMe spec, Feature ID 02h: bits 4:0 are the actual PS index;
+                  # bits 7:5 are Workload Hint; higher bits reserved. Some drives
+                  # (Crucial CT500P3SSD8 observed) reply with WH bits set even
+                  # when PS=0, returning e.g. 0x40 — without the mask we'd emit
+                  # PS=64. Mask to PS bits only.
+                  full=$(printf '%d' "0x$raw" 2>/dev/null) || continue
+                  ps=$((full & 0x1F))
                   printf 'node_nvme_power_state{device="%s"} %s\n' "$dev" "$ps" >> "$tmp"
                 done
 
