@@ -2,13 +2,34 @@
 
 ## Summary
 
-Chassis fan1 on k8s-2 (the `nct6775` Super-I/O `fan1` channel) is intermittently dropping to 0 RPM, while fan1 on k8s-1 / k8s-3 spin continuously and fan2 on k8s-2 is healthy. The dropouts began at **02:55 CDT 2026-05-06** — *inside* the package-throttle window of 02:30-04:30 CDT (peak 03:34) — making fan stalls and CPU throttle events co-temporal. Even when fan1 is spinning, k8s-2 runs ~20 % slower than the same fan on peers (1928 RPM vs 2415-2789 RPM). Downstream evidence: k8s-2's `nvme1` is **87 °C** vs 61-73 °C in the equivalent M.2 slot on either peer. Same hardware, same workload, same chassis design — the only differential is airflow. This is the leading hypothesis for the recurring k8s-2 throttle events under plan 0013, and possibly the silent-reboot mechanism the parent investigation has been chasing.
+Chassis fan1 on k8s-2 (the `nct6775` Super-I/O `fan1` channel) is intermittently dropping to 0 RPM. fan1 on k8s-1 / k8s-3 spin continuously; fan2 on k8s-2 is healthy.
 
-This note is a self-contained reference for whoever picks the issue back up: hard numbers, the PromQL to re-run, the hypothesis chain, and the three repair-or-replace options.
+**This is a long-running fault, not a new one.** Initial framing of this note (drafted ~10:00 CDT today) said the dropouts began 2026-05-06 02:55 CDT — that was an artifact of in-cluster Prometheus's 14h retention window. Off-cluster betty vmsingle (plan 0014) holds 24h+ of raw samples and surfaces a much longer history. Cross-checked against in-cluster Prom subqueries, fan1=0 readings on k8s-2 occur every day going back at least to **2026-04-29** (the limit of in-cluster retention; betty cannot reach further); k8s-1 and k8s-3 had **zero** zero-readings over the same window. Even when fan1 *is* spinning, k8s-2 runs ~20 % slower than the same fan on peers (1928 RPM vs 2415-2789 RPM). Downstream evidence: k8s-2's `nvme1` runs 14-26 °C hotter than the equivalent M.2 slot on either peer. Same hardware, same workload, same chassis design — the only differential is airflow.
 
-## Hard numbers (capture 2026-05-06 ~14:00 CDT)
+The 2026-05-06 02:30-04:30 CDT package-throttle episode (~18,041 events) IS co-temporal with a burst of fan zeros (~448 in the 11h spanning the morning), but it isn't the *onset* of the fault — it's a more severe day in a week-plus pattern. The amplification hypothesis (NVMe-heat-coupling causing the marginal fan to stall harder) was tested 2026-05-06 ~11:45 CDT and **invalidated by the precondition check**: per-drive `pm_qos_latency_tolerance_us` on k8s-2's three NVMes is the kernel default (100,000 µs), so APST is effectively enabled despite the cluster-wide module-param of 0, and the SN7100s are already naturally entering PS3/PS4 (80 % PS3, 20 % PS4 over a 2h sample). Whatever is making nvme1 hot is not steady-state APST-disabled draw — see `## Open question` at the bottom for the remaining mechanism candidates.
 
-### Fan zero-readings over the last 12 h
+The actionable conclusion is unchanged: **physical fan replacement on k8s-2** is the durable fix. Until then, the fault is intermittent and survivable; the cluster has run with it for at least 8 days.
+
+This note is a self-contained reference for whoever picks the issue back up: hard numbers, the PromQL to re-run, the corrected hypothesis chain, and the three repair-or-replace options.
+
+## Hard numbers
+
+### Per-day fan1=0 history on k8s-2 (in-cluster Prom 7-day retention)
+
+| CDT day | k8s-2 fan1=0 samples | k8s-1 fan1=0 | k8s-3 fan1=0 |
+|---|---:|---:|---:|
+| 2026-04-29 | 8 | 0 | 0 |
+| 2026-04-30 | 12 | 0 | 0 |
+| 2026-05-01 | 104 | 0 | 0 |
+| 2026-05-02 | 36 | 0 | 0 |
+| 2026-05-03 | 4 | 0 | 0 |
+| 2026-05-04 | 26 | 0 | 0 |
+| 2026-05-05 | 76 | 0 | 0 |
+| 2026-05-06 (partial, ~12h) | ~448 | 0 | 0 |
+
+Today is the most severe day in the window, but the pattern starts at retention's leading edge (the 04-29 zeros may not be the actual first occurrence — that's the limit of what we can see). Plan 0014's off-cluster betty vmsingle was load-bearing for this finding: in-cluster Prom has severe scrape gaps for k8s-2 (5 fan-RPM samples vs betty's 3400 over the same 2h window).
+
+### Fan zero-readings over the last 12 h (capture 2026-05-06 ~14:00 CDT)
 
 | Node | Fan | Total samples | Zero-reading samples | Healthy? |
 |---|---|---:|---:|---|
@@ -103,13 +124,25 @@ A second fan failure on k8s-2 would push thermal protection into a different reg
 
 ## Hypothesis chain (1 line each)
 
+The chain below explains how a fan-bearing fault produces the package-throttle pattern. It does **not** explain *why the fault rate spiked today* — see "Open question" below.
+
 1. fan1 stalls → airflow over VRM and M.2 slots collapses
 2. EC's VRM thermal sensor (separate from CPU coretemp) crosses threshold
 3. EC asserts BD_PROCHOT
 4. CPU drops to base or below-base frequency *while CPU coretemp reads room temp* because the heatsink is bonded directly to the package and is well-served by even a stalled fan
 5. When fan1 spins back up, throttle eases but firmware thermal hysteresis keeps freq capped for minutes-to-hours
 6. Repeated stalls produce the 18,041 throttle events observed across 02:30-04:30 CDT
-7. **Open question** — under heavier sustained load, can a fan stall cross the EC's *protection-reset* threshold rather than just PROCHOT? If yes, that's a firmware-initiated reset with zero kernel logging — exactly the silent-reboot signature plan 0013 has been chasing. The 2026-05-05 k8s-1 + k8s-3 dual silent reboot fits if both nodes had marginal fan health unobserved at the time (fan-RPM telemetry only became routinely watched after this incident)
+
+### Why is today's rate so much higher than yesterday's? (open question)
+
+Today's ~448 zeros in 12h vs ~76 across all of yesterday. The fan didn't suddenly fail — but the rate stepped up sharply. The remote experiment to test "idle-mitigations rollout amplifies via NVMe thermal coupling" was invalidated at the precondition check: per-drive `pm_qos_latency_tolerance_us` on k8s-2's three NVMes is at kernel default (100,000 µs), so the cluster-wide `default_ps_max_latency_us=0` mitigation is **a no-op on already-bound drives**. The SN7100s are naturally APST-sleeping (80 % PS3 / 20 % PS4 over a 2h sample), so steady-state NVMe heat is not the amplifier. Remaining candidates:
+
+- **Workload concentration on k8s-2.** k8s-2 hosts the observability stack and saw heavier sustained NVMe activity around the 02:30-04:30 CDT window (active workload bursts, not idle leakage). Active-state heat is real even with APST working. Burst NVMe activity could dump enough heat into the M.2 region during bursts to ramp fan duty and stall the marginal bearing.
+- **Bearing degradation accelerated this week.** Per-day zero counts are not monotonic (8 → 12 → 104 → 36 → 4 → 26 → 76 → 448), but the trend over 8 days is upward. The bearing may simply be in late-stage failure.
+- **Ambient temperature.** Higher room temp → higher chassis baseline → marginal bearing closer to its stall threshold. Worth checking if any thermostat / HVAC change happened.
+- **Co-tenant chassis fan2 wear.** fan2 is healthy in our metrics but if it's spinning slightly slower than spec, fan1 would get a higher PWM share to compensate, stressing the marginal bearing.
+
+7. **Silent-reboot link** — under heavier sustained load, can a fan stall cross the EC's *protection-reset* threshold rather than just PROCHOT? If yes, that's a firmware-initiated reset with zero kernel logging — exactly the silent-reboot signature plan 0013 has been chasing. The 2026-05-05 k8s-1 + k8s-3 dual silent reboot fits if both nodes had marginal fan health unobserved at the time (fan-RPM telemetry only became routinely watched after this incident).
 
 ## Repair or replace — three options
 
