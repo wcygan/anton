@@ -41,8 +41,27 @@ The 2026-05-05 incident left an 80-minute Prometheus blackout (19:11Z–20:29Z) 
 - [x] Author scrape config at `/home/wcygan/vmsingle-config/scrape.yml` with one job (`anton-node-exporter`, 30s interval). Relabel each tailnet target so `instance` matches anton's in-cluster Prometheus convention (`192.168.1.x:9100`) — keeps existing dashboards compatible. Add `external_labels: {source: betty, cluster: anton}` so betty-sourced data is distinguishable when overlayed.
 - [x] Restart vmsingle with `-promscrape.config=/etc/vmsingle/scrape.yml` and a second volume mount for the config dir (`/home/wcygan/vmsingle-config:/etc/vmsingle:Z,ro`).
 - [x] Verify ingestion: `/api/v1/targets` shows 3 healthy targets; `count(up{job="anton-node-exporter"})=3`; sample queries against the new Hardware Health row metrics (CPU temp, throttles, ECC, NVMe temp, fan RPM) and the SFP+ throughput panel return the same shape as anton's local Prometheus. TSDB at 1.6 MB after first scrape cycle.
-- [ ] Add `Prometheus (betty)` Grafana datasource pointing at `http://betty:8428` (URL works from in-cluster Grafana via the `ts-*` operator-managed Tailscale ingress on betty? — verify path; may need to expose vmsingle as a tailnet ingress or use the host's tailnet IP from in-cluster).
+- [x] **Decision (2026-05-05)**: skip the in-cluster Grafana datasource + dashboard-panel work. Operator queries betty directly via vmui or the HTTP API over Tailscale. Rationale: needing in-cluster Grafana to query betty would force adding a Tailscale operator egress shim (the same egress work the scrape pivot just avoided), which (a) reintroduces a cluster dependency on betty's reachability for normal dashboard operation, and (b) doesn't add forensic value — the whole point of betty is to be queryable when anton is broken. Direct browser/CLI access from any tailnet member is sufficient and stays fully independent.
 - [ ] (Optional, deferred) Federate anton's Prometheus from betty for cluster-level metrics (kube-state-metrics, etcd, application metrics). Requires exposing `kube-prometheus-stack-prometheus` Service via Tailscale operator ingress (one annotation, similar to `ts-grafana`). Defer until a real query needs it.
+
+### How to use betty during/after an incident
+
+- **vmui (browser, PromQL queries + graphs)**: <http://100.119.71.22:8428/vmui/> — works from any tailnet member.
+- **Targets health**: <http://100.119.71.22:8428/api/v1/targets>
+- **One-shot CLI query**:
+  ```sh
+  curl -fsSG 'http://100.119.71.22:8428/api/v1/query' \
+    --data-urlencode 'query=node_hwmon_temp_celsius{chip="platform_coretemp_0",sensor="temp1"}'
+  ```
+- **Range query (post-incident forensics)**:
+  ```sh
+  curl -fsSG 'http://100.119.71.22:8428/api/v1/query_range' \
+    --data-urlencode 'query=<promql>' \
+    --data-urlencode "start=$(date -u -d '<event time> - 30 min' +%s)" \
+    --data-urlencode "end=$(date -u -d '<event time> + 30 min' +%s)" \
+    --data-urlencode 'step=30'
+  ```
+- All `instance` labels match anton's in-cluster scheme (`192.168.1.98:9100` etc.) so PromQL written against anton's Prom works unchanged. The `nodename` label (`k8s-1`/`k8s-2`/`k8s-3`) is a betty-specific addition for readability. The `source=betty, cluster=anton` external labels distinguish the data source if it's ever overlaid with anton's Prom.
 
 ### Phase 3: Monitor
 
@@ -70,6 +89,7 @@ The 2026-05-05 incident left an 80-minute Prometheus blackout (19:11Z–20:29Z) 
 - 2026-05-05: Plan opened — 2026-05-05 incident left an 80-min Prometheus blackout because Prometheus was self-hosted on the crashed node (k8s-1, pod IP `10.42.1.167`). Plan 0013 needs forensics from the failure window to make progress. Betty is well-suited: 35 d uptime, on tailnet, off-site, aarch64 with native VictoriaMetrics image.
 - 2026-05-05: Phase 1 complete. VM v1.142.0 (latest stable; original `v1.106.1` pin was old) running on betty bound only to Tailscale interface `100.119.71.22:8428`. SELinux relabel (`:Z`) and `--user 1000:987` were both required on Fedora Asahi. Self-`/health=OK`; hostNetwork curl from k8s-2 returns OK; pod-network curl from all 3 nodes times out (expected — bridge layer needed). Phase 2 reachability path: Tailscale operator egress proxy via `ExternalName` Service annotated with `tailscale.com/tailnet-fqdn`.
 - 2026-05-05: **Pivoted Phase 2 from remote_write to direct scrape.** Operator question: "can betty just scrape anton instead?" Answer: yes, and it's *better* for plan 0013's specific failure mode — direct scrape of node-exporter on each tailnet-member node works with zero anton-side changes, and crucially **surviving-node data continues to be collected when one node hangs** (the 2026-05-05 incident's blackout was caused by the in-cluster Prometheus being on the dead node, killing all visibility for all three; direct scrape eliminates that single point of failure). Scrape config authored, vmsingle restarted with `-promscrape.config`, all 3 targets healthy, all Hardware Health row metrics + SFP+ throughput counters confirmed in betty's TSDB. Federation of cluster-level metrics (kube-state-metrics, etcd, app-level) deferred — the load-bearing forensics need is node metrics, which is now satisfied.
+- 2026-05-05: **Skipped in-cluster Grafana datasource + dashboard panel.** Operator preference: "okay to query betty directly." Adding an in-cluster panel showing betty's data would have re-required the Tailscale operator egress shim that the scrape pivot just avoided. Direct vmui / HTTP-API access from any tailnet member is sufficient and keeps betty fully independent of anton's reachability. The plan's "use during incidents" runbook section is the durable reference.
 
 ## References
 
