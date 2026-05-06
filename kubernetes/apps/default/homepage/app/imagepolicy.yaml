@@ -7,8 +7,7 @@ spec:
   imageRepositoryRef:
     name: homepage
   filterTags:
-    pattern: '^main-(?P<sha>[a-f0-9]+)$'
-    extract: '$sha'
+    pattern: '^main-\d+-[a-f0-9]+$'
   policy:
     alphabetical:
       order: asc
