@@ -1479,7 +1479,7 @@ data:
           "title": "Cluster Total Power (CPU+DRAM)",
           "gridPos": { "x": 12, "y": 148, "w": 6, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Sum of RAPL package + DRAM watts across all nodes. At-a-glance whole-cluster draw; baseline established post-idle-mitigations (2026-05-06).",
+          "description": "Sum of RAPL package watts across all nodes (plus DRAM if exposed — MS-01 firmware does not expose intel-rapl:1, so this is package-only on anton). At-a-glance whole-cluster draw; baseline established post-idle-mitigations (2026-05-06).",
           "fieldConfig": {
             "defaults": {
               "unit": "watt",
@@ -1504,7 +1504,7 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(rate(node_rapl_package_joules_total[1m])) + sum(rate(node_rapl_dram_joules_total[1m]))",
+              "expr": "sum(rate(node_rapl_package_joules_total[1m])) + (sum(rate(node_rapl_dram_joules_total[1m])) or vector(0))",
               "instant": true
             }
           ]
@@ -1515,7 +1515,7 @@ data:
           "title": "7-day Energy (kWh)",
           "gridPos": { "x": 18, "y": 148, "w": 6, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Trailing 7-day cluster energy from RAPL (CPU + DRAM only — excludes NVMe, NICs, fans, PSU loss). Multiply by your local $/kWh × 4.3 weeks/month for a rough monthly cost. Wall-power smart plugs would catch the missing ~30-40 W.",
+          "description": "Trailing 7-day cluster energy from RAPL package (DRAM domain absent on MS-01 firmware; excludes NVMe, NICs, fans, PSU loss). Multiply by your local $/kWh × 4.3 weeks/month for a rough monthly cost. Wall-power smart plugs would catch the missing ~30-50 W.",
           "fieldConfig": {
             "defaults": {
               "unit": "kwatth",
@@ -1539,7 +1539,7 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "(sum(increase(node_rapl_package_joules_total[7d])) + sum(increase(node_rapl_dram_joules_total[7d]))) / 3.6e6",
+              "expr": "(sum(increase(node_rapl_package_joules_total[7d])) + (sum(increase(node_rapl_dram_joules_total[7d])) or vector(0))) / 3.6e6",
               "instant": true
             }
           ]
