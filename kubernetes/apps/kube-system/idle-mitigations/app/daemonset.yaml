@@ -51,11 +51,6 @@ spec:
               memory: 8Mi
             limits:
               memory: 32Mi
-          env:
-            - name: NODE_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
           volumeMounts:
             - name: dev-cpu-dma-latency
               mountPath: /dev/cpu_dma_latency
@@ -81,16 +76,21 @@ spec:
               # ----- Op 1: PM-QoS C-state cap (the primary mitigation) -----
               # Linux PM-QoS aggregates all open requests with min(); the kernel
               # will not enter idle states with exit latency above the value we
-              # hold here. On the MS-01, 0 µs admits POLL only. k8s-2 runs a
-              # thermal canary at 1 µs so C1_ACPI/MWAIT 0x0 can be used while
-              # C2/C3, including the C3_ACPI/MWAIT 0x60 failure surface, remain
-              # blocked.
-              PM_QOS_LATENCY_US=0
-              PM_QOS_LATENCY_BYTES='\000\000\000\000'
-              if [ "${NODE_NAME}" = "k8s-2" ]; then
-                PM_QOS_LATENCY_US=1
-                PM_QOS_LATENCY_BYTES='\001\000\000\000'
-              fi
+              # hold here. On the MS-01, 0 µs admits POLL only; 1 µs admits
+              # C1_ACPI / MWAIT 0x0 (clock gated, voltage retained — true halt)
+              # while keeping C2_ACPI and C3_ACPI / MWAIT 0x60 blocked. The
+              # C3_ACPI / MWAIT 0x60 entry is the iter #6 silent-reboot failure
+              # surface — that stays closed at 1 µs.
+              #
+              # History: f7b8cafc (2026-05-06) introduced 1 µs as a k8s-2-only
+              # canary after the original 0 µs caused a 02:30-04:30 CDT throttle
+              # episode. The canary held without throttle for ~21 h with package
+              # temp ~10-15 °C lower and ~10 W less leakage power than the
+              # 0 µs nodes. Promoted cluster-wide here (2026-05-06) — k8s-1 and
+              # k8s-3 join the 1 µs posture. Reversibility: revert this edit and
+              # bounce pods; per-node PM-QoS releases on fd close.
+              PM_QOS_LATENCY_US=1
+              PM_QOS_LATENCY_BYTES='\001\000\000\000'
 
               exec 200>/dev/cpu_dma_latency
               printf "${PM_QOS_LATENCY_BYTES}" >&200
