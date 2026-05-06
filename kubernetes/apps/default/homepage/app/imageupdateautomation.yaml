@@ -17,7 +17,7 @@ spec:
       author:
         email: flux@anton
         name: flux
-      messageTemplate: 'chore(homepage): {{range .Updated.Images}}{{println .}}{{end}}'
+      messageTemplate: 'chore(homepage): {{range .Changed.Changes}}{{.NewValue}}{{println}}{{end}}'
     push:
       branch: main
   update:
