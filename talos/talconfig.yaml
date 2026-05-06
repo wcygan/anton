@@ -24,7 +24,7 @@ nodes:
       serial: "24304A343650"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/0e77ef9f7ee8043e144f0542531295e59b55474bbfd6a8be721f130d9be6fcf9
+    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -116,7 +116,7 @@ nodes:
       serial: "24304A23D2F0"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/0e77ef9f7ee8043e144f0542531295e59b55474bbfd6a8be721f130d9be6fcf9
+    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -209,7 +209,7 @@ nodes:
       serial: "24304A23705F"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/0e77ef9f7ee8043e144f0542531295e59b55474bbfd6a8be721f130d9be6fcf9
+    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
