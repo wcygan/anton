@@ -1874,6 +1874,82 @@ data:
               "legendFormat": "Sensor 2 {{instance}} {{chip}}"
             }
           ]
+        },
+        {
+          "id": 817,
+          "type": "timeseries",
+          "title": "Node Uptime — sawtooth resets at every reboot",
+          "gridPos": { "x": 0, "y": 186, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Time since last kernel boot per node (`time() - node_boot_time_seconds`). The line drops to ~0 at every host reboot — the x-coordinate of the drop is the exact reboot moment, and hovering the trough reads the timestamp. The boot timestamp is set by the kernel and read from `/proc/stat`, so the dashboard's 30 s scrape interval does not bound resolution: the *value* of `node_boot_time_seconds` is itself the precise (per-second) boot time. `max by (instance)` collapses any duplicate node-exporter pod series after a daemonset rotation. Cross-reference the throttle / ECC / SFP+ panels above for *why* a reboot fired. Added 2026-05-06 for plan 0009 silent-reboot triage.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max by (instance) (time() - node_boot_time_seconds)",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 818,
+          "type": "table",
+          "title": "Last Boot Time per Node",
+          "gridPos": { "x": 12, "y": 186, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "One row per node showing the kernel-reported last boot time (`node_boot_time_seconds`, rendered as ISO timestamp) and current uptime. Ground truth for 'which node came up when' — independent of scrape interval, because the metric value itself is the boot timestamp captured to the second. `max by (instance)` collapses transient duplicate series from node-exporter pod rotations. Added 2026-05-06.",
+          "fieldConfig": {
+            "defaults": { "unit": "short", "custom": { "align": "auto" } },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Last Boot" },
+                "properties": [{ "id": "unit", "value": "dateTimeAsIso" }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Uptime" },
+                "properties": [{ "id": "unit", "value": "s" }]
+              }
+            ]
+          },
+          "options": { "showHeader": true, "sortBy": [{ "displayName": "Last Boot", "desc": true }] },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max by (instance) (node_boot_time_seconds * 1000)",
+              "instant": true,
+              "format": "table"
+            },
+            {
+              "refId": "B",
+              "expr": "max by (instance) (time() - node_boot_time_seconds)",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            { "id": "merge", "options": {} },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": { "Time": true },
+                "renameByName": {
+                  "Value #A": "Last Boot",
+                  "Value #B": "Uptime",
+                  "instance": "Node"
+                },
+                "indexByName": { "instance": 0, "Value #A": 1, "Value #B": 2 }
+              }
+            }
+          ]
         }
       ]
     }
