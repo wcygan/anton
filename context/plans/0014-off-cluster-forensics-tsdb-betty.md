@@ -27,15 +27,16 @@ The 2026-05-05 incident left an 80-minute Prometheus blackout (19:11Z–20:29Z) 
 
 ### Phase 1: Setup on betty
 
-- [ ] Create persistent data dir at `/home/wcygan/vmsingle-data`
-- [ ] Pull `victoriametrics/victoria-metrics:v1.106.1` (pinned arm64 image)
-- [ ] Run vmsingle container bound to the Tailscale interface only (`-p 100.119.71.22:8428:8428`), `--restart unless-stopped`, `-retentionPeriod=30d`, 1 GiB memory limit
-- [ ] Smoke-test: `curl http://100.119.71.22:8428/health` from betty + from a tailnet peer
-- [ ] Verify container survives a betty reboot (unless we explicitly skip this step to avoid disrupting the running session)
+- [x] Create persistent data dir at `/home/wcygan/vmsingle-data`
+- [x] Pull `victoriametrics/victoria-metrics:v1.142.0` (pinned arm64 image)
+- [x] Run vmsingle container bound to the Tailscale interface only (`-p 100.119.71.22:8428:8428`), `--restart unless-stopped`, `-retentionPeriod=30d`, 1 GiB memory limit. Required `--user $(id -u):$(id -g)` (image runs as root, host dir is unprivileged) and SELinux relabel `:Z` on the volume mount (Fedora Asahi has SELinux enforcing).
+- [x] Smoke-test: `curl http://100.119.71.22:8428/health` from betty returns `OK`; `ss -ltn` confirms binding only on `100.119.71.22:8428` (not LAN, not loopback). HostNetwork curl from k8s-2 also returns `OK`.
+- [ ] Verify container survives a betty reboot (deferred — would disrupt this session)
 
 ### Phase 2: Wire anton → betty
 
-- [ ] Verify in-cluster reachability: can a Prometheus pod resolve `betty` via MagicDNS and reach `:8428`? (Talos nodes run tailscaled per ADR 0010; pod network may need a Tailscale-operator egress shim or subnet route.) If not reachable, design the egress path before merging the HelmRelease change.
+- [x] Verify in-cluster reachability — **CONFIRMED**: Talos nodes themselves are tailnet members (hostNetwork curl from k8s-2 to `http://100.119.71.22:8428/health` returns `OK`), but **pods on the Cilium pod network CANNOT reach betty's tailnet IP** (curl from a regular pod times out from all 3 nodes). An egress shim is required. The Tailscale operator is already installed (CRDs `Connector`, `ProxyClass`, `ProxyGroup` available; `ts-*` ingress proxies in the `tailscale` namespace).
+- [ ] Design + scaffold the egress: create a Kubernetes `Service` of type `ExternalName` annotated with `tailscale.com/tailnet-fqdn=betty.${TAILNET_NAME}`, OR a `Connector` CR. The operator spawns an egress proxy and exposes betty as a cluster-local DNS name. Postbuild-substitute `TAILNET_NAME` from `cluster-secrets` per anton convention (never commit literal tailnet name).
 - [ ] Patch `kube-prometheus-stack` HelmRelease values to add a `remoteWrite` block targeting `http://betty:8428/api/v1/write` (or the chosen egress URL)
 - [ ] Add a second Grafana datasource pointing at `http://betty:8428` named e.g. `Prometheus (betty)` so historical queries past in-cluster retention work in dashboards
 - [ ] Verify ingestion: `curl -G 'http://100.119.71.22:8428/api/v1/query' --data-urlencode 'query=up{job="node-exporter"}'` from betty returns 3 series within 5 minutes of HelmRelease apply
@@ -58,12 +59,13 @@ The 2026-05-05 incident left an 80-minute Prometheus blackout (19:11Z–20:29Z) 
 - [ ] Remove the `Prometheus (betty)` Grafana datasource
 - [ ] `docker stop vmsingle && docker rm vmsingle` on betty
 - [ ] Decide: keep `/home/wcygan/vmsingle-data` for archival query, or remove. Default: remove unless forensic value is being actively mined.
-- [ ] `docker image rm victoriametrics/victoria-metrics:v1.106.1` on betty
+- [ ] `docker image rm victoriametrics/victoria-metrics:v1.142.0` on betty
 - [ ] `close 0014 done "<closing note>"` via the planner skill
 
 ## Log
 
 - 2026-05-05: Plan opened — 2026-05-05 incident left an 80-min Prometheus blackout because Prometheus was self-hosted on the crashed node (k8s-1, pod IP `10.42.1.167`). Plan 0013 needs forensics from the failure window to make progress. Betty is well-suited: 35 d uptime, on tailnet, off-site, aarch64 with native VictoriaMetrics image.
+- 2026-05-05: Phase 1 complete. VM v1.142.0 (latest stable; original `v1.106.1` pin was old) running on betty bound only to Tailscale interface `100.119.71.22:8428`. SELinux relabel (`:Z`) and `--user 1000:987` were both required on Fedora Asahi. Self-`/health=OK`; hostNetwork curl from k8s-2 returns OK; pod-network curl from all 3 nodes times out (expected — bridge layer needed). Phase 2 reachability path: Tailscale operator egress proxy via `ExternalName` Service annotated with `tailscale.com/tailnet-fqdn`.
 
 ## References
 
