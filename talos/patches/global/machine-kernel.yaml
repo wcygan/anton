@@ -4,3 +4,6 @@ machine:
       # Required for VXLAN overlay (plan 0004 phase 4c, storage-vxlan DaemonSet).
       # Not compiled into the Talos kernel and not autoloaded; must be declared here.
       - name: vxlan
+      # Required for /dev/cpu/*/msr so nvme-power-collector can read Intel
+      # MSR 0x64F throttle-reason bits via rdmsr (plan 0013, 2026-05-06).
+      - name: msr
