@@ -74,6 +74,7 @@ Reduce the probability of MS-01 silent reboots / hard hangs by normalizing all t
 
 - 2026-05-06: Plan opened after web/community research showed MS-01 instability reports clustering around BIOS 1.26/1.27, 96 GiB DDR5 configurations, idle/light-load hangs, PCIe power-management edge cases, and vendor/community guidance to lower memory speed and cap turbo ratios.
 - 2026-05-06: Live cluster inventory confirmed the active topology is RJ45 management plus Intel X710 SFP+ full mesh; no Thunderbolt network links are used. Current kernel cmdline has no `pcie_aspm`, C-state, cpufreq, or `thunderbolt.host_reset` mitigations. Representative cpufreq state on k8s-1 is `scaling_governor=powersave`, `energy_performance_preference=balance_performance`, and `scaling_max_freq=cpuinfo_max_freq=5200000`.
+- 2026-05-06: Remote baseline from gertrude recorded in `../notes/k8s-2-instability/evidence-2026-05-06-ms-01-bios-amt-baseline.md`: k8s-1 is BIOS 1.26 (`10/14/2024`), k8s-2 and k8s-3 are BIOS 1.27 (`04/03/2025`), and AMT/KVM was not reachable from the LAN bastion during this check.
 
 ## References
 
@@ -81,6 +82,7 @@ Reduce the probability of MS-01 silent reboots / hard hangs by normalizing all t
 - Hardware inventory: [`../hardware.md`](../hardware.md)
 - Postmortem: [`../postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md`](../postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md)
 - Incident: [`../incidents/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md`](../incidents/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md)
+- Evidence: [`../notes/k8s-2-instability/evidence-2026-05-06-ms-01-bios-amt-baseline.md`](../notes/k8s-2-instability/evidence-2026-05-06-ms-01-bios-amt-baseline.md)
 - MS-01 BIOS notes: <https://www.virtualizationhowto.com/2024/09/how-to-upgrade-the-minisforum-ms-01-bios/>
 - Linux Thunderbolt `host_reset` source: <https://codebrowser.dev/linux/linux/drivers/thunderbolt/nhi.c.html>
 - Linux kernel parameter reference: <https://www.kernel.org/doc/html/v6.0/admin-guide/kernel-parameters.html>
