@@ -1,0 +1,30 @@
+---
+# Restore the Talos service-log destination to the Vector sink. This file was
+# deleted in commit 4037deec (plan 0007 Phase 5 teardown, 2026-05-04) and not
+# put back by the iter #5 restoration commit 35533bdb (2026-05-05) — restoring
+# only the Kubernetes-side Vector StatefulSet but leaving the Talos-side push
+# config absent.
+#
+# Discovered in plan-0013 iter #47-50 (2026-05-06): the Vector pod's
+# talos-service source on port 6000 has been listening for service logs since
+# 2026-05-05 23:24Z (sink restoration), but Talos has not been configured to
+# forward to it. The result has been a 36-hour silent forensic-surface gap —
+# kernel kmsg via KmsgLogConfig (machine-kmsg.yaml) keeps working, but service
+# logs (machined gRPC, etcd raft, controller-runtime, kubelet, auditd) have
+# been going nowhere. That pre-event evidence trail is exactly what iter #29-32
+# + #35 + #41 used for retrospective analysis of R3-R8 + the newly-discovered
+# 2026-05-03 event. Without it, future silent reboots can be DETECTED via the
+# iter #29 PrometheusRule (Prometheus-side metrics) but not deeply diagnosed.
+#
+# Port 6000 (TCP only) — the Vector ConfigMap (talos-log-sink-vector) declares:
+#   talos_service:
+#     address: 0.0.0.0:6000
+#     mode: tcp
+#     decoding: { codec: json }
+# UDP is not used for service logs (only for kernel kmsg crash-time flush via
+# machine-kmsg.yaml's UDP target on 6002).
+machine:
+  logging:
+    destinations:
+      - endpoint: "tcp://192.168.1.105:6000/"
+        format: "json_lines"

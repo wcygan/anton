@@ -13,3 +13,4 @@ resources:
   - ./prometheusrule-pod-crashloop.yaml
   - ./prometheusrule-pod-phase-unknown.yaml
   - ./prometheusrule-node-reboot.yaml
+  - ./prometheusrule-silent-reboot-precursor.yaml

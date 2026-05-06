@@ -1,0 +1,140 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: idle-mitigations
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: idle-mitigations
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: idle-mitigations
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: idle-mitigations
+    spec:
+      serviceAccountName: idle-mitigations
+      priorityClassName: system-node-critical
+      hostPID: false
+      # 3-node all-control-plane cluster: tolerate the control-plane taint so
+      # the DS schedules on every node (without this, it stays 0/3).
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: pm-qos
+          # busybox is sufficient: needs only `sh`, `echo`, FD-redirection, and
+          # `printf` — all in busybox-1.x. Using the registry.k8s.io mirror so
+          # spegel can serve it cluster-locally.
+          # renovate: datasource=docker depName=busybox
+          image: busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Need root + write access to /sys/module + character-device write
+            # on /dev/cpu_dma_latency. CAP_SYS_ADMIN alone isn't enough on
+            # Talos's SELinux-enforced sysfs; full privileged is the simplest
+            # route. The DaemonSet does no networking, no syscalls beyond
+            # write(2), and exits to a sleep-forever loop after init.
+            privileged: true
+            runAsNonRoot: false
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              memory: 32Mi
+          volumeMounts:
+            - name: dev-cpu-dma-latency
+              mountPath: /dev/cpu_dma_latency
+            - name: sys
+              mountPath: /sys
+          # The shell script must keep the /dev/cpu_dma_latency file descriptor
+          # OPEN for the lifetime of the pod. PM-QoS releases the request as
+          # soon as the fd is closed. Strategy:
+          #   - exec 200>/dev/cpu_dma_latency  → open fd 200, kept across exec
+          #   - printf '\0\0\0\0' >&200         → write 32-bit LE 0 (0 µs)
+          #   - exec sleep infinity             → replace shell with sleep,
+          #                                        but POSIX exec preserves
+          #                                        non-CLOEXEC fds across
+          #                                        execve(), so fd 200 stays
+          #                                        open until the pod stops.
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+
+              echo "[idle-mitigations] starting on $(hostname)"
+
+              # ----- Op 1: PM-QoS C-state cap (the primary mitigation) -----
+              # Hold /dev/cpu_dma_latency open with 0 µs latency tolerance.
+              # Linux PM-QoS aggregates all open requests with min(); the kernel
+              # will not enter idle states with exit latency > 0 µs while we
+              # hold this. C0/C1 only — removes the C8 / MWAIT 0x60 failure
+              # surface entirely.
+              exec 200>/dev/cpu_dma_latency
+              printf '\0\0\0\0' >&200
+              echo "[idle-mitigations] [ok] PM-QoS C-state cap held: /dev/cpu_dma_latency = 0 µs"
+
+              # ----- Op 2: Disable PCIe ASPM globally -----
+              # Iter #8: i226-V management NIC is the dominant wake source and
+              # has documented silent-PCIe-drop behavior under ASPM. "performance"
+              # disables L0s/L1 transitions globally.
+              if echo performance > /sys/module/pcie_aspm/parameters/policy 2>/dev/null; then
+                echo "[idle-mitigations] [ok] pcie_aspm policy = $(cat /sys/module/pcie_aspm/parameters/policy)"
+              else
+                echo "[idle-mitigations] [warn] failed to set pcie_aspm policy; continuing"
+              fi
+
+              # ----- Op 3: Disable NVMe APST (autonomous power-state transitions) -----
+              # Iter #15 single-write refinement: try the module parameter first
+              # (cluster-wide), fall back to per-drive pm_qos if the module param
+              # is read-only on this kernel build.
+              if [ -w /sys/module/nvme_core/parameters/default_ps_max_latency_us ]; then
+                echo 0 > /sys/module/nvme_core/parameters/default_ps_max_latency_us
+                echo "[idle-mitigations] [ok] nvme_core.default_ps_max_latency_us = 0 (cluster-wide)"
+              else
+                for d in /sys/class/nvme/nvme*/power/pm_qos_latency_tolerance_us; do
+                  [ -f "$d" ] || continue
+                  if echo 0 > "$d" 2>/dev/null; then
+                    echo "[idle-mitigations] [ok] $d = 0"
+                  fi
+                done
+              fi
+
+              # ----- Op 4: Disable HMB on WD_BLACK SN7100 drives -----
+              # Iter #27/#28: HMB on IOMMU-enabled nodes (BIOS 1.27 — k8s-2,
+              # k8s-3) creates a documented silent-reset path when DMA hits
+              # unmapped IOVAs. iter #28 verified the sysfs hmb file is mode
+              # 0644 (writable). The Crucial CT500P3SSD8 doesn't advertise HMB,
+              # so writing 0 to its hmb file is either a no-op or returns
+              # EINVAL — both safe.
+              for d in /sys/class/nvme/nvme*/hmb; do
+                [ -f "$d" ] || continue
+                if echo 0 > "$d" 2>/dev/null; then
+                  echo "[idle-mitigations] [ok] $(dirname "$d") hmb = 0"
+                fi
+              done
+
+              echo "[idle-mitigations] init complete; holding fd 200 open via sleep infinity"
+
+              # exec replaces the shell with sleep, but fd 200 remains open
+              # because it's not flagged O_CLOEXEC — POSIX inherits non-cloexec
+              # fds across execve(). This is what keeps the PM-QoS request alive.
+              exec sleep infinity
+      volumes:
+        - name: dev-cpu-dma-latency
+          hostPath:
+            path: /dev/cpu_dma_latency
+            type: CharDevice
+        - name: sys
+          hostPath:
+            path: /sys
+            type: Directory

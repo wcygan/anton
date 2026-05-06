@@ -1,0 +1,49 @@
+---
+# Plan 0013 — runtime mitigations for the Vmin/C-state silent-reboot mechanism.
+#
+# This DaemonSet runs one privileged pod per node that:
+#   1. Holds /dev/cpu_dma_latency open with a 0 µs PM-QoS request — caps every
+#      CPU at C0/C1, removing the C8 idle-voltage failure window per iter #6
+#      (measured) + iter #14 (E-cores in C8 ~50% of time) + iter #7+#9
+#      (elimination of all other failure surfaces). This is the primary
+#      mitigation; iter #6 PM-QoS DaemonSet specification.
+#   2. Writes "performance" to /sys/module/pcie_aspm/parameters/policy —
+#      disables ASPM cluster-wide. Iter #8 found the i226-V management NIC
+#      is the dominant non-timer IRQ source (~250-720/sec/node), and i226-V
+#      has documented silent-PCIe-bus-drop behavior under ASPM (per the
+#      2026-04-30 web research). Same DaemonSet writes a single sysfs file
+#      to address that secondary failure surface.
+#   3. Writes 0 to /sys/module/nvme_core/parameters/default_ps_max_latency_us
+#      (iter #15 single-write refinement) — disables NVMe APST cluster-wide.
+#      Falls back to per-drive /sys/class/nvme/*/power/pm_qos_latency_tolerance_us
+#      if the module-parameter write fails.
+#   4. Writes 0 to /sys/class/nvme/nvme*/hmb on WD_BLACK SN7100 drives (iter #28
+#      confirmed sysfs writable, mode 0644). HMB on IOMMU-enabled nodes (k8s-2
+#      + k8s-3 per iter #20) creates a documented silent-reset path; disabling
+#      HMB closes that path. Iter #23 saw a related "unchecked data buffer"
+#      warning on k8s-3's nvme1.
+#
+# Trade-off: idle CPU power consumption rises a few watts per node (cores hold
+# C0/C1 instead of C8). On a 6-P + 8-E hybrid in a small chassis, this raises
+# idle package power from ~10 W to ~20-25 W. iter #7 measured CPU temps at
+# 60-70 °C even now (35 °C below throttle), so the small thermal increase is
+# acceptable and the cluster operates well within the chassis envelope.
+#
+# Reversibility: `kubectl delete -k kubernetes/apps/kube-system/idle-mitigations/`
+# (or `flux suspend ks idle-mitigations` then `kubectl delete ds`) releases the
+# /dev/cpu_dma_latency hold within seconds. PM-QoS reverts to default; ASPM and
+# NVMe APST stay where the DaemonSet last wrote them until the next boot.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: idle-mitigations
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/kube-system/idle-mitigations/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: kube-system
+  wait: false

@@ -1,0 +1,32 @@
+---
+# Feed the iTCO hardware watchdog so silent reboots become graceful resets.
+#
+# Plan 0013 / iter #5 + iter #39: Talos detects /dev/watchdog0 at boot and
+# initializes the iTCO_wdt module with `heartbeat=30 sec (nowayout=0)` (verified
+# directly from the kernel boot log via the Vector kmsg sink — the message
+# `iTCO_wdt iTCO_wdt: initialized. heartbeat=30 sec` appears at every k8s-2
+# post-silent-reboot boot). Without this WatchdogTimerConfig, Talos does not
+# open /dev/watchdog0, so no userspace process is feeding the watchdog. The
+# BIOS-armed iTCO timer counts down anyway: when the kernel wedges, the timer
+# expires ~30 s later and produces a silent hardware reset with no log line.
+#
+# Plan 0013 iter #29-30 + iter #36 confirmed: across 5/5 testable historical
+# silent-reboot events (R3, R4, R5, R6, R8 — plus the iter #40 newly-discovered
+# 2026-05-03 19:27Z event), peers see the rebooting node go silent ~38 seconds
+# before the actual hardware reset, then iTCO fires. The 28-36 s peer-detection
+# window matches the iTCO 30 s heartbeat with sub-second jitter.
+#
+# With this config Talos opens /dev/watchdog0, sets a 5 m timeout, and feeds it
+# every <5 m. As long as machined is alive, the watchdog gets kicked. If the
+# kernel wedges and the feeder wedges with it, the watchdog still fires — but
+# the 5 m window gives operator detection time, AND the feed-loop's own log
+# entries timestamp the moment Talos last had a chance to kick. Silent resets
+# become observable graceful events.
+#
+# nowayout=0 (per kernel boot log) means closing /dev/watchdog0 cleanly disables
+# the timer — so this config can be removed at any time without risking a
+# spurious reset. Discovered as a load-bearing mitigation in plan-0013 iter #39.
+apiVersion: v1alpha1
+kind: WatchdogTimerConfig
+device: /dev/watchdog0
+timeout: 5m0s

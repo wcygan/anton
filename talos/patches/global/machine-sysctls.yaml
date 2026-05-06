@@ -11,10 +11,15 @@ machine:
     kernel.panic: "10"                         # Auto-reboot 10s after panic; leaves a boot marker. Plan 0007
     kernel.panic_on_oops: "1"                  # Promote BUG()s to panics. Plan 0007
     kernel.printk_devkmsg: "on"                # Remove ratelimit on /dev/kmsg writes — paired with the UDP KmsgLogConfig target so a final-flush from any userspace caller (machined, kubelet) is not dropped by the ratelimiter on its way to the kernel ring buffer. Plan 0009
+    kernel.panic_on_unrecovered_nmi: "1"       # Convert MCE-class hardware NMIs into kernel panics with traceback. Plan 0013 — paired with the UDP KmsgLogConfig so the panic dmesg flushes before reset. Captures the silent-failure surface Vmin shift produces below kernel-logging horizon.
+    kernel.panic_on_io_nmi: "1"                # Same rationale as panic_on_unrecovered_nmi — additional NMI-source class. Plan 0013.
+    kernel.unknown_nmi_panic: "1"              # Same rationale — unknown NMI sources. Plan 0013.
     # NOTE: kernel.hardlockup_panic and kernel.softlockup_panic cannot be set on
     # Talos — its Linux 6.18.18 kernel is built without CONFIG_HARDLOCKUP_DETECTOR /
     # CONFIG_SOFTLOCKUP_DETECTOR, so /proc/sys/kernel/{hardlockup,softlockup,
     # watchdog,nmi_watchdog,watchdog_thresh} do not exist. Talos silently accepts
     # the config but the writes are no-ops. Discovered 2026-04-20 during plan 0007
     # Phase 2 verification. Do not re-add without a Talos kernel rebuild with those
-    # CONFIGs enabled.
+    # CONFIGs enabled. The panic_on_*_nmi sysctls above are NOT in this category —
+    # they DO exist on Talos's kernel (verified 2026-05-06 plan-0013 iter #5) and
+    # are writable; they handle hardware-NMI escalation, not software lockup.

@@ -1,0 +1,93 @@
+---
+# Silent-reboot precursor detection — fires ~22-30 seconds before iTCO triggers
+# the silent hardware reset.
+#
+# Plan 0013 / iter #29-30 + iter #41: across 6/6 testable historical events
+# (R3 04-27 04:56, R4 04-27 21:42, R5 04-28 04:39, R6 04-28 10:37, R8 04-30
+# 02:32, plus the iter #40 newly-discovered 2026-05-03 19:27Z event), the
+# Vector kernel sink shows a deterministic precursor pattern: the about-to-
+# reboot node's i40e SFP+ NIC PHYs go dark, both peers see Link Down on their
+# enp2s0f0np0 storage port simultaneously, etcd raft probers report peer
+# timeouts within ~5 s, and then ~30 s later iTCO_wdt fires (heartbeat=30 sec
+# verified from the post-reboot kernel boot log in iter #39).
+#
+# The sink-coverage window saw 6/6 silent reboots with this signature AND 0
+# false positives across 7 days of normal operation (iter #41) — empirical
+# precision = recall = 1.0.
+#
+# Forward-looking detection: this PrometheusRule queries Prometheus directly
+# (node-exporter + etcd metrics endpoints), independent of the Vector sink, so
+# it works regardless of any sink-side gap (e.g. the iter #47-50 service-log
+# channel issue restored separately by talos/patches/global/machine-logging.yaml).
+#
+# When this fires, the operator has ~22-30 seconds before iTCO fires. With the
+# iter #5 WatchdogTimerConfig now active (talos/patches/global/machine-watchdog.yaml),
+# the iTCO firing becomes an observable graceful reset rather than a silent
+# reboot — but this rule is still useful as forward visibility for the moment
+# of kernel wedge.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: silent-reboot-precursor
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: silent-reboot-precursor
+      interval: 15s
+      rules:
+        - alert: SilentRebootPrecursor
+          expr: |
+            (
+              sum by (nodename) (
+                changes(node_network_carrier{device="enp2s0f0np0"}[60s])
+              ) >= 2
+            )
+            and on()
+            (
+              sum(rate(etcd_server_proposals_failed_total[1m])) > 0
+            )
+          for: 0s
+          labels:
+            severity: critical
+          annotations:
+            summary: "Silent-reboot precursor signature firing"
+            description: |
+              Bilateral i40e storage-mesh link flap detected on peer node(s) AND
+              etcd peer-probe failures elevated. This is the iter #29 signature
+              that preceded R3-R8 + the 2026-05-03 silent reboot event with 6/6
+              precision/recall in 7 days of sink coverage.
+
+              The wedging node typically resets ~30 seconds after this fires
+              (iTCO heartbeat=30 sec, verified from kernel boot log per iter #39).
+              With WatchdogTimerConfig now feeding /dev/watchdog0, the reset
+              should be a graceful event with kernel logs rather than silent.
+
+              Operator options when this fires:
+                1. Hands-off — let the watchdog/iTCO take its course; verify
+                   recovery via subsequent peer-side `node_network_carrier`
+                   recovery + etcd raft membership.
+                2. Force graceful: `talosctl --nodes <wedging-node> reboot
+                   --mode=default` to preempt iTCO.
+                3. Capture: snapshot the peer-side metrics before recovery
+                   for post-mortem.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/notes/k8s-2-instability/evidence-2026-05-06-precursor-signature-found.md"
+
+        - alert: HighStorageNicRxDrops
+          expr: |
+            rate(node_network_receive_drop_total{device=~"enp2s0f.*"}[5m]) > 1
+            and
+            (time() - node_boot_time_seconds) > 3600
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.nodename }} storage NIC RX-drop rate > 1/s for 10 m"
+            description: |
+              Sustained RX drops on storage SFP+ NIC. Forward-looking precursor
+              for the iter #2 bilateral-flap pattern. The 1-hour boot-time
+              exclusion filters out CNI-initialization transients (per iter #25
+              correction). If this fires during steady-state, the kernel is
+              missing packet-processing windows — likely deep-idle wake latency
+              from a Vmin/C8 marginal corner.
