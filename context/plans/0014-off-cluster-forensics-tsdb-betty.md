@@ -18,8 +18,9 @@ The 2026-05-05 incident left an 80-minute Prometheus blackout (19:11Z–20:29Z) 
 
 ## Acceptance criteria
 
-- [ ] VictoriaMetrics receiving cluster-health metrics from anton, ≥7 days continuous retention without gap
+- [x] VictoriaMetrics receiving cluster-health metrics from anton, ≥7 days continuous retention without gap (`-retentionPeriod=30d` configured 2026-05-05)
 - [ ] At least one anton incident window survives end-to-end in betty's TSDB and is queryable from Grafana via a betty-backed datasource
+- [x] **Off-cluster backstop alerting**: betty independently evaluates the iter-#29 silent-reboot precursor signature so that signal still fires when anton's in-cluster Prometheus is unavailable. Scrape of etcd peer metrics + vmalert rules file added 2026-05-06 (plan 0013 commit `de801143`).
 - [ ] Plan 0013 closes (root cause identified or formally abandoned), enabling a teardown-or-promote decision
 - [ ] Final decision recorded: tear down per the runbook below, OR open an ADR + production-rollout follow-up plan for a permanent off-cluster TSDB
 
@@ -69,6 +70,17 @@ The 2026-05-05 incident left an 80-minute Prometheus blackout (19:11Z–20:29Z) 
 - [ ] When the next silent-reboot fires, confirm the **failure window itself** is in betty's TSDB (the test plan 0009/0013 actually need)
 - [ ] Cross-check at least one cluster-health-glance dashboard panel against the betty datasource — e.g., the new Hardware Health row + SFP+ throughput panel — confirm they render the failure window
 
+### Phase 3.5: Off-cluster backstop alerting (2026-05-06)
+
+Added after plan 0013 landed its mitigation stack — gives off-cluster
+visibility on the silent-reboot precursor signature when anton's own
+Alertmanager / kube-prometheus-stack is unavailable.
+
+- [x] **Add etcd peer-metrics scrape job to `/home/wcygan/vmsingle-config/scrape.yml`** — required because the iter-#29 SilentRebootPrecursor expression joins `node_network_carrier` (already scraped) with `etcd_server_proposals_failed_total` (only on etcd's `:2381/metrics` endpoint). Reloaded vmsingle via `POST /-/reload`. Verified 132 etcd_* metrics flowing; targets `health=up` for all 3 nodes (k8s-1, k8s-2, k8s-3 on tailnet IPs).
+- [x] **Author vmalert rule file at `/home/wcygan/vmsingle-config/alerts.yml`** — three alerts: `SilentRebootPrecursor` (mirror of the in-cluster rule), `AntonEtcdQuorumDegraded` (sum(has_leader) < 3 for >1m), `AntonNodeUnreachableFromBetty` (up{anton-node-exporter}=0 for >2m, catches silent reboots from the off-cluster vantage). All three expressions verified well-formed against current betty data — quiet cluster returns no firing series.
+- [ ] **Launch vmalert** alongside vmsingle (operator decision). Suggested: `docker run -d --name vmalert ...` per the header comment in `alerts.yml`. Notifier should be **ntfy.sh public** (NOT anton's self-hosted ntfy per ADR 0026 — anton's ntfy lives on the cluster, would be suppressed by the very failure we want to detect). Until vmalert is launched, the rule expressions can be evaluated manually via `curl /api/v1/query` against vmsingle.
+- [ ] **(Optional) Federate Vector sink staleness signal** — add a scrape of the talos-log-sink-vector pod's metrics endpoint (Vector exposes Prometheus metrics on port 9598 by default) and alert when ingestion rate drops to zero for >5 m. Defers until iter-#47-50's `machine.logging.destinations` restoration is empirically confirmed to keep the sink fed under load.
+
 ### Phase 4: Decision (triggered by plan 0013 close, or 2026-06-05 review)
 
 - [ ] If plan 0013 closes with root cause identified AND the off-cluster TSDB was useful → open a follow-up plan + ADR for a permanent solution (Grafana Cloud, Mimir on dedicated hardware, or productionize the betty setup with proper SOPS/Renovate/etc.). Then Phase 5 teardown.
@@ -90,6 +102,7 @@ The 2026-05-05 incident left an 80-minute Prometheus blackout (19:11Z–20:29Z) 
 - 2026-05-05: Phase 1 complete. VM v1.142.0 (latest stable; original `v1.106.1` pin was old) running on betty bound only to Tailscale interface `100.119.71.22:8428`. SELinux relabel (`:Z`) and `--user 1000:987` were both required on Fedora Asahi. Self-`/health=OK`; hostNetwork curl from k8s-2 returns OK; pod-network curl from all 3 nodes times out (expected — bridge layer needed). Phase 2 reachability path: Tailscale operator egress proxy via `ExternalName` Service annotated with `tailscale.com/tailnet-fqdn`.
 - 2026-05-05: **Pivoted Phase 2 from remote_write to direct scrape.** Operator question: "can betty just scrape anton instead?" Answer: yes, and it's *better* for plan 0013's specific failure mode — direct scrape of node-exporter on each tailnet-member node works with zero anton-side changes, and crucially **surviving-node data continues to be collected when one node hangs** (the 2026-05-05 incident's blackout was caused by the in-cluster Prometheus being on the dead node, killing all visibility for all three; direct scrape eliminates that single point of failure). Scrape config authored, vmsingle restarted with `-promscrape.config`, all 3 targets healthy, all Hardware Health row metrics + SFP+ throughput counters confirmed in betty's TSDB. Federation of cluster-level metrics (kube-state-metrics, etcd, app-level) deferred — the load-bearing forensics need is node metrics, which is now satisfied.
 - 2026-05-05: **Skipped in-cluster Grafana datasource + dashboard panel.** Operator preference: "okay to query betty directly." Adding an in-cluster panel showing betty's data would have re-required the Tailscale operator egress shim that the scrape pivot just avoided. Direct vmui / HTTP-API access from any tailnet member is sufficient and keeps betty fully independent of anton's reachability. The plan's "use during incidents" runbook section is the durable reference.
+- 2026-05-06: **Added Phase 3.5 — off-cluster backstop alerting.** After plan 0013 landed its mitigation stack (commit `de801143`), the iter-#29 PrometheusRule lives in anton's in-cluster Prometheus — but that's on k8s-2, the historical reboot leader. A k8s-2-wedge would suppress the very alert we need. Added an etcd peer-metrics scrape job to `scrape.yml` (so betty has all the metrics the iter-#29 expression needs) and authored `alerts.yml` with three alerts (`SilentRebootPrecursor`, `AntonEtcdQuorumDegraded`, `AntonNodeUnreachableFromBetty`). Verified all three expressions evaluate correctly against current data. vmalert launch deferred to operator (notifier-topic decision required for ntfy.sh public) — until then, expressions can be polled manually via `curl /api/v1/query`. iter-#4's "≥48h retention" concern was already addressed by the original `-retentionPeriod=30d` flag set 2026-05-05.
 
 ## References
 
