@@ -5,13 +5,12 @@ Platform-scoped CRD operators for Postgres and Redis-compatible caches. **Not Ha
 ## Contents
 
 - `cloudnative-pg/` — CNPG operator (chart `cloudnative-pg/cloudnative-pg` via `HelmRepository`, no upstream OCI). Installs the `postgresql.cnpg.io` CRD group. Operator itself is lightweight (100m CPU / 256Mi mem request); bump if cluster count grows into the dozens.
-- `dragonfly-operator/` — DragonflyDB operator (chart lives *inside* `github.com/dragonflydb/dragonfly-operator` at `/charts/dragonfly-operator`, pulled via `GitRepository` with `ref.tag: v1.5.0` — upstream publishes neither an OCI chart nor a Helm repo). Installs the `dragonflydb.io` CRD group.
+- `dragonfly-operator/` — DragonflyDB operator. Upstream publishes neither an OCI chart nor a Helm repo; the only supported install path is the flat YAML manifest at `https://raw.githubusercontent.com/dragonflydb/dragonfly-operator/v<TAG>/manifests/dragonfly-operator.yaml`, vendored into `app/upstream.yaml` and applied as a plain Flux Kustomization. Installs the `dragonflydb.io` CRD group. To bump: refetch `upstream.yaml` from the new tag and commit.
 
 Both Kustomizations set `wait: true` so downstream apps can `dependsOn` them with confidence.
 
 ## Quirks to know
 
-- **`GitRepository` chart source for Dragonfly.** The hook `.claude/hooks/check_3_file_pattern.py` accepts `app/gitrepository.yaml` as a valid chart source alongside OCI and HelmRepository (fixed 2026-04-21). To bump Dragonfly, edit `ref.tag` in `gitrepository.yaml`; Renovate needs a `# renovate: datasource=github-tags depName=dragonflydb/dragonfly-operator` comment on that line to auto-bump (not yet added).
 - **CNPG-managed app Secret naming.** When a CNPG `Cluster` CR has `bootstrap.initdb.owner: <user>`, the operator creates `Secret/<cluster-name>-app` with keys `username` / `password` / `jdbc-uri` / `pgpass`. Harbor's Helm chart expects a Secret with a `password` key via `database.external.existingSecret` — this matches out of the box, no reshaping needed. **Don't** build an ExternalSecret that duplicates this Secret; reference CNPG's directly.
 - **Dragonfly has no auth.** The Dragonfly CR doesn't set a password by default. Consumers use `redis.external.addr` only and leave `existingSecret` empty. If auth is ever needed, add `--requirepass` to the CR's `args` and set up an ExternalSecret — but be aware Dragonfly's clustering uses its own internal protocol that won't speak your password.
 - **No smoke Cluster/Dragonfly CRs here.** The intended pattern is: Harbor (or the next consumer) brings its own `Cluster` / `Dragonfly` CR. See `kubernetes/apps/registries/harbor-config/` for Harbor's shape — sizing, replicas, and the `monitoring.enablePodMonitor: true` pattern are the reference.

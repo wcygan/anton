@@ -1,6 +1,11 @@
 ---
+# Upstream-recommended install path: a single flat YAML manifest at
+# https://raw.githubusercontent.com/dragonflydb/dragonfly-operator/v<TAG>/manifests/dragonfly-operator.yaml
+# is the only published distribution (no HelmRepository, no OCI Helm chart).
+# To bump the operator: refetch `upstream.yaml` from the new tag and commit.
+# Renovate auto-bumping for vendored manifests requires a custom regex manager
+# (follow-up — not configured in this PR).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ./gitrepository.yaml
-  - ./helmrelease.yaml
+  - ./upstream.yaml
