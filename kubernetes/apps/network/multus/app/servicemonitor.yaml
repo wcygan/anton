@@ -1,0 +1,24 @@
+---
+# Scrape the Multus thick-plugin metrics endpoint exposed by the headless
+# Service. Surfaces `nfvpe_multus_request_count{Type="ADD",Status="error"}`,
+# `nfvpe_multus_request_count{Type="ADD",Status="success"}`,
+# `nfvpe_multus_handle_request_duration_seconds`. Consumed by the alerts in
+# `prometheusrule.yaml`.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: multus
+  namespace: network
+  labels:
+    app.kubernetes.io/name: multus
+spec:
+  namespaceSelector:
+    matchNames:
+      - network
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: multus
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

@@ -4,3 +4,6 @@ kind: Kustomization
 resources:
   - ./gitrepository.yaml
   - ./flux-kustomization.yaml
+  - ./service.yaml
+  - ./servicemonitor.yaml
+  - ./prometheusrule.yaml

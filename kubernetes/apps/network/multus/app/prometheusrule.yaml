@@ -1,0 +1,113 @@
+---
+# Multus / NAD-attach health alerts. Plan 0016 Phase 3 task #1.
+#
+# Driving incident: 2026-05-06/07 harbor-postgres quorum failure. After a
+# rolling Talos reboot the Longhorn instance-manager pods on k8s-1 and k8s-3
+# came up `1/1 Running` with the `k8s.v1.cni.cncf.io/networks: longhorn-storage`
+# annotation requested but Multus' CNI-add silently failed to attach the
+# `lhnet1@vxlan-storage` interface. Every cross-node Longhorn replica attach
+# to those nodes then timed out for ~7h before triage. The cluster surfaced
+# this as `HarborPostgresQuorumAtRisk` (downstream symptom) — the upstream
+# Multus-attach failure had no alert.
+#
+# Three layers of detection here, ordered loudest-first:
+#   1. PodNADAttachFailed (critical) — pod has the `networks` request
+#      annotation but no `network-status` reply for >5m. Catches the
+#      silent-success failure mode the 2026-05-07 incident exercised.
+#      Requires kube-state-metrics' `--metric-annotations-allowlist=pods=...`
+#      patch in `kubernetes/apps/observability/kube-prometheus-stack/app/helmrelease.yaml`.
+#   2. MultusCNIRequestErrors (warning) — Multus' own counter shows
+#      `Status="error"` increments. Catches loud CNI-add failures (IPAM
+#      exhaustion, plugin chain error, etc.).
+#   3. MultusDaemonRestarting (warning) — multus-daemon pod is restart-looping.
+#      Implies the storage-fabric is unstable even if individual CNI calls
+#      complete.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: multus
+  namespace: network
+  labels:
+    app.kubernetes.io/name: multus
+spec:
+  groups:
+    - name: multus.attach.alerts
+      rules:
+        - alert: PodNADAttachFailed
+          # Pods with the `networks` request annotation but no matching
+          # `network-status` reply. The `unless on(namespace, pod)` set
+          # difference yields exactly the bad set. `for: 5m` allows the
+          # normal CNI-add path enough time on cold start.
+          expr: |-
+            kube_pod_annotations{annotation_k8s_v1_cni_cncf_io_networks!=""}
+            unless on(namespace, pod)
+            kube_pod_annotations{annotation_k8s_v1_cni_cncf_io_network_status!=""}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Multus did not attach the requested NetworkAttachmentDefinition for {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: |
+              Pod {{ $labels.namespace }}/{{ $labels.pod }} has annotation
+              `k8s.v1.cni.cncf.io/networks` requesting one or more
+              NetworkAttachmentDefinitions, but Multus did not record a
+              corresponding `network-status` annotation after 5m. This is the
+              2026-05-07 silent-attach failure mode — the pod is `1/1 Running`
+              but its secondary network is missing, and any cross-node Longhorn
+              attach via this pod will time out.
+
+              Recovery: `kubectl delete pod {{ $labels.pod }} -n {{ $labels.namespace }}`.
+              Longhorn / the workload controller will recreate; on the next CNI-add
+              Multus typically attaches cleanly. If the alert returns within
+              minutes of the recreate, escalate — Multus or Whereabouts on the
+              node is genuinely broken (check pod restart count and `kubectl logs
+              -n network -l name=multus`).
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/plans/0016-harden-flux-cold-start-ordering.md"
+    - name: multus.daemon.alerts
+      rules:
+        - alert: MultusCNIRequestErrors
+          # Multus' own counter — covers loud CNI-add/del/check failures.
+          # Does NOT cover the silent-success mode (see PodNADAttachFailed).
+          expr: |-
+            sum by (namespace, pod, Type) (
+              increase(nfvpe_multus_request_count{Status="error"}[10m])
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Multus reported CNI {{ $labels.Type }} errors on {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: |
+              `nfvpe_multus_request_count{Status="error",Type="{{ $labels.Type }}"}`
+              has been increasing on {{ $labels.namespace }}/{{ $labels.pod }} for 5m.
+              Likely causes: IPAM exhaustion (Whereabouts pool), upstream CNI plugin
+              chain error, or socket-path issue. Inspect `kubectl logs -n network -l
+              name=multus` for the specific error message.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/plans/0016-harden-flux-cold-start-ordering.md"
+
+        - alert: MultusDaemonRestarting
+          # Restart loop on the multus-daemon container — distinct from a
+          # one-off OOMKill or eviction. Threshold > 1 within 15m to avoid
+          # paging on a single recovery.
+          expr: |-
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="network",
+                pod=~"kube-multus-ds-.*",
+                container="kube-multus"
+              }[15m]
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Multus DaemonSet pod {{ $labels.pod }} is restarting"
+            description: |
+              `kube-multus` container in pod {{ $labels.pod }} has restarted
+              more than once in the last 15m. While restarting, no new pods on
+              that node can attach NetworkAttachmentDefinitions — every
+              storage-fabric-using pod that schedules during the gap will
+              silent-fail. Investigate restart cause via `kubectl describe pod
+              -n network {{ $labels.pod }}` and the prior container logs
+              (`--previous`).
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/plans/0016-harden-flux-cold-start-ordering.md"

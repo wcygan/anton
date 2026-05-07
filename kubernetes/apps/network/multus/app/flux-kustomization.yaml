@@ -69,7 +69,14 @@ spec:
         - op: replace
           path: /metadata/namespace
           value: network
-    # Move ConfigMap to the network namespace
+    # Move ConfigMap to the network namespace + enable thick-plugin metrics on
+    # port 9091. Multus thick-plugin reads its server config from this JSON,
+    # not CLI flags, so adding `metricsPort` here turns on the Prometheus
+    # endpoint at :9091/metrics. Plan 0016 Phase 3 (IM-NAD-attach probe);
+    # surfaces `nfvpe_multus_request_count{Status="error"}` so genuine CNI-add
+    # errors page. (The 2026-05-06/07 silent-attach mode where the daemon
+    # returns success without actually attaching is caught separately by the
+    # kube-state-metrics annotation-allowlist alert in `prometheusrule.yaml`.)
     - target:
         kind: ConfigMap
         name: multus-daemon-config
@@ -77,6 +84,38 @@ spec:
         - op: replace
           path: /metadata/namespace
           value: network
+        - op: replace
+          path: /data/daemon-config.json
+          value: |
+            {
+                "chrootDir": "/hostroot",
+                "cniVersion": "0.3.1",
+                "logLevel": "verbose",
+                "logToStderr": true,
+                "cniConfigDir": "/host/etc/cni/net.d",
+                "multusAutoconfigDir": "/host/etc/cni/net.d",
+                "multusConfigFile": "auto",
+                "socketDir": "/host/run/multus/",
+                "metricsPort": 9091
+            }
+    # Expose the metrics port on the DaemonSet so the sibling Service can
+    # target it by name. `reloader.stakater.com/auto: "true"` triggers a
+    # rolling restart of the DS when the daemon-config ConfigMap changes —
+    # multus-daemon does not watch the file, so a config-only edit otherwise
+    # only takes effect on the next pod restart.
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        - op: add
+          path: /metadata/annotations/reloader.stakater.com~1auto
+          value: "true"
+        - op: add
+          path: /spec/template/spec/containers/0/ports
+          value:
+            - name: metrics
+              containerPort: 9091
+              protocol: TCP
     # Re-point ClusterRoleBinding subject to the relocated ServiceAccount
     - target:
         kind: ClusterRoleBinding

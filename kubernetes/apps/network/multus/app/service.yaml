@@ -1,0 +1,22 @@
+---
+# Headless Service for scraping the Multus thick-plugin metrics port (9091)
+# enabled via the daemon-config ConfigMap patch in flux-kustomization.yaml.
+# Headless (clusterIP: None) so each per-node pod is scraped individually —
+# a regular ClusterIP would round-robin to a single random pod per scrape and
+# hide per-node failure modes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-multus-metrics
+  namespace: network
+  labels:
+    app.kubernetes.io/name: multus
+spec:
+  clusterIP: None
+  selector:
+    name: multus
+  ports:
+    - name: metrics
+      port: 9091
+      targetPort: metrics
+      protocol: TCP
