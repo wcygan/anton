@@ -1,0 +1,105 @@
+---
+# Longhorn-side cope alerts. Plan 0016 Phase 3 task #2 (Longhorn-volume-degraded
+# alert family). Strict complement to PR #284's `PodNADAttachFailed` — that
+# fires upstream of the failure (Multus didn't attach the NAD); these fire
+# downstream (Longhorn sees the consequence regardless of root cause).
+#
+# Driving incident: 2026-05-06/07 harbor-postgres incident. The Longhorn
+# volumes for harbor-postgres-2 and -3 sat in `state=attaching` /
+# `robustness=unknown` for ~7h while every cross-node engine bring-up timed
+# out. Longhorn's metrics carried the full signal the entire time
+# (longhorn_volume_state == 1, longhorn_volume_robustness != 1) — there
+# was no alert wired against it. These rules close that gap.
+#
+# Three complementary alerts:
+#   1. LonghornVolumeFaulted (critical → ntfy) — robustness=3, data path is
+#      gone; engine cannot reach quorum of replicas. Page immediately.
+#   2. LonghornVolumeDegraded (warning) — robustness=2, replicas are
+#      under-attached. Common during reboot recovery; only alerts after 15m
+#      so transient rebuilds don't page.
+#   3. LonghornVolumeStuckAttaching (critical → ntfy) — state=1
+#      (attaching) for >10m. The exact symptom of tonight's incident:
+#      attach loops indefinitely while the workload pod cycles
+#      Init:0/1. PromQL aggregates with `max by (volume, pvc)` to dedupe
+#      Longhorn's per-node series emission for the same volume.
+#
+# Longhorn metrics use one-hot encoding: each volume emits one series per
+# possible state with the state name in the `state` label and value 0 or 1
+# (not an integer enum). Verified empirically 2026-05-07 against live cluster:
+#   `longhorn_volume_state{state="attached",volume=X} = 1` → volume IS attached
+#   `longhorn_volume_state{state="attaching",volume=X} = 0` → volume is NOT attaching
+# So queries filter on the `state` label and `== 1`. Aggregation with
+# `max by (volume, pvc)` dedupes the per-node series emission.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn-cope-alerts
+  namespace: storage
+  labels:
+    app.kubernetes.io/name: longhorn
+spec:
+  groups:
+    - name: longhorn.volume.alerts
+      rules:
+        - alert: LonghornVolumeFaulted
+          expr: |-
+            max by (volume, pvc) (longhorn_volume_robustness{state="faulted"}) == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} ({{ $labels.pvc }}) is FAULTED"
+            description: |
+              `longhorn_volume_robustness` for volume {{ $labels.volume }}
+              (PVC {{ $labels.pvc }}) reads `3` (faulted) for 5m+. The engine
+              cannot reach quorum of healthy replicas — the data path is
+              degraded or gone. The bound workload pod is likely failing
+              writes.
+
+              Immediate triage:
+              - `kubectl -n storage get volumes.longhorn.io {{ $labels.volume }} -o yaml` — read .status.conditions
+              - `kubectl -n storage get replicas.longhorn.io -o jsonpath='{range .items[?(@.spec.volumeName=="{{ $labels.volume }}")]}{.metadata.name} {.status.currentState}{"\n"}{end}'`
+              - If a single replica's host has lost storage-network reachability, see [multus-attach-failure runbook](https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md).
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md"
+
+        - alert: LonghornVolumeDegraded
+          expr: |-
+            max by (volume, pvc) (longhorn_volume_robustness{state="degraded"}) == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} ({{ $labels.pvc }}) degraded"
+            description: |
+              `longhorn_volume_robustness` for volume {{ $labels.volume }}
+              has been `2` (degraded — fewer replicas than configured) for
+              15m. Common during reboot recovery while replicas rebuild;
+              if it persists past 30m the rebuild is likely stuck.
+              Inspect with `kubectl -n storage get replicas.longhorn.io
+              -o jsonpath` filtered to .spec.volumeName.
+
+        - alert: LonghornVolumeStuckAttaching
+          # The exact 2026-05-06/07 symptom: volume state oscillates between
+          # `attaching` and detach-on-error for hours while the engine on the
+          # destination node can't reach any replica.
+          expr: |-
+            max by (volume, pvc) (longhorn_volume_state{state="attaching"}) == 1
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} stuck attaching"
+            description: |
+              `longhorn_volume_state` for volume {{ $labels.volume }} (PVC
+              {{ $labels.pvc }}) has read `1` (attaching) for 10m+. Either
+              the destination node's instance-manager pod cannot reach any
+              replica's storage-network IP (the 2026-05-07 failure mode
+              caused by missing `lhnet1` Multus attachment) or the only
+              replica is unhealthy.
+
+              Triage path:
+              - Check if Multus attached lhnet1 on the destination node:
+                see the [multus-attach-failure runbook](https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md).
+              - `kubectl -n storage get engines.longhorn.io -o jsonpath`
+                filtered to volume to see if the engine is starting/stopped.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md"

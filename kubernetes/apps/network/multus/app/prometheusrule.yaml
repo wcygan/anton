@@ -64,7 +64,7 @@ spec:
               minutes of the recreate, escalate — Multus or Whereabouts on the
               node is genuinely broken (check pod restart count and `kubectl logs
               -n network -l name=multus`).
-            runbook_url: "https://github.com/wcygan/anton/blob/main/context/plans/0016-harden-flux-cold-start-ordering.md"
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md"
     - name: multus.daemon.alerts
       rules:
         - alert: MultusServerRequestErrors

@@ -22,7 +22,15 @@ spec:
     - name: longhorn-config
     - name: storage-vxlan
       namespace: network
-  wait: false
+  # `wait: true` gates every downstream Kustomization that adds
+  # `dependsOn: [{name: longhorn, namespace: storage}]` on the Longhorn
+  # HelmRelease reaching Ready=True (manager DaemonSet up, CRDs Established,
+  # storageClass present). Without this flip the same dep resolves at
+  # ks-applied (not Ready) and PVC-creating consumers race the Longhorn
+  # bootstrap on cold-start. Plan 0016 Phase 3 task #4. Default Kustomization
+  # timeout (5 min) covers a clean Longhorn install; bump to `timeout: 10m`
+  # if a future drill shows it's too tight.
+  wait: true
   postBuild:
     substituteFrom:
       - name: cluster-secrets
