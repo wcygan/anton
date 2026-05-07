@@ -142,6 +142,21 @@ spec:
     kubeEtcd:
       enabled: false
 
+    # ---- kube-state-metrics ----
+    # Annotation allowlist — feeds the `PodNADAttachFailed` alert in
+    # kubernetes/apps/network/multus/app/prometheusrule.yaml. By default
+    # `kube_pod_annotations` is emitted with no annotation labels; the
+    # allowlist below promotes the two Multus annotations to labels so a
+    # PromQL `unless on(namespace, pod)` set difference can find pods that
+    # requested a NAD but never got the Multus reply. Plan 0016 Phase 3.
+    #
+    # Annotation key → label name transform (kube-state-metrics convention):
+    # `k8s.v1.cni.cncf.io/networks`       → `annotation_k8s_v1_cni_cncf_io_networks`
+    # `k8s.v1.cni.cncf.io/network-status` → `annotation_k8s_v1_cni_cncf_io_network_status`
+    kube-state-metrics:
+      extraArgs:
+        - --metric-annotations-allowlist=pods=[k8s.v1.cni.cncf.io/networks,k8s.v1.cni.cncf.io/network-status]
+
     nodeExporter:
       enabled: true
 
