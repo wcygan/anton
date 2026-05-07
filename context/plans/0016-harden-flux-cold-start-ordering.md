@@ -28,12 +28,12 @@ Anton's MS-01 nodes have demonstrated a recurring failure mode of simultaneous (
 
 ### Phase 1 — PR1: dependsOn graph + wait flips (this session)
 
-- [ ] Edit 5 platform-layer ks.yamls — flip `wait: false` → `wait: true`: external-secrets, envoy-gateway, multus, storage-vxlan, kube-prometheus-stack.
-- [ ] Edit 11 consumer ks.yamls — add `dependsOn` per the table in the handoff plan: longhorn-config, longhorn, bakery-server, echo, homepage, flux-instance, cloudflare-tunnel, kube-prometheus-stack, ntfy, harbor-config, seaweedfs-config.
-- [ ] Run `conventions-linter` subagent on the diff.
-- [ ] Verify SOPS encryption status repo-wide.
-- [ ] Commit and push branch; open PR referencing this plan.
-- [ ] Time `task reconcile` before and after merge; record steady-state delta in this plan's Log.
+- [x] Edit 5 platform-layer ks.yamls — flip `wait: false` → `wait: true`: external-secrets, envoy-gateway, multus, storage-vxlan, kube-prometheus-stack.
+- [x] Edit 11 consumer ks.yamls — add `dependsOn` per the table in the handoff plan: longhorn-config, longhorn, bakery-server, echo, homepage, flux-instance, cloudflare-tunnel, kube-prometheus-stack, ntfy, harbor-config, seaweedfs-config.
+- [x] Run `conventions-linter` subagent on the diff.
+- [x] Verify SOPS encryption status repo-wide.
+- [x] Commit and push branch; open PR referencing this plan.
+- [x] Time `task reconcile` before and after merge; record steady-state delta in this plan's Log.
 
 ### Phase 2 — Cold-start drill (post-PR-merge)
 
@@ -59,6 +59,7 @@ Anton's MS-01 nodes have demonstrated a recurring failure mode of simultaneous (
 ## Log
 
 - 2026-05-06: Plan opened from a session-handoff audit. Audit found 30/37 Flux Kustomizations with no `dependsOn` and 3 of the 7 existing edges weak (`wait: false` on the upstream). Pairs with plans 0013 (reboot discriminator), 0014 (off-cluster forensics on betty), 0015 (firmware/power profile) — together cover localize → measure → fix → recover. PR1 (15 ks.yaml edits) drafted at `~/.claude/plans/handoff-cluster-wide-reboot-mellow-tarjan.md`; this plan is the durable tracker for the cope-side initiative now that the audit has progressed past one-session scope.
+- 2026-05-07: PR1 landed as PR #282 squash-merged at `9054990f`, prerequisite PR #283 (dragonfly-operator switch from `HelmRelease + GitRepository(chart)` to vendored upstream manifest, merged at `36f1ead1`) fixed the flux-local CI block via allenporter/flux-local#753. Combined CI is fully green on PR #282 (Diff helmrelease/kustomization, Test, Success all pass). Steady-state reconcile timing post-merge: `task reconcile` (flux-system Kustomization only) = 6.5 s; full cascade convergence to new SHA — 39 of 40 Kustomizations Ready=True within ~5 min of merge. Two inner Kustomizations (`multus-upstream`, `whereabouts-upstream`) reconcile against their own external GitRepo SHAs (`v4.2.4@705a59ea`, `v0.9.3@c4bb29f7`), not main — that is correct and expected. **Pre-existing exception**, not regression: `registries/harbor-config` stuck at SHA `11e097a5` with `HealthCheckFailed` because `harbor-postgres-2` is in a CNPG-bootstrap-controller restart loop (`Init:0/1`) that has been visible since at least 2026-05-06T20:36 — earlier reconcile attempts at SHA `77667632` and `36f1ead1` failed identically. Documented in talos-operator memory `project_iter15_retraction_complete.md`. Does not block close of Phase 1 acceptance criterion 1, but Phase 2 cold-start drill cannot start until harbor-postgres-2 is Ready (or harbor-config's `wait: true` health-check is loosened) — surfaces a real gap in cope coverage that the drill will exercise.
 
 ## References
 
