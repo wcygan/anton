@@ -16,9 +16,11 @@
 #      silent-success failure mode the 2026-05-07 incident exercised.
 #      Requires kube-state-metrics' `--metric-annotations-allowlist=pods=...`
 #      patch in `kubernetes/apps/observability/kube-prometheus-stack/app/helmrelease.yaml`.
-#   2. MultusCNIRequestErrors (warning) — Multus' own counter shows
-#      `Status="error"` increments. Catches loud CNI-add failures (IPAM
-#      exhaustion, plugin chain error, etc.).
+#   2. MultusServerRequestErrors (warning) — multus-daemon's HTTP REST
+#      API returned non-2xx. Coarse daemon-level health signal: catches
+#      panics, malformed requests, socket-path issues. Does NOT catch
+#      CNI errors that the daemon returns inside a 200 body
+#      (v4.2.4 only exposes one HTTP-level counter, no CNI-internal one).
 #   3. MultusDaemonRestarting (warning) — multus-daemon pod is restart-looping.
 #      Implies the storage-fabric is unstable even if individual CNI calls
 #      complete.
@@ -65,24 +67,34 @@ spec:
             runbook_url: "https://github.com/wcygan/anton/blob/main/context/plans/0016-harden-flux-cold-start-ordering.md"
     - name: multus.daemon.alerts
       rules:
-        - alert: MultusCNIRequestErrors
-          # Multus' own counter — covers loud CNI-add/del/check failures.
-          # Does NOT cover the silent-success mode (see PodNADAttachFailed).
+        - alert: MultusServerRequestErrors
+          # Multus thick-plugin v4.2.4 only exposes one app-level counter:
+          # `multus_server_request_total{code,handler,method}`. The `code`
+          # label is the HTTP status code returned by the daemon's REST API
+          # (which kubelet calls). Non-2xx means the daemon-level call
+          # failed — daemon crashed mid-request, panic'd, or the handler
+          # rejected the request shape. Coarse signal; does NOT catch CNI
+          # errors that the daemon successfully returns inside a 200 body
+          # (e.g. IPAM allocation failures, plugin chain errors). The
+          # silent-success failure mode is caught separately by
+          # `PodNADAttachFailed`.
           expr: |-
-            sum by (namespace, pod, Type) (
-              increase(nfvpe_multus_request_count{Status="error"}[10m])
+            sum by (handler) (
+              increase(multus_server_request_total{code!~"2.."}[10m])
             ) > 0
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "Multus reported CNI {{ $labels.Type }} errors on {{ $labels.namespace }}/{{ $labels.pod }}"
+            summary: "Multus daemon returned non-2xx on {{ $labels.handler }}"
             description: |
-              `nfvpe_multus_request_count{Status="error",Type="{{ $labels.Type }}"}`
-              has been increasing on {{ $labels.namespace }}/{{ $labels.pod }} for 5m.
-              Likely causes: IPAM exhaustion (Whereabouts pool), upstream CNI plugin
-              chain error, or socket-path issue. Inspect `kubectl logs -n network -l
-              name=multus` for the specific error message.
+              `multus_server_request_total{code!~"2..",handler="{{ $labels.handler }}"}`
+              has been increasing for 5m. The multus-daemon REST API rejected at
+              least one request from kubelet — likely a panic, malformed config,
+              or socket-path issue.
+
+              Inspect `kubectl logs -n network -l name=multus --tail=200` for the
+              specific error and stack trace.
             runbook_url: "https://github.com/wcygan/anton/blob/main/context/plans/0016-harden-flux-cold-start-ordering.md"
 
         - alert: MultusDaemonRestarting
