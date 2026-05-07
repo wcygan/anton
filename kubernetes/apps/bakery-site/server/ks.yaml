@@ -18,4 +18,13 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: bakery-site
+  # Authors an HTTPRoute on `envoy-external` and a DNSEndpoint on the secondary
+  # domain. Block this reconcile on the gateway controller (CRD + Gateway
+  # resources) and external-dns (DNSEndpoint CRD) being Ready, so manifest
+  # applies don't race the CRDs on a cold-start. See plan 0016.
+  dependsOn:
+    - name: envoy-gateway
+      namespace: network
+    - name: cloudflare-dns
+      namespace: network
   wait: false

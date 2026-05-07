@@ -16,4 +16,10 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: network
-  wait: false
+  # `wait: true` so downstream apps that author HTTPRoutes can `dependsOn`
+  # this Kustomization and block until the Envoy Gateway controller is Ready,
+  # the `gateway.networking.k8s.io` CRD is Established, and the shared
+  # `envoy-internal` / `envoy-external` Gateway resources exist. Without this
+  # flip, consumer `dependsOn` edges resolve at ks-applied (not Ready), which
+  # races CRD installation on a cold-start. See plan 0016.
+  wait: true

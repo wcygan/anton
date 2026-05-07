@@ -37,7 +37,23 @@ jobs:
       - name: Run flux-local test
         uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
         with:
-          args: test --enable-helm --all-namespaces --path /github/workspace/kubernetes/flux/cluster -v
+          # `--sources "flux-system"` matches the diff job and restricts the
+          # test set to Kustomizations whose `sourceRef` points at the main
+          # `flux-system` GitRepository. Anton has two inner Kustomizations
+          # (multus-upstream, whereabouts-upstream) that source from external
+          # GitRepositories whose contents flux-local does not pull — without
+          # this flag, the test phase tries to `kustomize build` the inner
+          # paths (`deployments`, `doc/crds`) against the local checkout and
+          # raises KustomizePathException.
+          # `--skip-invalid-helm-release-paths` skips HelmReleases whose chart
+          # path does not exist locally — covers `dragonfly-operator` whose
+          # chart lives inside an external GitRepository at runtime
+          # (`./charts/dragonfly-operator`).
+          # `--skip-invalid-kustomization-paths` keeps the upfront-collection
+          # path check from short-circuiting the whole pytest run; the upstream
+          # GitHub-action wrapper exposed it in v8.1.0 (PR #1069).
+          # Refs: allenporter/flux-local#1068, anton plan 0016 PR #282.
+          args: test --enable-helm --all-namespaces --sources "flux-system" --skip-invalid-helm-release-paths --skip-invalid-kustomization-paths --path /github/workspace/kubernetes/flux/cluster -v
 
   diff:
     name: Flux Local Diff
@@ -76,6 +92,7 @@ jobs:
             --limit-bytes 10000
             --all-namespaces
             --sources "flux-system"
+            --skip-invalid-kustomization-paths
             --output-file diff.patch
 
       - name: Generate Diff

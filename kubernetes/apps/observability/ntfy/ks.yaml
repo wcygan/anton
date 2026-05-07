@@ -12,6 +12,12 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: observability
+  # Authors an ExternalSecret under `app/`. Block this reconcile on
+  # `external-secrets` being Ready so the manifest apply doesn't race the CRD
+  # on a cold-start. See plan 0016.
+  dependsOn:
+    - name: external-secrets
+      namespace: external-secrets
   wait: false
   postBuild:
     substituteFrom:

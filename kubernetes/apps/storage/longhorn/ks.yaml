@@ -12,6 +12,16 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: storage
+  # Longhorn requires (a) the `longhorn-storage` NAD authored by
+  # `longhorn-config` for instance-manager pods' `lhnet1` interface, and (b)
+  # the `lhnet1-host` macvlan-bridge child set up by the `storage-vxlan`
+  # DaemonSet so the host's iSCSI initiator can reach co-located IM pods. Block
+  # this reconcile on both so iSCSI doesn't race the storage fabric on a
+  # cold-start. See plan 0016 and `storage/CLAUDE.md`.
+  dependsOn:
+    - name: longhorn-config
+    - name: storage-vxlan
+      namespace: network
   wait: false
   postBuild:
     substituteFrom:

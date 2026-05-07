@@ -16,4 +16,11 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: network
+  # `cloudflare-dns` owns the DNSEndpoint CRD that this app authors;
+  # `envoy-gateway` owns the `envoy-external` Gateway that cloudflared routes
+  # traffic to. Block this reconcile on both so manifest apply and connector
+  # startup don't race the upstreams on a cold-start. See plan 0016.
+  dependsOn:
+    - name: cloudflare-dns
+    - name: envoy-gateway
   wait: false

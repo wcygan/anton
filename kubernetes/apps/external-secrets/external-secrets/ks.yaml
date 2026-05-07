@@ -12,7 +12,12 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: external-secrets
-  wait: false
+  # `wait: true` so downstream apps (every ExternalSecret consumer) can
+  # `dependsOn` this Kustomization and block until the ESO controller is Ready
+  # and the `externalsecrets.external-secrets.io` CRD is Established. Without
+  # this flip, consumer `dependsOn` edges resolve at ks-applied (not Ready),
+  # which races CRD installation on a cold-start. See plan 0016.
+  wait: true
   postBuild:
     substituteFrom:
       - name: cluster-secrets

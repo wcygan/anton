@@ -20,6 +20,11 @@ spec:
       namespace: databases
     - name: dragonfly-operator
       namespace: databases
+    # `external-secrets` gates the two ExternalSecrets (admin password, S3
+    # creds) authored under `app/` — blocks manifest apply on the CRD being
+    # installed. See plan 0016.
+    - name: external-secrets
+      namespace: external-secrets
   wait: true
   postBuild:
     substituteFrom:
