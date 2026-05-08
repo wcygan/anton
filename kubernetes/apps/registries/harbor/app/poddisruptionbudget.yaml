@@ -1,0 +1,21 @@
+---
+# Harbor chart 1.18.3 does not expose a PDB key, so it lives here as a
+# sibling manifest. Pairs with the soft topologySpreadConstraints in the
+# `core` block of helmrelease.yaml: spread is best-effort, PDB enforces
+# that voluntary disruptions never take both replicas at once.
+#
+# This file is the template for the wider PDB+topologySpread sweep — copy
+# the same shape into other multi-replica platform deployments before
+# propagating.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: harbor-core
+  namespace: registries
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: harbor
+      component: core
+      release: harbor

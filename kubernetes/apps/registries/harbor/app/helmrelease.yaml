@@ -100,6 +100,20 @@ spec:
 
     core:
       replicas: 2
+      # Soft anti-affinity — keep the two replicas on different nodes when
+      # possible, but fall back to co-location instead of staying Pending
+      # when only one schedulable node exists (e.g. drain, k8s-2 NVMe
+      # asymmetry). Pair with the harbor-core PodDisruptionBudget so a
+      # voluntary disruption never takes both replicas down at once.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: harbor
+              component: core
+              release: harbor
       resources:
         requests:
           cpu: 100m
