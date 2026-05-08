@@ -53,6 +53,17 @@ spec:
     internalTLS:
       enabled: false
 
+    # Chart default is RollingUpdate, applied to the components that own a
+    # PVC (jobservice + registry — see chart comment). registry uses the S3
+    # backend here so it has no PVC, but jobservice keeps a RWO Longhorn
+    # PVC for jobLog (replicas=1 per ADR 0015). With RollingUpdate the
+    # incoming jobservice pod can never attach the PVC while the outgoing
+    # one still holds it, so every chart upgrade times out at the 5m
+    # health-check and Flux rolls back. Recreate is the only option until
+    # we have a replicated filesystem (RWX).
+    updateStrategy:
+      type: Recreate
+
     persistence:
       enabled: true
       resourcePolicy: keep
