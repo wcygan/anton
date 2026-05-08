@@ -28,6 +28,9 @@ spec:
         - name: homepage
           image: ghcr.io/nu-sync/homepage:main-00000010-9f384a3 # {"$imagepolicy": "default:homepage"}
           imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: homepage-env
           ports:
             - name: http
               containerPort: 3000
