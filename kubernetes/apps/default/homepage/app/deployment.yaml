@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: homepage
-          image: ghcr.io/nu-sync/homepage:main-00000008-99b4e8a # {"$imagepolicy": "default:homepage"}
+          image: ghcr.io/nu-sync/homepage:main-00000009-36344f2 # {"$imagepolicy": "default:homepage"}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
