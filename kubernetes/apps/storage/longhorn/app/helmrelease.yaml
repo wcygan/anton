@@ -37,6 +37,19 @@ spec:
       defaultReplicaCount: 2
       defaultDataLocality: best-effort
       staleReplicaTimeout: 2880
+      # Resilience tier 1: when a node goes down hard (kubelet stops reporting),
+      # delete both StatefulSet and Deployment pods so workloads can reschedule
+      # onto a healthy node and Longhorn can detach + reattach the volume.
+      # Default is "do-nothing", which leaves pods stuck Terminating until the
+      # node returns. Acceptable here because we run 2-replica volumes and the
+      # storage layer can survive a node loss.
+      nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
+      # Wait 30 min before rebuilding a degraded replica onto a different node.
+      # Default 600s (10 min) is too aggressive for Talos: a routine machine
+      # config apply or upgrade reboot can exceed that and trigger needless
+      # cross-node rebuild traffic on the SFP+ mesh. 1800s gives planned
+      # reboots room to complete; real node losses still get acted on.
+      replicaReplenishmentWaitInterval: 1800
       # Routes replica + iSCSI traffic onto the SFP+ mesh via the NAD in
       # longhorn-config/. Longhorn requires the "<namespace>/<nad>" form,
       # not a bare NAD name. Host-to-local-pod over this network depends
