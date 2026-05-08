@@ -25,6 +25,32 @@ spec:
     remediation:
       retries: 5
       remediateLastFailure: true
+  # Chart bug workaround (goharbor/harbor-helm 1.18.3): under the chart-default
+  # `updateStrategy.type: RollingUpdate`, `templates/jobservice/jobservice-dpl.yaml`
+  # omits `spec.strategy.rollingUpdate` entirely, so the Kubernetes API defaults
+  # it to maxSurge=25%/maxUnavailable=25%. With jobservice.replicas=1 + a RWO
+  # Longhorn PVC for jobLog (ADR 0015), 25/25 means the new pod tries to attach
+  # the volume while the old pod still holds it → stuck Pending → Flux 5m
+  # health-check timeout → rollback. Switching the chart's `updateStrategy.type`
+  # to "Recreate" trips a second chart bug: it renders `rollingUpdate: null`,
+  # which the API rejects ("may not be specified when type is Recreate").
+  #
+  # The fix here keeps RollingUpdate (so registry stays zero-downtime) and
+  # patches harbor-jobservice only with maxSurge=0/maxUnavailable=1, which is
+  # functionally equivalent to Recreate for replicas=1 (kill → wait for PVC
+  # detach → create) without affecting any other component.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: harbor-jobservice
+            patch: |
+              - op: add
+                path: /spec/strategy/rollingUpdate
+                value:
+                  maxSurge: 0
+                  maxUnavailable: 1
   values:
     # Tailscale ingress (ingress-tailscale.yaml under harbor-config) owns
     # externally-facing TLS at registry.<tailnet>.ts.net. The LoadBalancer
@@ -52,17 +78,6 @@ spec:
 
     internalTLS:
       enabled: false
-
-    # Chart default is RollingUpdate, applied to the components that own a
-    # PVC (jobservice + registry — see chart comment). registry uses the S3
-    # backend here so it has no PVC, but jobservice keeps a RWO Longhorn
-    # PVC for jobLog (replicas=1 per ADR 0015). With RollingUpdate the
-    # incoming jobservice pod can never attach the PVC while the outgoing
-    # one still holds it, so every chart upgrade times out at the 5m
-    # health-check and Flux rolls back. Recreate is the only option until
-    # we have a replicated filesystem (RWX).
-    updateStrategy:
-      type: Recreate
 
     persistence:
       enabled: true
