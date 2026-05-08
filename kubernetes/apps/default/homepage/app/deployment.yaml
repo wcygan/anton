@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: homepage
-          image: ghcr.io/nu-sync/homepage:main-00000011-2f3d598 # {"$imagepolicy": "default:homepage"}
+          image: ghcr.io/nu-sync/homepage:main-00000012-8274736 # {"$imagepolicy": "default:homepage"}
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
