@@ -1,2 +1,3 @@
 - [Longhorn HelmRepository deviation](longhorn_helmrepo.md) — Longhorn only publishes to charts.longhorn.io (no OCI); 3-file-pattern hook updated to accept .helmrepository.yaml
 - [Longhorn namespaceOverride](longhorn_namespace.md) — Intentional use of `namespaceOverride: storage` in HelmRelease values (chart defaults to `longhorn-system`); aligns with plan 0001 directive
+- [Multus/Whereabouts GitRepository pattern](pattern_multus_non_helmrelease.md) — GitRepository + Flux Kustomization spec.patches for thick-mode CNI (no usable upstream chart); ADR 0017 / plan 0004
