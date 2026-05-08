@@ -105,15 +105,15 @@ spec:
       # when only one schedulable node exists (e.g. drain, k8s-2 NVMe
       # asymmetry). Pair with the harbor-core PodDisruptionBudget so a
       # voluntary disruption never takes both replicas down at once.
+      #
+      # GOTCHA: the goharbor chart already injects a `labelSelector` matching
+      # the deployment's own selector labels — defining one here yields a
+      # duplicate-key YAML error in post-render and silently fails the Helm
+      # upgrade. Leave labelSelector out and let the chart fill it in.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchLabels:
-              app: harbor
-              component: core
-              release: harbor
       resources:
         requests:
           cpu: 100m
