@@ -19,6 +19,10 @@ spec:
       name: kube-dns
       clusterIP: "10.43.0.10"
     replicaCount: 2
+    # Match the upstream k8s convention for CoreDNS — its deployment is
+    # foundational (everything else needs DNS to resolve services), so it
+    # outranks ordinary workloads under node pressure.
+    priorityClassName: system-cluster-critical
     servers:
       - zones:
           - zone: .

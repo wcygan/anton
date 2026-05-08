@@ -11,6 +11,11 @@ spec:
   values:
     global:
       imageRegistry: mirror.gcr.io
+    # Envoy Gateway controller — translates Gateway/HTTPRoute CRs into
+    # EnvoyProxy data-plane config. The data-plane priority is set on the
+    # EnvoyProxy CR in envoy.yaml, not here.
+    deployment:
+      priorityClassName: system-cluster-critical
     config:
       envoyGateway:
         provider:

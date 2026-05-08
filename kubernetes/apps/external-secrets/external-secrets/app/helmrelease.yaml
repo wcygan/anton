@@ -12,6 +12,10 @@ spec:
     installCRDs: true
     serviceMonitor:
       enabled: true
+    # External-secrets gates secret reconciliation cluster-wide; an eviction
+    # under pressure stalls every ExternalSecret. Set per-component because
+    # the chart does not expose a single global key.
+    priorityClassName: system-cluster-critical
     resources:
       limits:
         memory: 256Mi
@@ -19,6 +23,7 @@ spec:
         cpu: 10m
         memory: 64Mi
     webhook:
+      priorityClassName: system-cluster-critical
       resources:
         limits:
           memory: 128Mi
@@ -26,6 +31,7 @@ spec:
           cpu: 10m
           memory: 32Mi
     certController:
+      priorityClassName: system-cluster-critical
       resources:
         limits:
           memory: 128Mi

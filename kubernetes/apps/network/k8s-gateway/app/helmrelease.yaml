@@ -12,6 +12,9 @@ spec:
     fullnameOverride: k8s-gateway
     domain: "${SECRET_DOMAIN}"
     ttl: 1
+    # Internal DNS resolver for HTTPRoute hosts on 192.168.1.102 — losing
+    # this strands every internal request that resolves through it.
+    priorityClassName: system-cluster-critical
     service:
       type: LoadBalancer
       port: 53

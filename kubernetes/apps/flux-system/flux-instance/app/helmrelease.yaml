@@ -141,3 +141,14 @@ spec:
             target:
               kind: Deployment
               name: kustomize-controller
+          - # Match the priority of source/kustomize/helm-controller (which
+            # ship system-cluster-critical in the upstream manifests). Without
+            # this, the image + notification controllers can be evicted under
+            # node pressure while the rest of Flux keeps running.
+            patch: |-
+              - op: add
+                path: /spec/template/spec/priorityClassName
+                value: system-cluster-critical
+            target:
+              kind: Deployment
+              name: (image-automation-controller|image-reflector-controller|notification-controller)

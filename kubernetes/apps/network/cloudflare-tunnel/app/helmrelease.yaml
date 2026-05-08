@@ -51,6 +51,9 @@ spec:
               limits:
                 memory: 256Mi
     defaultPodOptions:
+      # External entry point for everything proxied through Cloudflare;
+      # treat it the same as the Envoy data plane.
+      priorityClassName: system-cluster-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534

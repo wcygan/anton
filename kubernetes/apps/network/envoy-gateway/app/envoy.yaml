@@ -12,6 +12,10 @@ spec:
     kubernetes:
       envoyDeployment:
         replicas: 2
+        # All north-south traffic for the cluster traverses these proxies.
+        # Pair with the controller's PriorityClass in helmrelease.yaml.
+        pod:
+          priorityClassName: system-cluster-critical
         container:
           resources:
             requests:

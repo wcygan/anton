@@ -14,6 +14,11 @@ spec:
     replicaCount: 1
     dns01RecursiveNameservers: https://1.1.1.1:443/dns-query,https://1.0.0.1:443/dns-query
     dns01RecursiveNameserversOnly: true
+    # Applies to controller, cainjector, webhook, and startupapicheck —
+    # cert-manager only exposes a single global key. Without this, an
+    # eviction can stall TLS renewals for every Ingress in the cluster.
+    global:
+      priorityClassName: system-cluster-critical
     prometheus:
       enabled: true
       servicemonitor:

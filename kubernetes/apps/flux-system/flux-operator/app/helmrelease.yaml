@@ -9,6 +9,12 @@ spec:
     name: flux-operator
   interval: 1h
   values:
+    # Match the priority of the controllers it manages — flux-operator
+    # reconciles FluxInstance, which produces source/kustomize/helm
+    # controllers (already system-cluster-critical via the upstream
+    # manifests). Without this, the operator can be evicted while its
+    # children keep running, leaving the cluster un-reconcilable.
+    priorityClassName: system-cluster-critical
     serviceMonitor:
       create: true
     # Disable the chart's web NetworkPolicy — it only opens 8080/9080 and
