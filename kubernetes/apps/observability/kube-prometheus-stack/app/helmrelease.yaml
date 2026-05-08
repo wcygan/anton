@@ -77,6 +77,16 @@ spec:
         # still scope themselves via explicit `namespace =` matchers.
         alertmanagerConfigMatcherStrategy:
           type: None
+        # GOTCHA: prometheus-operator semantics — an empty/unset
+        # alertmanagerConfigSelector matches NO AlertmanagerConfig CRs
+        # (opposite of standard k8s LabelSelector "{} = match all").
+        # Without this, the ntfy AC CR is never merged and the rendered
+        # alertmanager.yaml falls back to the chart's null-only receiver,
+        # silently dropping every alert. Match the same `release` label that
+        # every PrometheusRule already carries.
+        alertmanagerConfigSelector:
+          matchLabels:
+            release: kube-prometheus-stack
         storage:
           volumeClaimTemplate:
             spec:

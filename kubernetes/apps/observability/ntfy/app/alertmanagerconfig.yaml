@@ -6,15 +6,17 @@
 # Operator from kube-prometheus-stack 83.5.0). v1beta1 is upstream-stable
 # but not present here; switch when the operator publishes it.
 #
-# Selector: kube-prometheus-stack ships `alertmanagerConfigSelector: {}`
-# (match-all). The `release: kube-prometheus-stack` label matches the
-# convention used by every PrometheusRule in this directory and stays
-# correct if a future selector tightens to release-scoped match.
+# Selector: matched by kps.alertmanagerSpec.alertmanagerConfigSelector via
+# the `release: kube-prometheus-stack` label. Same convention every
+# PrometheusRule in this directory uses.
 #
-# Initial route shape per ADR 0026: severity=critical only. Easier to
-# broaden than to silence; the new ClusterPodCrashLoopBackOffCritical rule
-# (commit 6ba53610) is critical, so it gets through. Re-evaluate one week
-# after deploy and consider widening to "everything except info".
+# Route shape: top-level `route` has receiver=drop, so anything that does
+# not match a sub-route is silently dropped (we cannot reuse the chart's
+# global "null" receiver from inside an AC CR — receivers are scoped).
+# The two sub-routes broaden ADR 0026's initial severity=critical-only
+# design to also page on hard node-state alerts, which kps ships at
+# severity=warning. Add explicit warning-level alertnames here as the
+# allowlist grows; do NOT match all warnings broadly.
 #
 # Webhook URL contains the secret topic — sourced from the ntfy-topic
 # Secret's `url` key (templated by externalsecret.yaml from the 1Password
@@ -28,16 +30,24 @@ metadata:
     release: kube-prometheus-stack
 spec:
   route:
-    receiver: ntfy
+    receiver: drop
     groupBy: ["alertname", "namespace"]
     groupWait: 30s
     groupInterval: 5m
     repeatInterval: 4h
-    matchers:
-      - name: severity
-        value: critical
-        matchType: "="
+    routes:
+      - receiver: ntfy
+        matchers:
+          - name: severity
+            value: critical
+            matchType: "="
+      - receiver: ntfy
+        matchers:
+          - name: alertname
+            value: "KubeNodeNotReady|KubeNodeUnreachable|KubeNodeReadinessFlapping"
+            matchType: "=~"
   receivers:
+    - name: drop
     - name: ntfy
       webhookConfigs:
         - sendResolved: true
