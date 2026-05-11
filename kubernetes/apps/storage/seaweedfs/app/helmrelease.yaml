@@ -7,6 +7,12 @@ spec:
   chart:
     spec:
       chart: seaweedfs-operator
+      # Pinned by ADR 0019. Chart < 0.1.19 / operator < 1.0.16 emits a spurious
+      # VolumeClaimTemplatesMismatch warning every ~5s on the Seaweed CR (upstream
+      # issue #224, fixed in PR #226 — apiserver defaults volumeMode→Filesystem,
+      # operator's desired template has nil, Semantic.DeepEqual reports drift).
+      # Cluster-side delete-and-recreate does NOT fix it; only the chart bump does.
+      # See docs/docs/notes/seaweedfs-baseline-2026-04-19.md §6.
       version: 0.1.14
       sourceRef:
         kind: HelmRepository

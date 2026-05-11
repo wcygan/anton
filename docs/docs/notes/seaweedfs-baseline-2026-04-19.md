@@ -222,6 +222,27 @@ migrate to the top-level spec.s3 standalone gateway
 
 Leave `spec.filer.s3` unset. Bare `spec.s3` is the canonical shape.
 
+### 6. Spurious `VolumeClaimTemplatesMismatch` event on chart < 0.1.19 — upstream bug, fixed by upgrade
+
+Chart `0.1.14` / operator `1.0.12` (and any release through `1.0.15`) emits a `VolumeClaimTemplatesMismatch` Warning event on the `Seaweed` CR every ~5 s, climbing into the tens of thousands of counts. The event message is misleading:
+
+```
+VolumeClaimTemplates on seaweedfs-volume differ but cannot be auto-applied.
+Delete the StatefulSet manually to apply changes.
+```
+
+**Deleting the StatefulSet does not fix it.** Verified locally on 2026-05-10: a clean `kubectl -n storage delete sts seaweedfs-volume --cascade=orphan` (with the operator suspended for the duration), followed by operator-driven recreation, adopted all three pods cleanly (UIDs preserved, PVCs Bound, no rolling update) — and the warning resumed firing within 5 s of the operator resuming.
+
+Root cause is in the operator's reconcile path, not in the cluster. From [seaweedfs/seaweedfs-operator#224](https://github.com/seaweedfs/seaweedfs-operator/issues/224) and the fix at [PR #226](https://github.com/seaweedfs/seaweedfs-operator/pull/226):
+
+> `reconcileVolumeClaimTemplates` uses `apiequality.Semantic.DeepEqual` on the entire VCT slice. The apiserver defaults `Spec.VolumeMode` to `&Filesystem` on Create when the operator leaves it nil. The desired in-memory view still has `nil`. DeepEqual returns false on every reconcile, the Warning event fires, and the 5-second `RequeueAfter` cadence keeps it cycling.
+
+Because the apiserver re-defaults `volumeMode` on every Create, no amount of cluster-side intervention can reconcile the diff against an operator that builds its desired template with `volumeMode: nil`.
+
+**Fix:** upgrade the operator to chart `≥ 0.1.19` / operator `≥ 1.0.16`, where PR #226 introduces a `vctSemanticallyEqual` comparator that treats `nil` and `&Filesystem` as equal. Anton runs Renovate; the chart bump arrives as a PR (e.g. PR #279, `0.1.14 → 0.1.22`). Merge that PR — no other action needed. The warning stops on the next reconcile after the new operator pod is Ready.
+
+**Do not** scaffold a runbook around delete-and-recreate — it has no effect on this bug and is unnecessary churn.
+
 ## Verdict + forward-looking
 
 Acceptance criteria from plan 0005:
