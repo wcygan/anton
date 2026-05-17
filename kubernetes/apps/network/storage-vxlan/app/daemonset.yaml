@@ -33,7 +33,7 @@ spec:
       containers:
         - name: vxlan
           # renovate: datasource=docker depName=nicolaka/netshoot
-          image: nicolaka/netshoot:v0.13
+          image: nicolaka/netshoot:v0.15
           imagePullPolicy: IfNotPresent
           env:
             - name: NODE_NAME
