@@ -5,7 +5,7 @@ metadata:
   name: harbor-redis
 spec:
   replicas: 3
-  image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.38.0
+  image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.38.1
 
   resources:
     requests:
