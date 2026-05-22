@@ -70,6 +70,56 @@ curl -fsS -o /tmp/temporal-workflows.json -w 'workflows_http=%{http_code} bytes=
   "https://${UI_HOST}/api/v1/namespaces/default/workflows"
 ```
 
+## App Integration Reference
+
+For an application deployed inside Anton's Kubernetes cluster, use the in-cluster
+Temporal frontend Service as the SDK/gRPC endpoint:
+
+```text
+temporal-frontend.temporal.svc.cluster.local:7233
+```
+
+Do not use the Tailscale Web UI hostname as an SDK endpoint. The `Ingress/temporal`
+routes to `temporal-web:8080` for the browser UI and HTTP API; Temporal workers
+and clients should talk to `svc/temporal-frontend` on port `7233`.
+
+Typical app environment:
+
+```yaml
+env:
+  - name: TEMPORAL_ADDRESS
+    value: temporal-frontend.temporal.svc.cluster.local:7233
+  - name: TEMPORAL_NAMESPACE
+    value: default
+  - name: TEMPORAL_TASK_QUEUE
+    value: my-app
+```
+
+`TEMPORAL_NAMESPACE=default` is the Temporal namespace created by the Temporal
+HelmRelease, not the Kubernetes `default` namespace. App pods do not need
+Postgres credentials; Temporal server owns persistence access.
+
+If the app is managed by Flux and should wait for Temporal, add a dependency to
+the app's Flux `Kustomization`:
+
+```yaml
+dependsOn:
+  - name: temporal
+    namespace: temporal
+```
+
+When troubleshooting app connectivity, verify the rendered Service and any egress
+policy before changing the app:
+
+```sh
+"$KUBECTL" --kubeconfig ./kubeconfig -n temporal get svc temporal-frontend -o wide
+"$KUBECTL" --kubeconfig ./kubeconfig -n temporal get networkpolicy
+```
+
+For clients outside the cluster, do not reuse the Web UI ingress. Exposing
+`temporal-frontend:7233` externally needs an explicit gRPC exposure design with
+TLS and authentication decisions.
+
 ## Expected Healthy Shape
 
 - Flux Kustomizations `temporal-config` and `temporal` are Ready.
