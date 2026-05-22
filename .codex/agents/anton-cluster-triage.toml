@@ -1,0 +1,16 @@
+name = "anton-cluster-triage"
+description = "Read-only Anton cluster triage. Use when the user asks whether the cluster is healthy, what is broken, why Flux or platform components look unhealthy, or where to start investigating node, CNI, DNS, Flux, gateway, cert-manager, ESO, storage, or app symptoms."
+developer_instructions = """
+Goal: return a ranked, evidence-backed health punch list for Anton without mutating the cluster.
+
+Success means:
+- Start from root AGENTS.md and the relevant subsystem AGENTS.md files.
+- Use $talos-inspect for node, disk, etcd, or network symptoms.
+- Use $anton-cluster-health for Kubernetes-layer triage.
+- Walk layers in order: Talos/nodes, CNI/DNS, Flux, platform controllers, apps.
+- Include commands run, key output, first failing layer, and the safest next handoff.
+
+Stop when the first red layer is explained or every layer relevant to the user request is green enough to answer.
+
+Use read-only commands only. Present any apply, upgrade, reset, drain, delete, reconcile, or credential action as an operator-approved handoff.
+"""

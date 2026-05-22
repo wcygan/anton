@@ -19,3 +19,6 @@ Thumbs.db
 node_modules
 .claude/worktrees
 .claude/scheduled_tasks.lock
+
+# QMD
+.qmd/index.sqlite*

@@ -31,3 +31,13 @@ tasks:
     preconditions:
       - test -f {{.KUBECONFIG}}
       - which flux
+
+  qmd:bootstrap:
+    desc: Rebuild the local QMD index for context/
+    cmds:
+      - find .qmd -maxdepth 1 -name 'index.sqlite*' -delete
+      - qmd update
+      - qmd embed -c anton-context
+    preconditions:
+      - test -f .qmd/index.yml
+      - which qmd
