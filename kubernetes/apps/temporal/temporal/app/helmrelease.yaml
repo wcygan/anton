@@ -1,0 +1,149 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: temporal
+spec:
+  chart:
+    spec:
+      chart: temporal
+      # renovate: registryUrl=https://go.temporal.io/helm-charts
+      version: 1.2.0
+      sourceRef:
+        kind: HelmRepository
+        name: temporal
+      interval: 15m
+  interval: 1h
+  timeout: 15m
+  install:
+    remediation:
+      retries: 5
+      remediateLastFailure: true
+  values:
+    schema:
+      # Flux owns ordering and Job visibility; render schema setup as a normal
+      # batch/v1 Job rather than a Helm hook.
+      useHelmHooks: false
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+
+    shims:
+      # Chart 1.2.0 deploys Temporal 1.31.0; the 1.29 compatibility shims are
+      # not needed for this server/admin-tools pair.
+      dockerize: false
+      elasticsearchTool: false
+
+    server:
+      image:
+        tag: 1.31.0
+      replicaCount: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+      metrics:
+        serviceMonitor:
+          enabled: true
+          interval: 30s
+      config:
+        logLevel: info
+        persistence:
+          defaultStore: default
+          visibilityStore: visibility
+          # Immutable after first deployment. Keep this explicit so future
+          # agents do not silently inherit a changed chart default.
+          numHistoryShards: 512
+          datastores:
+            default:
+              sql:
+                createDatabase: false
+                manageSchema: true
+                pluginName: postgres12
+                driverName: postgres12
+                databaseName: temporal
+                connectAddr: temporal-postgres-rw.temporal.svc.cluster.local:5432
+                connectProtocol: tcp
+                user: temporal
+                existingSecret: temporal-postgres-app
+                secretKey: password
+                connectAttributes:
+                  sslmode: require
+                maxConns: 20
+                maxIdleConns: 20
+                maxConnLifetime: "1h"
+            visibility:
+              sql:
+                createDatabase: false
+                manageSchema: true
+                pluginName: postgres12
+                driverName: postgres12
+                databaseName: temporal_visibility
+                connectAddr: temporal-postgres-rw.temporal.svc.cluster.local:5432
+                connectProtocol: tcp
+                user: temporal
+                existingSecret: temporal-postgres-app
+                secretKey: password
+                connectAttributes:
+                  sslmode: require
+                maxConns: 20
+                maxIdleConns: 20
+                maxConnLifetime: "1h"
+        namespaces:
+          create: true
+          namespace:
+            - name: default
+              retention: 3d
+      frontend:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+      history:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+      matching:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+      worker:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+
+    admintools:
+      image:
+        tag: "1.31.0"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+
+    web:
+      image:
+        tag: 2.49.1
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi

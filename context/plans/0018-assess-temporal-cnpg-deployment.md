@@ -64,7 +64,7 @@ Enable Temporal ServiceMonitors when the deployment lands, and make the `tempora
 - CNPG's generated application user is intentionally unprivileged. Let CNPG create the databases, then set `createDatabase: false` in the Temporal chart.
 - Temporal's chart can still own schema setup. Keep `manageSchema: true` so the schema Job runs `temporal-sql-tool setup-schema` and `temporal-sql-tool update-schema` against both stores.
 - Flux should own Job lifecycle visibility. Set `schema.useHelmHooks: false` so the schema Job renders as a normal `batch/v1 Job`.
-- Temporal server 1.30+ uses the Sprig config template path. Set `server.configMapsToMount: sprig` and `server.setConfigFilePath: true`.
+- Temporal chart `1.2.0` renders `TEMPORAL_SERVER_CONFIG_FILE_PATH=/etc/temporal/config/config_template.yaml` natively for server `1.31.0`; no extra config-path values are needed.
 - The 1.29 compatibility shims can stay off for server/admin-tools `1.31.0`: set `shims.dockerize: false` and `shims.elasticsearchTool: false`.
 - `numHistoryShards` is immutable after first deployment. Record the final value before first reconcile; the current chart default is `512`.
 
@@ -184,12 +184,20 @@ shims:
   elasticsearchTool: false
 
 server:
-  configMapsToMount: sprig
-  setConfigFilePath: true
+  image:
+    tag: 1.31.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
   metrics:
     serviceMonitor:
       enabled: true
+      interval: 30s
   config:
+    logLevel: info
     persistence:
       defaultStore: default
       visibilityStore: visibility
@@ -207,6 +215,11 @@ server:
             user: temporal
             existingSecret: temporal-postgres-app
             secretKey: password
+            connectAttributes:
+              sslmode: require
+            maxConns: 20
+            maxIdleConns: 20
+            maxConnLifetime: "1h"
         visibility:
           sql:
             createDatabase: false
@@ -219,9 +232,19 @@ server:
             user: temporal
             existingSecret: temporal-postgres-app
             secretKey: password
+            connectAttributes:
+              sslmode: require
+            maxConns: 20
+            maxIdleConns: 20
+            maxConnLifetime: "1h"
+    namespaces:
+      create: true
+      namespace:
+        - name: default
+          retention: 3d
 ```
 
-Add resource requests, install timeout, and pod disruption policy during implementation. Use the Temporal README's `900s` install timeout guidance as the starting point for the HelmRelease timeout.
+Implementation adds first-pass resource requests and a `15m` HelmRelease timeout. Add pod disruption policy after the initial reconcile if any Temporal service scales beyond one replica.
 
 ## Implementation Tasks
 
@@ -229,11 +252,11 @@ Add resource requests, install timeout, and pod disruption policy during impleme
 - [x] Inspect Anton's CNPG operator, Harbor CNPG consumer pattern, Flux dependency rule, and live read-only CNPG cluster inventory.
 - [x] Render the Temporal chart locally with PostgreSQL persistence to verify schema Job behavior under Flux-compatible settings.
 - [x] Reshape this plan as an outcome-first implementation contract using directional language.
-- [ ] Confirm the final `numHistoryShards`, initial replica counts, resource requests, and backup posture.
-- [ ] Draft `kubernetes/apps/temporal/` with `temporal-config` and `temporal` Kustomizations.
-- [ ] Add `ingress-tailscale.yaml` for `https://temporal.<tailnet-name>.ts.net`, backed by `Service/temporal-web:8080`.
-- [ ] Render the chart locally with the draft HelmRelease values and inspect the schema Job, ServiceMonitors, Deployments, Services, and Tailscale Ingress.
-- [ ] Run local YAML and Kustomize checks.
+- [x] Confirm the first-pass defaults: `numHistoryShards: 512`, one replica per Temporal service, Harbor-like CNPG sizing, conservative Temporal resource requests, chart-managed `default` Temporal namespace, and backup as a pre-durable-workflows gate.
+- [x] Draft `kubernetes/apps/temporal/` with `temporal-config` and `temporal` Kustomizations.
+- [x] Add `ingress-tailscale.yaml` for `https://temporal.<tailnet-name>.ts.net`, backed by `Service/temporal-web:8080`.
+- [x] Render the chart locally with the draft HelmRelease values and inspect the schema Job, namespace Job, ServiceMonitors, Deployments, Services, and Tailscale Ingress.
+- [x] Run local YAML and Kustomize checks.
 - [ ] Request operator approval for the first Flux reconcile.
 - [ ] Reconcile in order and verify CNPG, schema Job completion, Temporal pods, Tailscale UI route, ServiceMonitors, and a Temporal namespace-list command.
 - [ ] Open `https://temporal.<tailnet-name>.ts.net` from a Tailscale-connected browser and verify the Web UI can list namespaces and render a workflow list page.
@@ -278,11 +301,10 @@ Confirm the Web UI loads, lists namespaces, and shows the Workflows view for a n
 
 ## Open Decisions
 
-- Choose `numHistoryShards` before first install. The current chart default is `512`.
-- Choose the first resource requests and replica counts. Start from conservative homelab sizing, then scale Temporal services after a healthy first reconcile.
+- Revisit `numHistoryShards: 512` only before first live reconcile; changing it later requires a fresh Temporal deployment.
 - Choose the backup target and restore drill before running durable workflows. Use the Harbor Postgres backup plan as the closest precedent.
-- Choose whether Temporal namespaces should be bootstrapped by chart values (`server.config.namespaces.create`) or created manually through `temporal` CLI after install.
 - Choose whether a LAN-only `envoy-internal` route adds value after the Tailscale Web UI route is working.
+- Choose whether to add pod disruption policy after any Temporal service scales beyond one replica.
 
 ## Pause Conditions
 
@@ -297,6 +319,8 @@ Confirm the Web UI loads, lists namespaces, and shows the Workflows view for a n
 - 2026-05-22: Plan opened from a feasibility pass. Upstream Temporal chart requires external persistence; Anton already has a healthy CNPG operator and two app-owned CNPG clusters. Local render confirmed that `schema.useHelmHooks: false` produces a normal schema Job and that `createDatabase: false` suppresses database-creation init containers while preserving schema-management containers.
 - 2026-05-22: Reshaped the plan with an explicit outcome block, positive implementation direction, dependency contract, database contract, validation loop, open decisions, and pause conditions.
 - 2026-05-22: Added Web UI access as a required deliverable: expose `Service/temporal-web:8080` through a Tailscale operator Ingress at `https://temporal.<tailnet-name>.ts.net` and validate the UI against Temporal's namespace/workflow views.
+- 2026-05-22: Implemented the initial manifest set under `kubernetes/apps/temporal/`: dedicated CNPG cluster, Temporal HelmRepository/HelmRelease, Tailscale Web UI Ingress, ServiceMonitors, SQL visibility, `sslmode=require`, schema hooks disabled, chart-managed `default` Temporal namespace, and local render checks. Live reconcile remains operator-approved follow-up.
+- 2026-05-22: Validation passed locally: YAML/frontmatter parse, `kustomize build kubernetes/apps/temporal`, `flux build kustomization cluster-apps --dry-run`, and `helm template temporal temporal --repo https://go.temporal.io/helm-charts --version 1.2.0 -n temporal -f /tmp/temporal-values.yaml`. Rendered Temporal Jobs have no Helm hook annotations; schema Job manages both default and visibility stores, namespace Job creates `default`, `temporal-web` exposes port 8080, and four ServiceMonitors render.
 
 ## References
 

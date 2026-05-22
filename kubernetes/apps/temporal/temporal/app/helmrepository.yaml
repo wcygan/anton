@@ -1,0 +1,10 @@
+---
+# temporalio/helm-charts publishes the Temporal chart through the traditional
+# Helm repository at https://go.temporal.io/helm-charts.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: temporal
+spec:
+  interval: 1h
+  url: https://go.temporal.io/helm-charts

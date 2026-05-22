@@ -1,0 +1,32 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: temporal-config
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/temporal/temporal-config/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: temporal
+  # temporal-config authors a CNPG Cluster. Block reconcile until the CNPG
+  # operator Kustomization is Ready so the Cluster CR never races its CRD.
+  dependsOn:
+    - name: cloudnative-pg
+      namespace: databases
+  healthChecks:
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: temporal-postgres
+      namespace: temporal
+    - apiVersion: v1
+      kind: Secret
+      name: temporal-postgres-app
+      namespace: temporal
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

@@ -1,0 +1,18 @@
+---
+# Tailscale Ingress per ADR 0012 Recipe A. The operator builds the FQDN
+# `temporal.<tailnet-name>.ts.net` from this short hostname and provisions
+# browser-trusted TLS via MagicDNS. Keep the literal tailnet suffix out of git.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: temporal
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: temporal-web
+      port:
+        number: 8080
+  tls:
+    - hosts:
+        - temporal

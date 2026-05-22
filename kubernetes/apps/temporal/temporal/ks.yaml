@@ -1,0 +1,34 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: temporal
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/temporal/temporal/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: temporal
+  # temporal consumes the CNPG-generated Secret from temporal-config and emits
+  # ServiceMonitor CRs. Block on both dependency contracts before applying the
+  # HelmRelease.
+  dependsOn:
+    - name: temporal-config
+    - name: kube-prometheus-stack
+      namespace: observability
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: temporal
+      namespace: temporal
+    - apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      name: temporal
+      namespace: temporal
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
