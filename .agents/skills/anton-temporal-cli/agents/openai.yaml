@@ -1,0 +1,4 @@
+interface:
+  display_name: "Anton Temporal CLI"
+  short_description: "Inspect Anton Temporal with the local CLI"
+  default_prompt: "Use $anton-temporal-cli to inspect the Temporal deployment in my cluster."
