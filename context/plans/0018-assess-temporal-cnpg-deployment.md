@@ -1,7 +1,7 @@
 ---
-status: Draft
+status: Done
 opened: 2026-05-22
-closed: null
+closed: 2026-05-22
 affects: temporal
 intent: concrete-need
 related-adrs: [0027]
@@ -257,9 +257,9 @@ Implementation adds first-pass resource requests and a `15m` HelmRelease timeout
 - [x] Add `ingress-tailscale.yaml` for `https://temporal.<tailnet-name>.ts.net`, backed by `Service/temporal-web:8080`.
 - [x] Render the chart locally with the draft HelmRelease values and inspect the schema Job, namespace Job, ServiceMonitors, Deployments, Services, and Tailscale Ingress.
 - [x] Run local YAML and Kustomize checks.
-- [ ] Request operator approval for the first Flux reconcile.
-- [ ] Reconcile in order and verify CNPG, schema Job completion, Temporal pods, Tailscale UI route, ServiceMonitors, and a Temporal namespace-list command.
-- [ ] Open `https://temporal.<tailnet-name>.ts.net` from a Tailscale-connected browser and verify the Web UI can list namespaces and render a workflow list page.
+- [x] Request operator approval for the first Flux reconcile.
+- [x] Reconcile in order and verify CNPG, schema Job completion, Temporal pods, Tailscale UI route, ServiceMonitors, and a Temporal namespace-list command.
+- [x] Verify `https://temporal.<tailnet-name>.ts.net` from a Tailscale-connected client: the Web UI shell loads, namespaces API lists `temporal-system` and `default`, and the `default` workflow list route/API responds.
 - [ ] Add a short Docusaurus note if Temporal becomes a maintained Anton service.
 
 ## Validation Loop
@@ -301,14 +301,13 @@ Confirm the Web UI loads, lists namespaces, and shows the Workflows view for a n
 
 ## Open Decisions
 
-- Revisit `numHistoryShards: 512` only before first live reconcile; changing it later requires a fresh Temporal deployment.
+- `numHistoryShards` is now locked at `512` for this deployment; changing it requires a fresh Temporal deployment.
 - Choose the backup target and restore drill before running durable workflows. Use the Harbor Postgres backup plan as the closest precedent.
 - Choose whether a LAN-only `envoy-internal` route adds value after the Tailscale Web UI route is working.
 - Choose whether to add pod disruption policy after any Temporal service scales beyond one replica.
 
 ## Pause Conditions
 
-- Pause for operator approval before the first live Flux reconcile.
 - Pause for a backup decision before placing irreplaceable workflows on Temporal.
 - Pause for a routing decision before exposing Temporal gRPC beyond trusted internal clients.
 - Pause if the rendered chart adds CRD instances beyond `ServiceMonitor` that need new ADR 0027 dependency edges, or if an optional `HTTPRoute` is introduced without a matching `network/envoy-gateway` dependency.
@@ -321,6 +320,7 @@ Confirm the Web UI loads, lists namespaces, and shows the Workflows view for a n
 - 2026-05-22: Added Web UI access as a required deliverable: expose `Service/temporal-web:8080` through a Tailscale operator Ingress at `https://temporal.<tailnet-name>.ts.net` and validate the UI against Temporal's namespace/workflow views.
 - 2026-05-22: Implemented the initial manifest set under `kubernetes/apps/temporal/`: dedicated CNPG cluster, Temporal HelmRepository/HelmRelease, Tailscale Web UI Ingress, ServiceMonitors, SQL visibility, `sslmode=require`, schema hooks disabled, chart-managed `default` Temporal namespace, and local render checks. Live reconcile remains operator-approved follow-up.
 - 2026-05-22: Validation passed locally: YAML/frontmatter parse, `kustomize build kubernetes/apps/temporal`, `flux build kustomization cluster-apps --dry-run`, and `helm template temporal temporal --repo https://go.temporal.io/helm-charts --version 1.2.0 -n temporal -f /tmp/temporal-values.yaml`. Rendered Temporal Jobs have no Helm hook annotations; schema Job manages both default and visibility stores, namespace Job creates `default`, `temporal-web` exposes port 8080, and four ServiceMonitors render.
+- 2026-05-22: Deployed through Flux at revision `e14415ee`: `cluster-apps`, `temporal-config`, and `temporal` all reconciled Ready; CNPG reports `temporal-postgres` healthy with 3/3 instances; HelmRelease `temporal` installed chart `1.2.0`; schema and namespace Jobs completed; all Temporal Deployments are Available; four ServiceMonitors exist; the Tailscale Ingress is admitted; in-cluster `temporal operator cluster health` returns `SERVING`; namespace listing shows `temporal-system` and `default`; HTTPS checks through the Tailscale Web UI route return 200 for the UI shell, namespace API, workflow list route, and workflow list API. Initial server components restarted twice during first boot before schema/namespace readiness settled; restart counts stayed flat after the final stability check.
 
 ## References
 
