@@ -25,7 +25,25 @@ spec:
     # installed. See plan 0016.
     - name: external-secrets
       namespace: external-secrets
-  wait: true
+  # Check the resources Harbor actually consumes. Using `wait: true` here also
+  # health-checks the ExternalSecrets themselves, so a periodic 1Password
+  # refresh failure blocks Harbor even when the target Secrets already exist.
+  healthChecks:
+    - apiVersion: v1
+      kind: Secret
+      name: harbor-admin-secret
+    - apiVersion: v1
+      kind: Secret
+      name: harbor-s3-creds
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: harbor-postgres
+    - apiVersion: dragonflydb.io/v1alpha1
+      kind: Dragonfly
+      name: harbor-redis
+    - apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      name: registry-tailscale
   postBuild:
     substituteFrom:
       - name: cluster-secrets

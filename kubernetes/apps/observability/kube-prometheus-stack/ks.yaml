@@ -12,10 +12,11 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: observability
-  # `wait: true` so downstream observability apps (smartctl-exporter,
-  # nvme-power-collector) that already `dependsOn` kube-prometheus-stack get a
-  # `Ready` signal — without this flip, those edges resolve at ks-applied (not
-  # Ready) and ServiceMonitor applies race the CRD on cold-start.
+  # Downstream observability apps (smartctl-exporter, nvme-power-collector)
+  # need a `Ready` signal from the stack so ServiceMonitor applies do not race
+  # the CRDs on cold-start. Check the runtime contract directly instead of
+  # `wait: true`: periodic 1Password refresh failures can mark ExternalSecrets
+  # unhealthy even when the target Secret already exists and Grafana is running.
   # `dependsOn` adds: `envoy-gateway` for the HTTPRoute under `app/`, and
   # `external-secrets` for the ExternalSecret under `app/`. See plan 0016.
   dependsOn:
@@ -23,7 +24,16 @@ spec:
       namespace: network
     - name: external-secrets
       namespace: external-secrets
-  wait: true
+  healthChecks:
+    - apiVersion: v1
+      kind: Secret
+      name: grafana-admin
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: kube-prometheus-stack
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      name: grafana
   postBuild:
     substituteFrom:
       - name: cluster-secrets

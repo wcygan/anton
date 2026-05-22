@@ -26,7 +26,20 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: storage
-  wait: true
+  # Check the runtime resources directly. The ExternalSecret is still visible to
+  # ESO health checks, but a periodic 1Password refresh error should not make
+  # Flux report SeaweedFS config unhealthy when the generated S3 config Secret
+  # already exists and the Seaweed cluster is Ready.
+  healthChecks:
+    - apiVersion: v1
+      kind: Secret
+      name: seaweedfs-s3-config
+    - apiVersion: seaweed.seaweedfs.com/v1
+      kind: Seaweed
+      name: seaweedfs
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      name: seaweedfs-s3
   postBuild:
     substituteFrom:
       - name: cluster-secrets
