@@ -32,18 +32,23 @@ spec:
     - apiVersion: v1
       kind: Secret
       name: harbor-admin-secret
+      namespace: registries
     - apiVersion: v1
       kind: Secret
       name: harbor-s3-creds
+      namespace: registries
     - apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
       name: harbor-postgres
+      namespace: registries
     - apiVersion: dragonflydb.io/v1alpha1
       kind: Dragonfly
       name: harbor-redis
+      namespace: registries
     - apiVersion: networking.k8s.io/v1
       kind: Ingress
       name: registry-tailscale
+      namespace: registries
   postBuild:
     substituteFrom:
       - name: cluster-secrets

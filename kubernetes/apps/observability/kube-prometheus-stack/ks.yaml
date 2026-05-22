@@ -28,12 +28,15 @@ spec:
     - apiVersion: v1
       kind: Secret
       name: grafana-admin
+      namespace: observability
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
       name: kube-prometheus-stack
+      namespace: observability
     - apiVersion: gateway.networking.k8s.io/v1
       kind: HTTPRoute
       name: grafana
+      namespace: observability
   postBuild:
     substituteFrom:
       - name: cluster-secrets
