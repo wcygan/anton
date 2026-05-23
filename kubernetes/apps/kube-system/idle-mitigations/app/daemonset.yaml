@@ -34,7 +34,7 @@ spec:
           # `printf` — all in busybox-1.x. Using the registry.k8s.io mirror so
           # spegel can serve it cluster-locally.
           # renovate: datasource=docker depName=busybox
-          image: busybox:1.37.0
+          image: busybox:1.38.0
           imagePullPolicy: IfNotPresent
           securityContext:
             # Need root + write access to /sys/module + character-device write
