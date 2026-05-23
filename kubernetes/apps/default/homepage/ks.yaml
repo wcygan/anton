@@ -18,13 +18,18 @@ spec:
     name: flux-system
     namespace: flux-system
   targetNamespace: default
-  # Authors an HTTPRoute on `envoy-external` and a DNSEndpoint on the secondary
-  # domain. Block this reconcile on the gateway controller (CRD + Gateway
-  # resources) and external-dns (DNSEndpoint CRD) being Ready, so manifest
-  # applies don't race the CRDs on a cold-start. See plan 0016.
+  # Authors an ExternalSecret, an HTTPRoute on `envoy-external`, a DNSEndpoint
+  # on the secondary domain, and a Temporal webhook worker. Block this reconcile
+  # on the owning controllers and the Temporal deployment so manifest applies
+  # don't race CRDs or start webhook traffic before the in-cluster frontend is
+  # Ready. See plan 0016.
   dependsOn:
+    - name: external-secrets
+      namespace: external-secrets
     - name: envoy-gateway
       namespace: network
     - name: cloudflare-dns
       namespace: network
+    - name: temporal
+      namespace: temporal
   wait: false
