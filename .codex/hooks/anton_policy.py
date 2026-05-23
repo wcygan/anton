@@ -222,9 +222,7 @@ def validate_yaml(path: Path, root: Path) -> int:
 def app_root_for(path: Path, root: Path) -> Path | None:
     rel = relative(path, root)
     parts = Path(rel).parts
-    if len(parts) < 4 or parts[0] != "kubernetes" or parts[1] != "apps":
-        return None
-    if len(parts) == 3:
+    if len(parts) < 5 or parts[0] != "kubernetes" or parts[1] != "apps":
         return None
     return root / parts[0] / parts[1] / parts[2] / parts[3]
 

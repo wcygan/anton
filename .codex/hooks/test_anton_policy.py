@@ -95,6 +95,17 @@ class AntonPolicyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("missing required scaffold", result.stderr)
 
+    def test_allows_namespace_kustomization_updates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            namespace = root / "kubernetes" / "apps" / "default"
+            namespace.mkdir(parents=True)
+            kust = namespace / "kustomization.yaml"
+            kust.write_text("---\nresources:\n  - ./namespace.yaml\n")
+            patch = "*** Begin Patch\n*** Update File: kubernetes/apps/default/kustomization.yaml\n@@\n resources:\n   - ./namespace.yaml\n+  - ./demo/ks.yaml\n*** End Patch\n"
+            result = run_hook("post", self.patch(patch, tmp))
+        self.assertEqual(result.returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
