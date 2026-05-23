@@ -1,0 +1,29 @@
+---
+# ServiceMonitor — scrape metrics from Pods behind a Service.
+# Co-locate with the app: kubernetes/apps/{{NAMESPACE}}/{{APP_NAME}}/app/servicemonitor.yaml
+# Add to app/kustomization.yaml resources list.
+#
+# anton note: SM selectors are match-all cluster-wide — any namespace is fine.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{APP_NAME}}
+  namespace: {{NAMESPACE}}
+  labels:
+    app.kubernetes.io/name: {{APP_NAME}}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{NAMESPACE}}
+  selector:
+    matchLabels:
+      # Must match the Service's spec.selector / labels.
+      app.kubernetes.io/name: {{APP_NAME}}
+  endpoints:
+    - port: {{METRICS_PORT_NAME}}   # Service's port NAME (not number). Required.
+      interval: 30s
+      path: /metrics
+      # Uncomment for HTTPS endpoints:
+      # scheme: https
+      # tlsConfig:
+      #   insecureSkipVerify: true

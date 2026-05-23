@@ -1,0 +1,14 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/source.toolkit.fluxcd.io/ocirepository_v1.json
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: {{APP_NAME}}          # MUST match HelmRelease.spec.chartRef.name
+spec:
+  interval: 15m
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+  ref:
+    tag: {{CHART_TAG}}        # Pin to a semver tag, e.g. 1.2.3
+  url: {{CHART_URL}}          # e.g. oci://ghcr.io/stakater/charts/reloader

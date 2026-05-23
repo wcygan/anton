@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{NAMESPACE}}
+  annotations:
+    # Stops Flux from ever pruning this namespace.
+    kustomize.toolkit.fluxcd.io/prune: disabled

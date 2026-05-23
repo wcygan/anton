@@ -1,0 +1,21 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: {{APP_NAME}}
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: {{APP_NAME}}        # MUST match OCIRepository.metadata.name
+  interval: 1h
+  values:
+    # Chart-specific configuration goes here.
+    # Reference cluster-wide vars with ${VAR} — they resolve via
+    # ks.yaml's postBuild.substituteFrom from the cluster-secrets Secret.
+    {}
+  # Inherited from kubernetes/flux/cluster/ks.yaml — do NOT set per release:
+  #   install.crds: CreateReplace
+  #   upgrade.cleanupOnFail: true
+  #   install.remediation.retries / upgrade.remediation.retries
+  #   upgrade.remediation.strategy: rollback
