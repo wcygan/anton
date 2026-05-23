@@ -11,4 +11,4 @@ resources:
   - ./imageupdateautomation.yaml
 images:
   - name: ghcr.io/nu-sync/homepage
-    newTag: main-00000019-3310c31 # {"$imagepolicy": "default:homepage:tag"}
+    newTag: main-00000020-ca669ab # {"$imagepolicy": "default:homepage:tag"}
