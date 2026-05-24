@@ -1,0 +1,18 @@
+---
+# Tailscale Ingress per the existing Headlamp/ntfy pattern. The operator builds
+# `goldilocks.<tailnet>.ts.net` from the short TLS host; do not commit the
+# literal tailnet name.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: goldilocks
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: goldilocks-dashboard
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - goldilocks

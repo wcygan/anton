@@ -1,0 +1,61 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: goldilocks
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: goldilocks
+      version: 10.3.0
+      sourceRef:
+        kind: HelmRepository
+        name: fairwinds-stable
+      interval: 15m
+  values:
+    fullnameOverride: goldilocks
+
+    metrics-server:
+      enabled: false
+
+    vpa:
+      enabled: true
+      recommender:
+        enabled: true
+        resources:
+          requests:
+            cpu: 25m
+            memory: 256Mi
+          limits:
+            memory: 768Mi
+      updater:
+        enabled: false
+      admissionController:
+        enabled: false
+
+    controller:
+      rbac:
+        enableArgoproj: false
+      flags:
+        ignore-controller-kind: Job,CronJob
+      resources:
+        requests:
+          cpu: 25m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+
+    dashboard:
+      replicaCount: 1
+      rbac:
+        enableArgoproj: false
+      service:
+        type: ClusterIP
+        port: 80
+      resources:
+        requests:
+          cpu: 25m
+          memory: 128Mi
+        limits:
+          memory: 256Mi

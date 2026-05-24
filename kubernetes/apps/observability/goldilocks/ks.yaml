@@ -1,0 +1,18 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: goldilocks
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/observability/goldilocks/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: observability
+  wait: false
+  dependsOn:
+    - name: metrics-server
+      namespace: kube-system

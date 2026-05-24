@@ -8,6 +8,7 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./goldilocks/ks.yaml
   - ./kube-prometheus-stack/ks.yaml
   - ./ntfy/ks.yaml
   - ./nvme-power-collector/ks.yaml
