@@ -1,7 +1,8 @@
 ---
-# Narrow ClickStack test source for ADR 0028: collect only homepage-worker pod
-# logs and forward them to the bundled ClickStack OTLP gateway. This keeps the
-# experiment useful without turning ClickStack into cluster-wide observability.
+# Narrow ClickStack test source for ADR 0028: collect homepage worker and
+# server pod logs and forward them to the bundled ClickStack OTLP gateway. This
+# keeps the experiment useful without turning ClickStack into cluster-wide
+# observability.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
