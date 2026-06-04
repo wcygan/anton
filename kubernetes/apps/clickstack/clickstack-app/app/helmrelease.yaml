@@ -135,6 +135,18 @@ spec:
     # an operational follow-up, not part of this scaffold (ADR 0028).
     otel-collector:
       enabled: true
+      # ClickStack's OpAMP-managed default is currently crashing during remote
+      # config application. Run the bundled collector as the standalone
+      # ClickHouse-writing gateway instead; keep ingestion protected with the
+      # same generated HyperDX API key rather than opening unauthenticated OTLP.
+      extraEnvs:
+        - name: OPAMP_SERVER_URL
+          value: ""
+        - name: OTLP_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: clickstack-secret
+              key: HYPERDX_API_KEY
       resources:
         requests:
           cpu: 250m

@@ -10,4 +10,5 @@ resources:
   - ./namespace.yaml
   - ./clickstack-operators/ks.yaml
   - ./clickstack-app/ks.yaml
+  - ./homepage-log-agent/ks.yaml
   - ./hyperdx-tailscale-ingress/ks.yaml

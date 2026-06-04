@@ -25,12 +25,17 @@ spec:
   targetNamespace: clickstack
   # Check the runtime resources directly: the HyperDX Deployment Ready
   # (clickstack-app — the chart's hyperdx fullname helper appends `-app`), the
-  # ESO-managed credential Secret present (clickstack-credentials — its keys
-  # feed the HelmRelease via valuesFrom), and the HTTPRoute accepted.
+  # OTel gateway Deployment Ready, the ESO-managed credential Secret present
+  # (clickstack-credentials — its keys feed the HelmRelease via valuesFrom), and
+  # the HTTPRoute accepted.
   healthChecks:
     - apiVersion: apps/v1
       kind: Deployment
       name: clickstack-app
+      namespace: clickstack
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: clickstack-otel-collector
       namespace: clickstack
     - apiVersion: v1
       kind: Secret

@@ -1,0 +1,77 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage-log-agent-config
+data:
+  collector.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    receivers:
+      filelog/homepage_worker:
+        include:
+          - /var/log/pods/default_homepage-worker*/*/*.log
+        include_file_name: false
+        include_file_path: true
+        start_at: beginning
+        operators:
+          - id: container-parser
+            type: container
+            max_log_size: 102400
+          - id: logtape-json
+            type: json_parser
+            parse_from: body
+            parse_to: attributes
+            on_error: send
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 192
+        spike_limit_mib: 64
+      resource/homepage_worker:
+        attributes:
+          - action: upsert
+            key: service.name
+            value: homepage-worker
+          - action: upsert
+            key: service.namespace
+            value: homepage
+          - action: upsert
+            key: k8s.namespace.name
+            value: default
+          - action: upsert
+            key: k8s.deployment.name
+            value: homepage-worker
+      transform/homepage_logtape:
+        error_mode: ignore
+        log_statements:
+          - context: log
+            statements:
+              - set(body, attributes["message"]) where attributes["message"] != nil
+              - set(severity_text, attributes["level"]) where attributes["level"] != nil
+      batch: {}
+
+    exporters:
+      otlphttp/clickstack:
+        endpoint: http://clickstack-otel-collector.clickstack.svc.cluster.local:4318
+        compression: gzip
+        headers:
+          authorization: ${env:CLICKSTACK_INGESTION_API_KEY}
+
+    service:
+      extensions:
+        - health_check
+      pipelines:
+        logs/homepage_worker:
+          receivers:
+            - filelog/homepage_worker
+          processors:
+            - memory_limiter
+            - resource/homepage_worker
+            - transform/homepage_logtape
+            - batch
+          exporters:
+            - otlphttp/clickstack
