@@ -6,6 +6,9 @@ metadata:
 data:
   collector.yaml: |
     extensions:
+      file_storage:
+        directory: /var/lib/otelcol/file_storage
+        create_directory: true
       health_check:
         endpoint: 0.0.0.0:13133
 
@@ -15,7 +18,8 @@ data:
           - /var/log/pods/default_homepage-worker*/*/*.log
         include_file_name: false
         include_file_path: true
-        start_at: end
+        start_at: beginning
+        storage: file_storage
         operators:
           - id: container-parser
             type: container
@@ -64,6 +68,7 @@ data:
 
     service:
       extensions:
+        - file_storage
         - health_check
       pipelines:
         logs/homepage_worker:

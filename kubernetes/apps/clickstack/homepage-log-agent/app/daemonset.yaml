@@ -65,6 +65,8 @@ spec:
             - name: pod-logs
               mountPath: /var/log/pods
               readOnly: true
+            - name: file-storage
+              mountPath: /var/lib/otelcol/file_storage
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -78,5 +80,9 @@ spec:
           hostPath:
             path: /var/log/pods
             type: Directory
+        - name: file-storage
+          hostPath:
+            path: /var/lib/otelcol/homepage-log-agent
+            type: DirectoryOrCreate
         - name: tmp
           emptyDir: {}
