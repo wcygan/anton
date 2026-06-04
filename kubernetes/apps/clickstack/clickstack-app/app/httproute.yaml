@@ -1,0 +1,24 @@
+---
+# Internal-only per ADR 0028 — no Cloudflare tunnel, no `envoy-external`.
+# Exposes the HyperDX web UI. The chart's built-in Ingress is disabled
+# (hyperdx.ingress.enabled: false) — Gateway API owns exposure here.
+# Service `clickstack-app`: the chart's `clickstack.hyperdx.fullname` helper
+# appends `-app` to the release name `clickstack`. App/UI port 3000
+# (hyperdx.ports.app).
+# `${SECRET_DOMAIN}` is substituted by Flux from the `cluster-secrets` Secret
+# via the clickstack-app Kustomization's postBuild.substituteFrom.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hyperdx
+spec:
+  parentRefs:
+    - name: envoy-internal
+      namespace: network
+      sectionName: https
+  hostnames:
+    - hyperdx.${SECRET_DOMAIN}
+  rules:
+    - backendRefs:
+        - name: clickstack-app
+          port: 3000

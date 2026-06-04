@@ -1,0 +1,46 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: clickstack-app
+spec:
+  interval: 1h
+  # Phase 2 of the two-phase install. `dependsOn` the operators Kustomization so
+  # the ClickHouseCluster / KeeperCluster / MongoDBCommunity CRDs exist before
+  # this chart renders the CRs (ADR 0028 / ADR 0027). `external-secrets` gates
+  # the ExternalSecret pulling the four runtime credentials from 1Password;
+  # `envoy-gateway` gates the `envoy-internal/https` HTTPRoute CRD.
+  dependsOn:
+    - name: clickstack-operators
+    - name: external-secrets
+      namespace: external-secrets
+    - name: envoy-gateway
+      namespace: network
+  path: ./kubernetes/apps/clickstack/clickstack-app/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: clickstack
+  # Check the runtime resources directly: the HyperDX Deployment Ready
+  # (clickstack-app — the chart's hyperdx fullname helper appends `-app`), the
+  # ESO-managed credential Secret present (clickstack-credentials — its keys
+  # feed the HelmRelease via valuesFrom), and the HTTPRoute accepted.
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: clickstack-app
+      namespace: clickstack
+    - apiVersion: v1
+      kind: Secret
+      name: clickstack-credentials
+      namespace: clickstack
+    - apiVersion: gateway.networking.k8s.io/v1
+      kind: HTTPRoute
+      name: hyperdx
+      namespace: clickstack
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

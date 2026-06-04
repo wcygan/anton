@@ -1,0 +1,21 @@
+---
+# Exposes the HyperDX UI on the tailnet at hyperdx.<tailnet>.ts.net via the
+# tailscale operator's IngressClass (mirrors kube-system/hubble-tailscale-ingress).
+# Backend is the chart's HyperDX Service `clickstack-app` (the chart's
+# `clickstack.hyperdx.fullname` helper appends `-app` to release name `clickstack`)
+# on the app/UI port 3000. Tailnet-internal only — no public exposure (ADR 0028).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hyperdx
+  namespace: clickstack
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - hyperdx
+  defaultBackend:
+    service:
+      name: clickstack-app
+      port:
+        number: 3000

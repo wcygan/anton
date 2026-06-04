@@ -1,0 +1,11 @@
+---
+# ClickStack publishes a classic Helm repo on gh-pages, not an OCI chart — so
+# we use HelmRepository (same upstream-forced deviation as Longhorn / SeaweedFS).
+# Shared by both the operators HelmRelease and the main clickstack HelmRelease.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: clickstack
+spec:
+  interval: 1h
+  url: https://clickhouse.github.io/ClickStack-helm-charts

@@ -1,0 +1,23 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: clickstack-operators
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/clickstack/clickstack-operators/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: clickstack
+  # `wait: true` so `clickstack-app` (via `dependsOn`) blocks until the operators
+  # HelmRelease reports Ready=True — the ClickHouse operator (ClickHouseCluster /
+  # KeeperCluster CRDs) and the MongoDB MCK operator must be installed before the
+  # main chart applies the CRs. Two-phase install per ADR 0028 / ADR 0027.
+  wait: true
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

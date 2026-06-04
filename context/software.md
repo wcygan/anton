@@ -73,6 +73,7 @@ Secondary-domain HTTPRoutes require an explicit `DNSEndpoint` — see `kubernete
 |---|---|---|
 | kube-prometheus-stack | Metrics (Prometheus + Alertmanager + Grafana). | Deployed on Longhorn PVCs in the `observability` namespace; ADR 0007. |
 | OpenTelemetry (logs + traces) | Logs and traces pipeline. | Deferred roadmap — see [ADR 0008](adrs/0008-opentelemetry-based-logs-and-traces-roadmap.md). |
+| ClickStack (ClickHouse + OTel + HyperDX) | Logs/traces backend eval (bundled ClickHouse, Keeper, OTel collector, MongoDB, HyperDX UI). | **EXPERIMENT** — 60-day throwaway learning eval in the `clickstack` namespace; **review-by 2026-08-02**; [ADR 0028](adrs/0028-clickstack-learning-experiment.md). Metrics stay on Prometheus; logs/traces pillar only. See [note](../docs/docs/notes/clickstack-experiment.md). |
 
 ## Tooling (runs on the operator's machine, not the cluster)
 
