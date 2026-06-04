@@ -22,6 +22,7 @@ data:
             max_log_size: 102400
           - id: logtape-json
             type: json_parser
+            if: body matches "^\\{"
             parse_from: body
             parse_to: attributes
             on_error: send
@@ -50,12 +51,12 @@ data:
         log_statements:
           - context: log
             statements:
-              - set(body, attributes["message"]) where attributes["message"] != nil
-              - set(severity_text, attributes["level"]) where attributes["level"] != nil
+              - set(log.body, log.attributes["message"]) where log.attributes["message"] != nil
+              - set(log.severity_text, log.attributes["level"]) where log.attributes["level"] != nil
       batch: {}
 
     exporters:
-      otlphttp/clickstack:
+      otlp_http/clickstack:
         endpoint: http://clickstack-otel-collector.clickstack.svc.cluster.local:4318
         compression: gzip
         headers:
@@ -74,4 +75,4 @@ data:
             - transform/homepage_logtape
             - batch
           exporters:
-            - otlphttp/clickstack
+            - otlp_http/clickstack
