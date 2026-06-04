@@ -1,0 +1,23 @@
+---
+# Phase 1 of the two-phase ClickStack install (ADR 0028). Bundles the new
+# ClickHouse Kubernetes Operator (ClickHouseCluster + KeeperCluster CRDs — NOT
+# Altinity's clickhouse-operator / ClickHouseInstallation) and the MongoDB
+# Community Operator (MCK). The main `clickstack` chart renders the CRs that
+# these operators reconcile, so this must reach Ready before `clickstack-app`.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: clickstack-operators
+spec:
+  chart:
+    spec:
+      chart: clickstack-operators
+      # Pinned per ADR 0028 — young chart, single published version. No ranges;
+      # Renovate owns the bump.
+      version: 1.0.0
+      sourceRef:
+        kind: HelmRepository
+        name: clickstack
+      interval: 15m
+  interval: 1h
+  values: {}

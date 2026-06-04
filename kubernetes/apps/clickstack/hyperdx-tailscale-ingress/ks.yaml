@@ -1,0 +1,25 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: hyperdx-tailscale-ingress
+spec:
+  interval: 1h
+  # Puts the HyperDX UI on the tailnet at hyperdx.<tailnet>.ts.net via the
+  # tailscale IngressClass (same pattern as kube-system/hubble-tailscale-ingress).
+  # This is tailnet-internal remote access per ADR 0012 — NOT a public exposure
+  # (no Cloudflare tunnel / envoy-external), so it stays inside ADR 0028's
+  # "internal-only" intent. The envoy-internal HTTPRoute (clickstack-app) remains
+  # the on-LAN path; this adds off-LAN tailnet access.
+  # `dependsOn` the workload so the clickstack-app Service exists before the
+  # Ingress backend resolves.
+  dependsOn:
+    - name: clickstack-app
+  path: ./kubernetes/apps/clickstack/hyperdx-tailscale-ingress/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: clickstack
+  wait: false

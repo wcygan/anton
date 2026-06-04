@@ -1,0 +1,17 @@
+---
+# ClickStack publishes a classic Helm repo on gh-pages, not an OCI chart — so
+# we use HelmRepository (same upstream-forced deviation as Longhorn / SeaweedFS).
+#
+# Distinct name from the operators app's `clickstack` source: both Kustomizations
+# target the `clickstack` namespace, so a shared name would make two different
+# Flux Kustomizations co-own one HelmRepository object and fight over its SSA
+# field ownership on every reconcile. anton's 3-file-pattern hook also requires
+# each app dir to ship its own source, so a per-app uniquely-named source
+# satisfies both constraints.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: clickstack-charts
+spec:
+  interval: 1h
+  url: https://clickhouse.github.io/ClickStack-helm-charts

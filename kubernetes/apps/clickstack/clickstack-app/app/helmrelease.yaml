@@ -1,0 +1,133 @@
+---
+# Phase 2 of the two-phase ClickStack install (ADR 0028). Evaluates ClickStack
+# as-shipped: bundled ClickHouse + Keeper + OTel collector + MongoDB + HyperDX.
+# Release name `clickstack`; the chart's `clickstack.hyperdx.fullname` helper
+# appends `-app`, so the HyperDX Deployment and Service render as
+# `clickstack-app` (the HTTPRoute backendRef and ks.yaml healthCheck reference
+# that name). A top-level fullnameOverride is deliberately NOT used: the helper
+# would also rename ClickHouse/Keeper/MongoDB while the OTel service name stays
+# release-name-derived, desyncing the chart's internal service wiring.
+#
+# 60-day throwaway learning eval — single-replica ClickHouse/Keeper is fine.
+# Containment per ADR 0028: own namespace only, no Prometheus->ClickHouse
+# bridge, no ServiceMonitor forking prod metrics, explicit ClickHouse limits,
+# UI via envoy-internal HTTPRoute only.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: clickstack
+spec:
+  releaseName: clickstack
+  chart:
+    spec:
+      chart: clickstack
+      # Pinned per ADR 0028 — young chart (appVersion 2.27.0), single published
+      # version. No ranges; Renovate owns the bump.
+      version: 3.0.0
+      sourceRef:
+        kind: HelmRepository
+        name: clickstack-charts
+      interval: 15m
+  interval: 1h
+  # The four runtime credentials have NO chart-native existingSecret hook — they
+  # are plain Helm values under hyperdx.secrets.*. ESO writes them into
+  # `clickstack-credentials`; Flux injects each into the values tree via
+  # valuesFrom + targetPath, overriding the chart's weak default passwords
+  # (ADR 0028). The ESO Secret is deliberately NOT named `clickstack-secret`:
+  # the chart's hyperdx/secret.yaml template unconditionally renders its own
+  # `clickstack-secret` (because hyperdx.secrets stays non-nil), so an ESO
+  # target of the same name would make ESO and Helm fight to own one Secret.
+  # The chart reads these values via Helm templating, never the ESO Secret by
+  # name, so the ESO Secret name is free to differ.
+  valuesFrom:
+    - kind: Secret
+      name: clickstack-credentials
+      valuesKey: HYPERDX_API_KEY
+      targetPath: hyperdx.secrets.HYPERDX_API_KEY
+    - kind: Secret
+      name: clickstack-credentials
+      valuesKey: CLICKHOUSE_PASSWORD
+      targetPath: hyperdx.secrets.CLICKHOUSE_PASSWORD
+    - kind: Secret
+      name: clickstack-credentials
+      valuesKey: CLICKHOUSE_APP_PASSWORD
+      targetPath: hyperdx.secrets.CLICKHOUSE_APP_PASSWORD
+    - kind: Secret
+      name: clickstack-credentials
+      valuesKey: MONGODB_PASSWORD
+      targetPath: hyperdx.secrets.MONGODB_PASSWORD
+  values:
+    hyperdx:
+      # ClusterIP UI/API service; exposure is via Gateway API HTTPRoute, not the
+      # chart Ingress. Disabled explicitly (already the v3.0.0 default).
+      service:
+        type: ClusterIP
+      ingress:
+        enabled: false
+      # The data-source config (connections.json / sources.json) hook is SEPARATE
+      # from the four passwords above and is NOT used here — leave HyperDX to seed
+      # its own sources for the eval.
+      deployment:
+        useExistingConfigSecret: false
+
+    # Bundled components — evaluate ClickStack as-shipped (ADR 0028).
+    clickhouse:
+      enabled: true
+      cluster:
+        spec:
+          containerTemplate:
+            # Explicit ClickHouse resource limits are an ADR 0028 hard requirement
+            # (containment). Compute is separate from storage below.
+            resources:
+              requests:
+                cpu: "1"
+                memory: 4Gi
+              limits:
+                cpu: "4"
+                memory: 8Gi
+          dataVolumeClaimSpec:
+            resources:
+              requests:
+                storage: 20Gi
+      keeper:
+        spec:
+          dataVolumeClaimSpec:
+            resources:
+              requests:
+                storage: 5Gi
+
+    mongodb:
+      enabled: true
+      # The chart renders only `mongodb.spec` verbatim into the MongoDBCommunity
+      # CR — a top-level `mongodb.resources` key is read by no template and has
+      # no effect. Resources for the mongod container go through the CRD's
+      # statefulSet override (spec.statefulSet.spec.template.spec.containers,
+      # container name `mongod`).
+      spec:
+        statefulSet:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: mongod
+                    resources:
+                      requests:
+                        cpu: 250m
+                        memory: 512Mi
+                      limits:
+                        cpu: "1"
+                        memory: 1Gi
+
+    # Deployment-mode collector (NOT a daemonset): receives app telemetry via
+    # OTLP (4317 gRPC / 4318 HTTP) and writes to ClickHouse. It does not scrape
+    # pod logs by default — wiring the test signal (filelog + Temporal OTLP) is
+    # an operational follow-up, not part of this scaffold (ADR 0028).
+    otel-collector:
+      enabled: true
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi
