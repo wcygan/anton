@@ -69,6 +69,11 @@ spec:
       # redirect login to the tailnet origin; tailnet is the primary access path.
       config:
         FRONTEND_URL: "https://hyperdx.${TAILNET_SUFFIX}"
+        # Keep the eval dataset focused on explicit test signals. The chart's
+        # default points the HyperDX API at the bundled collector, which makes
+        # the Logs source live-tail hdx-oss-api health checks and UI query
+        # traffic instead of the onboarded workloads.
+        OTEL_EXPORTER_OTLP_ENDPOINT: ""
       # ClusterIP UI/API service; exposure is via Gateway API HTTPRoute, not the
       # chart Ingress. Disabled explicitly (already the v3.0.0 default).
       service:
