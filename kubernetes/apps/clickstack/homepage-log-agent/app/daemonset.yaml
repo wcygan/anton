@@ -20,6 +20,26 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: prepare-file-storage
+          # renovate: datasource=docker depName=busybox
+          image: busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - chown -R 10001:10001 /var/lib/otelcol/file_storage
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 0
+            runAsGroup: 0
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN]
+          volumeMounts:
+            - name: file-storage
+              mountPath: /var/lib/otelcol/file_storage
       containers:
         - name: otelcol
           image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.146.1
@@ -56,6 +76,8 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            runAsUser: 10001
+            runAsGroup: 10001
             capabilities:
               drop: [ALL]
           volumeMounts:
