@@ -58,6 +58,17 @@ spec:
       targetPath: hyperdx.secrets.MONGODB_PASSWORD
   values:
     hyperdx:
+      # External URL HyperDX uses to build login/OAuth redirects. The chart
+      # default is http://localhost:3000, which makes the UI bounce off-box
+      # users to localhost. We canonicalize on the tailnet URL since access is
+      # via the tailscale IngressClass. `${TAILNET_SUFFIX}` is substituted by
+      # Flux postBuild from cluster-secrets (same pattern as observability/ntfy),
+      # so the literal tailnet name never lands in git. Deep-merges over the
+      # chart's hyperdx.config defaults — only FRONTEND_URL is overridden.
+      # NOTE: the on-LAN envoy-internal route (hyperdx.${SECRET_DOMAIN}) will now
+      # redirect login to the tailnet origin; tailnet is the primary access path.
+      config:
+        FRONTEND_URL: "https://hyperdx.${TAILNET_SUFFIX}"
       # ClusterIP UI/API service; exposure is via Gateway API HTTPRoute, not the
       # chart Ingress. Disabled explicitly (already the v3.0.0 default).
       service:
