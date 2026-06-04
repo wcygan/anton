@@ -15,7 +15,7 @@ data:
           - /var/log/pods/default_homepage-worker*/*/*.log
         include_file_name: false
         include_file_path: true
-        start_at: beginning
+        start_at: end
         operators:
           - id: container-parser
             type: container
