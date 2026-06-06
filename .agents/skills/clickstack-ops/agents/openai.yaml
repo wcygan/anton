@@ -1,0 +1,3 @@
+interface:
+  display_name: "ClickStack Ops"
+  short_description: "Operate Anton ClickStack experiment"
