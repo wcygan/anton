@@ -35,6 +35,13 @@ spec:
     service:
       registry:
         hostPort: 29999
+        # WHY: This is a single-zone flat homelab — nodes carry no
+        # topology.kubernetes.io/zone labels, so topology-aware hints can never
+        # be programmed and the EndpointSlice controller logs a
+        # TopologyAwareHintsDisabled warning on every reconcile. Disabling the
+        # hints drops the chart's service.kubernetes.io/topology-mode=auto
+        # annotation; routing is unchanged (all 3 nodes are effectively local).
+        topologyAwareHintsEnabled: false
     serviceMonitor:
       enabled: false
     grafanaDashboard:
