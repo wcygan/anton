@@ -148,3 +148,24 @@ spec:
               - name: cnibin
                 mountPath: /host/opt/cni/bin
                 mountPropagation: Bidirectional
+    # Pin the upstream `install-multus-binary` init container, which otherwise
+    # rides the floating `:snapshot-thick` tag and installs an unpinned CNI
+    # binary onto the host filesystem. The containers/0 pin above only covers
+    # the main daemon; this strategic-merge patch is keyed by container name so
+    # it survives upstream initContainer reordering.
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+          name: kube-multus-ds
+          namespace: network
+        spec:
+          template:
+            spec:
+              initContainers:
+                - name: install-multus-binary
+                  # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/multus-cni
+                  image: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick
