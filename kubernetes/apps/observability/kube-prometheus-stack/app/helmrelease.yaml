@@ -110,6 +110,10 @@ spec:
       # for a rollout that actually completes.
       deploymentStrategy:
         type: Recreate
+        # The Grafana subchart ships a default rollingUpdate block; Kubernetes
+        # forbids spec.strategy.rollingUpdate when type is Recreate, so it must
+        # be nulled out or the rendered Deployment is rejected as invalid.
+        rollingUpdate: null
       # Admin credentials come from the ExternalSecret in this same app directory,
       # which materialises a Secret named `grafana-admin` with keys `admin-user`
       # and `admin-password`. Note: Grafana does not re-read this Secret on rotation
