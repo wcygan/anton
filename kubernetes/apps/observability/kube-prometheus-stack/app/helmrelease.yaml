@@ -98,6 +98,9 @@ spec:
 
     # ---- Grafana ----
     grafana:
+      image:
+        # renovate: datasource=docker depName=grafana/grafana
+        tag: "12.4.4"
       replicas: 1
       # Admin credentials come from the ExternalSecret in this same app directory,
       # which materialises a Secret named `grafana-admin` with keys `admin-user`
