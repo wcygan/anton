@@ -9,7 +9,7 @@ spec:
   url: https://github.com/k8snetworkplumbingwg/whereabouts
   ref:
     # renovate: datasource=github-releases depName=k8snetworkplumbingwg/whereabouts
-    tag: v0.9.3
+    tag: v0.9.4
   ignore: |
     /*
     !/doc/crds/daemonset-install.yaml
