@@ -102,6 +102,14 @@ spec:
         # renovate: datasource=docker depName=grafana/grafana
         tag: "12.4.4"
       replicas: 1
+      # Single replica on a RWO Longhorn PVC: use Recreate so the old pod
+      # releases the volume before the new one starts. The chart default
+      # (RollingUpdate, maxSurge 25% -> 1) creates the new pod first and
+      # deadlocks on a Multi-Attach error for the RWO volume on every image
+      # change. Recreate trades a few seconds of Grafana downtime per upgrade
+      # for a rollout that actually completes.
+      deploymentStrategy:
+        type: Recreate
       # Admin credentials come from the ExternalSecret in this same app directory,
       # which materialises a Secret named `grafana-admin` with keys `admin-user`
       # and `admin-password`. Note: Grafana does not re-read this Secret on rotation
