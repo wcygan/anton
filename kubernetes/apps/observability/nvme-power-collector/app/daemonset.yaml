@@ -35,7 +35,7 @@ spec:
           # image-build pipeline; if the apk fetch becomes flaky we can
           # promote to a built image via the deploy-owned-app pipeline.
           # renovate: datasource=docker depName=alpine
-          image: alpine:3.23.4
+          image: alpine:3.24.1
           imagePullPolicy: IfNotPresent
           securityContext:
             # Privileged required for /dev/nvme* ioctl (NVMe admin commands
