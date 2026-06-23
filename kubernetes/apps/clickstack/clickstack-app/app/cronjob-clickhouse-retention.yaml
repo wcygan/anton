@@ -55,20 +55,20 @@ spec:
                     table="$1"
                     ttl="$2"
 
-                    if [ "$(client --query "EXISTS TABLE default.${table}")" = "1" ]; then
-                      client --query "ALTER TABLE default.${table} MODIFY TTL ${ttl}"
+                    if [ "$(client --query "EXISTS TABLE default.$table")" = "1" ]; then
+                      client --query "ALTER TABLE default.$table MODIFY TTL $ttl"
                     fi
                   }
 
-                  days="toIntervalDay(${RETENTION_DAYS})"
-                  alter_ttl_if_present hyperdx_sessions "TimestampTime + ${days}"
-                  alter_ttl_if_present otel_logs "TimestampTime + ${days}"
-                  alter_ttl_if_present otel_traces "toDate(Timestamp) + ${days}"
-                  alter_ttl_if_present otel_metrics_exponential_histogram "toDateTime(TimeUnix) + ${days}"
-                  alter_ttl_if_present otel_metrics_gauge "toDateTime(TimeUnix) + ${days}"
-                  alter_ttl_if_present otel_metrics_histogram "toDateTime(TimeUnix) + ${days}"
-                  alter_ttl_if_present otel_metrics_sum "toDateTime(TimeUnix) + ${days}"
-                  alter_ttl_if_present otel_metrics_summary "toDateTime(TimeUnix) + ${days}"
+                  days="toIntervalDay($RETENTION_DAYS)"
+                  alter_ttl_if_present hyperdx_sessions "TimestampTime + $days"
+                  alter_ttl_if_present otel_logs "TimestampTime + $days"
+                  alter_ttl_if_present otel_traces "toDate(Timestamp) + $days"
+                  alter_ttl_if_present otel_metrics_exponential_histogram "toDateTime(TimeUnix) + $days"
+                  alter_ttl_if_present otel_metrics_gauge "toDateTime(TimeUnix) + $days"
+                  alter_ttl_if_present otel_metrics_histogram "toDateTime(TimeUnix) + $days"
+                  alter_ttl_if_present otel_metrics_sum "toDateTime(TimeUnix) + $days"
+                  alter_ttl_if_present otel_metrics_summary "toDateTime(TimeUnix) + $days"
               resources:
                 requests:
                   cpu: 50m

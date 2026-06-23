@@ -75,7 +75,7 @@ spec:
                   kubectl -n storage get volumes.longhorn.io \
                     -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}{" "}{.status.kubernetesStatus.pvcName}{"\n"}{end}' |
                   while read -r volume namespace pvc; do
-                    if [ -z "${volume:-}" ] || [ "$namespace" != "clickstack" ]; then
+                    if [ -z "$volume" ] || [ "$namespace" != "clickstack" ]; then
                       continue
                     fi
 
