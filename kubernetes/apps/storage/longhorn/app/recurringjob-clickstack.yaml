@@ -1,0 +1,43 @@
+---
+# ClickStack-specific local recovery points. Off-cluster Longhorn backups still
+# require a backup target and credentials decision; these snapshots provide a
+# bounded local rollback layer for the evaluation workload.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: clickstack-critical-snapshot-6h
+  namespace: storage
+  labels:
+    app.kubernetes.io/name: longhorn
+    app.kubernetes.io/component: recurring-job
+spec:
+  name: clickstack-critical-snapshot-6h
+  cron: "17 */6 * * *"
+  task: snapshot
+  groups:
+    - clickstack-critical
+  retain: 12
+  concurrency: 2
+  labels:
+    workload: clickstack
+    purpose: local-recovery-point
+---
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: clickstack-critical-fstrim-weekly
+  namespace: storage
+  labels:
+    app.kubernetes.io/name: longhorn
+    app.kubernetes.io/component: recurring-job
+spec:
+  name: clickstack-critical-fstrim-weekly
+  cron: "41 3 * * 0"
+  task: filesystem-trim
+  groups:
+    - clickstack-critical
+  retain: 1
+  concurrency: 1
+  labels:
+    workload: clickstack
+    purpose: space-reclamation

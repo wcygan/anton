@@ -6,3 +6,5 @@ resources:
   - ./helmrelease.yaml
   - ./externalsecret.yaml
   - ./httproute.yaml
+  - ./cronjob-clickhouse-retention.yaml
+  - ./prometheusrule-storage.yaml

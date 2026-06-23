@@ -1,0 +1,120 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: clickstack-storage
+  namespace: clickstack
+  labels:
+    app.kubernetes.io/name: clickstack
+spec:
+  groups:
+    - name: clickstack.storage.alerts
+      interval: 30s
+      rules:
+        - alert: ClickStackPersistentVolumeUsageHigh
+          expr: |
+            (
+              1 -
+              max by (namespace, persistentvolumeclaim) (
+                kubelet_volume_stats_available_bytes{
+                  namespace="clickstack",
+                  persistentvolumeclaim=~"(data-volume|logs-volume)-clickstack-mongodb-[0-9]+|clickhouse-storage-volume-clickstack-(clickhouse-clickhouse|keeper-keeper)-.*"
+                }
+              )
+              /
+              max by (namespace, persistentvolumeclaim) (
+                kubelet_volume_stats_capacity_bytes{
+                  namespace="clickstack",
+                  persistentvolumeclaim=~"(data-volume|logs-volume)-clickstack-mongodb-[0-9]+|clickhouse-storage-volume-clickstack-(clickhouse-clickhouse|keeper-keeper)-.*"
+                }
+              )
+            ) > 0.70
+          for: 30m
+          labels:
+            severity: warning
+            component: clickstack
+          annotations:
+            summary: "ClickStack PVC {{ $labels.persistentvolumeclaim }} is over 70% full"
+            description: |
+              ClickStack storage has crossed the early warning threshold for 30m.
+              Check current usage with:
+
+              `kubectl -n clickstack get pvc {{ $labels.persistentvolumeclaim }}`
+
+              The 2026-06-23 ClickStack incident started with MongoDB filling a
+              too-small PVC, so this alert is intentionally below the generic
+              cluster-wide persistent-volume filling threshold.
+
+        - alert: ClickStackPersistentVolumeUsageCritical
+          expr: |
+            (
+              1 -
+              max by (namespace, persistentvolumeclaim) (
+                kubelet_volume_stats_available_bytes{
+                  namespace="clickstack",
+                  persistentvolumeclaim=~"(data-volume|logs-volume)-clickstack-mongodb-[0-9]+|clickhouse-storage-volume-clickstack-(clickhouse-clickhouse|keeper-keeper)-.*"
+                }
+              )
+              /
+              max by (namespace, persistentvolumeclaim) (
+                kubelet_volume_stats_capacity_bytes{
+                  namespace="clickstack",
+                  persistentvolumeclaim=~"(data-volume|logs-volume)-clickstack-mongodb-[0-9]+|clickhouse-storage-volume-clickstack-(clickhouse-clickhouse|keeper-keeper)-.*"
+                }
+              )
+            ) > 0.85
+          for: 10m
+          labels:
+            severity: critical
+            component: clickstack
+          annotations:
+            summary: "ClickStack PVC {{ $labels.persistentvolumeclaim }} is over 85% full"
+            description: |
+              ClickStack storage is near the failure zone. Inspect PVC usage,
+              ClickStack write rate, and Longhorn volume health before the
+              workload reaches ENOSPC.
+
+        - alert: ClickStackPersistentVolumeWillFillSoon
+          expr: |
+            (
+              predict_linear(
+                (
+                  max by (namespace, persistentvolumeclaim) (
+                    kubelet_volume_stats_available_bytes{
+                      namespace="clickstack",
+                      persistentvolumeclaim=~"(data-volume|logs-volume)-clickstack-mongodb-[0-9]+|clickhouse-storage-volume-clickstack-(clickhouse-clickhouse|keeper-keeper)-.*"
+                    }
+                  )
+                )[6h:],
+                24 * 3600
+              ) < 0
+            )
+            and
+            (
+              (
+                1 -
+                max by (namespace, persistentvolumeclaim) (
+                  kubelet_volume_stats_available_bytes{
+                    namespace="clickstack",
+                    persistentvolumeclaim=~"(data-volume|logs-volume)-clickstack-mongodb-[0-9]+|clickhouse-storage-volume-clickstack-(clickhouse-clickhouse|keeper-keeper)-.*"
+                  }
+                )
+                /
+                max by (namespace, persistentvolumeclaim) (
+                  kubelet_volume_stats_capacity_bytes{
+                    namespace="clickstack",
+                    persistentvolumeclaim=~"(data-volume|logs-volume)-clickstack-mongodb-[0-9]+|clickhouse-storage-volume-clickstack-(clickhouse-clickhouse|keeper-keeper)-.*"
+                  }
+                )
+              ) > 0.60
+            )
+          for: 30m
+          labels:
+            severity: critical
+            component: clickstack
+          annotations:
+            summary: "ClickStack PVC {{ $labels.persistentvolumeclaim }} is projected to fill within 24h"
+            description: |
+              Prometheus predicts ClickStack PVC free space will reach zero
+              within 24h based on the last 6h of samples. Confirm ingestion
+              volume, TTL state, and Longhorn snapshot pressure.

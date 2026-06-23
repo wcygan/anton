@@ -1,0 +1,94 @@
+---
+# The ClickHouse/Keeper operator CRDs do not expose PVC template metadata, so
+# their Longhorn recurring-job group cannot be expressed at the PVC source.
+# Keep the Longhorn-side group label converged for current and recreated
+# ClickStack volumes.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clickstack-longhorn-volume-labeler
+  namespace: storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: clickstack-longhorn-volume-labeler
+  namespace: storage
+rules:
+  - apiGroups:
+      - longhorn.io
+    resources:
+      - volumes
+    verbs:
+      - get
+      - list
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: clickstack-longhorn-volume-labeler
+  namespace: storage
+subjects:
+  - kind: ServiceAccount
+    name: clickstack-longhorn-volume-labeler
+    namespace: storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: clickstack-longhorn-volume-labeler
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clickstack-longhorn-volume-labeler
+  namespace: storage
+  labels:
+    app.kubernetes.io/name: longhorn
+    app.kubernetes.io/component: recurring-job-labeler
+spec:
+  schedule: "11 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: longhorn
+            app.kubernetes.io/component: recurring-job-labeler
+        spec:
+          serviceAccountName: clickstack-longhorn-volume-labeler
+          restartPolicy: OnFailure
+          containers:
+            - name: labeler
+              image: registry.k8s.io/kubectl:v1.36.1
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  kubectl -n storage get volumes.longhorn.io \
+                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.kubernetesStatus.namespace}{" "}{.status.kubernetesStatus.pvcName}{"\n"}{end}' |
+                  while read -r volume namespace pvc; do
+                    if [ -z "${volume:-}" ] || [ "$namespace" != "clickstack" ]; then
+                      continue
+                    fi
+
+                    case "$pvc" in
+                      data-volume-clickstack-mongodb-*|logs-volume-clickstack-mongodb-*|clickhouse-storage-volume-clickstack-clickhouse-*|clickhouse-storage-volume-clickstack-keeper-*)
+                        kubectl -n storage label volumes.longhorn.io "$volume" recurring-job-group.longhorn.io/clickstack-critical=enabled --overwrite
+                        ;;
+                    esac
+                  done
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi

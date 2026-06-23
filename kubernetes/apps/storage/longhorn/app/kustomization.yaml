@@ -5,3 +5,5 @@ resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
   - ./prometheusrule.yaml
+  - ./recurringjob-clickstack.yaml
+  - ./volume-labeler-clickstack.yaml

@@ -1,0 +1,78 @@
+---
+# Enforce the ClickStack evaluation retention window even if HyperDX recreates
+# its ClickHouse tables with upstream defaults after a reset or chart upgrade.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clickstack-clickhouse-retention
+  namespace: clickstack
+  labels:
+    app.kubernetes.io/name: clickstack
+spec:
+  schedule: "23 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: clickstack
+            app.kubernetes.io/component: clickhouse-retention
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: retention
+              image: clickhouse/clickhouse-server:25.7-alpine
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: CLICKHOUSE_HOST
+                  value: clickstack-clickhouse-clickhouse-headless
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickstack-secret
+                      key: CLICKHOUSE_PASSWORD
+                - name: RETENTION_DAYS
+                  value: "7"
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  client() {
+                    clickhouse-client \
+                      --host "$CLICKHOUSE_HOST" \
+                      --user otelcollector \
+                      --password "$CLICKHOUSE_PASSWORD" \
+                      "$@"
+                  }
+
+                  alter_ttl_if_present() {
+                    table="$1"
+                    ttl="$2"
+
+                    if [ "$(client --query "EXISTS TABLE default.${table}")" = "1" ]; then
+                      client --query "ALTER TABLE default.${table} MODIFY TTL ${ttl}"
+                    fi
+                  }
+
+                  days="toIntervalDay(${RETENTION_DAYS})"
+                  alter_ttl_if_present hyperdx_sessions "TimestampTime + ${days}"
+                  alter_ttl_if_present otel_logs "TimestampTime + ${days}"
+                  alter_ttl_if_present otel_traces "toDate(Timestamp) + ${days}"
+                  alter_ttl_if_present otel_metrics_exponential_histogram "toDateTime(TimeUnix) + ${days}"
+                  alter_ttl_if_present otel_metrics_gauge "toDateTime(TimeUnix) + ${days}"
+                  alter_ttl_if_present otel_metrics_histogram "toDateTime(TimeUnix) + ${days}"
+                  alter_ttl_if_present otel_metrics_sum "toDateTime(TimeUnix) + ${days}"
+                  alter_ttl_if_present otel_metrics_summary "toDateTime(TimeUnix) + ${days}"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi

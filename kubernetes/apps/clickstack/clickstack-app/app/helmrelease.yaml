@@ -105,6 +105,15 @@ spec:
             resources:
               requests:
                 storage: 20Gi
+          # The retention CronJob below uses the existing collector user and
+          # needs only TTL-specific ALTER privileges to keep ClickStack's own
+          # telemetry tables bounded after table recreation.
+          settings:
+            extraUsersConfig:
+              users:
+                otelcollector:
+                  grants:
+                    - query: "GRANT SELECT,INSERT,CREATE,SHOW,ALTER TTL,ALTER MATERIALIZE TTL ON default.*"
       keeper:
         spec:
           dataVolumeClaimSpec:
@@ -127,6 +136,8 @@ spec:
             volumeClaimTemplates:
               - metadata:
                   name: data-volume
+                  labels:
+                    recurring-job-group.longhorn.io/clickstack-critical: enabled
                 spec:
                   accessModes:
                     - ReadWriteOnce
@@ -135,6 +146,8 @@ spec:
                       storage: 50Gi
               - metadata:
                   name: logs-volume
+                  labels:
+                    recurring-job-group.longhorn.io/clickstack-critical: enabled
                 spec:
                   accessModes:
                     - ReadWriteOnce
