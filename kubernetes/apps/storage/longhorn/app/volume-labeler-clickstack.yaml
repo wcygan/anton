@@ -65,7 +65,9 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: labeler
-              image: registry.k8s.io/kubectl:v1.36.1
+              # registry.k8s.io/kubectl is distroless. This labeler needs a
+              # shell to select ClickStack-owned Longhorn volumes.
+              image: bitnami/kubectl:1.36.1
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
