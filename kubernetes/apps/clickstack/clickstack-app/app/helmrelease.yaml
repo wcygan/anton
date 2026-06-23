@@ -118,10 +118,29 @@ spec:
       # CR — a top-level `mongodb.resources` key is read by no template and has
       # no effect. Resources for the mongod container go through the CRD's
       # statefulSet override (spec.statefulSet.spec.template.spec.containers,
-      # container name `mongod`).
+      # container name `mongod`). The data/log volume sizes live in
+      # volumeClaimTemplates; keep them explicit so the learning experiment does
+      # not silently inherit the operator's small 10G/2G defaults.
       spec:
         statefulSet:
           spec:
+            volumeClaimTemplates:
+              - metadata:
+                  name: data-volume
+                spec:
+                  accessModes:
+                    - ReadWriteOnce
+                  resources:
+                    requests:
+                      storage: 50Gi
+              - metadata:
+                  name: logs-volume
+                spec:
+                  accessModes:
+                    - ReadWriteOnce
+                  resources:
+                    requests:
+                      storage: 5Gi
             template:
               spec:
                 containers:
