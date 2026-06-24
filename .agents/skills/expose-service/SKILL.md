@@ -1,6 +1,6 @@
 ---
 name: expose-service
-description: Expose a workload for access. Four paths: envoy-internal (LAN via split-horizon DNS), Tailscale Ingress (internal remote HTTP with browser-trusted TLS), Tailscale Service annotation (raw TCP / non-HTTP), envoy-external + Cloudflare tunnel (genuinely public, requires explicit approval). Handles HTTPRoute authoring, DNSEndpoint for secondary domains, and per-domain cert wiring.
+description: "Expose a workload for Anton access. Use when choosing between envoy-internal, Tailscale Ingress, Tailscale Service annotation, or explicitly approved envoy-external plus Cloudflare tunnel. Handles HTTPRoute authoring, DNSEndpoint for secondary domains, per-domain cert wiring, and route verification."
 allowed-tools: Read, Write, Edit, Glob, Grep
 ---
 

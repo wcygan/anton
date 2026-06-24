@@ -1,8 +1,7 @@
 ---
 name: deploy-owned-app
-description: Drive the full lifecycle of an owned anton app deployed via Flux image-automation (ADR 0024 / plan 0012). Two modes auto-detected by checking for an existing `ImageRepository`. **Onboard mode** (new app, no ImageRepository found) — guides authoring the Dockerfile + GH Actions workflow in the app repo, flipping the GHCR package public, scaffolding the anton-side manifests (Deployment + Service + HTTPRoute + DNSEndpoint + 3 image-automation CRs), wiring them into the parent kustomization, committing, and watching the first rollout. **Redeploy mode** (ImageRepository exists) — short-circuits the default 5m polling cadence: `flux reconcile image repository/update`, GitRepository fetch, Kustomization apply, deployment rollout watch, public-URL HTTP-200 check. Works for any owned app following the ADR 0024 / plan 0012 pattern (homepage today, others later). On stuck loops, reports where it failed and hands off to `debug-flux-reconciliation`. Keywords — deploy, deploy app, deploy homepage, redeploy, redeploy app, redeploy homepage, onboard app, new owned app, set up app, kick flux, force reconcile, force redeploy, image-automation, image update, GHCR, deploy now, see it live, watch the loop, verify deploy.
+description: "Deploy or onboard an owned Anton app through Flux image automation. Use for deploy, redeploy, force reconcile, deploy homepage, onboard app, new owned app, ADR 0024 image automation, ImageRepository loops, rollout watching, and public URL verification. Reports stuck reconciles and hands them to debug-flux-reconciliation."
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
-argument-hint: <app-name> [--no-force] [--no-watch] [--no-verify]
 ---
 
 # Deploy owned app

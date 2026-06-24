@@ -66,20 +66,25 @@ Common causes:
 - TLS Secret referenced by the listener is missing or expired
 - envoy-gateway controller pod is crash-looping — check `kubectl -n envoy-gateway-system get pods`
 
-## Cloudflared tunnel
+## Cloudflare tunnel
 
 **Silent killer.** The pod runs fine, the Deployment is Ready, but the tunnel never re-registered with Cloudflare. You just fixed a QUIC→HTTP/2 regression in commit `42822fc3` — this failure mode is fresh in memory.
 
 ```sh
 # Pod health
-kubectl -n network get pods -l app.kubernetes.io/name=cloudflared
+kubectl -n network get deploy cloudflare-tunnel
+kubectl -n network get pods -l app.kubernetes.io/name=cloudflare-tunnel
 
-# Registration signal in recent logs
-kubectl -n network logs -l app.kubernetes.io/name=cloudflared --tail=50 | \
+# Registration and transport signals in retained logs
+kubectl -n network logs deploy/cloudflare-tunnel --tail=100 | \
   grep -Ei 'Registered tunnel connection|ERR|connection refused|QUIC|http2'
+
+# Current error pulse
+kubectl -n network logs deploy/cloudflare-tunnel --since=6h | \
+  grep -Ei 'ERR|connection refused'
 ```
 
-**Healthy**: at least one `Registered tunnel connection` line per pod in the last few minutes, no `ERR` lines, no `connection refused`.
+**Healthy**: Deployment Ready, retained logs show `Registered tunnel connection` after pod start or reconnect, and the current error pulse is empty.
 
 **If only `ERR` lines**: Cloudflare token may be expired → `rotate-credential`. Or the tunnel transport is blocked — the current workaround is HTTP/2 (set in the Helm values after the QUIC block); verify that is still the case.
 
@@ -114,5 +119,5 @@ Paste this to get every silent-killer signal in one go:
 echo "=== cert-manager ===" && kubectl -n cert-manager get pods
 echo "=== ESO store ===" && kubectl get clustersecretstore onepassword-connect -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}{"\n"}'
 echo "=== gateways ===" && kubectl get gateway -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,PROGRAMMED:.status.conditions[?(@.type=="Programmed")].status'
-echo "=== cloudflared ===" && kubectl -n network logs -l app.kubernetes.io/name=cloudflared --tail=10 | grep -Ei 'Registered|ERR' | tail -5
+echo "=== cloudflare-tunnel ===" && kubectl -n network get deploy cloudflare-tunnel && kubectl -n network logs deploy/cloudflare-tunnel --tail=20 | grep -Ei 'Registered|ERR|http2|QUIC' | tail -5
 ```
