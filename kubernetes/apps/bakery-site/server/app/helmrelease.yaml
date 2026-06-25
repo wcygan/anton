@@ -16,9 +16,9 @@ spec:
         containers:
           app:
             image:
-              repository: 192.168.1.106/bakery/server
-              tag: main-static-fdc0e8c
-              digest: sha256:9ccff874114e1de34af2aa1fdca540fba6878ced3d82b8b77ec5b3b999424bfe
+              repository: ghcr.io/wcygan/kneadybynaturebakery/server
+              tag: main-static-cc273ca
+              digest: sha256:c4ddd4c4c302ac75ce037da9b601733883e701fbdcaf16b88cf3311b117c27e7
             probes:
               liveness: &probes
                 enabled: true
@@ -43,6 +43,8 @@ spec:
               limits:
                 memory: 256Mi
     defaultPodOptions:
+      imagePullSecrets:
+        - name: ghcr-registry-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
