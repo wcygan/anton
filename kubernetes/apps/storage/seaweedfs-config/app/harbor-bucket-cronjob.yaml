@@ -36,10 +36,10 @@ spec:
                 - |
                   set -eu
                   endpoint="http://seaweedfs-s3.storage.svc.cluster.local:8333"
-                  if aws --endpoint-url="${endpoint}" s3api head-bucket --bucket harbor >/dev/null 2>&1; then
+                  if aws --endpoint-url="$endpoint" s3api head-bucket --bucket harbor >/dev/null 2>&1; then
                     echo "harbor bucket present"
                   else
-                    aws --endpoint-url="${endpoint}" s3 mb s3://harbor
+                    aws --endpoint-url="$endpoint" s3 mb s3://harbor
                     echo "harbor bucket created"
                   fi
               securityContext:
