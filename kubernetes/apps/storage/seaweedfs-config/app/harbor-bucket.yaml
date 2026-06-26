@@ -1,0 +1,14 @@
+---
+apiVersion: seaweed.seaweedfs.com/v1
+kind: Bucket
+metadata:
+  name: harbor
+spec:
+  clusterRef:
+    name: seaweedfs
+  name: harbor
+  reclaimPolicy: Retain
+  versioning: "Off"
+  access:
+    - user: harbor
+      actions: ["Read", "Write", "List", "Tagging"]

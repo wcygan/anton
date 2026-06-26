@@ -4,4 +4,5 @@ kind: Kustomization
 resources:
   - ./seaweed.yaml
   - ./externalsecret.yaml
+  - ./harbor-bucket.yaml
   - ./httproute.yaml
