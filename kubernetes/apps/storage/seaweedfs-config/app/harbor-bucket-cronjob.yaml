@@ -1,0 +1,48 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seaweedfs-harbor-bucket-ensure
+spec:
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: ensure-bucket
+              image: amazon/aws-cli:2.17.0
+              envFrom:
+                - secretRef:
+                    name: seaweedfs-s3-config
+              env:
+                - name: AWS_EC2_METADATA_DISABLED
+                  value: "true"
+              command:
+                - /bin/sh
+                - -c
+              args:
+                - |
+                  set -eu
+                  endpoint="http://seaweedfs-s3.storage.svc.cluster.local:8333"
+                  if aws --endpoint-url="${endpoint}" s3api head-bucket --bucket harbor >/dev/null 2>&1; then
+                    echo "harbor bucket present"
+                  else
+                    aws --endpoint-url="${endpoint}" s3 mb s3://harbor
+                    echo "harbor bucket created"
+                  fi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]

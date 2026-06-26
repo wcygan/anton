@@ -39,10 +39,6 @@ spec:
       kind: Seaweed
       name: seaweedfs
       namespace: storage
-    - apiVersion: seaweed.seaweedfs.com/v1
-      kind: Bucket
-      name: harbor
-      namespace: storage
     - apiVersion: gateway.networking.k8s.io/v1
       kind: HTTPRoute
       name: seaweedfs-s3
