@@ -5,7 +5,7 @@ metadata:
   name: seaweedfs
   namespace: storage
 spec:
-  image: chrislusf/seaweedfs:4.25
+  image: chrislusf/seaweedfs:4.36
   master:
     replicas: 3
     defaultReplication: "000"      # Longhorn owns durability (ADR 0005)
