@@ -67,7 +67,7 @@ spec:
             - name: labeler
               # registry.k8s.io/kubectl is distroless. This labeler needs a
               # shell to select ClickStack-owned Longhorn volumes.
-              image: alpine/k8s:1.36.1
+              image: alpine/k8s:1.36.2
               imagePullPolicy: IfNotPresent
               command:
                 - /bin/sh
