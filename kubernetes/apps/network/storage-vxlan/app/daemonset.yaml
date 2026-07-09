@@ -34,7 +34,7 @@ spec:
       containers:
         - name: vxlan
           # renovate: datasource=docker depName=nicolaka/netshoot
-          image: nicolaka/netshoot:v0.15
+          image: nicolaka/netshoot:v0.15@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61
           imagePullPolicy: IfNotPresent
           env:
             - name: NODE_NAME
@@ -44,7 +44,10 @@ spec:
           securityContext:
             privileged: false
             runAsNonRoot: false
-            allowPrivilegeEscalation: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
             capabilities:
               add:
                 - NET_ADMIN
@@ -56,6 +59,15 @@ spec:
               memory: 64Mi
             limits:
               memory: 128Mi
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - ip link show vxlan-storage >/dev/null && ip link show lhnet1-host >/dev/null
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
           volumeMounts:
             - name: nodemap
               mountPath: /etc/vxlan-nodemap
