@@ -64,7 +64,12 @@ spec:
               command:
                 - /bin/bash
                 - -ec
-                - ip link show vxlan-storage >/dev/null && ip link show lhnet1-host >/dev/null
+                - |
+                  source "/etc/vxlan-nodemap/$${NODE_NAME}.env"
+                  ip link show vxlan-storage >/dev/null
+                  ip link show lhnet1-host >/dev/null
+                  test "$$(cat /sys/class/net/vxlan-storage/mtu)" = 8950
+                  ip -4 address show dev lhnet1-host | grep -Fq "$${NODE_OVERLAY_IP}/24"
             initialDelaySeconds: 2
             periodSeconds: 10
             failureThreshold: 3
