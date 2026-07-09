@@ -63,6 +63,12 @@ spec:
         spec:
           serviceAccountName: clickstack-longhorn-volume-labeler
           restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: labeler
               # registry.k8s.io/kubectl is distroless. This labeler needs a
@@ -94,3 +100,8 @@ spec:
                 limits:
                   cpu: 100m
                   memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
