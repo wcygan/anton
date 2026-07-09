@@ -19,6 +19,16 @@ spec:
         name: vector
       interval: 15m
   interval: 1h
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: StatefulSet
+              name: talos-log-sink-vector
+            patch: |
+              - op: add
+                path: /spec/template/spec/automountServiceAccountToken
+                value: false
 
   values:
     role: Aggregator
