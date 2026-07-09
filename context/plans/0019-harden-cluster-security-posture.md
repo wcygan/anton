@@ -4,7 +4,7 @@ opened: 2026-07-09
 closed: null
 affects: security
 intent: concrete-need
-related-adrs: [0015, 0025, 0027]
+related-adrs: [0015, 0025, 0027, 0029]
 review-by: null
 ---
 
@@ -31,12 +31,12 @@ Reduce the high-confidence findings from the 2026-07-09 agentless security audit
 - [x] Preserve the 2026-07-09 scan summaries and record the exact coverage gaps.
 - [ ] Audit the relevant Renovate PRs, release notes, supersessions, and dependency order.
 - [x] Inspect the history behind the Talos PodSecurity deletion and the accepted NetworkPolicy posture.
-- [ ] Author a successor ADR before adopting namespace default-deny behavior that changes ADR 0025.
+- [x] Author a successor ADR before adopting namespace default-deny behavior that changes ADR 0025.
 
 ### Phase 2: Low-blast-radius remediation
 
 - [ ] Merge and verify security-relevant patch/minor image updates one at a time where their preflight gates pass.
-- [ ] Disable unnecessary service-account token automounting for no-API host agents.
+- [x] Disable unnecessary service-account token automounting for no-API host agents.
 - [ ] Replace or narrow mutable, broad host-network tooling and pin privileged/host-writing images where feasible.
 - [ ] Restrict Talos log-sink ingestion to expected sources and bounded resource use without breaking node logging.
 
@@ -64,6 +64,9 @@ Reduce the high-confidence findings from the 2026-07-09 agentless security audit
 - 2026-07-09: The rollout excludes credential rotation, destructive recovery, namespace/data deletion, Secure Boot or disk-encryption migration, and an in-cluster security operator; any such need is a separate operator-approved initiative.
 - 2026-07-09: Preserved the sanitized baseline in `context/notes/2026-07-09-cluster-security-audit.md`, including the two private-image coverage gaps and candidate-image comparisons.
 - 2026-07-09: Repository history traced the PodSecurity deletion to the initial Talos configuration import and found no documented rationale. ADR 0025 intentionally deferred namespace default-deny, so the changed threat posture requires a successor ADR.
+- 2026-07-09: Disabled projected API tokens for idle-mitigations, NVMe collection, smartctl-exporter, storage-vxlan, and the Talos log receiver. Every rollout completed; live pods have no token volumes and their device, metric, log, and storage paths remain healthy.
+- 2026-07-09: Hardened storage-vxlan with a digest pin, no-new-privileges, read-only root, RuntimeDefault seccomp, and an overlay readiness probe. All nodes reached all three Longhorn instance-manager iSCSI endpoints and all attached volumes remained healthy.
+- 2026-07-09: Accepted ADR 0029, superseding ADR 0025's default-deny deferral and requiring explicit probe validation for targeted public-workload isolation.
 
 ## References
 
