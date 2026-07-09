@@ -162,7 +162,7 @@ spec:
     extraContainers:
       - name: rotator
         # renovate: datasource=docker depName=busybox
-        image: busybox:1.37.0
+        image: busybox:1.37.0@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
         command: [sh, -c, "trap 'exit 0' TERM; sleep infinity & wait"]
         resources:
           requests:
