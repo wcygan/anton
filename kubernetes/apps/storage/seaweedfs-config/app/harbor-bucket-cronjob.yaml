@@ -22,7 +22,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: ensure-bucket
-              image: amazon/aws-cli:2.17.0
+              image: amazon/aws-cli:2.35.20
               envFrom:
                 - secretRef:
                     name: seaweedfs-s3-config
