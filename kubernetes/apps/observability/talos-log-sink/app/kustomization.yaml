@@ -6,3 +6,4 @@ resources:
   - ./helmrelease.yaml
   - ./rbac.yaml
   - ./cronjob.yaml
+  - ./networkpolicy.yaml

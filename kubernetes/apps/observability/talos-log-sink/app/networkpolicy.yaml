@@ -1,0 +1,42 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: talos-log-sink-ingress
+  namespace: observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: talos-log-sink
+      app.kubernetes.io/name: vector
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 192.168.1.98/32
+        - ipBlock:
+            cidr: 192.168.1.99/32
+        - ipBlock:
+            cidr: 192.168.1.100/32
+        - ipBlock:
+            cidr: 10.100.100.1/32
+        - ipBlock:
+            cidr: 10.100.100.2/32
+        - ipBlock:
+            cidr: 10.100.100.3/32
+        - ipBlock:
+            cidr: 10.100.1.1/32
+        - ipBlock:
+            cidr: 10.100.1.2/32
+        - ipBlock:
+            cidr: 10.100.1.3/32
+        - ipBlock:
+            cidr: 10.100.0.0/29
+      ports:
+        - port: 6000
+          protocol: TCP
+        - port: 6001
+          protocol: TCP
+        - port: 6002
+          protocol: UDP
