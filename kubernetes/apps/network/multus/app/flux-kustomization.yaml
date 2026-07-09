@@ -32,7 +32,7 @@ spec:
         - op: replace
           path: /spec/template/spec/containers/0/image
           # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/multus-cni
-          value: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick
+          value: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick@sha256:3c20900b5381fac7f9cbbdfac8370ea10a2f6ed7fbecc678384a9db57047abb1
     # Raise Multus cgroup memory limit 50Mi → 512Mi. Upstream default is
     # tuned for pod-creation rates that small clusters rarely see; anton
     # hits the limit during bursts because Multus invokes `cilium-cni` as
@@ -140,7 +140,7 @@ spec:
           value:
             name: install-cni
             # renovate: datasource=docker depName=ghcr.io/siderolabs/install-cni
-            image: ghcr.io/siderolabs/install-cni:v1.9.0
+            image: ghcr.io/siderolabs/install-cni:v1.9.0@sha256:53bdeb6c8d238dd593ee75f265baf4625925a034d8d18f10ffeae88d7fcf2c3e
             command: ["/install-cni.sh"]
             securityContext:
               privileged: true
@@ -168,4 +168,4 @@ spec:
               initContainers:
                 - name: install-multus-binary
                   # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/multus-cni
-                  image: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick
+                  image: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.2.4-thick@sha256:3c20900b5381fac7f9cbbdfac8370ea10a2f6ed7fbecc678384a9db57047abb1
