@@ -31,12 +31,12 @@ spec:
           effect: NoSchedule
       containers:
         - name: collector
-          # Alpine + nvme-cli/msr-tools installed at startup. ~5s init penalty per pod
+          # Alpine + nvme-cli installed at startup. ~5s init penalty per pod
           # (one apk add fetch), then a tight sleep loop. Avoids a custom
           # image-build pipeline; if the apk fetch becomes flaky we can
           # promote to a built image via the deploy-owned-app pipeline.
           # renovate: datasource=docker depName=alpine
-          image: alpine:3.23.4
+          image: alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
           imagePullPolicy: IfNotPresent
           securityContext:
             # Privileged required for /dev/nvme* ioctl (NVMe admin commands
@@ -54,6 +54,7 @@ spec:
           volumeMounts:
             - name: dev
               mountPath: /dev
+              readOnly: true
             - name: textfile
               mountPath: /tf
           command: ["/bin/sh", "-c"]
@@ -66,67 +67,18 @@ spec:
               # Install collection tools at runtime. Cached on subsequent restarts
               # via the alpine package layer if the image is in spegel; cold cache
               # adds ~5s. Failure here is fatal — without these tools the
-              # textfile would silently stay incomplete. Alpine 3.20 carries
-              # msr-tools only in edge/testing, so add that repository just for
-              # the tiny rdmsr/wrmsr package.
+              # textfile would silently stay incomplete.
               apk add --no-cache nvme-cli >/dev/null
-              apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing msr-tools >/dev/null
-              echo "[nvme-power-collector] nvme-cli + msr-tools ready"
-
-              online_cpus() {
-                tr ',' '\n' < /sys/devices/system/cpu/online | while read -r part; do
-                  [ -n "$part" ] || continue
-                  case "$part" in
-                    *-*)
-                      start=${part%-*}
-                      end=${part#*-}
-                      cpu=$start
-                      while [ "$cpu" -le "$end" ]; do
-                        printf '%s\n' "$cpu"
-                        cpu=$((cpu + 1))
-                      done
-                      ;;
-                    *)
-                      printf '%s\n' "$part"
-                      ;;
-                  esac
-                done
-              }
-
-              emit_msr_throttle_reasons() {
-                cpu=$1
-                raw=$(rdmsr -p "$cpu" 0x64f 2>/dev/null) || return 0
-                case "$raw" in
-                  ''|*[!0-9a-fA-F]*) return 0 ;;
-                esac
-
-                value=$((0x$raw))
-                for pair in \
-                  0:PROCHOT \
-                  1:thermal \
-                  4:PL1 \
-                  5:PL2 \
-                  6:max-turbo \
-                  9:core-power; do
-                  bit=${pair%%:*}
-                  reason=${pair#*:}
-                  active=$(((value >> bit) & 1))
-                  printf 'node_cpu_msr_throttle_reason{cpu="%s",reason="%s"} %s\n' "$cpu" "$reason" "$active"
-                done
-              }
+              echo "[nvme-power-collector] nvme-cli ready"
 
               # Atomic-write loop: each iteration writes a .tmp file then
               # renames it over .prom so node-exporter never reads a partial
               # file. 30 s cadence matches betty's scrape interval.
-              msr_missing_logged=0
               while true; do
                 tmp=/tf/nvme_power.prom.tmp
                 : > "$tmp"
                 printf '# HELP node_nvme_power_state Current NVMe NPSS power state (lower index = higher power draw)\n' >> "$tmp"
                 printf '# TYPE node_nvme_power_state gauge\n' >> "$tmp"
-                printf '# HELP node_cpu_msr_throttle_reason Intel MSR 0x64F active package/core throttle reason bit decoded per online CPU (0=PROCHOT, 1=thermal, 4=PL1, 5=PL2, 6=max-turbo, 9=core-power)\n' >> "$tmp"
-                printf '# TYPE node_cpu_msr_throttle_reason gauge\n' >> "$tmp"
-
                 for d in /dev/nvme[0-9] /dev/nvme[0-9][0-9]; do
                   [ -e "$d" ] || continue
                   dev=$(basename "$d")
@@ -147,21 +99,6 @@ spec:
                   ps=$((full & 0x1F))
                   printf 'node_nvme_power_state{device="%s"} %s\n' "$dev" "$ps" >> "$tmp"
                 done
-
-                # Plan 0013 evidence from 2026-05-06 02:30-04:30 CDT: k8s-2
-                # throttled at 52 °C / 0.47 GHz with peer-identical PL1. MSR
-                # 0x64F distinguishes PROCHOT/VRM-side assertion from thermal
-                # or package-limit causes.
-                if [ -e /dev/cpu/0/msr ]; then
-                  msr_missing_logged=0
-                  for cpu in $(online_cpus); do
-                    [ -e "/dev/cpu/$cpu/msr" ] || continue
-                    emit_msr_throttle_reasons "$cpu" >> "$tmp"
-                  done
-                elif [ "$msr_missing_logged" -eq 0 ]; then
-                  echo "[nvme-power-collector] /dev/cpu/0/msr missing; load the Talos msr kernel module before node_cpu_msr_throttle_reason can emit"
-                  msr_missing_logged=1
-                fi
 
                 mv "$tmp" /tf/nvme_power.prom
                 sleep 30
