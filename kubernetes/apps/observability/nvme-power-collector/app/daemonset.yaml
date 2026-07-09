@@ -20,6 +20,7 @@ spec:
         app.kubernetes.io/name: nvme-power-collector
     spec:
       serviceAccountName: nvme-power-collector
+      automountServiceAccountToken: false
       priorityClassName: system-node-critical
       hostPID: false
       # 3-node all-control-plane cluster: tolerate the control-plane taint so

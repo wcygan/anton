@@ -7,3 +7,4 @@ kind: ServiceAccount
 metadata:
   name: nvme-power-collector
   namespace: observability
+automountServiceAccountToken: false

@@ -14,6 +14,25 @@ spec:
         name: prometheus-community-smartctl
       interval: 15m
   interval: 1h
+  # The chart does not expose automountServiceAccountToken. This exporter only
+  # reads host devices and serves metrics; it never calls the Kubernetes API.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ServiceAccount
+              name: smartctl-exporter-prometheus-smartctl-exporter
+            patch: |
+              - op: add
+                path: /automountServiceAccountToken
+                value: false
+          - target:
+              kind: DaemonSet
+              name: smartctl-exporter-prometheus-smartctl-exporter-0
+            patch: |
+              - op: add
+                path: /spec/template/spec/automountServiceAccountToken
+                value: false
   values:
     # Privileged DaemonSet that mounts /dev to read SMART data via ioctl.
     # Default chart already runs as a DaemonSet; we only override what's needed

@@ -20,6 +20,7 @@ spec:
         app.kubernetes.io/name: idle-mitigations
     spec:
       serviceAccountName: idle-mitigations
+      automountServiceAccountToken: false
       priorityClassName: system-node-critical
       hostPID: false
       # 3-node all-control-plane cluster: tolerate the control-plane taint so

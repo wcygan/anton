@@ -4,3 +4,4 @@ kind: ServiceAccount
 metadata:
   name: idle-mitigations
   namespace: kube-system
+automountServiceAccountToken: false

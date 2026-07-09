@@ -24,6 +24,12 @@ spec:
     role: Aggregator
     replicas: 1
 
+    # Vector receives Talos logs over sockets and writes them to its PVC. It
+    # does not watch Kubernetes resources, so do not project API credentials
+    # into the long-lived receiver or its rotator sidecar.
+    serviceAccount:
+      automountToken: false
+
     # Keep the sink off the node under investigation so a k8s-2 reboot does not
     # take the receiver with it. Hard-exclude k8s-2; scheduler picks k8s-1 or k8s-3.
     affinity:

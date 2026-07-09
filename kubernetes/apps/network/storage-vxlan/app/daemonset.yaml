@@ -20,6 +20,7 @@ spec:
         app.kubernetes.io/name: storage-vxlan
     spec:
       serviceAccountName: storage-vxlan
+      automountServiceAccountToken: false
       priorityClassName: system-node-critical
       hostNetwork: true
       hostPID: false
