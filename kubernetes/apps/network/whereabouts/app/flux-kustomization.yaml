@@ -48,7 +48,7 @@ spec:
         - op: replace
           path: /spec/template/spec/containers/0/image
           # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/whereabouts
-          value: ghcr.io/k8snetworkplumbingwg/whereabouts:v0.9.4
+          value: ghcr.io/k8snetworkplumbingwg/whereabouts:v0.9.4@sha256:f279fd7dc1124d7819330fb2e07357990b2b4c5d8733aef1b028573c29f05e14
     # Keep IPAM available during pod-creation bursts. The 2026-04-23 incident
     # did not prove whereabouts OOMKilled, but the pod restarted 10x around the
     # k8s-2 reset and is part of the CNI critical path.
