@@ -24,9 +24,15 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: /
-                    port: &port 8000
+                  exec:
+                    command:
+                      - /usr/bin/wget
+                      - -q
+                      - -T
+                      - "1"
+                      - -O
+                      - /dev/null
+                      - http://127.0.0.1:8000/
                   initialDelaySeconds: 5
                   periodSeconds: 10
                   timeoutSeconds: 2
@@ -56,7 +62,7 @@ spec:
         controller: server
         ports:
           http:
-            port: *port
+            port: 8000
     persistence:
       cache:
         type: emptyDir

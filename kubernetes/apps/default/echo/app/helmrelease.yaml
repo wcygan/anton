@@ -28,9 +28,15 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: /healthz
-                    port: *port
+                  exec:
+                    command:
+                      - /usr/bin/wget
+                      - -q
+                      - -T
+                      - "1"
+                      - -O
+                      - /dev/null
+                      - http://127.0.0.1:80/healthz
                   initialDelaySeconds: 0
                   periodSeconds: 10
                   timeoutSeconds: 1

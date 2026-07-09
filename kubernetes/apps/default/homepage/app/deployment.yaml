@@ -36,14 +36,18 @@ spec:
               containerPort: 3000
               protocol: TCP
           readinessProbe:
-            httpGet:
-              path: /
-              port: http
+            exec:
+              command:
+                - /bin/deno
+                - eval
+                - const r = await fetch("http://127.0.0.1:3000/"); if (!r.ok) Deno.exit(1)
             periodSeconds: 10
           livenessProbe:
-            httpGet:
-              path: /
-              port: http
+            exec:
+              command:
+                - /bin/deno
+                - eval
+                - const r = await fetch("http://127.0.0.1:3000/"); if (!r.ok) Deno.exit(1)
             periodSeconds: 30
           resources:
             requests:

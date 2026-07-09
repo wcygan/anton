@@ -152,3 +152,39 @@ spec:
             target:
               kind: Deployment
               name: (image-automation-controller|image-reflector-controller|notification-controller)
+          - # Keep kubelet health checks inside the container. Node-originated
+            # probes arrive over the storage VXLAN with Cilium's world identity.
+            patch: |-
+              - op: replace
+                path: /spec/template/spec/containers/0/livenessProbe
+                value:
+                  exec:
+                    command:
+                      - /usr/bin/wget
+                      - -q
+                      - -T
+                      - "1"
+                      - -O
+                      - /dev/null
+                      - http://127.0.0.1:9440/healthz
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+              - op: replace
+                path: /spec/template/spec/containers/0/readinessProbe
+                value:
+                  exec:
+                    command:
+                      - /usr/bin/wget
+                      - -q
+                      - -T
+                      - "1"
+                      - -O
+                      - /dev/null
+                      - http://127.0.0.1:9440/readyz
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+            target:
+              kind: Deployment
+              name: notification-controller
