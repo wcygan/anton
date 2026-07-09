@@ -19,6 +19,7 @@ env:
 
 includes:
   bootstrap: .taskfiles/bootstrap
+  security: .taskfiles/security
   talos: .taskfiles/talos
 
 tasks:
