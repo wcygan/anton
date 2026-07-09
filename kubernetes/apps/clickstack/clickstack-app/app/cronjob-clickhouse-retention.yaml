@@ -26,7 +26,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: retention
-              image: clickhouse/clickhouse-server:25.7-alpine
+              image: clickhouse/clickhouse-server:26.5-alpine
               imagePullPolicy: IfNotPresent
               env:
                 - name: CLICKHOUSE_HOST
