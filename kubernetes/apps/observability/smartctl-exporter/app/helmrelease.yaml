@@ -34,6 +34,11 @@ spec:
                 path: /spec/template/spec/automountServiceAccountToken
                 value: false
   values:
+    image:
+      repository: quay.io/prometheuscommunity/smartctl-exporter
+      # renovate: datasource=docker depName=quay.io/prometheuscommunity/smartctl-exporter
+      tag: v0.14.0@sha256:cfe22c36d7d2fac48ebf619707305acb65eb0fb670656eb80f356e606d782bc1
+
     # Privileged DaemonSet that mounts /dev to read SMART data via ioctl.
     # Default chart already runs as a DaemonSet; we only override what's needed
     # for Talos: privileged container + tolerate the control-plane taint so
