@@ -7,6 +7,16 @@ spec:
   replicas: 3
   image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.38.1
 
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app: harbor-redis
+              app.kubernetes.io/name: dragonfly
+              app.kubernetes.io/part-of: dragonfly
+
   resources:
     requests:
       cpu: 100m

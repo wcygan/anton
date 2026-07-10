@@ -10,6 +10,15 @@ spec:
     replicas: 3
     defaultReplication: "000"      # Longhorn owns durability (ADR 0005)
     volumeSizeLimitMB: 30000        # 30 GB per volume file
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: seaweedfs
+                app.kubernetes.io/component: master
+                app.kubernetes.io/instance: seaweedfs
   volume:
     replicas: 3                     # one per node
     requests:
@@ -33,9 +42,27 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   filer:
     replicas: 2                     # Phase 1 verdict: 2 holds under pod-kill
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: seaweedfs
+                app.kubernetes.io/component: filer
+                app.kubernetes.io/instance: seaweedfs
   s3:
     replicas: 2                     # standalone Deployment HA per ADR 0019
     iam: false                      # explicit override — operator default is true
     configSecret:
       name: seaweedfs-s3-config     # matches ExternalSecret target.name
       key: s3.json                  # matches ExternalSecret target.template.data key
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: seaweedfs
+                app.kubernetes.io/component: s3
+                app.kubernetes.io/instance: seaweedfs
