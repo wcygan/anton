@@ -11,4 +11,4 @@ resources:
   - ./networkpolicy.yaml
 images:
   - name: ghcr.io/nu-sync/homepage
-    newTag: main-00000025-2a3d587 # {"$imagepolicy": "default:homepage:tag"}
+    newTag: main-00000026-acc7e96 # {"$imagepolicy": "default:homepage:tag"}
