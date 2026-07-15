@@ -13,28 +13,9 @@ data:
         endpoint: 0.0.0.0:13133
 
     receivers:
-      filelog/homepage_worker:
-        include:
-          - /var/log/pods/default_homepage-worker*/*/*.log
-        include_file_name: false
-        include_file_path: true
-        start_at: beginning
-        storage: file_storage
-        operators:
-          - id: container-parser
-            type: container
-            max_log_size: 102400
-          - id: logtape-json
-            type: json_parser
-            if: body matches "^\\{"
-            parse_from: body
-            parse_to: attributes
-            on_error: send
-      filelog/homepage_server:
+      filelog/homepage:
         include:
           - /var/log/pods/default_homepage-*/*/*.log
-        exclude:
-          - /var/log/pods/default_homepage-worker*/*/*.log
         include_file_name: false
         include_file_path: true
         start_at: beginning
@@ -43,37 +24,17 @@ data:
           - id: container-parser
             type: container
             max_log_size: 102400
-          - id: logtape-json
-            type: json_parser
-            if: body matches "^\\{"
-            parse_from: body
-            parse_to: attributes
-            on_error: send
 
     processors:
       memory_limiter:
         check_interval: 5s
         limit_mib: 192
         spike_limit_mib: 64
-      resource/homepage_worker:
+      resource/homepage:
         attributes:
           - action: upsert
             key: service.name
-            value: homepage-worker
-          - action: upsert
-            key: service.namespace
             value: homepage
-          - action: upsert
-            key: k8s.namespace.name
-            value: default
-          - action: upsert
-            key: k8s.deployment.name
-            value: homepage-worker
-      resource/homepage_server:
-        attributes:
-          - action: upsert
-            key: service.name
-            value: homepage-server
           - action: upsert
             key: service.namespace
             value: homepage
@@ -83,13 +44,6 @@ data:
           - action: upsert
             key: k8s.deployment.name
             value: homepage
-      transform/homepage_logtape:
-        error_mode: ignore
-        log_statements:
-          - context: log
-            statements:
-              - set(log.body, log.attributes["message"]) where log.attributes["message"] != nil
-              - set(log.severity_text, log.attributes["level"]) where log.attributes["level"] != nil
       batch: {}
 
     exporters:
@@ -104,23 +58,12 @@ data:
         - file_storage
         - health_check
       pipelines:
-        logs/homepage_worker:
+        logs/homepage:
           receivers:
-            - filelog/homepage_worker
+            - filelog/homepage
           processors:
             - memory_limiter
-            - resource/homepage_worker
-            - transform/homepage_logtape
-            - batch
-          exporters:
-            - otlp_http/clickstack
-        logs/homepage_server:
-          receivers:
-            - filelog/homepage_server
-          processors:
-            - memory_limiter
-            - resource/homepage_server
-            - transform/homepage_logtape
+            - resource/homepage
             - batch
           exporters:
             - otlp_http/clickstack

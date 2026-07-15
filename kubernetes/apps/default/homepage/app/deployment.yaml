@@ -20,34 +20,27 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: 65534
+        runAsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: homepage
           image: ghcr.io/nu-sync/homepage:main-00000025-2a3d587 # {"$imagepolicy": "default:homepage"}
           imagePullPolicy: IfNotPresent
-          envFrom:
-            - secretRef:
-                name: homepage-env
           ports:
             - name: http
               containerPort: 3000
               protocol: TCP
           readinessProbe:
-            exec:
-              command:
-                - /bin/deno
-                - eval
-                - const r = await fetch("http://127.0.0.1:3000/"); if (!r.ok) Deno.exit(1)
+            httpGet:
+              path: /
+              port: http
             periodSeconds: 10
           livenessProbe:
-            exec:
-              command:
-                - /bin/deno
-                - eval
-                - const r = await fetch("http://127.0.0.1:3000/"); if (!r.ok) Deno.exit(1)
+            httpGet:
+              path: /
+              port: http
             periodSeconds: 30
           resources:
             requests:
@@ -60,9 +53,3 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-      volumes:
-        - name: tmp
-          emptyDir: {}
