@@ -15,7 +15,20 @@ spec:
     # EnvoyProxy data-plane config. The data-plane priority is set on the
     # EnvoyProxy CR in envoy.yaml, not here.
     deployment:
+      replicas: 2
       priorityClassName: system-cluster-critical
+      pod:
+        topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/instance: envoy-gateway
+                app.kubernetes.io/name: gateway-helm
+                control-plane: envoy-gateway
+    podDisruptionBudget:
+      minAvailable: 1
     config:
       envoyGateway:
         provider:
