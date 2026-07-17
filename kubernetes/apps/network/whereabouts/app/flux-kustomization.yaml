@@ -65,6 +65,10 @@ spec:
         - op: replace
           path: /spec/template/spec/containers/0/resources/limits/memory
           value: 512Mi
+        # Upstream's 100m CPU limit throttles IPAM during pod-creation bursts.
+        # Keep the 100m request and memory bounds while allowing CPU bursting.
+        - op: remove
+          path: /spec/template/spec/containers/0/resources/limits/cpu
     # Re-point ClusterRoleBinding subject to the relocated ServiceAccount
     - target:
         kind: ClusterRoleBinding

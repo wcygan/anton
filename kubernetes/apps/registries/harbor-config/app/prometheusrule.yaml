@@ -99,14 +99,21 @@ spec:
               DB. Investigate immediately.
 
         - alert: HarborPodNotReady
-          # Matches any harbor-* or postgres/redis pod in registries that has
-          # been not-ready for 15m. Filters out completed / job-like pods by
-          # requiring the ready=0 reading to persist.
+          # Matches active harbor-* or SeaweedFS pods in registries that have
+          # been not-ready for 15m. Terminal pods retain ready=0 metrics, so
+          # explicitly exclude Succeeded and Failed phases by namespace/pod.
           expr: |
-            kube_pod_container_status_ready{
-              namespace="registries",
-              pod=~"harbor-.*|seaweedfs-.*"
-            } == 0
+            (
+              kube_pod_container_status_ready{
+                namespace="registries",
+                pod=~"harbor-.*|seaweedfs-.*"
+              } == 0
+            ) unless on(namespace, pod) (
+              kube_pod_status_phase{
+                namespace="registries",
+                phase=~"Succeeded|Failed"
+              } == 1
+            )
           for: 15m
           labels:
             severity: warning

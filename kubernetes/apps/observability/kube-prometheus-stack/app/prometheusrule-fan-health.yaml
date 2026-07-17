@@ -1,0 +1,30 @@
+---
+# Physical fan channels fan1 and fan2 are present on each MS-01. Other
+# nct6775 channels are unused and report zero by design, so they are excluded.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: physical-fan-health
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: physical-fan-health
+      interval: 30s
+      rules:
+        - alert: NodePhysicalFanStopped
+          expr: |
+            (node_hwmon_fan_rpm{sensor=~"fan1|fan2"} == 0)
+              * on(instance) group_left(nodename) node_uname_info
+          for: 5m
+          labels:
+            severity: critical
+            component: hardware
+          annotations:
+            summary: "Physical fan {{ $labels.sensor }} stopped on {{ $labels.nodename }}"
+            description: |
+              {{ $labels.nodename }} reports {{ $labels.sensor }} at 0 RPM for
+              at least 5 minutes. Inspect the fan, cabling, and chassis airflow
+              before sustained load causes thermal throttling or a reset.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/context/notes/k8s-2-instability/evidence-2026-05-06-k8s-2-fan1-intermittent-failure.md"
