@@ -9,7 +9,7 @@ resources:
   - ./dashboard-cluster-health.yaml
   - ./prometheusrule-cilium-memory.yaml
   - ./prometheusrule-cni-plumbing.yaml
-  - ./prometheusrule-k8s-2-rejoin-abort.yaml
+  - ./prometheusrule-fan-health.yaml
   - ./prometheusrule-pod-crashloop.yaml
   - ./prometheusrule-pod-phase-unknown.yaml
   - ./prometheusrule-node-reboot.yaml
