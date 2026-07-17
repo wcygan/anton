@@ -6,6 +6,9 @@ metadata:
 spec:
   replicas: 3
   image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.39.0
+  # The operator's generated policy leaves Redis open to every source. Keep
+  # policy ownership in GitOps so Harbor and operator access stay explicit.
+  networkPolicyEnabled: false
 
   affinity:
     podAntiAffinity:
