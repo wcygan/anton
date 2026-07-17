@@ -12,7 +12,20 @@ spec:
   values:
     controllers:
       server:
+        replicas: 2
         strategy: RollingUpdate
+        pod:
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/controller: server
+                  app.kubernetes.io/instance: bakery-server
+                  app.kubernetes.io/name: bakery-server
+        podDisruptionBudget:
+          minAvailable: 1
         containers:
           app:
             image:

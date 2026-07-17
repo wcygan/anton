@@ -12,7 +12,20 @@ spec:
   values:
     controllers:
       echo:
+        replicas: 2
         strategy: RollingUpdate
+        pod:
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/controller: echo
+                  app.kubernetes.io/instance: echo
+                  app.kubernetes.io/name: echo
+        podDisruptionBudget:
+          minAvailable: 1
         containers:
           app:
             image:

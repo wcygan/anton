@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: homepage
 spec:
-  replicas: 1
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -17,6 +17,13 @@ spec:
       labels:
         app.kubernetes.io/name: homepage
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: homepage
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
