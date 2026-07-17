@@ -23,8 +23,9 @@ spec:
     # to true, apply, delete the pod, then flip back — do NOT leave it on.
     bpf:
       masquerade: true
-      # Ref: https://github.com/siderolabs/talos/issues/10002
-      hostLegacyRouting: true
+      # Bypass the host Tailscale connmark mask conflict (cilium/cilium#36104).
+      # Legacy routing truncated same-node source identities and caused policy drops.
+      hostLegacyRouting: false
     cni:
       # Required for pairing with Multus CNI
       exclusive: false
