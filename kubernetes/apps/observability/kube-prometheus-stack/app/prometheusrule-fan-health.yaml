@@ -13,18 +13,24 @@ spec:
     - name: physical-fan-health
       interval: 30s
       rules:
-        - alert: NodePhysicalFanStopped
+        - alert: NodePhysicalFanStoppedOrUnstable
           expr: |
-            (node_hwmon_fan_rpm{sensor=~"fan1|fan2"} == 0)
+            (
+              avg_over_time(
+                (node_hwmon_fan_rpm{sensor=~"fan1|fan2"} == bool 0)[10m:30s]
+              ) >= 0.25
+            )
               * on(instance) group_left(nodename) node_uname_info
           for: 5m
           labels:
             severity: critical
             component: hardware
           annotations:
-            summary: "Physical fan {{ $labels.sensor }} stopped on {{ $labels.nodename }}"
+            summary: "Physical fan {{ $labels.sensor }} stopped or unstable on {{ $labels.nodename }}"
             description: |
-              {{ $labels.nodename }} reports {{ $labels.sensor }} at 0 RPM for
-              at least 5 minutes. Inspect the fan, cabling, and chassis airflow
-              before sustained load causes thermal throttling or a reset.
+              {{ $labels.nodename }} reports {{ $labels.sensor }} at 0 RPM for at
+              least 25% of samples over the last 10 minutes (observed fraction:
+              {{ $value }}). This detects a sustained stop or intermittent stall.
+              Inspect the fan, cabling, and chassis airflow before sustained load
+              causes thermal throttling or a reset.
             runbook_url: "https://github.com/wcygan/anton/blob/main/context/notes/k8s-2-instability/evidence-2026-05-06-k8s-2-fan1-intermittent-failure.md"
