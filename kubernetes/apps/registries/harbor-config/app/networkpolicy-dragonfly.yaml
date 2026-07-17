@@ -1,0 +1,49 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: harbor-redis-restricted
+spec:
+  podSelector:
+    matchLabels:
+      app: harbor-redis
+      app.kubernetes.io/name: dragonfly
+      app.kubernetes.io/part-of: dragonfly
+  policyTypes:
+    - Ingress
+  ingress:
+    # Redis clients: Harbor, the operator, and Dragonfly replication peers.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: harbor
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchLabels:
+              control-plane: controller-manager
+        - podSelector:
+            matchLabels:
+              app: harbor-redis
+              app.kubernetes.io/name: dragonfly
+              app.kubernetes.io/part-of: dragonfly
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Dragonfly's unauthenticated admin endpoint is only for its operator and peers.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchLabels:
+              control-plane: controller-manager
+        - podSelector:
+            matchLabels:
+              app: harbor-redis
+              app.kubernetes.io/name: dragonfly
+              app.kubernetes.io/part-of: dragonfly
+      ports:
+        - protocol: TCP
+          port: 9999

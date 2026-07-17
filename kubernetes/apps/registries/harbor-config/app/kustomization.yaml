@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - ./postgres-cluster.yaml
   - ./dragonfly.yaml
+  - ./networkpolicy-dragonfly.yaml
   - ./externalsecret-admin.yaml
   - ./externalsecret-s3.yaml
   - ./ingress-tailscale.yaml
