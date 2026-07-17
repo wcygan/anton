@@ -126,6 +126,9 @@ spec:
         trustCRDsExist: true
     rollOutCiliumPods: true
     routingMode: native
+    updateStrategy:
+      rollingUpdate:
+        maxUnavailable: 1
     securityContext:
       capabilities:
         ciliumAgent:
