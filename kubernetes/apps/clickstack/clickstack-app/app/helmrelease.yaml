@@ -116,6 +116,13 @@ spec:
                     - query: "GRANT SELECT,INSERT,CREATE,SHOW,ALTER TTL,ALTER MATERIALIZE TTL ON default.*"
       keeper:
         spec:
+          # KeeperCluster supports the image through its container template.
+          # Keep the currently running official 26.5.1.882 build, but make the
+          # version and digest explicit instead of tracking the mutable latest tag.
+          containerTemplate:
+            image:
+              repository: docker.io/clickhouse/clickhouse-keeper:26.5.1.882
+              hash: sha256:1264096f8c73a3e2fbc62cbbaa8cb83089edb4129c2d50f1b9e14c8fb1923cb3
           dataVolumeClaimSpec:
             resources:
               requests:
