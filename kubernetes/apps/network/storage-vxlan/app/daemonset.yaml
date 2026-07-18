@@ -33,8 +33,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: vxlan
-          # renovate: datasource=docker depName=nicolaka/netshoot
-          image: nicolaka/netshoot:v0.15@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61
+          image: 192.168.1.106/library/storage-vxlan:0.1.1@sha256:4963bcf50365220415a02eece7a32c42466b7ead21e36e47028bf02cc7cbcd81
           imagePullPolicy: IfNotPresent
           env:
             - name: NODE_NAME
