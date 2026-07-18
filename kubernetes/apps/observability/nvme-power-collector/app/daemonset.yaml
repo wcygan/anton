@@ -31,12 +31,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: collector
-          # Alpine + nvme-cli installed at startup. ~5s init penalty per pod
-          # (one apk add fetch), then a tight sleep loop. Avoids a custom
-          # image-build pipeline; if the apk fetch becomes flaky we can
-          # promote to a built image via the deploy-owned-app pipeline.
-          # renovate: datasource=docker depName=alpine
-          image: alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+          image: 192.168.1.106/library/nvme-power-collector:0.1.1@sha256:a190eb1d473ce16a01100e3c9427b353b9ee864554a4ef6de1571ab4d0a35841
           imagePullPolicy: IfNotPresent
           securityContext:
             # Privileged required for /dev/nvme* ioctl (NVMe admin commands
@@ -45,6 +40,7 @@ spec:
             privileged: true
             runAsNonRoot: false
             runAsUser: 0
+            readOnlyRootFilesystem: true
           resources:
             requests:
               cpu: 5m
@@ -64,13 +60,6 @@ spec:
 
               echo "[nvme-power-collector] starting on $(hostname)"
 
-              # Install collection tools at runtime. Cached on subsequent restarts
-              # via the alpine package layer if the image is in spegel; cold cache
-              # adds ~5s. Failure here is fatal — without these tools the
-              # textfile would silently stay incomplete.
-              apk add --no-cache nvme-cli >/dev/null
-              echo "[nvme-power-collector] nvme-cli ready"
-
               # Atomic-write loop: each iteration writes a .tmp file then
               # renames it over .prom so node-exporter never reads a partial
               # file. 30 s cadence matches betty's scrape interval.
@@ -86,7 +75,7 @@ spec:
                   # after the colon, so awk $NF returns "value:0x..." not
                   # "0x...". Use sed with an anchored capture group to extract
                   # just the hex literal, then printf %d to convert to decimal.
-                  raw=$(nvme get-feature -f 0x02 "$d" 2>/dev/null | sed -n 's/.*Current value:[[:space:]]*0x\([0-9a-fA-F][0-9a-fA-F]*\).*/\1/p')
+                  raw=$(nvme get-feature "$d" -f 0x02 2>/dev/null | sed -n 's/.*Current value:[[:space:]]*0x\([0-9a-fA-F][0-9a-fA-F]*\).*/\1/p')
                   case "$raw" in
                     ''|*[!0-9a-fA-F]*) continue ;;
                   esac
