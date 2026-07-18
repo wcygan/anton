@@ -35,10 +35,24 @@ readonly AUDIT_MODE="${1:-cluster}"
 readonly AUDIT_TIMESTAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
 readonly AUDIT_ROOT="${ROOT_DIR}/.private/security-audits"
 readonly OUTPUT_DIR="${AUDIT_ROOT}/${AUDIT_TIMESTAMP}"
+# Full workload-image inventory can exceed Trivy's five-minute default on a
+# homelab registry path. Operators may override this duration per run.
+readonly TRIVY_TIMEOUT="${TRIVY_TIMEOUT:-30m}"
+if [[ -n "${TRIVY_DOCKER_CONFIG:-}" ]]; then
+    readonly TRIVY_DOCKER_CONFIG_OVERRIDE=1
+else
+    readonly TRIVY_DOCKER_CONFIG_OVERRIDE=""
+fi
+readonly TRIVY_DOCKER_CONFIG="${TRIVY_DOCKER_CONFIG:-${OUTPUT_DIR}/docker-config}"
 
 function usage() {
     cat <<'EOF'
 Usage: security-audit.sh [cluster|images]
+
+Environment:
+  TRIVY_TIMEOUT  Trivy Kubernetes scan timeout (default: 30m).
+  TRIVY_DOCKER_CONFIG  Docker config directory for Trivy (default: isolated
+                       empty directory inside the private audit output).
 
   cluster  Scan cluster configuration and RBAC with Trivy, then the NSA
            framework with Kubescape. This is the default.
@@ -102,6 +116,13 @@ function write_metadata() {
         printf 'mode=%s\n' "${AUDIT_MODE}"
         printf 'kube_context=%s\n' "$(kubectl config current-context)"
         printf 'trivy_version=%s\n' "$(trivy --version | sed -n '1s/^Version: //p')"
+        printf 'trivy_timeout=%s\n' "${TRIVY_TIMEOUT}"
+        printf 'trivy_docker_config=%s\n' "${TRIVY_DOCKER_CONFIG}"
+        if [[ -n "${TRIVY_DOCKER_CONFIG_OVERRIDE:-}" ]]; then
+            printf 'trivy_docker_config_mode=operator-override\n'
+        else
+            printf 'trivy_docker_config_mode=isolated-empty\n'
+        fi
         if [[ "${AUDIT_MODE}" == "cluster" ]]; then
             printf 'kubescape_version=%s\n' "$(kubescape version | sed -n 's/^Your current version is: //p')"
         fi
@@ -110,7 +131,8 @@ function write_metadata() {
 
 function run_cluster_audit() {
     log info "Running Trivy configuration and RBAC scan" "output=${OUTPUT_DIR}/trivy-config-rbac.json"
-    trivy kubernetes \
+    DOCKER_CONFIG="${TRIVY_DOCKER_CONFIG}" trivy kubernetes \
+        --timeout "${TRIVY_TIMEOUT}" \
         --kubeconfig "${KUBECONFIG}" \
         --disable-node-collector \
         --disable-telemetry \
@@ -129,13 +151,23 @@ function run_cluster_audit() {
 
 function run_image_audit() {
     log info "Running explicit Trivy workload image scan" "output=${OUTPUT_DIR}/trivy-images.json"
-    trivy kubernetes \
+    local status=0
+    DOCKER_CONFIG="${TRIVY_DOCKER_CONFIG}" trivy kubernetes \
+        --timeout "${TRIVY_TIMEOUT}" \
         --kubeconfig "${KUBECONFIG}" \
         --disable-node-collector \
         --disable-telemetry \
         --scanners vuln \
         --format json \
-        --output "${OUTPUT_DIR}/trivy-images.json"
+        --output "${OUTPUT_DIR}/trivy-images.json" \
+        2>"${OUTPUT_DIR}/trivy-images.stderr.log" || status=$?
+
+    printf '%s\n' "${status}" >"${OUTPUT_DIR}/trivy-images.exit-status"
+    if ((status != 0)); then
+        log error "Trivy workload image scan failed" \
+            "exit_status=${status}" \
+            "stderr=${OUTPUT_DIR}/trivy-images.stderr.log"
+    fi
 }
 
 case "${AUDIT_MODE}" in
@@ -169,6 +201,8 @@ trap verify_agentless_state_on_exit EXIT
 
 mkdir -p "${OUTPUT_DIR}"
 chmod 700 "${OUTPUT_DIR}"
+mkdir -p "${TRIVY_DOCKER_CONFIG}"
+chmod 700 "${TRIVY_DOCKER_CONFIG}"
 write_metadata
 
 case "${AUDIT_MODE}" in
