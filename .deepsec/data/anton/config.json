@@ -1,0 +1,23 @@
+{
+  "ignorePaths": [
+    "**/*.key",
+    "**/*.pub",
+    "**/*.decrypted~*.yaml",
+    "**/.env*.local",
+    ".private/**",
+    ".task/**",
+    ".venv/**",
+    ".qmd/index.sqlite*",
+    ".jj/**",
+    ".claude/worktrees/**",
+    ".claude/settings.local.json",
+    ".claude/scheduled_tasks.lock",
+    ".deepsec/**",
+    "docs/.docusaurus/**",
+    "cloudflare-tunnel.json",
+    "github-push-token.txt",
+    "**/kubeconfig",
+    "**/talosconfig",
+    "talos/clusterconfig/**"
+  ]
+}
