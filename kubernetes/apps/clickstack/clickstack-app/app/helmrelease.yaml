@@ -23,7 +23,7 @@ spec:
       chart: clickstack
       # Pinned per ADR 0028 — young chart (appVersion 2.27.0), single published
       # version. No ranges; Renovate owns the bump.
-      version: 3.0.0
+      version: 3.0.2
       sourceRef:
         kind: HelmRepository
         name: clickstack-charts
