@@ -1,0 +1,91 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: food-site-server
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: food-site-server
+  interval: 1h
+  values:
+    controllers:
+      server:
+        replicas: 2
+        strategy: RollingUpdate
+        pod:
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/controller: server
+                  app.kubernetes.io/instance: food-site-server
+                  app.kubernetes.io/name: food-site-server
+        podDisruptionBudget:
+          minAvailable: 1
+        containers:
+          app:
+            image:
+              repository: ghcr.io/wcygan/food-site/server
+              tag: main-static-ad81160
+              digest: sha256:f9fdf782b53190fe98aabc4ca85b139b1ba8cddf719890affb4889b4e9d9b1f6
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - /usr/bin/wget
+                      - -q
+                      - -T
+                      - "1"
+                      - -O
+                      - /dev/null
+                      - http://127.0.0.1:8000/
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  timeoutSeconds: 2
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 25m
+                memory: 128Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      imagePullSecrets:
+        - name: ghcr-registry-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        controller: server
+        ports:
+          http:
+            port: 8000
+    persistence:
+      cache:
+        type: emptyDir
+        advancedMounts:
+          server:
+            app:
+              - path: /var/cache/nginx
+      run:
+        type: emptyDir
+        advancedMounts:
+          server:
+            app:
+              - path: /var/run
