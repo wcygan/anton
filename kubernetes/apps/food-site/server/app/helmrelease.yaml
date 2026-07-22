@@ -30,8 +30,8 @@ spec:
           app:
             image:
               repository: ghcr.io/wcygan/food-site/server
-              tag: main-static-9a20cdb
-              digest: sha256:842cce269282f3a78f7e21e984b9f28af9d4c5692eaaacc044dbb225b4717474
+              tag: main-static-93c15e6
+              digest: sha256:ba048d26b8a3d1a95cd68f9861c1a7074821a786c366c9812138ca75977db8dc
             probes:
               liveness: &probes
                 enabled: true
