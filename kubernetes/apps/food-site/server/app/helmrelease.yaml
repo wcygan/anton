@@ -1,4 +1,3 @@
----
 # yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -30,8 +29,8 @@ spec:
           app:
             image:
               repository: ghcr.io/wcygan/food-site/server
-              tag: build-static-4-93c15e6 # {"$imagepolicy": "food-site:food-site-server:tag"}
-              digest: sha256:ba048d26b8a3d1a95cd68f9861c1a7074821a786c366c9812138ca75977db8dc # {"$imagepolicy": "food-site:food-site-server:digest"}
+              tag: build-static-5-ec2102d # {"$imagepolicy": "food-site:food-site-server:tag"}
+              digest: sha256:db9da19e6bd236afb4eaec6db084ff5d31de65bc22712ec74ba03e4dfa4b2f8e # {"$imagepolicy": "food-site:food-site-server:digest"}
             probes:
               liveness: &probes
                 enabled: true
@@ -54,7 +53,7 @@ spec:
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: { drop: ["ALL"] }
+              capabilities: {drop: ["ALL"]}
             resources:
               requests:
                 cpu: 25m
