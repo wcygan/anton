@@ -1,0 +1,8 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: food-site-server
+spec:
+  image: ghcr.io/wcygan/food-site/server
+  interval: 5m

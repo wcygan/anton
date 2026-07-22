@@ -1,0 +1,25 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: food-site-server
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: flux@anton
+        name: flux
+      messageTemplate: 'chore(food-site): {{range .Changed.Changes}}{{.NewValue}}{{println}}{{end}}'
+    push:
+      branch: main
+  update:
+    path: ./kubernetes/apps/food-site/server/app
+    strategy: Setters
