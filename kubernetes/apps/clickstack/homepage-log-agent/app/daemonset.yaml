@@ -42,7 +42,7 @@ spec:
               mountPath: /var/lib/otelcol/file_storage
       containers:
         - name: otelcol
-          image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.146.1@sha256:5a61538861c9e860c0c1c8b64188c0bd1d416ab380f05b8ff052fb88216bafd3
+          image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s:0.157.0@sha256:37309aafd87d97b8966cf0f458ca909363be0e619adbac484c587507020a11f5
           imagePullPolicy: IfNotPresent
           args:
             - --config=/conf/collector.yaml
