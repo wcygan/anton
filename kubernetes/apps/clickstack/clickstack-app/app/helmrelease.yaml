@@ -125,7 +125,7 @@ spec:
           containerTemplate:
             image:
               repository: docker.io/clickhouse/clickhouse-keeper
-              tag: 26.5.1.882@sha256:1264096f8c73a3e2fbc62cbbaa8cb83089edb4129c2d50f1b9e14c8fb1923cb3
+              tag: 26.7.1.1315@sha256:84f85a71874d0071c11a1b85f32a2b920b45a5c0e8210809b4882e0f556d2eb2
           dataVolumeClaimSpec:
             resources:
               requests:
