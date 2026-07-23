@@ -36,7 +36,7 @@ spec:
           containers:
             - name: kubectl
               # renovate: datasource=docker depName=registry.k8s.io/kubectl
-              image: registry.k8s.io/kubectl:v1.36.1
+              image: registry.k8s.io/kubectl:v1.36.3
               imagePullPolicy: IfNotPresent
               # Distroless kubectl invokes directly via args (no shell); the
               # shell command runs inside the `rotator` busybox sidecar on the
