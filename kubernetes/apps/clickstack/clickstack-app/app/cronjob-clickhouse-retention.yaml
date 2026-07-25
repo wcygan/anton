@@ -33,7 +33,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: retention
-              image: clickhouse/clickhouse-server:26.5-alpine
+              image: clickhouse/clickhouse-server:26.7-alpine
               imagePullPolicy: IfNotPresent
               env:
                 - name: CLICKHOUSE_HOST
