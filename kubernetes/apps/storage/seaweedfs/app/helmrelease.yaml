@@ -14,7 +14,7 @@ spec:
       # Bumped to 0.1.22 on 2026-05-10 to pick up the fix; cluster-side
       # delete-and-recreate does NOT work, only the chart upgrade does.
       # See docs/docs/notes/seaweedfs-baseline-2026-04-19.md §6.
-      version: 0.1.22
+      version: 0.1.36
       sourceRef:
         kind: HelmRepository
         name: seaweedfs-operator
