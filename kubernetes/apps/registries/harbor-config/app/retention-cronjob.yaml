@@ -1,0 +1,81 @@
+# Reconcile Harbor's project-scoped retention policies from Git. Harbor does
+# not expose retention policies as a Kubernetes resource, so this bounded job
+# uses the supported Harbor API and the existing admin-password Secret.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: harbor-retention-reconcile
+  labels:
+    app.kubernetes.io/name: harbor-retention
+    app.kubernetes.io/part-of: harbor
+spec:
+  schedule: "17 1 * * *"
+  startingDeadlineSeconds: 900
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 900
+      backoffLimit: 3
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: harbor-retention
+            app.kubernetes.io/part-of: harbor
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: reconcile
+              # Existing Anton convention; this image includes curl and jq.
+              image: alpine/k8s:1.36.2@sha256:44ef4942e171939b9c665a4a84beb80e2dcdb9a24330d4651cfdfd2e9deecc47
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+              args:
+                - /opt/reconcile.sh
+              env:
+                - name: HARBOR_API_URL
+                  value: http://harbor-core/api/v2.0
+                - name: HARBOR_USERNAME
+                  value: admin
+                - name: HARBOR_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: harbor-admin-secret
+                      key: HARBOR_ADMIN_PASSWORD
+                # Harbor's scheduler uses a six-field cron expression with
+                # seconds. Run policy execution daily at 01:30 UTC.
+                - name: HARBOR_RETENTION_CRON
+                  value: "0 30 1 * * *"
+                - name: HARBOR_PROTECTED_TAGS
+                  value: "{latest,stable,prod,release-*}"
+              volumeMounts:
+                - name: reconciler
+                  mountPath: /opt/reconcile.sh
+                  subPath: reconcile.sh
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+          volumes:
+            - name: reconciler
+              configMap:
+                name: harbor-retention-reconciler
