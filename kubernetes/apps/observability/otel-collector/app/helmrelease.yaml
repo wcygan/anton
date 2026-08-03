@@ -84,6 +84,11 @@ spec:
               parse_to: attributes
               if: 'body matches "^\\s*\\{"'
             - type: regex_parser
+              id: key-value-severity
+              parse_from: body
+              regex: '(?i)(?:^|[\\s])(?:level|severity)[=: ]+(?P<severity_text>fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b'
+              if: 'body matches "(?i).*(level|severity)[=: ]+(fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b.*"'
+            - type: regex_parser
               id: text-severity
               parse_from: body
               regex: '^(?P<severity_text>fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b[:\\s-]*(?P<message>.*)$'
@@ -112,7 +117,7 @@ spec:
                 - set(resource.attributes["severity"], "trace") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^trace$")
                 - set(resource.attributes["severity"], "info") where resource.attributes["severity"] == nil
       exporters:
-        otlphttp/loki:
+        otlp_http/loki:
           endpoint: http://loki.observability.svc.cluster.local:3100/otlp
           compression: gzip
           timeout: 10s
@@ -146,7 +151,7 @@ spec:
               - transform/severity
               - batch
             exporters:
-              - otlphttp/loki
+              - otlp_http/loki
     ports:
       otlp:
         enabled: false
