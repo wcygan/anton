@@ -102,7 +102,6 @@ spec:
         apply_retention_interval: 10m
         retention_delete_delay: 2h
         delete_request_store: s3
-        deletion_mode: filter-and-delete
       # Keep only deliberately low-cardinality resource attributes as Loki
       # labels. Pod names, UIDs, node names, image fields, and request-like
       # values remain structured metadata.
