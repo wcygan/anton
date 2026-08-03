@@ -1,6 +1,12 @@
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+configMapGenerator:
+  - name: harbor-retention-reconciler
+    files:
+      - reconcile.sh=./reconcile.sh
+    options:
+      disableNameSuffixHash: true
 resources:
   - ./postgres-cluster.yaml
   - ./dragonfly.yaml
@@ -9,3 +15,4 @@ resources:
   - ./externalsecret-s3.yaml
   - ./ingress-tailscale.yaml
   - ./prometheusrule.yaml
+  - ./retention-cronjob.yaml
