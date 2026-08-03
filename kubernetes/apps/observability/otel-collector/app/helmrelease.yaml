@@ -26,10 +26,7 @@ spec:
       name: otelcol-k8s
     presets:
       logsCollection:
-        enabled: true
-        includeCollectorLogs: false
-        storeCheckpoints: true
-        maxRecombineLogSize: 262144
+        enabled: false
       kubernetesAttributes:
         enabled: true
     initContainers:
@@ -65,6 +62,8 @@ spec:
         type: RuntimeDefault
     alternateConfig:
       extensions:
+        file_storage:
+          directory: /var/lib/otelcol
         health_check:
           endpoint: $${env:MY_POD_IP}:13133
       receivers:
@@ -132,6 +131,7 @@ spec:
       service:
         extensions:
           - health_check
+          - file_storage
         telemetry:
           metrics:
             level: normal
@@ -151,6 +151,21 @@ spec:
               - batch
             exporters:
               - otlp_http/loki
+    extraVolumes:
+      - name: varlogpods
+        hostPath:
+          path: /var/log/pods
+          type: Directory
+      - name: varlibotelcol
+        hostPath:
+          path: /var/lib/otelcol
+          type: DirectoryOrCreate
+    extraVolumeMounts:
+      - name: varlogpods
+        mountPath: /var/log/pods
+        readOnly: true
+      - name: varlibotelcol
+        mountPath: /var/lib/otelcol
     ports:
       otlp:
         enabled: false
