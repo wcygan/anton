@@ -38,7 +38,7 @@ spec:
         command:
           - /bin/sh
           - -ec
-          - mkdir -p /var/lib/otelcol && chmod 0700 /var/lib/otelcol && find /var/lib/otelcol -type f -exec chmod 0600 {} +
+          - mkdir -p /var/lib/otelcol && chmod 0700 /var/lib/otelcol
         securityContext:
           runAsUser: 0
           runAsGroup: 0
