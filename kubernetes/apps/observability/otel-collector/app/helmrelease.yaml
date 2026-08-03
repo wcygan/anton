@@ -82,15 +82,6 @@ spec:
               parse_from: body
               parse_to: attributes
               if: 'body matches "^\\s*\\{"'
-            - type: regex_parser
-              id: key-value-severity
-              parse_from: body
-              regex: '(?i)(?:.*(?:level|severity)[=: ]+(?P<severity_text>fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b.*|.*)'
-            - type: regex_parser
-              id: text-severity
-              parse_from: body
-              regex: '^(?P<severity_text>fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b[:\\s-]*(?P<message>.*)$'
-              if: 'body matches "(?i)^(fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b"'
       processors:
         batch:
           timeout: 2s
@@ -105,6 +96,7 @@ spec:
           log_statements:
             - context: log
               statements:
+                - delete_key(resource.attributes, "severity")
                 - set(log.severity_text, log.attributes["severity_text"]) where log.attributes["severity_text"] != nil
                 - set(log.severity_text, log.attributes["level"]) where log.attributes["level"] != nil
                 - set(log.severity_text, log.attributes["severity"]) where log.attributes["severity"] != nil
@@ -113,12 +105,15 @@ spec:
                 - set(log.severity_text, "warn") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)(warn|warning)\\b|(?:level|severity)[\"'=:\\s]+[\"']?(warn|warning)\\b")
                 - set(log.severity_text, "debug") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)debug\\b|(?:level|severity)[\"'=:\\s]+[\"']?debug\\b")
                 - set(log.severity_text, "trace") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)trace\\b|(?:level|severity)[\"'=:\\s]+[\"']?trace\\b")
-                - set(resource.attributes["severity"], "fatal") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(fatal|critical|panic)$")
-                - set(resource.attributes["severity"], "error") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(error|err)$")
-                - set(resource.attributes["severity"], "warn") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(warn|warning)$")
-                - set(resource.attributes["severity"], "debug") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^debug$")
-                - set(resource.attributes["severity"], "trace") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^trace$")
-                - set(resource.attributes["severity"], "info") where resource.attributes["severity"] == nil
+                - set(log.attributes["severity"], "fatal") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(fatal|critical|panic)$")
+                - set(log.attributes["severity"], "error") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(error|err)$")
+                - set(log.attributes["severity"], "warn") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(warn|warning)$")
+                - set(log.attributes["severity"], "debug") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^debug$")
+                - set(log.attributes["severity"], "trace") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^trace$")
+                - set(log.attributes["severity"], "info") where log.attributes["severity"] == nil
+        groupbyattrs/severity:
+          keys:
+            - severity
       exporters:
         otlp_http/loki:
           endpoint: http://loki.observability.svc.cluster.local:3100/otlp
@@ -153,6 +148,7 @@ spec:
             processors:
               - memory_limiter
               - transform/severity
+              - groupbyattrs/severity
               - batch
             exporters:
               - otlp_http/loki
