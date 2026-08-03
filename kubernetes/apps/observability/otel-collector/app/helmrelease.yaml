@@ -177,9 +177,6 @@ spec:
       limits:
         cpu: 500m
         memory: 512Mi
-    extraEnvs:
-      - name: GOMEMLIMIT
-        value: 450MiB
     tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
