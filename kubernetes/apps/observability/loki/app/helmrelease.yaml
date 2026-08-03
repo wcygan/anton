@@ -1,0 +1,166 @@
+---
+# Loki is deliberately monolithic: one StatefulSet, one bounded PVC, and the
+# existing SeaweedFS S3 service. Grafana remains the only user-facing UI.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+spec:
+  chart:
+    spec:
+      chart: loki
+      version: 18.7.1
+      sourceRef:
+        kind: HelmRepository
+        name: grafana-community
+      interval: 15m
+  interval: 1h
+  values:
+    deploymentMode: Monolithic
+
+    # No gateway, canary, MinIO, rollout operator, or chart test pod: the
+    # in-cluster service is sufficient for Grafana and the DaemonSet.
+    gateway:
+      enabled: false
+    lokiCanary:
+      enabled: false
+    minio:
+      enabled: false
+    rollout_operator:
+      enabled: false
+    test:
+      enabled: false
+
+    serviceAccount:
+      automountServiceAccountToken: false
+
+    defaults:
+      extraArgs:
+        - -config.expand-env=true
+      extraEnvFrom:
+        - secretRef:
+            name: loki-s3-credentials
+
+    loki:
+      auth_enabled: false
+      server:
+        http_listen_port: 3100
+        grpc_listen_port: 9095
+        log_level: info
+      commonConfig:
+        path_prefix: /var/loki
+        replication_factor: 1
+      schemaConfig:
+        configs:
+          - from: "2024-01-01"
+            store: tsdb
+            object_store: s3
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+      storage:
+        type: s3
+        bucketNames:
+          chunks: loki
+          ruler: loki
+        s3:
+          endpoint: http://seaweedfs-s3.storage.svc.cluster.local:8333
+          region: us-east-1
+          accessKeyId: "${AWS_ACCESS_KEY_ID}"
+          secretAccessKey: "${AWS_SECRET_ACCESS_KEY}"
+          s3ForcePathStyle: true
+          insecure: true
+      limits_config:
+        allow_structured_metadata: true
+        volume_enabled: true
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+        retention_period: 24h
+        retention_stream:
+          - selector: '{severity=~"fatal|error"}'
+            priority: 100
+            period: 720h
+          - selector: '{severity="warn"}'
+            priority: 90
+            period: 336h
+          - selector: '{severity=~"debug|trace"}'
+            priority: 80
+            period: 6h
+          - selector: '{severity=~"info|unknown"}'
+            priority: 70
+            period: 24h
+        ingestion_rate_mb: 4
+        ingestion_burst_size_mb: 8
+        max_global_streams_per_user: 10000
+        max_line_size: 256KB
+        max_entries_limit_per_query: 5000
+      compactor:
+        working_directory: /var/loki/compactor
+        retention_enabled: true
+        compaction_interval: 10m
+        apply_retention_interval: 10m
+        retention_delete_delay: 2h
+        delete_request_store: s3
+        deletion_mode: filter-and-delete
+      # Keep only deliberately low-cardinality resource attributes as Loki
+      # labels. Pod names, UIDs, node names, image fields, and request-like
+      # values remain structured metadata.
+      distributor:
+        otlp_config:
+          default_resource_attributes_as_index_labels:
+            - k8s.namespace.name
+            - k8s.container.name
+            - k8s.deployment.name
+            - k8s.statefulset.name
+            - k8s.daemonset.name
+            - k8s.job.name
+            - k8s.cronjob.name
+            - severity
+
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
+    singleBinary:
+      enabled: true
+      kind: StatefulSet
+      replicas: 1
+      podDisruptionBudget:
+        enabled: false
+      persistence:
+        enabled: true
+        storageClass: longhorn
+        accessModes: [ReadWriteOnce]
+        size: 20Gi
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: 1
+          memory: 1Gi
+    write:
+      replicas: 0
+    read:
+      replicas: 0
+    backend:
+      replicas: 0
+
+    # The compactor runs inside the monolithic Loki process; do not create a
+    # separate compactor workload.
+    compactor:
+      enabled: false
+    ruler:
+      enabled: false
+
+    monitoring:
+      serviceMonitor:
+        enabled: true
+        interval: 30s
+        labels:
+          release: kube-prometheus-stack
+      rules:
+        enabled: false
+      alerts:
+        enabled: false

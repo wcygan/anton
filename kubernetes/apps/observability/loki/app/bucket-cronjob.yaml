@@ -1,0 +1,64 @@
+---
+# The existing SeaweedFS source-of-truth provisions Harbor's bucket separately.
+# Ensure Loki's bucket exists without introducing a second database or storing
+# credentials in Git. This is idempotent and uses the same bounded CronJob
+# pattern as storage/seaweedfs-config.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: loki-bucket-ensure
+spec:
+  schedule: "23 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: ensure-bucket
+              image: amazon/aws-cli:2.36.14
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: loki-s3-credentials
+              env:
+                - name: AWS_EC2_METADATA_DISABLED
+                  value: "true"
+                - name: AWS_DEFAULT_REGION
+                  value: us-east-1
+              command:
+                - /bin/sh
+                - -c
+              args:
+                - |
+                  set -eu
+                  endpoint="http://seaweedfs-s3.storage.svc.cluster.local:8333"
+                  if aws --endpoint-url="$endpoint" s3api head-bucket --bucket loki >/dev/null 2>&1; then
+                    echo "loki bucket present"
+                  else
+                    aws --endpoint-url="$endpoint" s3 mb s3://loki
+                    echo "loki bucket created"
+                  fi
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]

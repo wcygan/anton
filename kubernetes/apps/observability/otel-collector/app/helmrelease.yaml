@@ -1,0 +1,189 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: otel-collector
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: opentelemetry-collector
+      version: 0.165.0
+      sourceRef:
+        kind: HelmRepository
+        name: opentelemetry
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    mode: daemonset
+    image:
+      repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s
+      tag: 0.156.0
+    command:
+      name: otelcol-k8s
+    presets:
+      logsCollection:
+        enabled: true
+        includeCollectorLogs: false
+        storeCheckpoints: true
+        maxRecombineLogSize: 262144
+      kubernetesAttributes:
+        enabled: true
+    initContainers:
+      - name: harden-checkpoint-directory
+        image: busybox:1.37.0
+        command:
+          - /bin/sh
+          - -ec
+          - mkdir -p /var/lib/otelcol && chmod 0700 /var/lib/otelcol && find /var/lib/otelcol -type f -exec chmod 0600 {} +
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+          - name: varlibotelcol
+            mountPath: /var/lib/otelcol
+    securityContext:
+      runAsUser: 0
+      runAsGroup: 0
+      runAsNonRoot: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+    alternateConfig:
+      extensions:
+        health_check:
+          endpoint: ${env:MY_POD_IP}:13133
+      receivers:
+        filelog:
+          include:
+            - /var/log/pods/*/*/*.log
+          start_at: end
+          include_file_name: false
+          include_file_path: true
+          operators:
+            - type: container
+              id: container-parser
+              max_log_size: 256KiB
+            - type: json_parser
+              id: json-severity
+              parse_from: body
+              parse_to: attributes
+              if: 'body matches "^\\s*\\{"'
+            - type: regex_parser
+              id: text-severity
+              parse_from: body
+              regex: '^(?P<severity_text>fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b[:\\s-]*(?P<message>.*)$'
+              if: 'body matches "(?i)^(fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b"'
+      processors:
+        batch:
+          timeout: 2s
+          send_batch_size: 256
+          send_batch_max_size: 512
+        memory_limiter:
+          check_interval: 1s
+          limit_mib: 384
+          spike_limit_mib: 96
+        transform/severity:
+          error_mode: ignore
+          log_statements:
+            - context: log
+              statements:
+                - set(log.severity_text, log.attributes["severity_text"]) where log.attributes["severity_text"] != nil
+                - set(log.severity_text, log.attributes["level"]) where log.attributes["level"] != nil
+                - set(log.severity_text, log.attributes["severity"]) where log.attributes["severity"] != nil
+                - set(resource.attributes["severity"], "fatal") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(fatal|critical|panic)$")
+                - set(resource.attributes["severity"], "error") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(error|err)$")
+                - set(resource.attributes["severity"], "warn") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(warn|warning)$")
+                - set(resource.attributes["severity"], "debug") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^debug$")
+                - set(resource.attributes["severity"], "trace") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^trace$")
+                - set(resource.attributes["severity"], "info") where resource.attributes["severity"] == nil
+      exporters:
+        otlphttp/loki:
+          endpoint: http://loki.observability.svc.cluster.local:3100/otlp
+          compression: gzip
+          timeout: 10s
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_interval: 30s
+            max_elapsed_time: 5m
+          sending_queue:
+            enabled: true
+            num_consumers: 2
+            queue_size: 256
+      service:
+        extensions:
+          - health_check
+        telemetry:
+          metrics:
+            level: normal
+            readers:
+              - pull:
+                  exporter:
+                    prometheus:
+                      host: ${env:MY_POD_IP}
+                      port: 8888
+        pipelines:
+          logs:
+            receivers:
+              - filelog
+            processors:
+              - memory_limiter
+              - transform/severity
+              - batch
+            exporters:
+              - otlphttp/loki
+    ports:
+      otlp:
+        enabled: false
+      otlp-http:
+        enabled: false
+      jaeger-compact:
+        enabled: false
+      jaeger-thrift:
+        enabled: false
+      jaeger-grpc:
+        enabled: false
+      zipkin:
+        enabled: false
+      metrics:
+        enabled: true
+        containerPort: 8888
+        servicePort: 8888
+        protocol: TCP
+    podMonitor:
+      enabled: true
+      metricsEndpoints:
+        - port: metrics
+          interval: 30s
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    extraEnvs:
+      - name: GOMEMLIMIT
+        value: 450MiB
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule

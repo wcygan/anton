@@ -1,0 +1,11 @@
+---
+# Grafana Community is the current upstream home of the open-source Loki chart.
+# Use a classic HelmRepository here because Flux can fetch the pinned chart from
+# the same official repository used by the documented Helm install path.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: grafana-community
+spec:
+  interval: 1h
+  url: https://grafana-community.github.io/helm-charts

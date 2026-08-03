@@ -140,6 +140,16 @@ spec:
           # ConfigMap-sourced ones. Per plan 0002.
           allowUiUpdates: false
           disableDeletion: true
+      # GitOps-provisioned Loki datasource. Loki stays ClusterIP-only; Grafana
+      # talks to its in-cluster service and remains the sole logs UI.
+      additionalDataSources:
+        - name: Loki
+          uid: loki
+          type: loki
+          access: proxy
+          url: http://loki.observability.svc.cluster.local:3100
+          isDefault: false
+          editable: false
       # Off-LAN access via the Tailscale operator Ingress recipe. Pattern
       # validated on Hubble UI 2026-04-17 after the Cilium `devices: enp+`
       # fix for tailscale/tailscale#12393. See ADR 0012 Consequences.

@@ -1,11 +1,11 @@
 ---
-status: Deferred
+status: Superseded-by 0030
 date: 2026-04-12
 deciders: ['@wcygan']
 affects: observability
 intent: concrete-need
 supersedes: []
-superseded-by: null
+superseded-by: 0030
 retrospective: false
 ---
 

@@ -10,7 +10,9 @@ resources:
   - ./namespace.yaml
   - ./goldilocks/ks.yaml
   - ./kube-prometheus-stack/ks.yaml
+  - ./loki/ks.yaml
   - ./ntfy/ks.yaml
   - ./nvme-power-collector/ks.yaml
+  - ./otel-collector/ks.yaml
   - ./smartctl-exporter/ks.yaml
   - ./talos-log-sink/ks.yaml
