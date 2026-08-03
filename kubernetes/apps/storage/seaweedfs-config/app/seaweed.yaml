@@ -9,7 +9,10 @@ spec:
   master:
     replicas: 3
     defaultReplication: "000"      # Longhorn owns durability (ADR 0005)
-    volumeSizeLimitMB: 30000        # 30 GB per volume file
+    # Keep logical volumes small enough that each 100Gi volume server has
+    # room for multiple collections. Existing volumes are unaffected; this
+    # only increases the number of new volume slots available to S3 buckets.
+    volumeSizeLimitMB: 10000        # 10 GB per volume file
     affinity:
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
