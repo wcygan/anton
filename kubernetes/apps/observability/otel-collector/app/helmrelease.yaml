@@ -108,6 +108,11 @@ spec:
                 - set(log.severity_text, log.attributes["severity_text"]) where log.attributes["severity_text"] != nil
                 - set(log.severity_text, log.attributes["level"]) where log.attributes["level"] != nil
                 - set(log.severity_text, log.attributes["severity"]) where log.attributes["severity"] != nil
+                - set(log.severity_text, "fatal") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)(fatal|critical|panic)\\b|(?:level|severity)[\"'=:\\s]+[\"']?(fatal|critical|panic)\\b")
+                - set(log.severity_text, "error") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)(error|err)\\b|(?:level|severity)[\"'=:\\s]+[\"']?(error|err)\\b")
+                - set(log.severity_text, "warn") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)(warn|warning)\\b|(?:level|severity)[\"'=:\\s]+[\"']?(warn|warning)\\b")
+                - set(log.severity_text, "debug") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)debug\\b|(?:level|severity)[\"'=:\\s]+[\"']?debug\\b")
+                - set(log.severity_text, "trace") where log.body != nil and IsMatch(log.body, "(?i)(^|\\s)trace\\b|(?:level|severity)[\"'=:\\s]+[\"']?trace\\b")
                 - set(resource.attributes["severity"], "fatal") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(fatal|critical|panic)$")
                 - set(resource.attributes["severity"], "error") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(error|err)$")
                 - set(resource.attributes["severity"], "warn") where log.severity_text != nil and IsMatch(log.severity_text, "(?i)^(warn|warning)$")
