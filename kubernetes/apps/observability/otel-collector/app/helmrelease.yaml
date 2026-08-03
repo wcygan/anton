@@ -68,7 +68,7 @@ spec:
         health_check:
           endpoint: $${env:MY_POD_IP}:13133
       receivers:
-        filelog:
+        file_log:
           include:
             - /var/log/pods/*/*/*.log
           start_at: end
@@ -86,8 +86,7 @@ spec:
             - type: regex_parser
               id: key-value-severity
               parse_from: body
-              regex: '(?i)(?:^|[\\s])(?:level|severity)[=: ]+(?P<severity_text>fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b'
-              if: 'body matches "(?i).*(level|severity)[=: ]+(fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b.*"'
+              regex: '(?i)(?:.*(?:level|severity)[=: ]+(?P<severity_text>fatal|critical|panic|error|err|warn|warning|info|debug|trace)\\b.*|.*)'
             - type: regex_parser
               id: text-severity
               parse_from: body
@@ -145,7 +144,7 @@ spec:
         pipelines:
           logs:
             receivers:
-              - filelog
+              - file_log
             processors:
               - memory_limiter
               - transform/severity
