@@ -1,0 +1,21 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: snapshot-controller
+spec:
+  dependsOn:
+    - name: snapshot-crds
+  interval: 1h
+  images:
+    # The upstream v8.5.0 manifest still names the v8.4.0 controller image;
+    # keep the controller aligned with the Longhorn CSI snapshotter build.
+    - name: registry.k8s.io/sig-storage/snapshot-controller
+      newTag: v8.5.0
+  path: ./deploy/kubernetes/snapshot-controller
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: external-snapshotter
+  targetNamespace: kube-system
+  wait: true

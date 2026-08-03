@@ -22,6 +22,10 @@ spec:
     - name: longhorn-config
     - name: storage-vxlan
       namespace: network
+    # Longhorn's CSI snapshotter expects the cluster-level VolumeSnapshot
+    # CRDs and common snapshot controller to exist before it starts watching.
+    - name: snapshot-controller
+      namespace: kube-system
   # `wait: true` gates every downstream Kustomization that adds
   # `dependsOn: [{name: longhorn, namespace: storage}]` on the Longhorn
   # HelmRelease reaching Ready=True (manager DaemonSet up, CRDs Established,

@@ -1,0 +1,21 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: external-snapshotter
+spec:
+  interval: 24h
+  url: https://github.com/kubernetes-csi/external-snapshotter
+  ref:
+    # renovate: datasource=github-releases depName=kubernetes-csi/external-snapshotter
+    tag: v8.5.0
+  ignore: |
+    /*
+    !/client/
+    !/client/config/
+    !/client/config/crd/
+    !/client/config/crd/*.yaml
+    !/deploy/
+    !/deploy/kubernetes/
+    !/deploy/kubernetes/snapshot-controller/
+    !/deploy/kubernetes/snapshot-controller/*.yaml

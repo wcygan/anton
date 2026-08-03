@@ -1,0 +1,13 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: snapshot-crds
+spec:
+  interval: 1h
+  path: ./client/config/crd
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: external-snapshotter
+  wait: true

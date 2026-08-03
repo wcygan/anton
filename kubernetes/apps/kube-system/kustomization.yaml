@@ -16,5 +16,6 @@ resources:
   - ./metrics-server/ks.yaml
   - ./pod-gc/ks.yaml
   - ./reloader/ks.yaml
+  - ./snapshot-controller/ks.yaml
   - ./spegel/ks.yaml
   - ./tailnet-rbac/ks.yaml
