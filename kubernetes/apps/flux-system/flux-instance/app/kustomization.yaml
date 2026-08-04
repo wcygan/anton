@@ -6,6 +6,7 @@ resources:
   - ./ocirepository.yaml
   - ./secret.sops.yaml
   - ./externalsecret.yaml
+  - ./image-automation-gitrepository.yaml
   - ./httproute.yaml
   - ./receiver.yaml
   - ./podmonitor.yaml

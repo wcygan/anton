@@ -1,0 +1,15 @@
+---
+# Keep image automation's write credential out of the primary public source.
+# A failed ESO sync or GitHub credential then pauses image bumps only, while
+# Flux can continue anonymously pulling the cluster's GitOps configuration.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: image-automation
+spec:
+  interval: 1m
+  ref:
+    name: refs/heads/main
+  secretRef:
+    name: flux-system-git-auth
+  url: "https://github.com/wcygan/anton.git"
