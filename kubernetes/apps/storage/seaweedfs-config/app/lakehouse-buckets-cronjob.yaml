@@ -53,8 +53,11 @@ spec:
                     echo "iceberg-raw bucket created"
                   fi
 
-                  table_bucket_arn="arn:aws:s3tables:us-east-1:000000000000:bucket/iceberg-warehouse"
-                  if aws --endpoint-url="$endpoint" s3tables get-table-bucket \
+                  table_bucket_arn="$(aws --endpoint-url="$endpoint" s3tables list-table-buckets \
+                    --query 'tableBuckets[?name==`iceberg-warehouse`].arn | [0]' \
+                    --output text 2>/dev/null || true)"
+                  if [ -n "$table_bucket_arn" ] && [ "$table_bucket_arn" != "None" ] && \
+                    aws --endpoint-url="$endpoint" s3tables get-table-bucket \
                     --table-bucket-arn "$table_bucket_arn" >/dev/null 2>&1; then
                     echo "iceberg-warehouse table bucket present"
                   else
