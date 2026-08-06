@@ -56,7 +56,7 @@ spec:
                 rm -f "$payload" "$downloaded"
               }
               trap cleanup EXIT
-              object="smoke/${HOSTNAME}-$(date +%s)-$$"
+              object="smoke/$${HOSTNAME}-$$(date +%s)-$$"
               printf 'anton lakehouse s3 smoke %s\n' "$object" > "$payload"
               aws --endpoint-url="$endpoint" s3 cp "$payload" "s3://$bucket/$object"
               aws --endpoint-url="$endpoint" s3 cp "s3://$bucket/$object" "$downloaded"
