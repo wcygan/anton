@@ -86,19 +86,19 @@ at `http://seaweedfs-iceberg.storage.svc.cluster.local:8181`.
 
 ## Operator-only prerequisites
 
-Do not reconcile the demo until these external prerequisites are satisfied:
+The external prerequisites are now satisfied and the demo has been reconciled through its storage gate. Keep these commands as the reproducible handoff for a future rebuild:
 
 1. Create the 1Password item `seaweedfs-iceberg` in vault `anton` with
    `raw-access-key`, `raw-secret-key`, `warehouse-access-key`, and
    `warehouse-secret-key`. The manifests intentionally contain no values.
 2. Build the image from `images/iceberg-log-spark/Dockerfile`, push it to
-   Harbor project `library`, record its immutable digest, and replace both
-   `REPLACE_WITH_HARBOR_DIGEST` markers in
+   Harbor project `library`, and pin the returned digest in
    `kubernetes/apps/iceberg-demo/spark-fixture/app/job.yaml`.
-3. Mirror the pinned Trino 480 image into Harbor and replace the digest marker
-   in `kubernetes/apps/iceberg-demo/trino/app/helmrelease.yaml`.
-4. Review the resulting Flux diff and obtain operator approval before any
-   live reconcile or workload execution.
+3. Build Trino for the cluster architecture (`linux/amd64`), push it to
+   Harbor, and pin the returned digest in
+   `kubernetes/apps/iceberg-demo/trino/app/helmrelease.yaml`.
+4. Review the Flux diff and obtain operator approval before live reconcile or
+   workload execution.
 
 The image handoff can use these operator-run commands from a host that can
 reach Harbor (authenticate with the existing Harbor robot/user; do not commit
@@ -109,11 +109,12 @@ docker build --platform linux/amd64 \
   -t 192.168.1.106/library/iceberg-log-spark:0.1.0 \
   -f images/iceberg-log-spark/Dockerfile .
 docker push 192.168.1.106/library/iceberg-log-spark:0.1.0
-docker pull trinodb/trino:480
-docker tag trinodb/trino:480 192.168.1.106/library/trino:480
-docker push 192.168.1.106/library/trino:480
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+  --file /tmp/trino-amd64/Dockerfile \
+  --tag 192.168.1.106/library/trino:480-amd64 \
+  --push /tmp/trino-amd64
 crane digest --insecure 192.168.1.106/library/iceberg-log-spark:0.1.0
-crane digest --insecure 192.168.1.106/library/trino:480
+crane digest --insecure 192.168.1.106/library/trino:480-amd64
 ```
 
 Replace both Spark markers and the Trino marker with the returned Harbor

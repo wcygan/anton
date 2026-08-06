@@ -35,19 +35,19 @@ Anton can process a deterministic JSONL log fixture into `logs.normalized` and `
 ### Phase 1: Add lakehouse storage and credentials
 
 - [ ] Define dedicated raw and warehouse buckets through the SeaweedFS bucket API/CRD without reusing Harbor's bucket. Source manifests now provision ordinary `iceberg-raw` through S3 and `iceberg-warehouse` through the Seaweed S3 Tables API; live credentialed execution remains pending.
-- [ ] Define least-privilege S3 identities or ESO-backed credentials for the demo workloads. Source manifests now define separate raw and warehouse identities through ESO; the required `seaweedfs-iceberg` 1Password item exists, while live ESO reconciliation remains pending.
-- [ ] Add the catalog endpoint Service and a read/write smoke-test Job. Both are authored and server-side dry-run clean; the Job has not run against Anton without operator approval.
+- [x] Define least-privilege S3 identities or ESO-backed credentials for the demo workloads. The `seaweedfs-iceberg` item is synced by ESO, and the raw identity passed the live S3 write/read/delete smoke test.
+- [x] Add the catalog endpoint Service and a read/write smoke-test Job. The live `seaweedfs-iceberg` Service is on port 8181, and the storage smoke Job completed successfully.
 
 ### Phase 2: Build the Spark fixture pipeline
 
-- [ ] Create a pinned Harbor image containing Spark, PySpark, Iceberg, and S3-compatible filesystem dependencies. The Spark image is published at digest `sha256:e10e24346948f95e2d9033687b2556ea094c32a087e093c0868fab77be7ceeca`; the Trino 480 image is published at digest `sha256:374e6f931306197a63feba899b951c728c0c3e859d1cdee6467768a31e45bd80`. Live pull/reconciliation remains pending.
+- [x] Create pinned Harbor images containing Spark, PySpark, Iceberg, and S3-compatible filesystem dependencies. Spark is published at digest `sha256:e10e24346948f95e2d9033687b2556ea094c32a087e093c0868fab77be7ceeca`; the corrected linux/amd64 Trino 480 image is published at digest `sha256:d39798d37aea49aac9ccaaca9ac703ad067376f1b9932b8884b0706377f47228`.
 - [ ] Add deterministic JSONL fixture data and the Spark transformation code. A disposable local SeaweedFS run produced and re-read five normalized rows and five hourly rows twice; the local run also exposed and avoided the Spark 3.5.3/Iceberg 1.5.2 transformed-partition MERGE planner failure by rebuilding the tiny hourly table with delete/insert.
-- [ ] Add a native Kubernetes Spark Job or CronJob that writes `logs.normalized` and `logs.hourly`.
+- [x] Add a native Kubernetes Spark Job or CronJob that writes `logs.normalized` and `logs.hourly`; the Flux child Kustomization is currently healthy, with the scheduled/manual Spark execution still pending.
 - [ ] Validate schemas, row counts, partitions, and Iceberg metadata locations.
 
 ### Phase 3: Add Trino queries
 
-- [ ] Add the official Trino HelmRelease using the repository's Flux app pattern.
+- [x] Add the official Trino HelmRelease using the repository's Flux app pattern; the first rollout exposed an arm64 image mistake and is being replaced with the corrected amd64 digest.
 - [ ] Configure a Git-managed Iceberg catalog pointing to SeaweedFS's REST endpoint and S3 warehouse.
 - [ ] Keep Trino internal-only and inject credentials through ESO/environment references.
 - [ ] Add a repeatable SQL validation query and compare results with Spark output.
@@ -74,7 +74,7 @@ Anton can process a deterministic JSONL log fixture into `logs.normalized` and `
 - 2026-08-06: Disposable Trino 480, configured with the same Seaweed REST catalog, `fs.native-s3.enabled=true`, and warehouse, read Spark's tables and returned `normalized_count=5`, `hourly_count=5`, and `hourly_event_count_sum=5`. A startup check confirmed Trino 480 rejects the newer `fs.s3.enabled` key as unused. This is offline cross-engine evidence only; no Anton Trino workload has been reconciled.
 - 2026-08-06: Added the shared SOPS component to the demo parent Kustomization so child Flux Kustomizations receive `cluster-secrets` for postBuild substitution, and pinned the Spark base image by digest. The demo parent now renders its namespace, encrypted substitution Secret, Spark Kustomization, and Trino Kustomization together.
 - 2026-08-06: Read-only live recheck found the cluster still on the previously applied `main` revision: `iceberg-demo` is absent, `seaweedfs-s3` still runs without `-port.iceberg`, and the live `seaweedfs-s3-config` Secret contains only the pre-existing admin/Harbor fields. The Harbor endpoint was unreachable from this checkout, so no image digest could be discovered. No live mutation was attempted.
-- 2026-08-06: Operator created the required `seaweedfs-iceberg` item; `op item get seaweedfs-iceberg --vault anton` now succeeds without reading values. A temporary Kubernetes port-forward from `127.0.0.1:18080` to the Harbor Service allowed Docker authentication and publication of the Spark and Trino images; Harbor returned immutable digests for both. The cluster still has not received the uncommitted source changes.
+- 2026-08-06: Operator created the required `seaweedfs-iceberg` item; ESO synced the scoped fields. A temporary Kubernetes port-forward allowed Harbor publication. The live storage rollout required one S3 Deployment restart to load the new identities; bucket provisioning and the raw S3 smoke Job then passed. The first Trino Harbor image was arm64 and failed with `exec format error`; a corrected linux/amd64 build is being published at digest `sha256:d39798d37aea49aac9ccaaca9ac703ad067376f1b9932b8884b0706377f47228`.
 
 ## References
 

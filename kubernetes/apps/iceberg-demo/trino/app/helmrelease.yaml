@@ -28,8 +28,8 @@ spec:
       # Pinned Harbor image published from the upstream Trino 480 image.
       registry: 192.168.1.106
       repository: library/trino
-      tag: "480"
-      digest: sha256:374e6f931306197a63feba899b951c728c0c3e859d1cdee6467768a31e45bd80
+      tag: "480-amd64"
+      digest: sha256:d39798d37aea49aac9ccaaca9ac703ad067376f1b9932b8884b0706377f47228
       pullPolicy: IfNotPresent
 
     server:
