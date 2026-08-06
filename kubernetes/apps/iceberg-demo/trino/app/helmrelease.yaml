@@ -79,6 +79,9 @@ spec:
     worker:
       jvm:
         maxHeapSize: 1G
+      config:
+        query:
+          maxMemoryPerNode: 512MB
       resources:
         requests:
           cpu: 250m
