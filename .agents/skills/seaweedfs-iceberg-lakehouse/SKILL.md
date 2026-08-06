@@ -12,6 +12,10 @@ description: >-
 Use this skill for the time-boxed internal lakehouse demo described by ADR 0031
 and plan 0020. The validated path is:
 
+For table-level Spark and Trino reads, writes, schemas, locations, and
+cross-engine queries, use the companion
+`seaweedfs-iceberg-data-access` skill.
+
 ```text
 1Password -> ESO -> SeaweedFS S3 identities
                            |
