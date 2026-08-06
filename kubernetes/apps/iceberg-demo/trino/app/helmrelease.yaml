@@ -36,7 +36,7 @@ spec:
       workers: 1
       config:
         query:
-          maxMemory: 1GB
+          maxMemory: 512MB
       coordinatorExtraConfig: |
         http-server.process-forwarded=true
 
@@ -67,7 +67,7 @@ spec:
         maxHeapSize: 1G
       config:
         query:
-          maxMemoryPerNode: 768MB
+          maxMemoryPerNode: 512MB
       resources:
         requests:
           cpu: 250m
