@@ -56,7 +56,7 @@ The configured stream policy is:
 | `fatal`, `error` | 30 days |
 | `warn` | 14 days |
 | `info`, `unknown` | 24 hours |
-| `debug`, `trace` | 6 hours |
+| `debug`, `trace` | 24 hours |
 
 The collector maps missing/unrecognized severity to `info`; `unknown` is a
 Loki policy fallback for records that arrive without the normalized label.

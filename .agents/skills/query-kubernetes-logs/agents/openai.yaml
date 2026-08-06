@@ -1,0 +1,4 @@
+interface:
+  display_name: "Query Kubernetes Logs"
+  short_description: "Run safe, useful Loki queries"
+  default_prompt: "Use $query-kubernetes-logs to investigate the relevant Kubernetes logs and summarize the evidence."

@@ -6,36 +6,40 @@ function log() {
     local level="${1:-info}"
     shift
 
-    # Define log levels with their priorities
-    local -A level_priority=(
-        [debug]=1
-        [info]=2
-        [warn]=3
-        [error]=4
-    )
+    # Keep this Bash 3.2-compatible: macOS's system Bash does not support
+    # associative arrays, and set -u turns an indexed-array lookup such as
+    # level_priority[debug] into an unbound arithmetic variable.
+    local current_priority=2
+    case "${level}" in
+        debug) current_priority=1 ;;
+        info) current_priority=2 ;;
+        warn) current_priority=3 ;;
+        error) current_priority=4 ;;
+    esac
 
-    # Get the current log level's priority
-    local current_priority=${level_priority[$level]:-2} # Default to "info" priority
-
-    # Get the configured log level from the environment, default to "info"
-    local configured_level=${LOG_LEVEL:-info}
-    local configured_priority=${level_priority[$configured_level]:-2}
+    # Get the configured log level from the environment, default to "info".
+    local configured_level="${LOG_LEVEL:-info}"
+    local configured_priority=2
+    case "${configured_level}" in
+        debug) configured_priority=1 ;;
+        info) configured_priority=2 ;;
+        warn) configured_priority=3 ;;
+        error) configured_priority=4 ;;
+    esac
 
     # Skip log messages below the configured log level
     if ((current_priority < configured_priority)); then
         return
     fi
 
-    # Define log colors
-    local -A colors=(
-        [debug]="\033[1m\033[38;5;63m"  # Blue
-        [info]="\033[1m\033[38;5;87m"   # Cyan
-        [warn]="\033[1m\033[38;5;192m"  # Yellow
-        [error]="\033[1m\033[38;5;198m" # Red
-    )
-
-    # Fallback to "info" if the color for the given level is not defined
-    local color="${colors[$level]:-${colors[info]}}"
+    # Define log colors without associative arrays for Bash 3.2 support.
+    local color="\033[1m\033[38;5;87m"
+    case "${level}" in
+        debug) color="\033[1m\033[38;5;63m" ;;
+        info) color="\033[1m\033[38;5;87m" ;;
+        warn) color="\033[1m\033[38;5;192m" ;;
+        error) color="\033[1m\033[38;5;198m" ;;
+    esac
     local msg="$1"
     shift
 
@@ -58,8 +62,10 @@ function log() {
     fi
 
     # Print the log message
+    local uppercase_level
+    uppercase_level="$(printf '%s' "${level}" | tr '[:lower:]' '[:upper:]')"
     printf "%s %b%s%b %s %b\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-        "${color}" "${level^^}" "\033[0m" "${msg}" "${data}" >"${output_stream}"
+        "${color}" "${uppercase_level}" "\033[0m" "${msg}" "${data}" >"${output_stream}"
 
     # Exit if the log level is error
     if [[ "$level" == "error" ]]; then

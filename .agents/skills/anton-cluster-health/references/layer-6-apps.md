@@ -5,8 +5,8 @@ Only meaningful if layers 3-5 are green. This layer **counts and categorizes** a
 ## The fast pulse
 
 ```sh
-flux get ks -A --status-selector ready=false
-flux get hr -A --status-selector ready=false
+mise exec -- flux get ks -A --status-selector ready=false
+mise exec -- flux get hr -A --status-selector ready=false
 ```
 
 Zero rows in both = the Flux view of apps is clean. Good signal, but go on to the pod-level check below because a HelmRelease can report Ready while its workload crash-loops.

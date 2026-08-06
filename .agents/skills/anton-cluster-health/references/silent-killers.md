@@ -13,9 +13,9 @@ Each section has the same shape: **Symptom → Probe → Fix path**.
 **Probe**:
 
 ```sh
-flux get ks -A --status-selector ready=false
+mise exec -- flux get ks -A --status-selector ready=false
 # For any suspicious row:
-flux -n <ns> describe ks <name> | grep -A3 -i 'decrypt'
+mise exec -- flux -n <ns> describe ks <name> | grep -A3 -i 'decrypt'
 ```
 
 **Verify the Flux-side Secret exists**:

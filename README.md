@@ -182,10 +182,10 @@ There are **5 stages** outlined below for completing this project, make sure you
    📍 _Run `task reconcile` to force Flux to sync your Git repository state_
 
     ```sh
-    flux check
-    flux get sources git flux-system
-    flux get ks -A
-    flux get hr -A
+    mise exec -- flux check
+    mise exec -- flux get sources git flux-system
+    mise exec -- flux get ks -A
+    mise exec -- flux get hr -A
     ```
 
 3. Check TCP connectivity to both the internal and external gateways:
@@ -259,6 +259,34 @@ task talos:reset
 
 ## 🛠️ Talos and Kubernetes Maintenance
 
+### 🌐 Remote Talos health checks
+
+Run Talos inspection through the nodes' Tailscale endpoints. The generated
+Talos config contains LAN addresses, which are not reliable from an off-LAN
+operator shell. The wrapper probes all three Tailscale endpoints individually
+before running the server-side health check, so a missing node cannot be
+silently omitted:
+
+```sh
+mise exec -- task talos:health
+```
+
+The current mapping is recorded in `context/hardware.md`. For a temporary
+address change, override it explicitly:
+
+```sh
+TALOS_TAILSCALE_NODES='k8s-1=100.x.x.x,k8s-2=100.x.x.x,k8s-3=100.x.x.x' \
+  mise exec -- task talos:health
+```
+
+Use the Mise-pinned Flux CLI as well. The repository pins Flux in `.mise.toml`
+and direct `flux` invocations may select a different global installation:
+
+```sh
+mise install
+mise exec -- flux version
+```
+
 ### ⚙️ Updating Talos node configuration
 
 > [!TIP]
@@ -306,9 +334,9 @@ Below is a general guide on trying to debug an issue with an resource or applica
    📍 _Run `task reconcile` to force Flux to sync your Git repository state_
 
     ```sh
-    flux get sources git -A
-    flux get ks -A
-    flux get hr -A
+    mise exec -- flux get sources git -A
+    mise exec -- flux get ks -A
+    mise exec -- flux get hr -A
     ```
 
 2. Do you see the pod of the workload you are debugging:

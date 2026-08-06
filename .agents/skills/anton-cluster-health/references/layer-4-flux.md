@@ -7,7 +7,7 @@ Flux is GitOps. If any controller in `flux-system` is down, the reconciliation e
 Anton runs the four standard Flux controllers:
 
 ```sh
-flux check
+mise exec -- flux check
 kubectl -n flux-system get pods
 ```
 
@@ -22,7 +22,7 @@ Expected pods (all `Running`, `1/1`, zero recent restarts):
 ## Root Kustomization
 
 ```sh
-flux -n flux-system get ks flux-system
+mise exec -- flux -n flux-system get ks flux-system
 ```
 
 This is the Kustomization that defines *all other* Kustomizations. If it is `Ready=False`, the tree is frozen — no app gets updates until you fix this one.
@@ -30,9 +30,9 @@ This is the Kustomization that defines *all other* Kustomizations. If it is `Rea
 ## Sources
 
 ```sh
-flux get sources git -A
-flux get sources oci -A
-flux get sources helm -A
+mise exec -- flux get sources git -A
+mise exec -- flux get sources oci -A
+mise exec -- flux get sources helm -A
 ```
 
 **Healthy**: all sources `Ready=True`, recent revisions, no error suffix in the status column.
@@ -46,15 +46,15 @@ flux get sources helm -A
 
 ```sh
 # Everything that is not Ready
-flux get ks -A --status-selector ready=false
-flux get hr -A --status-selector ready=false
+mise exec -- flux get ks -A --status-selector ready=false
+mise exec -- flux get hr -A --status-selector ready=false
 ```
 
 For each row returned, walk the dependency chain upward:
 
 ```sh
-flux -n <namespace> describe ks <name>
-flux -n <namespace> describe hr <name>
+mise exec -- flux -n <namespace> describe ks <name>
+mise exec -- flux -n <namespace> describe hr <name>
 ```
 
 ## SOPS decryption errors (the silent killer)

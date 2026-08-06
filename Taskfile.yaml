@@ -28,10 +28,11 @@ tasks:
 
   reconcile:
     desc: Force Flux to pull in changes from your Git repository
-    cmd: flux --namespace flux-system reconcile kustomization flux-system --with-source
+    cmd: mise exec -- flux --namespace flux-system reconcile kustomization flux-system --with-source
     preconditions:
       - test -f {{.KUBECONFIG}}
-      - which flux
+      - test -f {{.ROOT_DIR}}/.mise.toml
+      - which mise
 
   qmd:bootstrap:
     desc: Rebuild the local QMD index for context/

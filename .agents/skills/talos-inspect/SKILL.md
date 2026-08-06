@@ -27,14 +27,13 @@ Stop when: the Talos layer is classified as healthy, degraded, or blocked by con
 ## Command Shape
 
 ```sh
-TALOS="talosctl --talosconfig ./talos/clusterconfig/talosconfig"
-$TALOS -e k8s-1 -n k8s-1,k8s-2,k8s-3 health
-$TALOS -e k8s-1 -n k8s-1,k8s-2,k8s-3 service etcd
-$TALOS -e k8s-1 -n k8s-1,k8s-2,k8s-3 get disks
-kubectl get nodes -o wide
+mise exec -- task talos:health
 ```
 
-Use the Tailscale MagicDNS names so inspection works off-LAN.
+The wrapper uses the current Tailscale endpoint map, probes each node
+individually, and then runs the server-side health check. For a direct query,
+use the same Tailscale IP for `--endpoints` and `--nodes`; do not use the LAN
+addresses from the generated `talosconfig` off-LAN.
 
 ## Boundaries
 

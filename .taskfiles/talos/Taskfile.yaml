@@ -3,6 +3,26 @@ version: '3'
 
 tasks:
 
+  health:
+    desc: Check all Talos nodes over their Tailscale endpoints
+    cmd: '{{.ANTON_BASH}} {{.SCRIPTS_DIR}}/talos-health.sh'
+    vars:
+      ANTON_BASH:
+        sh: |
+          if [ -x /opt/homebrew/bin/bash ]; then
+            printf '%s\n' /opt/homebrew/bin/bash
+          elif [ -x /usr/local/bin/bash ]; then
+            printf '%s\n' /usr/local/bin/bash
+          else
+            command -v bash
+          fi
+    preconditions:
+      - test -f {{.SCRIPTS_DIR}}/talos-health.sh
+      - test -f {{.TALOSCONFIG}}
+      - test -f {{.KUBECONFIG}}
+      - test -x {{.ANTON_BASH}}
+      - which mise kubectl
+
   generate-config:
     desc: Generate Talos configuration
     dir: '{{.TALOS_DIR}}'

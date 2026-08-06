@@ -28,9 +28,9 @@ Stop when: the first red layer is explained or every layer is green enough for t
 ```sh
 kubectl get nodes -o wide
 kubectl get pods -A
-flux get sources git -A
-flux get ks -A
-flux get hr -A
+mise exec -- flux get sources git -A
+mise exec -- flux get ks -A
+mise exec -- flux get hr -A
 kubectl -n cert-manager get pods
 kubectl -n external-secrets get pods
 kubectl -n network get pods,httproute,gateway

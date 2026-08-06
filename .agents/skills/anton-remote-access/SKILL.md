@@ -10,7 +10,9 @@ Goal: Use Anton's expected remote access paths for read-only inspection and oper
 Success means:
 - Kubernetes commands use the repo kubeconfig and the Tailscale operator proxy context.
 - Talos commands use `./talos/clusterconfig/talosconfig`.
-- Node references use Tailscale MagicDNS hostnames: `k8s-1`, `k8s-2`, `k8s-3`.
+- Talos inspection uses the nodes' Tailscale endpoints: `100.75.61.79`,
+  `100.87.89.3`, and `100.100.217.100`, labelled `k8s-1`, `k8s-2`, and
+  `k8s-3`. Do not rely on the generated LAN endpoints from an off-LAN shell.
 - Mutating commands wait for explicit operator approval.
 
 Stop when: the access path is clear enough to run the requested read-only command or to hand the operator a safe mutation command.
@@ -32,13 +34,14 @@ The expected Kubernetes context is `tailscale-operator.<tailnet-name>.ts.net`; u
 ```sh
 kubectl config current-context
 kubectl get nodes -o wide
-flux get ks -A
-flux get hr -A
-talosctl --talosconfig ./talos/clusterconfig/talosconfig \
-  -e k8s-1 -n k8s-1,k8s-2,k8s-3 health
+mise exec -- flux get ks -A
+mise exec -- flux get hr -A
+mise exec -- task talos:health
 ```
 
-Use `-e k8s-1` as the Talos endpoint and fan out with `-n k8s-1,k8s-2,k8s-3` for all-node inspection.
+For direct inspection, use the same Tailscale IP for `--endpoints` and
+`--nodes` on each node. The wrapper is preferred because it probes all three
+endpoints before running the server-side health check.
 
 ## Mutation Handoff
 

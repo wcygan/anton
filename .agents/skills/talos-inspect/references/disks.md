@@ -3,17 +3,24 @@
 Read-only storage inspection at the Talos layer. Good for: `add-or-replace-node` pre-flight, capacity planning, NVMe health triage, install-disk selection, volume sanity. All commands use the shape from `SKILL.md`:
 
 ```sh
-TALOS="talosctl --talosconfig ./talos/clusterconfig/talosconfig"
-NODES="k8s-1,k8s-2,k8s-3"
+TALOS="mise exec -- talosctl --talosconfig ./talos/clusterconfig/talosconfig"
+K8S1="100.75.61.79"
+K8S2="100.87.89.3"
+K8S3="100.100.217.100"
+NODES="$K8S1,$K8S2,$K8S3"
 ```
+
+Use the same Tailscale IP for `--endpoints` and `--nodes` in direct queries.
+For the standard all-node check, run `mise exec -- task talos:health` first so
+an unreachable node is reported instead of omitted.
 
 ## Fleet-wide inventory
 
 ```sh
-$TALOS -e k8s-1 -n $NODES get disks                  # block devices: name, size, model, serial
-$TALOS -e k8s-1 -n $NODES get systemdisk             # which disk holds the Talos install
-$TALOS -e k8s-1 -n $NODES get discoveredvolumes      # detected volumes (partitions, filesystems)
-$TALOS -e k8s-1 -n $NODES get volumemountstatus      # what is actually mounted where
+$TALOS -e $K8S1 -n $NODES get disks                  # block devices: name, size, model, serial
+$TALOS -e $K8S1 -n $NODES get systemdisk             # which disk holds the Talos install
+$TALOS -e $K8S1 -n $NODES get discoveredvolumes      # detected volumes (partitions, filesystems)
+$TALOS -e $K8S1 -n $NODES get volumemountstatus      # what is actually mounted where
 ```
 
 What to look for:
@@ -42,7 +49,7 @@ Talos doesn't ship `smartctl` in the default image. You have two options:
 
 1. **Kernel signals** (always available). Grep `dmesg` for hardware-level errors:
    ```sh
-   $TALOS -n k8s-1 dmesg | rg -i 'nvme|ata|scsi|i/o error|medium error|bad block|timeout'
+   $TALOS -n $K8S1 dmesg | rg -i 'nvme|ata|scsi|i/o error|medium error|bad block|timeout'
    ```
    Patterns that matter:
 
@@ -55,10 +62,10 @@ Talos doesn't ship `smartctl` in the default image. You have two options:
 ## Disk pressure and free space
 
 ```sh
-$TALOS -n k8s-1 read /proc/mounts                    # raw mount table
-$TALOS -n k8s-1 usage /var                           # space used by path
-$TALOS -n k8s-1 usage /var/lib/containerd            # images + snapshots
-$TALOS -n k8s-1 usage /var/lib/kubelet               # kubelet pod volumes
+$TALOS -n $K8S1 read /proc/mounts                    # raw mount table
+$TALOS -n $K8S1 usage /var                           # space used by path
+$TALOS -n $K8S1 usage /var/lib/containerd            # images + snapshots
+$TALOS -n $K8S1 usage /var/lib/kubelet               # kubelet pod volumes
 ```
 
 The `EPHEMERAL` partition holds `/var` and is the most common culprit for disk pressure. Top three causes:
@@ -72,7 +79,7 @@ When a node reports `DiskPressure` in `kubectl describe node`, this is where to 
 ## Container image storage (read-only triage)
 
 ```sh
-$TALOS -n k8s-1 containers                           # containers + image IDs on this node
+$TALOS -n $K8S1 containers                           # containers + image IDs on this node
 kubectl get pods -A -o jsonpath='{..image}' | tr ' ' '\n' | sort -u | wc -l
 ```
 
