@@ -84,21 +84,26 @@ The Trino HelmRelease uses the official chart (`1.42.2`, Trino image `480`),
 one bounded worker, an internal `ClusterIP`, and an Iceberg REST catalog aimed
 at `http://seaweedfs-iceberg.storage.svc.cluster.local:8181`.
 
-## Operator-only prerequisites
+## Build and rebuild prerequisites
 
-The external prerequisites are now satisfied and the demo has been reconciled through its storage gate. Keep these commands as the reproducible handoff for a future rebuild:
+The external prerequisites are satisfied for the current time-boxed demo: the
+`seaweedfs-iceberg` 1Password item is synced by ESO, both pinned Harbor images
+are live, and Flux has reconciled the storage, Spark, and Trino apps. The
+following commands remain the reproducible rebuild handoff; credentials stay
+out of Git.
 
-1. Create the 1Password item `seaweedfs-iceberg` in vault `anton` with
+1. Keep the 1Password item `seaweedfs-iceberg` in vault `anton` with
    `raw-access-key`, `raw-secret-key`, `warehouse-access-key`, and
-   `warehouse-secret-key`. The manifests intentionally contain no values.
+   `warehouse-secret-key`.
 2. Build the image from `images/iceberg-log-spark/Dockerfile`, push it to
    Harbor project `library`, and pin the returned digest in
    `kubernetes/apps/iceberg-demo/spark-fixture/app/job.yaml`.
 3. Build Trino for the cluster architecture (`linux/amd64`), push it to
    Harbor, and pin the returned digest in
    `kubernetes/apps/iceberg-demo/trino/app/helmrelease.yaml`.
-4. Review the Flux diff and obtain operator approval before live reconcile or
-   workload execution.
+4. Review the Flux diff before repeating a live reconcile. Harbor was reached
+   from this laptop through a temporary Kubernetes port-forward; the tunnel
+   is not part of the committed configuration.
 
 The image handoff can use these operator-run commands from a host that can
 reach Harbor (authenticate with the existing Harbor robot/user; do not commit
@@ -120,7 +125,7 @@ crane digest --insecure 192.168.1.106/library/trino:480-amd64
 Replace both Spark markers and the Trino marker with the returned Harbor
 digests, then stop for review before pushing or reconciling Git.
 
-After approval, re-run the one-shot storage smoke test with:
+The live storage smoke test was run with:
 
 ```sh
 kubectl -n storage delete job seaweedfs-lakehouse-s3-smoke --ignore-not-found
@@ -151,10 +156,9 @@ python3 -m py_compile images/iceberg-log-spark/transform.py
 git diff --check
 ```
 
-After the operator has approved and reconciled the manifests, run the Spark
-fixture once, then use the repeatable query file
-`kubernetes/apps/iceberg-demo/trino/validation.sql` with a Trino client against
-the internal coordinator:
+The live acceptance run used two one-off Spark Jobs and the repeatable query
+file `kubernetes/apps/iceberg-demo/trino/validation.sql` against the internal
+coordinator:
 
 ```sql
 SELECT count(*) FROM iceberg.logs.normalized; -- 5
@@ -162,19 +166,29 @@ SELECT count(*) FROM iceberg.logs.hourly;     -- 5
 SELECT sum(event_count) FROM iceberg.logs.hourly; -- 5
 ```
 
-Run the fixture again. The counts must remain 5; the current `MERGE` plus
-bounded hourly rebuild intentionally records additional Iceberg snapshots on
-each successful rerun even though the final row set is deduplicated. Capture Flux,
-SeaweedFS, Spark-driver, and Trino evidence in the plan before the review
-date. The Loki snapshot CronJob remains optional and should not be added until
-this deterministic gate is green.
+Observed live evidence:
+
+- Spark driver 1: `Succeeded`, `expected normalized rows=5 actual=5`,
+  `expected hourly rows=5 actual=5`.
+- Spark driver 2 (identical input): `Succeeded`, the same two row-count lines.
+- Trino aggregate: `normalized_count=5`, `hourly_count=5`,
+  `hourly_event_count_sum=5`.
+- Trino DDL: `logs.normalized` is partitioned by `event_date` and located at
+  `s3://iceberg-warehouse/logs/normalized`; `logs.hourly` is partitioned by
+  `day(hour)` and located at `s3://iceberg-warehouse/logs/hourly`.
+
+The current `MERGE` plus bounded hourly rebuild intentionally records
+additional Iceberg snapshots on each successful rerun even though the final
+row set is deduplicated. The Loki snapshot CronJob remains optional and is
+deferred until a later review gate.
 
 ## Cleanup and risks
 
-Cleanup is operator-only: suspend the demo Kustomizations, remove the
-`iceberg-demo` namespace after retaining the evidence, and remove the two
-dedicated buckets and 1Password identities if the 2026-08-20 review rejects
-the experiment. SeaweedFS uses `defaultReplication: "000"`, so demo data is
-disposable and does not receive an independent Seaweed durability guarantee.
-The image digest and 1Password item are intentionally unresolved in Git until
-an operator performs those authority-bearing steps.
+Cleanup is operator-only: suspend the demo Kustomizations, retain the
+acceptance evidence, then remove the `iceberg-demo` namespace, the two
+dedicated buckets, and the 1Password identities if the 2026-08-20 review
+rejects the experiment. SeaweedFS uses `defaultReplication: "000"`, so demo
+data is disposable and does not receive an independent Seaweed durability
+guarantee. The generated Seaweed S3 Deployment also needs an explicit restart
+after changes to its credential Secret; the operator does not automatically
+roll that generated Deployment.

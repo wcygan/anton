@@ -18,11 +18,11 @@ Anton can process a deterministic JSONL log fixture into `logs.normalized` and `
 
 ## Acceptance criteria
 
-- [ ] SeaweedFS exposes a working Iceberg REST endpoint through a declarative Kubernetes Service, and both Spark and Trino can reach it.
-- [ ] Flux reconciles the lakehouse buckets, credentials, Spark workload, and Trino catalog without manual UI configuration or hand-created runtime state.
-- [ ] The deterministic fixture produces both Iceberg tables, and a Trino aggregate returns the expected results from the same tables Spark wrote.
-- [ ] Re-running the same input is idempotent or explicitly deduplicated, while new input creates a new Iceberg snapshot. The current fixture run keeps both row counts at five on rerun; because normalized uses `MERGE` and hourly uses a bounded delete/insert workaround, successful reruns currently add snapshots even when the final row set is unchanged.
-- [ ] The demo has a documented validation and cleanup path, with evidence captured before the 2026-08-20 review.
+- [x] SeaweedFS exposes a working Iceberg REST endpoint through a declarative Kubernetes Service, and both Spark and Trino can reach it.
+- [x] Flux reconciles the lakehouse buckets, credentials, Spark workload, and Trino catalog without manual UI configuration or hand-created runtime state.
+- [x] The deterministic fixture produces both Iceberg tables, and a Trino aggregate returns the expected results from the same tables Spark wrote.
+- [x] Re-running the same input is idempotent or explicitly deduplicated, while new input creates a new Iceberg snapshot. Two live Spark runs kept both row counts at five; because normalized uses `MERGE` and hourly uses a bounded delete/insert workaround, successful reruns add snapshots even when the final row set is unchanged.
+- [x] The demo has a documented validation and cleanup path, with evidence captured before the 2026-08-20 review.
 
 ## Tasks
 
@@ -34,30 +34,30 @@ Anton can process a deterministic JSONL log fixture into `logs.normalized` and `
 
 ### Phase 1: Add lakehouse storage and credentials
 
-- [ ] Define dedicated raw and warehouse buckets through the SeaweedFS bucket API/CRD without reusing Harbor's bucket. Source manifests now provision ordinary `iceberg-raw` through S3 and `iceberg-warehouse` through the Seaweed S3 Tables API; live credentialed execution remains pending.
+- [x] Define dedicated raw and warehouse buckets through the SeaweedFS bucket API/CRD without reusing Harbor's bucket. The live provisioner created ordinary `iceberg-raw` and S3 Table bucket `iceberg-warehouse`.
 - [x] Define least-privilege S3 identities or ESO-backed credentials for the demo workloads. The `seaweedfs-iceberg` item is synced by ESO, and the raw identity passed the live S3 write/read/delete smoke test.
 - [x] Add the catalog endpoint Service and a read/write smoke-test Job. The live `seaweedfs-iceberg` Service is on port 8181, and the storage smoke Job completed successfully.
 
 ### Phase 2: Build the Spark fixture pipeline
 
 - [x] Create pinned Harbor images containing Spark, PySpark, Iceberg, and S3-compatible filesystem dependencies. Spark is published at digest `sha256:e10e24346948f95e2d9033687b2556ea094c32a087e093c0868fab77be7ceeca`; the corrected linux/amd64 Trino 480 image is published at digest `sha256:d39798d37aea49aac9ccaaca9ac703ad067376f1b9932b8884b0706377f47228`.
-- [ ] Add deterministic JSONL fixture data and the Spark transformation code. A disposable local SeaweedFS run produced and re-read five normalized rows and five hourly rows twice; the local run also exposed and avoided the Spark 3.5.3/Iceberg 1.5.2 transformed-partition MERGE planner failure by rebuilding the tiny hourly table with delete/insert.
-- [x] Add a native Kubernetes Spark Job or CronJob that writes `logs.normalized` and `logs.hourly`; the Flux child Kustomization is currently healthy, with the scheduled/manual Spark execution still pending.
-- [ ] Validate schemas, row counts, partitions, and Iceberg metadata locations.
+- [x] Add deterministic JSONL fixture data and the Spark transformation code. The live Spark driver produced five normalized rows and five hourly rows on two identical runs; the hourly table uses the documented delete/insert workaround for the Spark 3.5.3/Iceberg 1.5.2 transformed-partition MERGE planner failure.
+- [x] Add a native Kubernetes Spark Job or CronJob that writes `logs.normalized` and `logs.hourly`; two live one-off Jobs completed and their drivers reached `Succeeded`.
+- [x] Validate schemas, row counts, partitions, and Iceberg metadata locations. Trino reported the expected columns, `event_date`/`day(hour)` partitions, and locations under `s3://iceberg-warehouse/logs/`.
 
 ### Phase 3: Add Trino queries
 
-- [x] Add the official Trino HelmRelease using the repository's Flux app pattern; the first rollout exposed an arm64 image mistake and is being replaced with the corrected amd64 digest.
-- [ ] Configure a Git-managed Iceberg catalog pointing to SeaweedFS's REST endpoint and S3 warehouse.
-- [ ] Keep Trino internal-only and inject credentials through ESO/environment references.
-- [ ] Add a repeatable SQL validation query and compare results with Spark output.
+- [x] Add the official Trino HelmRelease using the repository's Flux app pattern; the live release uses the corrected linux/amd64 Harbor digest.
+- [x] Configure a Git-managed Iceberg catalog pointing to SeaweedFS's REST endpoint and S3 warehouse.
+- [x] Keep Trino internal-only and inject credentials through ESO/environment references.
+- [x] Add a repeatable SQL validation query and compare results with Spark output. The live coordinator returned `normalized_count=5`, `hourly_count=5`, and `hourly_event_count_sum=5`.
 
 ### Phase 4: Validate and document
 
-- [ ] Run the full fixture flow from raw input through Trino.
-- [ ] Re-run identical input and verify the duplicate/snapshot contract.
-- [ ] Capture Flux, Spark, SeaweedFS, and Trino evidence in the implementation notes.
-- [ ] Document operator-only cleanup, resource bounds, and known failure modes.
+- [x] Run the full fixture flow from raw input through Trino.
+- [x] Re-run identical input and verify the duplicate/snapshot contract.
+- [x] Capture Flux, Spark, SeaweedFS, and Trino evidence in the implementation notes.
+- [x] Document operator-only cleanup, resource bounds, and known failure modes.
 
 ### Phase 5: Optional Loki source
 
@@ -75,6 +75,7 @@ Anton can process a deterministic JSONL log fixture into `logs.normalized` and `
 - 2026-08-06: Added the shared SOPS component to the demo parent Kustomization so child Flux Kustomizations receive `cluster-secrets` for postBuild substitution, and pinned the Spark base image by digest. The demo parent now renders its namespace, encrypted substitution Secret, Spark Kustomization, and Trino Kustomization together.
 - 2026-08-06: Read-only live recheck found the cluster still on the previously applied `main` revision: `iceberg-demo` is absent, `seaweedfs-s3` still runs without `-port.iceberg`, and the live `seaweedfs-s3-config` Secret contains only the pre-existing admin/Harbor fields. The Harbor endpoint was unreachable from this checkout, so no image digest could be discovered. No live mutation was attempted.
 - 2026-08-06: Operator created the required `seaweedfs-iceberg` item; ESO synced the scoped fields. A temporary Kubernetes port-forward allowed Harbor publication. The live storage rollout required one S3 Deployment restart to load the new identities; bucket provisioning and the raw S3 smoke Job then passed. The first Trino Harbor image was arm64 and failed with `exec format error`; a corrected linux/amd64 build is being published at digest `sha256:d39798d37aea49aac9ccaaca9ac703ad067376f1b9932b8884b0706377f47228`.
+- 2026-08-06: Live acceptance passed. Flux reconciled storage, Spark, and Trino; the table-bucket provisioner and scoped raw S3 smoke Job completed; Spark drivers succeeded twice with `expected normalized rows=5 actual=5` and `expected hourly rows=5 actual=5`; and Trino returned `5 / 5 / 5` for the aggregate, the expected five hourly rows, and locations `s3://iceberg-warehouse/logs/normalized` and `s3://iceberg-warehouse/logs/hourly`. The warehouse identity requires the bucket-scoped `s3tables:*:iceberg-warehouse` action, and the generated Seaweed S3 Deployment must be restarted after Secret changes because the operator does not roll it automatically.
 
 ## References
 
