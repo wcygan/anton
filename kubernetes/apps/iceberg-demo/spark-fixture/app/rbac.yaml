@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: iceberg-spark
+  namespace: iceberg-demo
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: iceberg-spark
+  namespace: iceberg-demo
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, configmaps]
+    verbs: [get, list, watch, create, delete, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: iceberg-spark
+  namespace: iceberg-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: iceberg-spark
+subjects:
+  - kind: ServiceAccount
+    name: iceberg-spark
+    namespace: iceberg-demo

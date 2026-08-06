@@ -48,8 +48,8 @@ The first gate uses deterministic JSONL input and produces `logs.normalized` and
 
 ## Follow-ups
 
-- [ ] Verify the current SeaweedFS image and operator can expose the built-in Iceberg REST catalog declaratively.
-- [ ] Author the dedicated lakehouse bucket, credentials, Spark image, Trino catalog, and batch-job manifests.
+- [x] Verify the current SeaweedFS image and operator can expose the built-in Iceberg REST catalog declaratively. SeaweedFS 4.40 provides `-port.iceberg=8181`, the live operator CRD accepts `spec.s3.extraArgs`, and the demo adds a separate internal Service because the generated S3 Service only publishes 8333. The built-in catalog also requires a Seaweed S3 Table bucket (created through `s3tables`, not ordinary `s3 mb`) and OAuth credential exchange at `/v1/oauth/tokens`; the standalone operator-managed `weed s3` process cannot seed that table bucket itself.
+- [x] Author the dedicated lakehouse bucket, credentials, Spark image, Trino catalog, and batch-job manifests. Runtime rollout still requires operator-owned 1Password item creation, Harbor image mirroring/digest replacement, and approved Flux reconciliation.
 - [ ] Complete the deterministic JSONL gate and validate the same tables through Trino.
 - [ ] Add the Loki snapshot gate only after the fixture path is green.
 - [ ] Review the experiment on 2026-08-20 and retain, revise, or remove it based on evidence.

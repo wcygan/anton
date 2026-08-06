@@ -1,0 +1,84 @@
+---
+# One-shot S3 contract check for the dedicated raw identity. The object key is
+# unique per attempt and the EXIT trap removes it, so retries are safe and do
+# not accumulate fixture data in the lakehouse bucket.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seaweedfs-lakehouse-s3-smoke
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: s3-smoke
+          image: amazon/aws-cli:2.36.14
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-config
+                  key: RAW_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-config
+                  key: RAW_SECRET_ACCESS_KEY
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -eu
+              endpoint="http://seaweedfs-s3.storage.svc.cluster.local:8333"
+              bucket="iceberg-raw"
+              object=""
+              payload=/tmp/payload
+              downloaded=/tmp/downloaded
+              cleanup() {
+                if [ -n "${object:-}" ]; then
+                  aws --endpoint-url="$endpoint" s3api delete-object --bucket "$bucket" --key "$object" >/dev/null 2>&1 || true
+                fi
+                rm -f "$payload" "$downloaded"
+              }
+              trap cleanup EXIT
+              object="smoke/${HOSTNAME}-$(date +%s)-$$"
+              printf 'anton lakehouse s3 smoke %s\n' "$object" > "$payload"
+              aws --endpoint-url="$endpoint" s3 cp "$payload" "s3://$bucket/$object"
+              aws --endpoint-url="$endpoint" s3 cp "s3://$bucket/$object" "$downloaded"
+              expected="$(sha256sum "$payload" | awk '{print $1}')"
+              actual="$(sha256sum "$downloaded" | awk '{print $1}')"
+              test "$expected" = "$actual"
+              echo "S3 raw identity read/write verified for $object"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: tmp
+          emptyDir: {}

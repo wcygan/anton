@@ -1,0 +1,25 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: spark-fixture
+  namespace: flux-system
+spec:
+  interval: 1h
+  targetNamespace: iceberg-demo
+  dependsOn:
+    - name: seaweedfs-config
+      namespace: storage
+    - name: external-secrets
+      namespace: external-secrets
+  path: ./kubernetes/apps/iceberg-demo/spark-fixture/app
+  prune: true
+  # This app owns a CronJob; Flux must not wait for a one-shot Job to run.
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets

@@ -1,0 +1,91 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: trino
+spec:
+  chart:
+    spec:
+      chart: trino
+      # renovate: registryUrl=https://trinodb.github.io/charts
+      version: 1.42.2
+      sourceRef:
+        kind: HelmRepository
+        name: trino
+      interval: 15m
+  interval: 1h
+  timeout: 15m
+  install:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  values:
+    image:
+      # Pinned Harbor image published from the upstream Trino 480 image.
+      registry: 192.168.1.106
+      repository: library/trino
+      tag: "480"
+      digest: sha256:374e6f931306197a63feba899b951c728c0c3e859d1cdee6467768a31e45bd80
+      pullPolicy: IfNotPresent
+
+    server:
+      workers: 1
+      config:
+        query:
+          maxMemory: 1GB
+      coordinatorExtraConfig: |
+        http-server.process-forwarded=true
+
+    # The official chart emits these properties as /etc/trino/catalog/iceberg.properties.
+    catalogs:
+      iceberg: |
+        connector.name=iceberg
+        iceberg.catalog.type=rest
+        iceberg.rest-catalog.uri=http://seaweedfs-iceberg.storage.svc.cluster.local:8181
+        iceberg.rest-catalog.security=OAUTH2
+        iceberg.rest-catalog.oauth2.credential=${ENV:AWS_ACCESS_KEY_ID}:${ENV:AWS_SECRET_ACCESS_KEY}
+        iceberg.rest-catalog.oauth2.server-uri=http://seaweedfs-iceberg.storage.svc.cluster.local:8181/v1/oauth/tokens
+        iceberg.rest-catalog.warehouse=s3://iceberg-warehouse
+        # Trino 480 still uses the versioned native filesystem switch.
+        fs.native-s3.enabled=true
+        s3.endpoint=http://seaweedfs-s3.storage.svc.cluster.local:8333
+        s3.path-style-access=true
+        s3.region=us-east-1
+        s3.aws-access-key=${ENV:AWS_ACCESS_KEY_ID}
+        s3.aws-secret-key=${ENV:AWS_SECRET_ACCESS_KEY}
+
+    envFrom:
+      - secretRef:
+          name: trino-warehouse-credentials
+
+    coordinator:
+      jvm:
+        maxHeapSize: 1G
+      config:
+        query:
+          maxMemoryPerNode: 768MB
+      resources:
+        requests:
+          cpu: 250m
+          memory: 1Gi
+        limits:
+          cpu: 1
+          memory: 1536Mi
+
+    worker:
+      jvm:
+        maxHeapSize: 1G
+      resources:
+        requests:
+          cpu: 250m
+          memory: 1Gi
+        limits:
+          cpu: 1
+          memory: 1536Mi
+
+    service:
+      type: ClusterIP

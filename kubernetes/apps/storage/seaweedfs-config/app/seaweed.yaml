@@ -57,6 +57,12 @@ spec:
   s3:
     replicas: 2                     # standalone Deployment HA per ADR 0019
     iam: false                      # explicit override — operator default is true
+    # SeaweedFS 4.40's built-in Iceberg REST catalog is disabled unless this
+    # listener is explicitly enabled. The operator exposes extraArgs but its
+    # generated Service only publishes the S3 port, so the catalog gets a
+    # separate Flux-managed Service below.
+    extraArgs:
+      - -port.iceberg=8181
     configSecret:
       name: seaweedfs-s3-config     # matches ExternalSecret target.name
       key: s3.json                  # matches ExternalSecret target.template.data key

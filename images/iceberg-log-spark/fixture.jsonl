@@ -1,0 +1,6 @@
+{"event_id":"evt-001","ts":"2026-08-06T10:05:00Z","service":"api","level":"INFO","message":"request accepted"}
+{"event_id":"evt-002","ts":"2026-08-06T10:15:00Z","service":"api","level":"WARN","message":"retry scheduled"}
+{"event_id":"evt-003","ts":"2026-08-06T11:02:00Z","service":"worker","level":"ERROR","message":"job failed"}
+{"event_id":"evt-004","ts":"2026-08-06T11:22:00Z","service":"worker","level":"INFO","message":"job recovered"}
+{"event_id":"evt-005","ts":"2026-08-06T12:01:00Z","service":"api","level":"INFO","message":"request accepted"}
+{"event_id":"evt-003","ts":"2026-08-06T11:02:00Z","service":"worker","level":"ERROR","message":"job failed"}

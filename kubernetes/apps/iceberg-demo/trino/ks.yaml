@@ -1,0 +1,28 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: trino
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/iceberg-demo/trino/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: iceberg-demo
+  dependsOn:
+    - name: seaweedfs-config
+      namespace: storage
+    - name: external-secrets
+      namespace: external-secrets
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: trino
+      namespace: iceberg-demo
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

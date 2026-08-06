@@ -1,0 +1,9 @@
+---
+# Official Trino community chart repository.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: trino
+spec:
+  interval: 1h
+  url: https://trinodb.github.io/charts
