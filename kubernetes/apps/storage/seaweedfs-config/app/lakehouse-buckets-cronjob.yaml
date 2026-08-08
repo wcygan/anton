@@ -29,7 +29,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: ensure-buckets
-              image: amazon/aws-cli:2.36.14
+              image: amazon/aws-cli:2.36.19
               imagePullPolicy: IfNotPresent
               envFrom:
                 - secretRef:
