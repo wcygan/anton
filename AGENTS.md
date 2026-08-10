@@ -52,7 +52,7 @@ The `.claude/` tree remains authoritative precedent during the Codex migration. 
 - Treat inspect, diagnose, audit, assess, and recommend requests as read-only.
 - Treat repository edits, Flux actions, Kubernetes/Talos mutations, DNS or provider changes, and credential work as separate authority boundaries. Authority for one does not grant the others.
 - Before a cluster command, establish the current kube or Talos context, cluster, namespace, exact target, owner, and incident window. Before a repository edit, establish branch, revision, and dirty state.
-- Use the repo environment through `mise exec --`; discover task entry points with `task --list`. Fail closed on an unexpected context, ambiguous target, missing access, or unclear mutation owner.
+- Use the repo environment through `mise exec --`; discover task entry points with `mise exec -- task --list`. Fail closed on an unexpected context, ambiguous target, missing access, or unclear mutation owner.
 - Treat port-forwards, debug pods, ephemeral containers, ad hoc jobs, synthetic traffic, and force reconciles as live mutations with explicit approval and cleanup requirements.
 
 ### Diagnose one path
@@ -93,7 +93,7 @@ Verify the intended revision or configuration, Flux-reported revision and reconc
 
 ## QMD Context Search
 
-Use QMD before broad manual browsing when the task depends on Anton's ADRs, plans, incidents, postmortems, or inventory under `context/`. Search `anton-context`, then retrieve the source with `qmd get` or `qmd multi-get` before relying on it. Treat snippets as leads and cite the actual `context/` path. Use `rg` for exact repository state. Rebuild a missing or stale local index with `task qmd:bootstrap`.
+Use QMD before broad manual browsing when the task depends on Anton's ADRs, plans, incidents, postmortems, or inventory under `context/`. Search `anton-context`, then retrieve the source with `qmd get` or `qmd multi-get` before relying on it. Treat snippets as leads and cite the actual `context/` path. Use `rg` for exact repository state. Rebuild a missing or stale local index with `mise exec -- task qmd:bootstrap`.
 
 ## Safety and Secrets
 
@@ -108,9 +108,9 @@ Use QMD before broad manual browsing when the task depends on Anton's ADRs, plan
 
 1. Read the matching subsystem guidance, skill, and representative sibling files; finish when the intended convention and ownership boundary are explicit.
 2. Edit the committed source of truth directly while preserving unrelated dirty work; finish when the diff contains only the requested change.
-3. For Talos source edits, run `task talos:generate-config`; finish when generated configs reflect the intended source change.
+3. For Talos source edits, run `mise exec -- task talos:generate-config`; finish when generated configs reflect the intended source change.
 4. For SOPS files, verify encryption with `sops filestatus`; finish only when every touched payload reports encrypted.
-5. Run the narrowest validation that proves the edited surface: YAML parse, skill or hook fixture, Docusaurus check, generated-config check, or read-only Flux/Talos status.
+5. Run the narrowest validation that proves the edited surface: YAML parse, skill or hook fixture, Docusaurus check, generated-config check, or read-only Flux/Talos status. Run `mise exec -- task contracts:validate` when changing Flux application policy, Kubernetes logging semantics, SeaweedFS bucket provisioning, or cluster target/preflight behavior.
 6. Summarize changed files, validation evidence, residual risks, and any operator-only follow-up. Do not reconcile or apply merely because repository validation passed.
 
 ## Codex Enablement

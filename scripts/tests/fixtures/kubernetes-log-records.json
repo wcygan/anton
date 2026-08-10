@@ -1,0 +1,44 @@
+[
+  {
+    "name": "structured critical alias",
+    "severity_text": "critical",
+    "body": "database unavailable",
+    "expected": "fatal"
+  },
+  {
+    "name": "structured warning alias",
+    "severity_text": "warning",
+    "body": "retrying",
+    "expected": "warn"
+  },
+  {
+    "name": "klog error prefix",
+    "severity_text": null,
+    "body": "E0809 controller failed",
+    "expected": "error"
+  },
+  {
+    "name": "klog warning containing error text",
+    "severity_text": null,
+    "body": "W0809 error budget is low",
+    "expected": "warn"
+  },
+  {
+    "name": "unrecognized severity defaults to info",
+    "severity_text": "notice",
+    "body": "request finished",
+    "expected": "info"
+  },
+  {
+    "name": "trace prefix",
+    "severity_text": null,
+    "body": "trace request path",
+    "expected": "trace"
+  },
+  {
+    "name": "structured level in body",
+    "severity_text": null,
+    "body": "timestamp=now level=debug request finished",
+    "expected": "debug"
+  }
+]

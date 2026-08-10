@@ -54,6 +54,24 @@ class AntonPolicyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("Secret output", result.stderr)
 
+    def test_cluster_mutation_fails_closed_without_expected_context(self) -> None:
+        result = run_hook(
+            "pre",
+            self.bash("kubectl -n observability port-forward svc/loki 3100:3100"),
+            env={"ANTON_KUBE_CONTEXT": "definitely-not-the-current-context"},
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context", result.stderr)
+
+    def test_destructive_approval_does_not_bypass_context_preflight(self) -> None:
+        result = run_hook(
+            "pre",
+            self.bash("ANTON_DESTRUCTIVE_OK=1 talosctl reset"),
+            env={"ANTON_TALOS_CONTEXT": "definitely-not-the-current-context"},
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context", result.stderr)
+
     def test_blocks_tailnet_literal_in_patch(self) -> None:
         host = "realtail" + ".ts.net"
         patch = f"*** Begin Patch\n*** Add File: docs/example.md\n+hello {host}\n*** End Patch\n"
@@ -93,7 +111,7 @@ class AntonPolicyTests(unittest.TestCase):
             patch = "*** Begin Patch\n*** Update File: kubernetes/apps/default/demo/app/helmrelease.yaml\n@@\n-kind: HelmRelease\n+kind: HelmRelease\n*** End Patch\n"
             result = run_hook("post", self.patch(patch, tmp))
         self.assertEqual(result.returncode, 2)
-        self.assertIn("missing required scaffold", result.stderr)
+        self.assertIn("required Flux application file is missing", result.stderr)
 
     def test_allows_namespace_kustomization_updates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

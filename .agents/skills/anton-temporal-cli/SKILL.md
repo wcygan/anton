@@ -14,6 +14,7 @@ Inspect Anton's Temporal deployment with the local `temporal` CLI while keeping 
 - Work from the Anton checkout. Use the current workspace when it is the Anton repo; otherwise prefer `${ANTON_REPO:-$HOME/Development/anton}` after verifying it exists.
 - Use `./kubeconfig` with `kubectl` and Flux commands.
 - Keep checks read-only by default. Do not reconcile, apply, delete, rotate credentials, or edit manifests unless the user explicitly asks.
+- Treat the required localhost port-forward as a live networking mutation: obtain explicit operator approval and verify the Anton context first.
 - Do not print secret values. Listing Secret key names is acceptable when useful.
 - Do not hardcode the tailnet FQDN in skill output or files. Discover the current Web UI hostname from `Ingress/temporal` or use `temporal.<tailnet-name>.ts.net` as a placeholder.
 - Close any port-forward before finishing the turn.
@@ -34,7 +35,7 @@ FLUX="$(mise which flux 2>/dev/null || command -v flux)"
 "$KUBECTL" --kubeconfig ./kubeconfig -n temporal get cluster temporal-postgres -o wide
 ```
 
-2. Open a localhost tunnel to the private Temporal frontend:
+2. After explicit operator approval, open a localhost tunnel to the private Temporal frontend:
 
 ```sh
 "$KUBECTL" --kubeconfig ./kubeconfig -n temporal \

@@ -5,18 +5,19 @@ Read-only inspection of node-level networking: interfaces, addresses, routes, bo
 All commands use the shape from `SKILL.md`:
 
 ```sh
-TALOS="talosctl --talosconfig ./talos/clusterconfig/talosconfig"
-NODES="k8s-1,k8s-2,k8s-3"
+TALOS="mise exec -- talosctl --talosconfig ./talos/clusterconfig/talosconfig"
+NODES="$(python3 scripts/cluster-targets.py resolve --format addresses --show-addresses)"
+K8S1="${NODES%%,*}"
 ```
 
 ## Fleet-wide interface snapshot
 
 ```sh
-$TALOS -e k8s-1 -n $NODES get links                  # interfaces: name, state, MTU, MAC
-$TALOS -e k8s-1 -n $NODES get addresses              # IPv4/IPv6 per link
-$TALOS -e k8s-1 -n $NODES get routes                 # default + per-link routes
-$TALOS -e k8s-1 -n $NODES get resolvers              # DNS servers in effect
-$TALOS -e k8s-1 -n $NODES get hostname               # configured vs effective
+$TALOS -e "$K8S1" -n "$NODES" get links                  # interfaces: name, state, MTU, MAC
+$TALOS -e "$K8S1" -n "$NODES" get addresses              # IPv4/IPv6 per link
+$TALOS -e "$K8S1" -n "$NODES" get routes                 # default + per-link routes
+$TALOS -e "$K8S1" -n "$NODES" get resolvers              # DNS servers in effect
+$TALOS -e "$K8S1" -n "$NODES" get hostname               # configured vs effective
 ```
 
 | Query | What to look for |
@@ -33,11 +34,11 @@ Anton uses a shared VIP (`192.168.1.101`) that floats across `k8s-1/2/3`. Only o
 
 ```sh
 # Which node currently holds the VIP?
-$TALOS -e k8s-1 -n $NODES get addresses | rg 192.168.1.101
+$TALOS -e "$K8S1" -n "$NODES" get addresses | rg 192.168.1.101
 
 # machined is the service that manages it:
-$TALOS -e k8s-1 -n $NODES service machined
-$TALOS -e k8s-1 -n $NODES logs machined | rg -i 'vip'
+$TALOS -e "$K8S1" -n "$NODES" service machined
+$TALOS -e "$K8S1" -n "$NODES" logs machined | rg -i 'vip'
 ```
 
 Symptoms of VIP trouble:
@@ -52,11 +53,11 @@ When something feels like a partition, confirm raw L3 reachability between all t
 
 ```sh
 # 1. Etcd peers should all see each other.
-$TALOS -n k8s-1 etcd members          # expects three HEALTHY members
+$TALOS -n "$K8S1" etcd members          # expects three HEALTHY members
 
 # 2. Talos discovery service lists affiliates it has talked to.
-$TALOS -e k8s-1 -n $NODES get affiliates
-$TALOS -e k8s-1 -n $NODES get members
+$TALOS -e "$K8S1" -n "$NODES" get affiliates
+$TALOS -e "$K8S1" -n "$NODES" get members
 ```
 
 If `etcd members` shows one peer as unhealthy but the node is otherwise up, it is almost certainly network-level: MTU mismatch, firewall ACL, duplicate IP, or a dead switch port.
@@ -64,21 +65,23 @@ If `etcd members` shows one peer as unhealthy but the node is otherwise up, it i
 From the **workstation** (not from nodes — Talos has no shell) you can L4-probe:
 
 ```sh
-nc -vz k8s-1 50000         # Talos apid
-nc -vz k8s-1 6443          # Kubernetes API
-nc -vz k8s-1 2379          # etcd client (control plane only)
-nc -vz k8s-1 2380          # etcd peer (control plane only)
+nc -vz "$K8S1" 50000         # Talos apid
+nc -vz "$K8S1" 6443          # Kubernetes API
+nc -vz "$K8S1" 2379          # etcd client (control plane only)
+nc -vz "$K8S1" 2380          # etcd peer (control plane only)
 ```
 
-These hostnames resolve over Tailscale MagicDNS when remote. If a port refuses from off-LAN but accepts on-LAN, the Tailscale extension on the node has de-authed — see `anton-remote-access` for re-auth guidance.
+Use the resolver-provided address. If a port refuses over Tailscale but accepts
+on-LAN, the Tailscale extension on the node may have de-authed; see
+`anton-remote-access` for the approved handoff.
 
 ## MTU and bond diagnostics
 
 MTU mismatch is a classic silent failure: small packets pass, large ones drop. If Anton ever grows a VLAN or bonded NIC in front of a node:
 
 ```sh
-$TALOS -e k8s-1 -n $NODES get links | rg -i 'mtu|bond'
-$TALOS -n k8s-1 dmesg | rg -i 'bond|link down|link up|mtu'
+$TALOS -e "$K8S1" -n "$NODES" get links | rg -i 'mtu|bond'
+$TALOS -n "$K8S1" dmesg | rg -i 'bond|link down|link up|mtu'
 ```
 
 Healthy bond:
@@ -92,9 +95,9 @@ One member `DOWN` = redundancy loss but no outage. Fix at the switch side; Talos
 ## DNS and NTP (network-adjacent)
 
 ```sh
-$TALOS -e k8s-1 -n $NODES get resolvers              # upstream DNS
-$TALOS -e k8s-1 -n $NODES service timed              # NTP sync health
-$TALOS -e k8s-1 -n $NODES time                       # wall clock per node
+$TALOS -e "$K8S1" -n "$NODES" get resolvers              # upstream DNS
+$TALOS -e "$K8S1" -n "$NODES" service timed              # NTP sync health
+$TALOS -e "$K8S1" -n "$NODES" time                       # wall clock per node
 ```
 
 Clock drift > 1s across nodes will break etcd — cross-link `references/health.md` for the etcd symptom list. Flaky upstream DNS manifests as slow `trustd` / `apid` cert operations and slow `machined` discovery.

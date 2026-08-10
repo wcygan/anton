@@ -9,7 +9,9 @@ Success means:
 - Copy the closest sibling shape before creating a new pattern.
 - Keep application secrets on ExternalSecret unless the bootstrap timing requires SOPS.
 - Attach routes to the correct gateway and add DNSEndpoint resources for secondary domains.
-- Validate YAML and the Flux app scaffold before returning.
+- Run `python3 scripts/validate-flux-contract.py` so ADR 0027 consumer
+  dependencies and provider readiness are checked with the app scaffold.
+- Validate YAML before returning.
 
 Stop when the manifest files are written, local validation passes, and the summary names any operator-only reconcile or secret action.
 

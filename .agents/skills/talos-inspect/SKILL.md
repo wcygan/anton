@@ -32,8 +32,16 @@ mise exec -- task talos:health
 
 The wrapper uses the current Tailscale endpoint map, probes each node
 individually, and then runs the server-side health check. For a direct query,
-use the same Tailscale IP for `--endpoints` and `--nodes`; do not use the LAN
-addresses from the generated `talosconfig` off-LAN.
+consume the same resolver instead of copying endpoints into the skill:
+
+```sh
+NODES="$(python3 scripts/cluster-targets.py resolve --format addresses --show-addresses)"
+ENDPOINT="${NODES%%,*}"
+mise exec -- talosctl --talosconfig ./talos/clusterconfig/talosconfig \
+  --endpoints "$ENDPOINT" --nodes "$NODES" <read-only-command>
+```
+
+Do not use the LAN addresses from the generated `talosconfig` off-LAN.
 
 ## Boundaries
 

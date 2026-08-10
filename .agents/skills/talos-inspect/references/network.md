@@ -6,10 +6,8 @@ All commands use the shape from `SKILL.md`:
 
 ```sh
 TALOS="mise exec -- talosctl --talosconfig ./talos/clusterconfig/talosconfig"
-K8S1="100.75.61.79"
-K8S2="100.87.89.3"
-K8S3="100.100.217.100"
-NODES="$K8S1,$K8S2,$K8S3"
+NODES="$(python3 scripts/cluster-targets.py resolve --format addresses --show-addresses)"
+K8S1="${NODES%%,*}"
 ```
 
 Use the same Tailscale IP for `--endpoints` and `--nodes` in direct queries.
@@ -19,11 +17,11 @@ node that is unreachable is reported instead of omitted.
 ## Fleet-wide interface snapshot
 
 ```sh
-$TALOS -e $K8S1 -n $NODES get links                  # interfaces: name, state, MTU, MAC
-$TALOS -e $K8S1 -n $NODES get addresses              # IPv4/IPv6 per link
-$TALOS -e $K8S1 -n $NODES get routes                 # default + per-link routes
-$TALOS -e $K8S1 -n $NODES get resolvers              # DNS servers in effect
-$TALOS -e $K8S1 -n $NODES get hostname               # configured vs effective
+$TALOS -e "$K8S1" -n "$NODES" get links                  # interfaces: name, state, MTU, MAC
+$TALOS -e "$K8S1" -n "$NODES" get addresses              # IPv4/IPv6 per link
+$TALOS -e "$K8S1" -n "$NODES" get routes                 # default + per-link routes
+$TALOS -e "$K8S1" -n "$NODES" get resolvers              # DNS servers in effect
+$TALOS -e "$K8S1" -n "$NODES" get hostname               # configured vs effective
 ```
 
 | Query | What to look for |
@@ -40,11 +38,11 @@ Anton uses a shared VIP (`192.168.1.101`) that floats across `k8s-1/2/3`. Only o
 
 ```sh
 # Which node currently holds the VIP?
-$TALOS -e $K8S1 -n $NODES get addresses | rg 192.168.1.101
+$TALOS -e "$K8S1" -n "$NODES" get addresses | rg 192.168.1.101
 
 # machined is the service that manages it:
-$TALOS -e $K8S1 -n $NODES service machined
-$TALOS -e $K8S1 -n $NODES logs machined | rg -i 'vip'
+$TALOS -e "$K8S1" -n "$NODES" service machined
+$TALOS -e "$K8S1" -n "$NODES" logs machined | rg -i 'vip'
 ```
 
 Symptoms of VIP trouble:
@@ -59,11 +57,11 @@ When something feels like a partition, confirm raw L3 reachability between all t
 
 ```sh
 # 1. Etcd peers should all see each other.
-$TALOS -n $K8S1 etcd members          # expects three HEALTHY members
+$TALOS -n "$K8S1" etcd members          # expects three HEALTHY members
 
 # 2. Talos discovery service lists affiliates it has talked to.
-$TALOS -e $K8S1 -n $NODES get affiliates
-$TALOS -e $K8S1 -n $NODES get members
+$TALOS -e "$K8S1" -n "$NODES" get affiliates
+$TALOS -e "$K8S1" -n "$NODES" get members
 ```
 
 If `etcd members` shows one peer as unhealthy but the node is otherwise up, it is almost certainly network-level: MTU mismatch, firewall ACL, duplicate IP, or a dead switch port.
@@ -87,8 +85,8 @@ accepts on-LAN, the Tailscale extension on the node may have de-authed — see
 MTU mismatch is a classic silent failure: small packets pass, large ones drop. If Anton ever grows a VLAN or bonded NIC in front of a node:
 
 ```sh
-$TALOS -e $K8S1 -n $NODES get links | rg -i 'mtu|bond'
-$TALOS -n $K8S1 dmesg | rg -i 'bond|link down|link up|mtu'
+$TALOS -e "$K8S1" -n "$NODES" get links | rg -i 'mtu|bond'
+$TALOS -n "$K8S1" dmesg | rg -i 'bond|link down|link up|mtu'
 ```
 
 Healthy bond:
@@ -102,9 +100,9 @@ One member `DOWN` = redundancy loss but no outage. Fix at the switch side; Talos
 ## DNS and NTP (network-adjacent)
 
 ```sh
-$TALOS -e $K8S1 -n $NODES get resolvers              # upstream DNS
-$TALOS -e $K8S1 -n $NODES service timed              # NTP sync health
-$TALOS -e $K8S1 -n $NODES time                       # wall clock per node
+$TALOS -e "$K8S1" -n "$NODES" get resolvers              # upstream DNS
+$TALOS -e "$K8S1" -n "$NODES" service timed              # NTP sync health
+$TALOS -e "$K8S1" -n "$NODES" time                       # wall clock per node
 ```
 
 Clock drift > 1s across nodes will break etcd — cross-link `references/health.md` for the etcd symptom list. Flaky upstream DNS manifests as slow `trustd` / `apid` cert operations and slow `machined` discovery.

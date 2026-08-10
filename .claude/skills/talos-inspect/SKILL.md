@@ -12,16 +12,21 @@ One-stop read-only diagnostic skill for Anton at the **Talos / OS layer**. Reach
 
 ## Common invocation shape
 
-Always use the repo's generated talosconfig (gitignored, produced by `task talos:generate-config`) and fan out to all three nodes:
+Use the repository wrapper for the fleet pulse:
 
 ```sh
-TALOS="talosctl --talosconfig ./talos/clusterconfig/talosconfig"
-NODES="k8s-1,k8s-2,k8s-3"
-
-$TALOS -e k8s-1 -n $NODES <command>
+mise exec -- task talos:health
 ```
 
-Prefer Tailscale MagicDNS hostnames (`k8s-1` etc.) over `192.168.1.x` — the LAN addresses only work on-network. See `anton-remote-access` for how the endpoint wiring works.
+For direct queries, consume `scripts/cluster-targets.py` instead of copying
+node endpoints into this skill or relying on the generated LAN defaults:
+
+```sh
+TALOS="mise exec -- talosctl --talosconfig ./talos/clusterconfig/talosconfig"
+NODES="$(python3 scripts/cluster-targets.py resolve --format addresses --show-addresses)"
+ENDPOINT="${NODES%%,*}"
+$TALOS --endpoints "$ENDPOINT" --nodes "$NODES" <read-only-command>
+```
 
 ## Decision tree — which reference file?
 
@@ -44,27 +49,26 @@ When in doubt, run the 60-second pulse below first, then jump.
 A yes/no "is anything obviously broken at the OS layer":
 
 ```sh
-$TALOS -e k8s-1 -n $NODES version          # client/server skew
-$TALOS -e k8s-1 -n $NODES health           # full Talos health probes
-$TALOS -e k8s-1 -n $NODES service          # anything in Failed?
-$TALOS -n k8s-1 etcd members               # 3 healthy members?
-kubectl get nodes -o wide                  # all Ready, kubelet version sane?
-kubectl get pods -A | rg -v 'Running|Completed'   # anything stuck?
+mise exec -- task talos:health
+mise exec -- kubectl get nodes -o wide
+mise exec -- kubectl get pods -A | rg -v 'Running|Completed'
 ```
 
-If all six are clean, the OS layer is fine — the problem is upstream (Flux, app, ingress). Hand off to `debug-flux-reconciliation`.
+If the Talos pulse and both Kubernetes reads are clean, the OS layer is fine —
+the problem is upstream (Flux, app, ingress). Hand off to
+`debug-flux-reconciliation`.
 
 ## Hard rules
 
 - **Read-only, always.** Never run `apply-config` without `--mode=no-reboot --dry-run`. This skill does not mutate machine config.
 - **Never paste** `talosconfig`, `controlplane.yaml`, `worker.yaml`, or any `*.sops.*` contents into the conversation. File paths are fine; contents are not.
-- **Never write the real tailnet name** into a committed file — use the placeholder `<tailnet-name>.ts.net` per repo `CLAUDE.md`. MagicDNS short hostnames (`k8s-1` etc.) are fine.
+- **Never write the real tailnet name** into a committed file — use the placeholder `<tailnet-name>.ts.net` per repo `AGENTS.md`. Keep fallback node addresses in `scripts/cluster-targets.json` only.
 - **Don't improvise a fix.** If inspection reveals a mutation is needed (sysctl patch, version bump, bad disk, dead node), stop and hand off to the right skill.
 - **Cite the docs for anything unfamiliar.** Talos `v1.12` docs at `https://docs.siderolabs.com/talos/v1.12/` — WebFetch before guessing at resource schemas or flag names.
 
 ## Related skills
 
-- `anton-remote-access` — how `talosctl` endpoints, Tailscale MagicDNS, and kubeconfig are wired
+- `anton-remote-access` — how `talosctl` targets and kubeconfig contexts are resolved
 - `debug-flux-reconciliation` — app-layer triage once the OS layer looks fine
 - `upgrade-talos-or-k8s` — if inspection reveals a version skew that needs fixing
 - `add-or-replace-node` — if inspection reveals a bad disk or a dead node

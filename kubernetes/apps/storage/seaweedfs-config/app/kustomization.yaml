@@ -1,11 +1,16 @@
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+configMapGenerator:
+  - name: seaweedfs-bucket-provisioner
+    files:
+      - provision-buckets.sh=./provision-buckets.sh
+    options:
+      disableNameSuffixHash: true
 resources:
   - ./seaweed.yaml
   - ./iceberg-service.yaml
   - ./externalsecret.yaml
-  - ./harbor-bucket-cronjob.yaml
-  - ./lakehouse-buckets-cronjob.yaml
+  - ./buckets-cronjob.yaml
   - ./lakehouse-s3-smoke-job.yaml
   - ./httproute.yaml

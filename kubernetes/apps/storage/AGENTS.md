@@ -30,10 +30,15 @@ Keep the chart 0.1.14 workarounds until upstream proves they are fixed:
 
 Use top-level `spec.s3`; `filer.s3.enabled` conflicts with the canonical shape.
 
+Bucket lifecycle is owned by `seaweedfs-config/app/buckets-cronjob.yaml`; its
+mounted `provision-buckets.sh` is the single implementation for ordinary S3 and
+S3 Tables buckets. Add workload bucket intent there and retain collision
+refusal, security context, bounded evidence, and the two explicit bucket kinds.
+
 ## Validation
 
 ```sh
-flux get ks -n storage
-flux get hr -n storage
-kubectl -n storage get pods,pvc
+mise exec -- flux get ks -n storage
+mise exec -- flux get hr -n storage
+mise exec -- kubectl -n storage get pods,pvc
 ```

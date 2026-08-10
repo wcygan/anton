@@ -36,8 +36,12 @@ Attach HTTPRoutes to `envoy-internal` for LAN/internal access and `envoy-externa
 Prefer local structural checks before cluster actions:
 
 ```sh
-find . -name '*.sops.*' -not -name '.sops.yaml' -not -path './.private/*' -exec sops filestatus {} \;
-yq . kubernetes/apps/<namespace>/<app>/ks.yaml
-flux get ks -A
-flux get hr -A
+mise exec -- task contracts:validate
+mise exec -- find . -name '*.sops.*' -not -name '.sops.yaml' -not -path './.private/*' -exec sops filestatus {} \;
+mise exec -- yq . kubernetes/apps/<namespace>/<app>/ks.yaml
+mise exec -- flux get ks -A
+mise exec -- flux get hr -A
 ```
+
+The contract gate enforces the 3-file shape, namespace registration, and ADR
+0027 consumer/provider dependency rules across the current tree.

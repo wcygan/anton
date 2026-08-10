@@ -54,8 +54,9 @@ Use `mise exec --` for cluster commands. In the current checkout,
   with explicit operator approval.
 - Trino `SELECT`, `SHOW`, and `DESCRIBE` queries are safe; avoid `DROP`,
   `DELETE`, `INSERT`, `MERGE`, or `ALTER` unless the operator explicitly asks.
-- Use a local port-forward for laptop access. Do not create an Ingress,
-  HTTPRoute, LoadBalancer, or public DNS record for this demo.
+- Obtain explicit operator approval before `kubectl exec` or a localhost-only
+  port-forward, and close the port-forward during cleanup. Do not create an
+  Ingress, HTTPRoute, LoadBalancer, or public DNS record for this demo.
 - Preserve unrelated dirty-worktree changes when editing access code or docs.
 
 ## Table contract

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "kubernetes": {
+    "operator_context_prefix": "tailscale-operator.",
+    "fallback_context": "admin@anton"
+  },
+  "talos": {
+    "context": "anton",
+    "nodes": [
+      {"name": "k8s-1", "tailscale_ipv4": "100.75.61.79"},
+      {"name": "k8s-2", "tailscale_ipv4": "100.87.89.3"},
+      {"name": "k8s-3", "tailscale_ipv4": "100.100.217.100"}
+    ]
+  }
+}

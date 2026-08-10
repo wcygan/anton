@@ -49,8 +49,9 @@ this checkout, `KUBECONFIG=./kubeconfig` is the equivalent explicit form.
 
 ## Safety boundaries
 
-- Read-only inspection is the default: `kubectl get`, `describe`, `logs`,
-  `exec`, `flux get`, and `port-forward`.
+- Read-only inspection is the default: `kubectl get`, `describe`, `logs`, and
+  `flux get`. Treat `exec` and `port-forward` as live mutations that require
+  explicit operator approval and cleanup.
 - Ask for explicit operator approval before `flux reconcile`, `rollout
   restart`, `kubectl create job`, bucket changes, namespace deletion,
   credential rotation, or other live mutations.
@@ -67,7 +68,8 @@ this checkout, `KUBECONFIG=./kubeconfig` is the equivalent explicit form.
 - Seaweed CR and catalog argument: `kubernetes/apps/storage/seaweedfs-config/app/seaweed.yaml`
 - Catalog Service: `kubernetes/apps/storage/seaweedfs-config/app/iceberg-service.yaml`
 - ESO identities and permissions: `kubernetes/apps/storage/seaweedfs-config/app/externalsecret.yaml`
-- Bucket provisioner: `kubernetes/apps/storage/seaweedfs-config/app/lakehouse-buckets-cronjob.yaml`
+- Shared bucket provisioner: `kubernetes/apps/storage/seaweedfs-config/app/buckets-cronjob.yaml`
+- Provisioning implementation: `kubernetes/apps/storage/seaweedfs-config/app/provision-buckets.sh`
 - Raw S3 smoke test: `kubernetes/apps/storage/seaweedfs-config/app/lakehouse-s3-smoke-job.yaml`
 - Spark CronJob and RBAC: `kubernetes/apps/iceberg-demo/spark-fixture/app/`
 - Trino HelmRelease and query: `kubernetes/apps/iceberg-demo/trino/`
@@ -133,7 +135,9 @@ Follow the phases in order. Do not skip the storage gate.
 ```sh
 mise exec -- flux get ks -n storage seaweedfs-config
 mise exec -- kubectl -n storage get svc seaweedfs-iceberg
-mise exec -- kubectl -n storage get job seaweedfs-lakehouse-buckets-ensure
+mise exec -- kubectl -n storage get cronjob seaweedfs-buckets-ensure
+mise exec -- kubectl -n storage get jobs \
+  -l batch.kubernetes.io/cronjob-name=seaweedfs-buckets-ensure
 mise exec -- kubectl -n storage get job seaweedfs-lakehouse-s3-smoke
 ```
 

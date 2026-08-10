@@ -4,10 +4,8 @@ Read-only storage inspection at the Talos layer. Good for: `add-or-replace-node`
 
 ```sh
 TALOS="mise exec -- talosctl --talosconfig ./talos/clusterconfig/talosconfig"
-K8S1="100.75.61.79"
-K8S2="100.87.89.3"
-K8S3="100.100.217.100"
-NODES="$K8S1,$K8S2,$K8S3"
+NODES="$(python3 scripts/cluster-targets.py resolve --format addresses --show-addresses)"
+K8S1="${NODES%%,*}"
 ```
 
 Use the same Tailscale IP for `--endpoints` and `--nodes` in direct queries.
@@ -17,10 +15,10 @@ an unreachable node is reported instead of omitted.
 ## Fleet-wide inventory
 
 ```sh
-$TALOS -e $K8S1 -n $NODES get disks                  # block devices: name, size, model, serial
-$TALOS -e $K8S1 -n $NODES get systemdisk             # which disk holds the Talos install
-$TALOS -e $K8S1 -n $NODES get discoveredvolumes      # detected volumes (partitions, filesystems)
-$TALOS -e $K8S1 -n $NODES get volumemountstatus      # what is actually mounted where
+$TALOS -e "$K8S1" -n "$NODES" get disks                  # block devices: name, size, model, serial
+$TALOS -e "$K8S1" -n "$NODES" get systemdisk             # which disk holds the Talos install
+$TALOS -e "$K8S1" -n "$NODES" get discoveredvolumes      # detected volumes (partitions, filesystems)
+$TALOS -e "$K8S1" -n "$NODES" get volumemountstatus      # what is actually mounted where
 ```
 
 What to look for:
@@ -38,7 +36,7 @@ Before joining a new node, capture the serial of the disk you intend to install 
 
 ```sh
 # From a Talos maintenance-mode boot on the new hardware:
-talosctl -n <new-node-ip> --insecure get disks
+mise exec -- talosctl -n <new-node-ip> --insecure get disks
 ```
 
 Use the serial (preferred) in `installDiskSelector:` in `talos/talconfig.yaml`. Model-only selection is possible but fragile when you have two identical drives.
@@ -49,7 +47,7 @@ Talos doesn't ship `smartctl` in the default image. You have two options:
 
 1. **Kernel signals** (always available). Grep `dmesg` for hardware-level errors:
    ```sh
-   $TALOS -n $K8S1 dmesg | rg -i 'nvme|ata|scsi|i/o error|medium error|bad block|timeout'
+   $TALOS -n "$K8S1" dmesg | rg -i 'nvme|ata|scsi|i/o error|medium error|bad block|timeout'
    ```
    Patterns that matter:
 
@@ -62,10 +60,10 @@ Talos doesn't ship `smartctl` in the default image. You have two options:
 ## Disk pressure and free space
 
 ```sh
-$TALOS -n $K8S1 read /proc/mounts                    # raw mount table
-$TALOS -n $K8S1 usage /var                           # space used by path
-$TALOS -n $K8S1 usage /var/lib/containerd            # images + snapshots
-$TALOS -n $K8S1 usage /var/lib/kubelet               # kubelet pod volumes
+$TALOS -n "$K8S1" read /proc/mounts                    # raw mount table
+$TALOS -n "$K8S1" usage /var                           # space used by path
+$TALOS -n "$K8S1" usage /var/lib/containerd            # images + snapshots
+$TALOS -n "$K8S1" usage /var/lib/kubelet               # kubelet pod volumes
 ```
 
 The `EPHEMERAL` partition holds `/var` and is the most common culprit for disk pressure. Top three causes:
@@ -79,8 +77,8 @@ When a node reports `DiskPressure` in `kubectl describe node`, this is where to 
 ## Container image storage (read-only triage)
 
 ```sh
-$TALOS -n $K8S1 containers                           # containers + image IDs on this node
-kubectl get pods -A -o jsonpath='{..image}' | tr ' ' '\n' | sort -u | wc -l
+$TALOS -n "$K8S1" containers                           # containers + image IDs on this node
+mise exec -- kubectl get pods -A -o jsonpath='{..image}' | tr ' ' '\n' | sort -u | wc -l
 ```
 
 Expect the number of unique images in-use to match roughly what `/var/lib/containerd` holds. A big divergence means old images are pinned; image GC needs a closer look (kubelet config, not this skill).

@@ -25,6 +25,13 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+
+from flux_application_contract import validate_changed_path  # noqa: E402
+from cluster_target_contract import preflight_command  # noqa: E402
+
 WATCH_YAML_PREFIXES = ("kubernetes/", "talos/", "bootstrap/")
 YAML_SUFFIXES = (".yaml", ".yml")
 PLAN_PATTERN = re.compile(r"^\d{4}-.+\.md$")
@@ -140,19 +147,26 @@ def check_tailnet(texts: Iterable[str]) -> int:
     return 0
 
 
-def check_bash_policy(cmd: str) -> int:
+def check_bash_policy(cmd: str, root: Path) -> int:
     if not cmd:
         return 0
-    if re.match(r"^\s*ANTON_DESTRUCTIVE_OK=1\s+", cmd):
-        return 0
-    for pattern, reason in DESTRUCTIVE_PATTERNS:
-        if pattern.search(cmd):
-            return block(f"{reason} Ask for explicit operator approval first.")
-    if re.match(r"^\s*ANTON_ALLOW_SECRET_READ=1\s+", cmd):
-        return 0
-    for segment in SECRET_SEGMENT_SEP.split(cmd):
-        if KUBECTL_GET_SECRET.search(segment) and DANGEROUS_SECRET_OUTPUT.search(segment):
-            return block("kubectl Secret output would expose .data values; use describe or ExternalSecret status.")
+    destructive_approved = bool(re.match(r"^\s*ANTON_DESTRUCTIVE_OK=1\s+", cmd))
+    if not destructive_approved:
+        for pattern, reason in DESTRUCTIVE_PATTERNS:
+            if pattern.search(cmd):
+                return block(f"{reason} Ask for explicit operator approval first.")
+    secret_read_approved = bool(re.match(r"^\s*ANTON_ALLOW_SECRET_READ=1\s+", cmd))
+    if not secret_read_approved:
+        for segment in SECRET_SEGMENT_SEP.split(cmd):
+            if KUBECTL_GET_SECRET.search(segment) and DANGEROUS_SECRET_OUTPUT.search(segment):
+                return block("kubectl Secret output would expose .data values; use describe or ExternalSecret status.")
+    violations = preflight_command(cmd, root)
+    if violations:
+        violation = violations[0]
+        return block(
+            f"{violation.binary} {violation.subcommand or '<none>'}: {violation.message}; "
+            f"actual={violation.actual!r}, expected={violation.expected!r}."
+        )
     return 0
 
 
@@ -219,46 +233,6 @@ def validate_yaml(path: Path, root: Path) -> int:
     return 0
 
 
-def app_root_for(path: Path, root: Path) -> Path | None:
-    rel = relative(path, root)
-    parts = Path(rel).parts
-    if len(parts) < 5 or parts[0] != "kubernetes" or parts[1] != "apps":
-        return None
-    return root / parts[0] / parts[1] / parts[2] / parts[3]
-
-
-def kustomization_has_entries(path: Path) -> bool:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    return bool(re.search(r"^\s*-\s+\S", text, re.MULTILINE))
-
-
-def validate_flux_app(path: Path, root: Path) -> int:
-    app_root = app_root_for(path, root)
-    if app_root is None or not app_root.exists():
-        return 0
-    required = [app_root / "ks.yaml", app_root / "app" / "kustomization.yaml"]
-    missing = [p for p in required if not p.exists()]
-    helmrelease = app_root / "app" / "helmrelease.yaml"
-    source_options = [
-        app_root / "app" / "ocirepository.yaml",
-        app_root / "app" / "helmrepository.yaml",
-        app_root / "app" / "gitrepository.yaml",
-    ]
-    if helmrelease.exists() and not any(p.exists() for p in source_options):
-        missing.append(app_root / "app" / "ocirepository.yaml or helmrepository.yaml or gitrepository.yaml")
-    if not helmrelease.exists():
-        app_kust = app_root / "app" / "kustomization.yaml"
-        if app_kust.exists() and not kustomization_has_entries(app_kust):
-            missing.append(app_kust)
-    if missing:
-        rels = ", ".join(relative(p, root) for p in missing)
-        return block(f"Flux app {relative(app_root, root)} is missing required scaffold: {rels}.")
-    return 0
-
-
 def validate_plan_status(path: Path, root: Path) -> int:
     rel = relative(path, root)
     if not rel.startswith("context/plans/") or path.parent.name != "plans" or not PLAN_PATTERN.match(path.name):
@@ -285,7 +259,7 @@ def run_pre(data: dict) -> int:
     tool = data.get("tool_name")
     if tool == "Bash":
         rc = check_tailnet([command(data)])
-        return rc or check_bash_policy(command(data))
+        return rc or check_bash_policy(command(data), project_root(data))
     if tool == "apply_patch":
         return check_patch_pre(data)
     return 0
@@ -296,10 +270,13 @@ def run_post(data: dict) -> int:
         return 0
     root = project_root(data)
     for path in changed_paths_for_post(data):
-        for check in (validate_yaml, validate_flux_app, validate_plan_status):
+        for check in (validate_yaml, validate_plan_status):
             rc = check(path, root)
             if rc:
                 return rc
+        violations = validate_changed_path(path, root)
+        if violations:
+            return block(violations[0].render(root))
     return 0
 
 

@@ -1,14 +1,13 @@
 ---
-# The existing SeaweedFS source-of-truth provisions Harbor's bucket separately.
-# Ensure Loki's bucket exists without introducing a second database or storing
-# credentials in Git. This is idempotent and uses the same bounded CronJob
-# pattern as storage/seaweedfs-config.
+# Storage owns bucket lifecycle. Workloads declare intent here; the mounted
+# provisioner keeps ordinary S3 and S3 Tables behavior explicit and refuses a
+# kind collision instead of deleting or replacing data.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: loki-bucket-ensure
+  name: seaweedfs-buckets-ensure
 spec:
-  schedule: "23 */6 * * *"
+  schedule: "17 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
@@ -16,9 +15,11 @@ spec:
     spec:
       ttlSecondsAfterFinished: 86400
       backoffLimit: 2
+      activeDeadlineSeconds: 300
       template:
         spec:
           restartPolicy: OnFailure
+          automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
@@ -26,30 +27,30 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           containers:
-            - name: ensure-bucket
+            - name: provision-buckets
               image: amazon/aws-cli:2.36.14
               imagePullPolicy: IfNotPresent
               envFrom:
                 - secretRef:
-                    name: loki-s3-credentials
+                    name: seaweedfs-s3-config
               env:
                 - name: AWS_EC2_METADATA_DISABLED
                   value: "true"
                 - name: AWS_DEFAULT_REGION
                   value: us-east-1
+                - name: S3_ENDPOINT
+                  value: http://seaweedfs-s3.storage.svc.cluster.local:8333
+                - name: ORDINARY_BUCKETS
+                  value: harbor loki iceberg-raw
+                - name: TABLE_BUCKETS
+                  value: iceberg-warehouse
               command:
                 - /bin/sh
-                - -c
-              args:
-                - |
-                  set -eu
-                  endpoint="http://seaweedfs-s3.storage.svc.cluster.local:8333"
-                  if aws --endpoint-url="$endpoint" s3api head-bucket --bucket loki >/dev/null 2>&1; then
-                    echo "loki bucket present"
-                  else
-                    aws --endpoint-url="$endpoint" s3 mb s3://loki
-                    echo "loki bucket created"
-                  fi
+                - /opt/anton/provision-buckets.sh
+              volumeMounts:
+                - name: provisioner
+                  mountPath: /opt/anton
+                  readOnly: true
               resources:
                 requests:
                   cpu: 10m
@@ -62,3 +63,7 @@ spec:
                 readOnlyRootFilesystem: true
                 capabilities:
                   drop: ["ALL"]
+          volumes:
+            - name: provisioner
+              configMap:
+                name: seaweedfs-bucket-provisioner

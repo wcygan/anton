@@ -1,6 +1,6 @@
 ---
 name: add-flux-app
-description: Scaffold a new Flux app for Anton. Use to add an app, deploy app, new helm chart, new namespace, scaffold flux app, or create external secret. Generates ks.yaml with postBuild, HelmRelease, OCIRepository, and optional ExternalSecret.
+description: Scaffold a new Helm or raw Kustomize Flux app for Anton. Use to add an app, add a chart, add a raw manifest app, create a namespace, or create an ExternalSecret. Stops after repository validation and an explicit Git/rollout handoff.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -16,30 +16,29 @@ Field reference for every file's shape: `anton-repo-conventions` skill.
 | --- | --- |
 | Flux Kustomization (Tier 1) | `kubernetes/apps/<ns>/<app>/ks.yaml` |
 | Plain Kustomize (Tier 2) | `kubernetes/apps/<ns>/<app>/app/kustomization.yaml` |
-| HelmRelease (Tier 3) | `kubernetes/apps/<ns>/<app>/app/helmrelease.yaml` |
-| OCIRepository (chart source) | `kubernetes/apps/<ns>/<app>/app/ocirepository.yaml` |
+| Helm resources (Tier 3, Helm mode) | `app/helmrelease.yaml` plus exactly one chart source |
+| Raw resources (Tier 3, raw mode) | manifests, components, patches, or generators listed by `app/kustomization.yaml` |
 | Optional Namespace + namespace kustomization | `kubernetes/apps/<ns>/namespace.yaml` |
 | Optional ExternalSecret | `kubernetes/apps/<ns>/<app>/app/externalsecret.yaml` |
 
 ## Workflow A — add an app to an existing namespace
 
 1. **Pick the namespace.** Confirm it already exists: `ls kubernetes/apps/<ns>/`. If not, jump to Workflow B.
-2. **Check the chart exists** before scaffolding: `helm search repo <repo>/<chart> --versions | head -5` for HelmRepository charts; for OCI, look at the registry directly (`crane ls ghcr.io/<org>/charts/<chart>` or just visit the URL).
+2. **Choose Helm or raw mode.** Match the closest sibling. For Helm, verify the chart first with `mise exec -- helm search repo <repo>/<chart> --versions | head -5` or `mise exec -- crane ls ghcr.io/<org>/charts/<chart>`. For raw mode, identify the exact manifests, components, patches, or generators that `app/kustomization.yaml` will own.
 3. **Create the app directory:** `mkdir -p kubernetes/apps/<ns>/<app>/app`
-4. **Author the four core files directly** (`ks.yaml`, `app/kustomization.yaml`, `app/helmrelease.yaml`, `app/ocirepository.yaml`). Required fields per file and a working example: see `anton-repo-conventions` (three-file pattern and HelmRelease sources). Copy the closest in-tree app (`kubernetes/apps/<ns>/<similar-app>/`) as a starting point — faster than assembling from scratch.
+4. **Author the app shape directly.** Every app gets `ks.yaml` and `app/kustomization.yaml`. Helm mode adds `app/helmrelease.yaml` and exactly one chart source. Raw mode lists at least one manifest, component, patch, or generator and does not invent a HelmRelease. Use `anton-repo-conventions` for the field contract and copy the closest in-tree sibling.
 5. **Register the app** in the namespace kustomization. Add one line:
    ```sh
    $EDITOR kubernetes/apps/<ns>/kustomization.yaml
    # add: - ./<app>/ks.yaml
    ```
    Apps are NOT auto-discovered. Skipping this means Flux silently never deploys the app.
-6. **If any `*.sops.*` files:** `sops -e -i <file>` to encrypt in place. Verify with `sops filestatus <file>` → `encrypted`.
-7. **Commit and push.** Wait for Flux poll, or force with `task reconcile`.
-8. **Verify:**
-   ```sh
-   flux get ks -A | rg <app>
-   flux get hr -A | rg <app>
-   ```
+6. **Validate dependency readiness:** run
+   `python3 scripts/validate-flux-contract.py`. If the app authors a custom
+   resource, add the ADR 0027 `dependsOn` edge reported by the validator; if it
+   is a provider, add `wait: true`, `healthChecks`, or `healthCheckExprs`.
+7. **If any `*.sops.*` files:** `mise exec -- sops -e -i <file>` to encrypt in place. Verify with `mise exec -- sops filestatus <file>` → `encrypted`.
+8. **Stop after repository validation.** Report the validated diff and hand off commit, push, and Flux reconciliation as separate operator actions. Perform none of them unless the user explicitly authorizes that boundary.
 
 ## Workflow B — add an app in a new namespace
 
@@ -98,20 +97,20 @@ spec:
 Pick one path; do not mix for the same secret.
 
 **Path 1 — ExternalSecret (default for new apps, pulls from 1Password).**
-1. Add the item to the `anton` 1Password vault. Field names are case-sensitive.
+1. Hand off creation of the item in the `anton` 1Password vault unless that external mutation was explicitly authorized. Field names are case-sensitive.
 2. Author `app/externalsecret.yaml` directly. Template shape and field-mapping rules: `anton-repo-conventions/references/secrets.md`. Copy from an in-tree ExternalSecret (e.g. `kubernetes/apps/network/cloudflare-tunnel/app/externalsecret.yaml`).
 3. Add `- ./externalsecret.yaml` to the app's `kustomization.yaml`.
 4. No encryption step. Verify after deploy:
    ```sh
-   kubectl get externalsecret -n <ns> <name>
-   kubectl get secret        -n <ns> <name>
-   kubectl describe externalsecret -n <ns> <name> | grep -A5 Status:
+   mise exec -- kubectl get externalsecret -n <ns> <name>
+   mise exec -- kubectl get secret        -n <ns> <name>
+   mise exec -- kubectl describe externalsecret -n <ns> <name> | grep -A5 Status:
    ```
 
 **Path 2 — SOPS Secret (only for static infra credentials that must exist before ESO).**
 1. Author `app/secret.sops.yaml` in plaintext with `data` or `stringData`.
-2. Encrypt in place: `sops -e -i app/secret.sops.yaml`.
-3. Verify: `SOPS_AGE_KEY_FILE=./age.key sops filestatus app/secret.sops.yaml` → `encrypted`.
+2. Encrypt in place: `mise exec -- sops -e -i app/secret.sops.yaml`.
+3. Verify: `SOPS_AGE_KEY_FILE=./age.key mise exec -- sops filestatus app/secret.sops.yaml` → `encrypted`.
 4. Add `- ./secret.sops.yaml` to the app's `kustomization.yaml`.
 
 Full templates and field-mapping rules: `anton-repo-conventions/references/secrets.md`.
@@ -122,12 +121,14 @@ That belongs to a different skill. Use `expose-service` for HTTPRoute, gateway c
 
 ## Pre-commit checklist
 
+- [ ] `python3 scripts/validate-flux-contract.py` passes
 - [ ] App is listed in `kubernetes/apps/<ns>/kustomization.yaml`
 - [ ] `ks.yaml` has `postBuild.substituteFrom: [{name: cluster-secrets, kind: Secret}]` if the app uses any `${VAR}`
 - [ ] Namespace kustomization includes `components: [../../components/sops]`
-- [ ] `OCIRepository.metadata.name` matches `HelmRelease.spec.chartRef.name`
-- [ ] All `*.sops.*` files show `encrypted`: `find . -name '*.sops.*' -exec sops filestatus {} \;`
-- [ ] `flux get ks -A | rg <app>` and `flux get hr -A | rg <app>` both show `Ready=True` after `task reconcile`
+- [ ] Helm mode has exactly one chart source; raw mode lists at least one manifest, component, patch, or generator
+- [ ] In Helm mode, `OCIRepository.metadata.name` matches `HelmRelease.spec.chartRef.name`
+- [ ] All `*.sops.*` files show `encrypted`: `mise exec -- find . -name '*.sops.*' -exec sops filestatus {} \;`
+- [ ] Commit, push, live Secret creation, and Flux reconciliation are named as unperformed operator handoffs unless separately authorized
 
 ## Related skills
 

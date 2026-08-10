@@ -21,8 +21,7 @@ kubernetes/
 │       ├── ks.yaml                 # Flux Kustomization (Tier 1)
 │       └── app/
 │           ├── kustomization.yaml  # Plain Kustomize (Tier 2)
-│           ├── helmrelease.yaml    # Resources (Tier 3)
-│           └── ocirepository.yaml  # OR helmrepository.yaml
+│           └── <resources>         # HelmRelease + one source, or raw resources
 ├── components/sops/                # Kustomize Component → cluster-secrets
 └── flux/cluster/ks.yaml            # Top-level Flux Kustomization
 ```
@@ -37,7 +36,7 @@ Every app has exactly three tiers, named identically to the app:
 | --- | --- | --- |
 | 1 | `<ns>/<app>/ks.yaml` | `kustomize.toolkit.fluxcd.io/v1` Kustomization |
 | 2 | `<ns>/<app>/app/kustomization.yaml` | `kustomize.config.k8s.io/v1beta1` Kustomization |
-| 3 | `<ns>/<app>/app/{helmrelease,ocirepository,…}.yaml` | the actual resources |
+| 3 | `<ns>/<app>/app/*.yaml` | HelmRelease plus one chart source, or raw manifests/components/patches/generators |
 
 Full annotated example: see `references/three-file-pattern.md`.
 
@@ -49,12 +48,21 @@ Full annotated example: see `references/three-file-pattern.md`.
 | `spec.interval` | `1h` |
 | `spec.path` | `./kubernetes/apps/<ns>/<app>/app` (must end in `/app`) |
 | `spec.prune` | `true` |
-| `spec.wait` | `false` (use `true` only for critical services) |
+| `spec.wait` | providers depended on by other apps use `true`, `healthChecks`, or `healthCheckExprs`; consumers may omit it |
 | `spec.targetNamespace` | matches namespace dir |
 | `spec.sourceRef` | `GitRepository flux-system/flux-system` |
 | `spec.postBuild.substituteFrom` | `[{name: cluster-secrets, kind: Secret}]` — required if the app uses any `${VAR}` |
 
 Defaults inherited from `kubernetes/flux/cluster/ks.yaml` (do NOT repeat per app): `decryption.provider: sops`, HelmRelease `install.crds: CreateReplace`, retry/remediation policies, `cleanupOnFail`.
+
+## Dependency readiness
+
+ADR 0027 requires every app that authors an operator-managed custom resource
+to declare the matching platform Kustomization in `dependsOn`. Every platform
+Kustomization used by those edges must signal readiness. The executable kind
+mapping lives in `scripts/lib/flux_application_contract.py`; run
+`python3 scripts/validate-flux-contract.py` rather than copying the mapping into
+this skill.
 
 ## HelmRelease chart sources
 
@@ -67,6 +75,10 @@ Three source kinds, prefer OCIRepository:
 | `GitRepository` | chart lives in a git tree (rare) | a fork, or a chart not yet released |
 
 `OCIRepository.metadata.name` MUST match `HelmRelease.spec.chartRef.name`. Full templates plus the values vs valuesFrom rules: see `references/helmrelease-sources.md`.
+
+Raw mode lists at least one manifest, component, patch, or generator in
+`app/kustomization.yaml` and does not add a HelmRelease merely to fit the Helm
+example.
 
 ## Cluster-secrets and postBuild substitution
 
@@ -92,6 +104,7 @@ Both share the same Age recipient (defined in `.sops.yaml`); ESO uses the `onepa
 
 ## Pre-commit checklist
 
+- [ ] `python3 scripts/validate-flux-contract.py` passes
 - [ ] App is listed in `kubernetes/apps/<ns>/kustomization.yaml`
 - [ ] `ks.yaml` has `postBuild.substituteFrom` if the app uses any `${VAR}`
 - [ ] Namespace kustomization includes `components: [../../components/sops]`

@@ -4,10 +4,9 @@ Read-only triage at the OS / Talos / etcd layer for Anton. All commands assume t
 
 ```sh
 TALOS="mise exec -- talosctl --talosconfig ./talos/clusterconfig/talosconfig"
-K8S1="100.75.61.79"
-K8S2="100.87.89.3"
-K8S3="100.100.217.100"
-NODES="$K8S1,$K8S2,$K8S3"
+NODES="$(python3 scripts/cluster-targets.py resolve --format addresses --show-addresses)"
+K8S1="${NODES%%,*}"
+K8S2="$(printf '%s\n' "$NODES" | cut -d, -f2)"
 ```
 
 Use the same Tailscale IP for `--endpoints` and `--nodes` when running a
@@ -17,10 +16,10 @@ talos:health`, which also verifies that every configured node is reachable.
 ## Fleet-wide pulse
 
 ```sh
-$TALOS -e $K8S1 -n $NODES version
-$TALOS -e $K8S1 -n $NODES health
-$TALOS -e $K8S1 -n $NODES service
-$TALOS -e $K8S1 -n $NODES get members
+$TALOS -e "$K8S1" -n "$NODES" version
+$TALOS -e "$K8S1" -n "$NODES" health
+$TALOS -e "$K8S1" -n "$NODES" service
+$TALOS -e "$K8S1" -n "$NODES" get members
 ```
 
 | Query | What to look for |
@@ -35,19 +34,19 @@ $TALOS -e $K8S1 -n $NODES get members
 When the fleet pulse flags one node, drill in:
 
 ```sh
-$TALOS -n $K8S2 service               # per-service state, last restart, exit code
-$TALOS -n $K8S2 logs <service>        # kubelet / machined / etcd / apid / trustd / containerd
-$TALOS -n $K8S2 dmesg | tail -200     # kernel messages — panics, OOM, NVMe/network resets
-$TALOS -n $K8S2 get staticpods        # control-plane static pods (CP nodes only)
-$TALOS -n $K8S2 containers            # running containers + image IDs
-$TALOS -n $K8S2 processes             # top-like process list
-$TALOS -n $K8S2 memory                # usage by category
+$TALOS -n "$K8S2" service               # per-service state, last restart, exit code
+$TALOS -n "$K8S2" logs <service>        # kubelet / machined / etcd / apid / trustd / containerd
+$TALOS -n "$K8S2" dmesg | tail -200     # kernel messages — panics, OOM, NVMe/network resets
+$TALOS -n "$K8S2" get staticpods        # control-plane static pods (CP nodes only)
+$TALOS -n "$K8S2" containers            # running containers + image IDs
+$TALOS -n "$K8S2" processes             # top-like process list
+$TALOS -n "$K8S2" memory                # usage by category
 ```
 
 Follow `dmesg` when a node just rebooted — kernel panics, NVMe timeouts, driver resets, and OOM kills all print here. Grep patterns that actually matter:
 
 ```sh
-$TALOS -n $K8S2 dmesg | rg -i 'panic|oom|i/o error|segfault|hung task|nvme: I/O timeout'
+$TALOS -n "$K8S2" dmesg | rg -i 'panic|oom|i/o error|segfault|hung task|nvme: I/O timeout'
 ```
 
 Common services and what their failure means:
@@ -67,10 +66,10 @@ Common services and what their failure means:
 All three nodes in Anton are control planes, so etcd must have **exactly three healthy members**. A 3-node cluster tolerates losing one member at a time; losing two is quorum loss and requires disaster recovery.
 
 ```sh
-$TALOS -n $K8S1 etcd members          # id, name, peer/client URLs, learner flag
-$TALOS -n $K8S1 etcd status           # leader, raft index, db size, db size in use
-$TALOS -n $K8S1 service etcd          # process-level health
-$TALOS -n $K8S1 logs etcd             # peer warnings, compaction, slow apply
+$TALOS -n "$K8S1" etcd members          # id, name, peer/client URLs, learner flag
+$TALOS -n "$K8S1" etcd status           # leader, raft index, db size, db size in use
+$TALOS -n "$K8S1" service etcd          # process-level health
+$TALOS -n "$K8S1" logs etcd             # peer warnings, compaction, slow apply
 ```
 
 Warning signs:
@@ -88,8 +87,8 @@ Etcd **snapshots** are a separate mutating operation; this skill only reads stat
 Etcd is extremely sensitive to wall-clock drift between members. Symptoms: leader re-elections every few minutes, `slow fdatasync` or `clock drift` messages in etcd logs, random `context deadline exceeded` from the API.
 
 ```sh
-$TALOS -e $K8S1 -n $NODES service timed     # Talos NTP sync service (timed)
-$TALOS -e $K8S1 -n $NODES time              # wall clock per node
+$TALOS -e "$K8S1" -n "$NODES" service timed     # Talos NTP sync service (timed)
+$TALOS -e "$K8S1" -n "$NODES" time              # wall clock per node
 ```
 
 All three wall clocks should be within ~1 second of each other. Larger drift → investigate NTP reachability (router ACL, upstream NTP outage, VLAN misrouting).
@@ -99,10 +98,10 @@ All three wall clocks should be within ~1 second of each other. Larger drift →
 Complementary checks that aren't strictly Talos but belong in the same triage pass:
 
 ```sh
-kubectl get nodes -o wide
-kubectl top nodes                                   # needs metrics-server
-kubectl get pods -A -o wide | rg -v 'Running|Completed'
-kubectl get events -A --sort-by='.lastTimestamp' | tail -30
+mise exec -- kubectl get nodes -o wide
+mise exec -- kubectl top nodes                                   # needs metrics-server
+mise exec -- kubectl get pods -A -o wide | rg -v 'Running|Completed'
+mise exec -- kubectl get events -A --sort-by='.lastTimestamp' | tail -30
 ```
 
 If these are noisy but Talos health is clean, the problem is upstream. Hand off to `debug-flux-reconciliation`.

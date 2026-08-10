@@ -28,15 +28,20 @@ The health command discovers the cluster's internal etcd/control-plane
 addresses server-side. Do not pass the Tailscale IPs as
 `--control-plane-nodes`; those are not the addresses etcd advertises.
 
-## Tailscale address mapping
+## Target resolution
 
-The wrapper's default mapping is:
+The wrapper resolves all three node targets through one interface. It prefers a
+complete live `tailscale status --json` result and falls back as one set to the
+committed inventory in `scripts/cluster-targets.json`; it never mixes live and
+fallback addresses. Inspect the selected source with redacted evidence:
 
-| Node | Tailscale endpoint |
-| --- | --- |
-| k8s-1 | `100.75.61.79` |
-| k8s-2 | `100.87.89.3` |
-| k8s-3 | `100.100.217.100` |
+```sh
+mise exec -- task talos:targets
+```
+
+Use `python3 scripts/cluster-targets.py resolve --format addresses
+--show-addresses` only when the exact endpoints are needed for an approved
+operator action.
 
 For a temporary address change, override the complete mapping so that the
 wrapper continues to require all three nodes:
@@ -47,13 +52,13 @@ TALOS_TAILSCALE_NODES='k8s-1=100.x.x.x,k8s-2=100.x.x.x,k8s-3=100.x.x.x' \
 ```
 
 If an address changes permanently, update the mapping in
-`scripts/talos-health.sh` and `context/hardware.md` together. Do not commit the
-tailnet name; use node labels and Tailscale IPs.
+`scripts/cluster-targets.json`; scripts, tasks, hooks, runbooks, and skills all
+consume that interface. Keep the literal tailnet name out of committed files.
 
 ## Flux version
 
-The repository pins Flux CLI 2.9.3 in `.mise.toml`. Use Mise so a global
-Homebrew or other installation cannot shadow the pinned version:
+The repository pins the Flux CLI in `.mise.toml`. Use Mise so a global Homebrew
+or other installation cannot shadow the pinned version:
 
 ```sh
 mise install
@@ -61,5 +66,5 @@ mise exec -- flux version
 mise exec -- flux check
 ```
 
-The same rule applies to `task reconcile`, which invokes the Mise-pinned Flux
+The same rule applies to `mise exec -- task reconcile`, which invokes the Mise-pinned Flux
 binary internally.

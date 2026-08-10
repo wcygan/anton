@@ -14,11 +14,11 @@ Node hardware reference for anton's three control planes.
 
 All nodes ship 2× 48 GiB DDR5 SODIMMs (one per memory controller) for 96 GiB total. k8s-2 runs at a lower speed (Mushkin vs Crucial on the other two).
 
-| Node (tailnet IP) | Used / Total (MiB) | Modules | Manufacturer | Part | Speed |
+| Node | Used / Total (MiB) | Modules | Manufacturer | Part | Speed |
 |---|---|---|---|---|---|
-| k8s-1 (100.75.61.79) | 4,345 / 96,260 | 2× 48 GiB | Crucial Technology | CT48G56C46S5.M16B1 | 5600 MT/s |
-| k8s-2 (100.87.89.3) | 3,642 / 96,224 | 2× 48 GiB | Mushkin | MRA5S520HHHD48G | 5200 MT/s |
-| k8s-3 (100.100.217.100) | 3,090 / 96,221 | 2× 48 GiB | Crucial Technology | CT48G56C46S5.M16B1 | 5600 MT/s |
+| k8s-1 | 4,345 / 96,260 | 2× 48 GiB | Crucial Technology | CT48G56C46S5.M16B1 | 5600 MT/s |
+| k8s-2 | 3,642 / 96,224 | 2× 48 GiB | Mushkin | MRA5S520HHHD48G | 5200 MT/s |
+| k8s-3 | 3,090 / 96,221 | 2× 48 GiB | Crucial Technology | CT48G56C46S5.M16B1 | 5600 MT/s |
 
 ## Storage
 

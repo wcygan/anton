@@ -22,7 +22,9 @@ examples or a clear explanation of why no logs were found.
    when the question involves retention, storage, Grafana access, or a
    missing-log investigation.
 3. Read the [query catalog](references/query-catalog.md) for starting queries.
-4. Read the [Loki HelmRelease](../../../kubernetes/apps/observability/loki/app/helmrelease.yaml)
+4. Run `python3 scripts/validate-log-contract.py --show` for the canonical
+   vocabulary, indexed labels, and retention policy.
+5. Read the [Loki HelmRelease](../../../kubernetes/apps/observability/loki/app/helmrelease.yaml)
    or [OTel HelmRelease](../../../kubernetes/apps/observability/otel-collector/app/helmrelease.yaml)
    when a query result conflicts with the configured pipeline.
 
@@ -35,12 +37,14 @@ collected merely because the manifest looks correct.
 - Verify the Kubernetes context before querying:
   `mise exec -- kubectl config current-context`.
 - Read-only commands are the default: `kubectl get`, `describe`, `logs`,
-  `port-forward`, `flux get`, and HTTP GETs to Loki's local port-forward.
+  `flux get`, and HTTP GETs to an already-approved local endpoint.
+- Treat `port-forward` as a live networking mutation. Obtain explicit operator
+  approval, bind it to localhost, and close it before finishing the turn.
 - Do not run `apply`, `delete`, `reconcile`, `suspend`, `rollout restart`,
   `scale`, or storage changes from this skill. Hand proposed mutations to the
   operator for approval.
-- Use a local port-forward. Never expose Loki publicly and never print S3,
-  Grafana, or Kubernetes Secret values.
+- When approved, keep the port-forward local. Never expose Loki publicly or
+  print S3, Grafana, or Kubernetes Secret values.
 - Logs can contain credentials, cookies, tokens, personal data, and request
   bodies. Redact those fields in the report and keep samples short.
 - Start with a narrow time range and `limit`; widen only when the evidence
@@ -66,16 +70,14 @@ Important names and behavior:
 - The collector tails `/var/log/pods/*/*/*.log`, starts at file end, and uses
   a host checkpoint directory. A newly installed collector intentionally does
   not replay old file history.
-- Indexed labels are deliberately low-cardinality:
-  `k8s_namespace_name`, `k8s_container_name`, `k8s_deployment_name`,
-  `k8s_statefulset_name`, `k8s_daemonset_name`, `k8s_job_name`,
-  `k8s_cronjob_name`, and `severity`.
+- Indexed labels and normalized severities come from
+  `scripts/validate-log-contract.py --show`; use that output rather than a
+  copied list.
 - Pod name, UID, node, image, container ID, and file path are structured
   metadata, not indexed labels. Filter them with a structured metadata
   expression such as `| k8s_pod_name="loki-0"`, or use a line filter.
-- Retention targets are `fatal`/`error`: 30 days; `warn`: 14 days; and
-  `info`, `unknown`, `debug`, and `trace`: 24 hours. Missing severity is
-  normalized to `info`.
+- Retention and missing-severity behavior come from the executable contract;
+  do not infer them from a remembered value or query window.
 - Loki has one 20 GiB Longhorn PVC. Chunks and ruler data use the existing
   SeaweedFS S3 service and `loki` bucket. SeaweedFS's 10,000 MB volume limit
   creates more logical volume slots; it is not a Loki retention quota.
@@ -104,10 +106,13 @@ mise exec -- kubectl logs -n observability loki-0 -c loki --since=10m
 
 ### 2. Query through a local port-forward
 
+After explicit operator approval, start a localhost-only port-forward and keep
+its process identity so it can be stopped during cleanup.
+
 In one terminal:
 
 ```sh
-mise exec -- kubectl -n observability port-forward svc/loki 3100:3100
+mise exec -- kubectl -n observability port-forward --address 127.0.0.1 svc/loki 3100:3100
 ```
 
 In another:

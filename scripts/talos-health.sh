@@ -3,16 +3,16 @@ set -Eeuo pipefail
 
 source "$(dirname "${0}")/lib/common.sh"
 
-# The generated talosconfig contains the nodes' LAN addresses. Those are not
-# reachable from an off-LAN operator shell, so this wrapper deliberately uses
-# the persistent Tailscale addresses instead. Override the mapping when a
-# Tailscale address changes:
-#   TALOS_TAILSCALE_NODES='k8s-1=100.x.x.x,k8s-2=100.x.x.x,k8s-3=100.x.x.x'
-readonly DEFAULT_TAILSCALE_NODES='k8s-1=100.75.61.79,k8s-2=100.87.89.3,k8s-3=100.100.217.100'
-readonly TAILSCALE_NODE_SPEC="${TALOS_TAILSCALE_NODES:-${DEFAULT_TAILSCALE_NODES}}"
+readonly SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+readonly TARGET_RESOLVER="${SCRIPT_DIR}/cluster-targets.py"
 
 check_env TALOSCONFIG KUBECONFIG
-check_cli mise kubectl
+check_cli mise kubectl python3
+
+if ! TAILSCALE_NODE_SPEC="$(python3 "${TARGET_RESOLVER}" resolve --format mapping --show-addresses)"; then
+    log error "Failed to resolve the Anton Talos target set" "resolver=${TARGET_RESOLVER}"
+fi
+readonly TAILSCALE_NODE_SPEC
 
 declare -a node_specs=()
 declare -a reachable_nodes=()

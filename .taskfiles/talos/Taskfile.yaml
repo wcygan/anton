@@ -3,6 +3,14 @@ version: '3'
 
 tasks:
 
+  targets:
+    desc: Resolve the Anton Talos target source with redacted evidence
+    cmd: python3 {{.SCRIPTS_DIR}}/cluster-targets.py resolve
+    preconditions:
+      - test -f {{.SCRIPTS_DIR}}/cluster-targets.json
+      - test -f {{.SCRIPTS_DIR}}/cluster-targets.py
+      - which python3
+
   health:
     desc: Check all Talos nodes over their Tailscale endpoints
     cmd: '{{.ANTON_BASH}} {{.SCRIPTS_DIR}}/talos-health.sh'
@@ -18,6 +26,8 @@ tasks:
           fi
     preconditions:
       - test -f {{.SCRIPTS_DIR}}/talos-health.sh
+      - test -f {{.SCRIPTS_DIR}}/cluster-targets.json
+      - test -f {{.SCRIPTS_DIR}}/cluster-targets.py
       - test -f {{.TALOSCONFIG}}
       - test -f {{.KUBECONFIG}}
       - test -x {{.ANTON_BASH}}
