@@ -19,6 +19,17 @@ SOURCE_FILES = (
     "gitrepository.yaml",
 )
 
+RAW_MATERIAL_KEYS = frozenset(
+    {
+        "resources",
+        "components",
+        "generators",
+        "configMapGenerator",
+        "secretGenerator",
+        "helmCharts",
+    }
+)
+
 
 @dataclass(frozen=True)
 class DependencyRule:
@@ -87,6 +98,52 @@ def _yaml_documents(text: str) -> Iterator[str]:
 def _top_level_kind(document: str) -> str | None:
     match = re.search(r"(?m)^kind:\s*([^#\n]+?)\s*$", document)
     return _unquote(match.group(1)) if match else None
+
+
+def _has_raw_material(text: str) -> bool:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(r"^(?P<key>[A-Za-z][A-Za-z0-9]*):\s*(?P<value>[^#]*?)\s*(?:#.*)?$", line)
+        if not match or match.group("key") not in RAW_MATERIAL_KEYS:
+            continue
+        inline = match.group("value").strip()
+        if inline and not re.fullmatch(r"(?:\[\s*\]|\{\s*\}|null|~)", inline):
+            return True
+        for child in lines[index + 1 :]:
+            if child and not child[0].isspace():
+                break
+            item = re.match(r"^\s+-\s*(?P<value>.*)$", child)
+            value = item.group("value").split("#", 1)[0].strip() if item else ""
+            if value and not re.fullmatch(r"(?:\[\s*\]|\{\s*\}|null|~)", value):
+                return True
+    return False
+
+
+def _top_level_list_contains(text: str, key: str, expected: str) -> bool:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(
+            rf"^{re.escape(key)}:\s*(?P<value>[^#]*?)\s*(?:#.*)?$",
+            line,
+        )
+        if not match:
+            continue
+        inline = match.group("value").strip()
+        if inline.startswith("[") and inline.endswith("]"):
+            return any(
+                _unquote(item.strip()) == expected
+                for item in inline[1:-1].split(",")
+                if item.strip()
+            )
+        for child in lines[index + 1 :]:
+            if child and not child[0].isspace():
+                break
+            item = re.match(r"^\s+-\s*(?P<value>.*)$", child)
+            value = item.group("value").split("#", 1)[0].strip() if item else ""
+            if value and _unquote(value) == expected:
+                return True
+        return False
+    return False
 
 
 def _authored_kinds(app_dir: Path) -> dict[str, list[Path]]:
@@ -179,7 +236,17 @@ def _shape_violations(app_root: Path, root: Path) -> list[Violation]:
 
     namespace_kustomization = app_root.parent / "kustomization.yaml"
     registration = f"./{app_name}/ks.yaml"
-    if namespace_kustomization.exists() and registration not in _read(namespace_kustomization):
+    if not namespace_kustomization.exists():
+        violations.append(
+            Violation(
+                "flux.registration.missing",
+                namespace_kustomization,
+                f"namespace kustomization is missing; it must register {registration}",
+            )
+        )
+    elif not _top_level_list_contains(
+        _read(namespace_kustomization), "resources", registration
+    ):
         violations.append(
             Violation(
                 "flux.registration.missing",
@@ -211,12 +278,12 @@ def _shape_violations(app_root: Path, root: Path) -> list[Violation]:
             )
         )
     if not helmrelease.exists() and app_kustomization.exists():
-        if not re.search(r"(?m)^\s*-\s+\S", _read(app_kustomization)):
+        if not _has_raw_material(_read(app_kustomization)):
             violations.append(
                 Violation(
                     "flux.raw.empty",
                     app_kustomization,
-                    "raw-resource applications must list at least one resource, component, patch, or generator",
+                    "raw-resource applications must list at least one resource, component, or generator",
                 )
             )
     return violations

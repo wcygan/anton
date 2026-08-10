@@ -3,23 +3,19 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""PostToolUse validator: sanity-check YAML under kubernetes/, talos/, bootstrap/.
+"""Claude adapter for Anton's shared YAML validation policy."""
 
-Shells out to `yq` (already the preferred tool in CLAUDE.md) to parse the
-file after an edit. Surfaces syntax errors immediately with exit 2 so the
-error is fed back to the agent instead of silently breaking Flux.
+from __future__ import annotations
 
-No-op if yq is not on PATH, or if the edited file is outside the watched
-manifest trees.
-"""
 import json
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-WATCH_PREFIXES = ("kubernetes/", "talos/", "bootstrap/")
-YAML_SUFFIXES = (".yaml", ".yml")
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+
+from agent_policy_contract import yaml_file_violation  # noqa: E402
 
 
 def main() -> int:
@@ -27,50 +23,18 @@ def main() -> int:
         data = json.load(sys.stdin)
     except json.JSONDecodeError:
         return 0
-
     if data.get("tool_name") not in {"Edit", "Write", "MultiEdit"}:
         return 0
-
-    file_path = data.get("tool_input", {}).get("file_path", "")
-    if not file_path or not file_path.endswith(YAML_SUFFIXES):
+    file_path = (data.get("tool_input") or {}).get("file_path", "")
+    if not isinstance(file_path, str) or not file_path:
         return 0
-
-    # Ignore SOPS-encrypted files — parsing them is meaningless until decrypted.
-    if ".sops." in Path(file_path).name:
+    root = Path(data.get("cwd") or REPO)
+    violation = yaml_file_violation(Path(file_path), root)
+    if not violation:
         return 0
-
-    cwd = data.get("cwd") or ""
-    try:
-        rel = str(Path(file_path).resolve().relative_to(Path(cwd).resolve()))
-    except (ValueError, OSError):
-        rel = file_path
-    if not any(rel.startswith(p) for p in WATCH_PREFIXES):
-        return 0
-
-    if not shutil.which("yq"):
-        return 0
-
-    try:
-        result = subprocess.run(
-            ["yq", ".", file_path],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (subprocess.SubprocessError, OSError) as exc:
-        print(f"validate_yaml: could not run yq ({exc})", file=sys.stderr)
-        return 0
-
-    if result.returncode != 0:
-        print(
-            f"YAML syntax error in {rel}:\n{result.stderr.strip()}\n"
-            f"→ Fix YAML syntax before commit; Flux will reject invalid manifests.",
-            file=sys.stderr,
-        )
-        return 2
-
-    return 0
+    print(f"Blocked invalid YAML.\n→ {violation.message}", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -98,6 +98,47 @@ class FluxApplicationContractTests(unittest.TestCase):
             app.parent.joinpath("kustomization.yaml").write_text("---\nresources: []\n", encoding="utf-8")
             self.assertIn("flux.registration.missing", self.codes(root))
 
+    def test_requires_namespace_kustomization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app = self.create_raw_app(root, "default", "demo")
+            app.parent.joinpath("kustomization.yaml").unlink()
+            self.assertIn("flux.registration.missing", self.codes(root))
+
+    def test_commented_namespace_registration_does_not_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app = self.create_raw_app(root, "default", "demo")
+            app.parent.joinpath("kustomization.yaml").write_text(
+                "---\nresources: []\n# ./demo/ks.yaml\n",
+                encoding="utf-8",
+            )
+            self.assertIn("flux.registration.missing", self.codes(root))
+
+    def test_rejects_raw_app_without_material(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app = self.create_raw_app(root, "default", "demo")
+            app.joinpath("app", "kustomization.yaml").write_text(
+                "---\nlabels:\n  - includeSelectors: true\n",
+                encoding="utf-8",
+            )
+            self.assertIn("flux.raw.empty", self.codes(root))
+
+    def test_rejects_raw_app_with_empty_or_non_producing_material(self) -> None:
+        invalid_kustomizations = (
+            "---\nresources: [ ]\n",
+            "---\nresources:\n  - # placeholder\n",
+            "---\npatches:\n  - path: patch.yaml\n",
+            "---\ntransformers:\n  - labels.yaml\n",
+        )
+        for kustomization in invalid_kustomizations:
+            with self.subTest(kustomization=kustomization), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                app = self.create_raw_app(root, "default", "demo")
+                app.joinpath("app", "kustomization.yaml").write_text(kustomization, encoding="utf-8")
+                self.assertIn("flux.raw.empty", self.codes(root))
+
     def test_requires_cross_namespace_dependency_for_custom_resource(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

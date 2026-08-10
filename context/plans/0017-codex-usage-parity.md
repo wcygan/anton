@@ -107,6 +107,7 @@ Codex should enter `/Users/wcygan/Development/anton`, discover Anton-specific in
 - 2026-05-22: Root and subsystem `AGENTS.md` files added; Codex prompt debug confirmed root guidance loads as project-doc.
 - 2026-05-22: P0 repo-local Codex skills added under `.agents/skills/` and validated with `quick_validate.py`.
 - 2026-05-22: Codex hook adapter, fixture tests, and three project agents added; hook tests pass and remaining gaps are documented in `context/codex-parity-report.md`.
+- 2026-08-10: Consolidated destructive-command, Secret-output, tailnet, SOPS/protected-file, YAML, and plan-status meaning in `scripts/lib/agent_policy_contract.py`; Claude and Codex remain thin event adapters, 17 cross-adapter fixtures guard every shared family against semantic drift, and the 13 Codex transport fixtures pass.
 
 ## References
 

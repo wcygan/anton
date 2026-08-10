@@ -14,6 +14,7 @@ durable map of the resulting interfaces and rollout boundaries.
 | SeaweedFS storage provisioning | Implemented after fixture proof | `kubernetes/apps/storage/seaweedfs-config/app/provision-buckets.sh` |
 | Kubernetes log contract | Implemented; ADR drift resolved to the accepted decision | `scripts/lib/kubernetes_log_contract.py` |
 | Cluster target and preflight resolution | Implemented | `scripts/lib/cluster_target_contract.py` plus `scripts/cluster-targets.json` |
+| Shared agent safety policy | Implemented after adapter-parity proof | `scripts/lib/agent_policy_contract.py` |
 | Iceberg acceptance module | Deferred | ADR 0031 review on 2026-08-20 decides retain versus remove before more abstraction |
 
 ## Interfaces
@@ -23,16 +24,23 @@ durable map of the resulting interfaces and rollout boundaries.
 Codex and Claude retain separate hook event adapters, but both call the same
 dependency-free module. It validates namespace registration, app source shape,
 the committed application path, ADR 0027 consumer `dependsOn` edges, and
-provider readiness. `python3 scripts/validate-flux-contract.py` scans the full
-tree, while PostToolUse hooks validate the affected app or namespace.
+provider readiness. A namespace-level `kustomization.yaml` is required, and a
+raw app must contain a resource-producing Kustomize key rather than an
+unrelated list such as `labels`. `python3 scripts/validate-flux-contract.py`
+scans the full tree, while PostToolUse hooks validate the affected app or
+namespace.
 
 ### Kubernetes logging contract
 
-The module owns severity normalization, indexed resource attributes, default
-retention, stream retention, and golden log records. Its adapters validate the
-OTel pipeline, Loki policy, Grafana datasource, query catalog, runbook pointer,
-and query skill pointer. `python3 scripts/validate-log-contract.py --show`
-prints the current contract without another copied table.
+The module owns severity normalization patterns, their serialized OTTL
+statements, indexed resource attributes, default retention, stream retention,
+and golden log records. Golden records and the deployed transform therefore
+consume one policy vocabulary. The OTel adapter compares the full ordered
+statement list, including conditions, rather than checking copied fragments;
+it does not claim to execute an OTel Collector binary. Other adapters validate
+Loki policy, Grafana datasource, query catalog, runbook pointer, and query skill
+pointer. `python3 scripts/validate-log-contract.py --show` prints the current
+contract without another copied table.
 
 ADR 0030 is authoritative: debug and trace retention is six hours. Applying
 the changed Loki source lets the compactor delete older low-severity records.
@@ -61,9 +69,36 @@ wrapper, both agent context guards, the remote-access skill, and the Talos
 runbook consume the interface.
 
 Command classification treats port-forwards and pod exec as cluster mutations.
-Mutations fail closed when the current kube or Talos context cannot be resolved
-or does not match Anton. Local context-selection commands remain local
-mutations so the operator can repair an incorrect context.
+Direct environment, `command` without `-p`, Mise, `exec`, `nohup`, `nice`,
+`timeout`, and `time` wrappers retain classification and target-query semantics;
+`command -p` fails closed because it changes executable lookup.
+Every Kubernetes or Flux mutation must resolve to the independently derived
+Anton API endpoint, and every Talos mutation must resolve to the committed node
+inventory. Explicit `--context`, `--kubeconfig`, `--talosconfig`, `KUBECONFIG`,
+and `TALOSCONFIG` selections are included in that effective-target check. The
+Kubernetes identity comes from the repo-selected canonical kubeconfig when it
+is available, otherwise from the operator-proxy context or committed fallback
+endpoint; custom context fixtures must pair `ANTON_KUBE_CONTEXT` with
+`ANTON_KUBE_ENDPOINT`. Repeated scalar target flags use the CLI-effective final
+value, while repeated Talos node and endpoint selections are conservatively
+combined. Talos identity includes committed LAN node addresses and remote
+Tailscale targets. Explicit executable paths are reused for target
+queries. Environment-clearing wrappers, target-affecting environment or shell
+state, compound forms, `eval`, command substitution, `sudo`, `xargs`, and
+parallel mutations fail closed when their runtime target cannot be proved;
+indirect read-only operations remain read-only.
+Local context-selection commands remain local mutations so the operator can
+repair an incorrect context.
+
+### Shared agent safety policy
+
+Claude and Codex keep separate event-shape adapters but consume one policy
+module for destructive-command approval, Secret-output protection, tailnet
+privacy, protected credentials and encrypted SOPS files, YAML syntax, and plan
+status. The stricter shared meaning requires approval for every
+`talosctl apply-config` and `flux suspend` command and protects the union of
+known bootstrap credential artifacts. Cross-adapter fixtures exercise each
+policy family so transport changes cannot silently fork policy behavior.
 
 ## Validation
 
@@ -73,8 +108,9 @@ Run the aggregate source gate:
 mise exec -- task contracts:validate
 ```
 
-It runs the four contract validators and the shared fixture suite. Also run the
-Codex hook fixtures and manifest/render checks for touched apps:
+It runs the four contract validators and the shared fixture suite, including
+Claude/Codex safety-policy parity. Also run the Codex adapter fixtures and
+manifest/render checks for touched apps:
 
 ```sh
 python3 .codex/hooks/test_anton_policy.py

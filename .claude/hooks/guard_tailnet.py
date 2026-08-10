@@ -3,62 +3,46 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""PreToolUse guard: prevent the real tailnet name from entering repository files.
+"""Claude adapter for Anton's shared tailnet-content policy."""
 
-anton's CLAUDE.md requires the literal placeholder `<tailnet-name>.ts.net` in
-committed files. This hook blocks any Edit/Write/Bash payload that contains
-the real tailnet name.
+from __future__ import annotations
 
-Set ANTON_TAILNET_NAME in your shell (e.g., `export ANTON_TAILNET_NAME=my-net`).
-Without that env var the hook is a no-op — we deliberately never hardcode the
-real name in this file.
-"""
 import json
-import os
 import sys
+from pathlib import Path
+
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "scripts" / "lib"))
+
+from agent_policy_contract import tailnet_content_violation  # noqa: E402
+
+
+def payload_texts(data: dict) -> list[str]:
+    tool = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {}) or {}
+    if tool == "Write":
+        return [tool_input.get("content") or ""]
+    if tool == "Edit":
+        return [tool_input.get("new_string") or ""]
+    if tool == "MultiEdit":
+        return [edit.get("new_string") or "" for edit in tool_input.get("edits", []) or []]
+    if tool == "Bash":
+        return [tool_input.get("command") or ""]
+    return []
 
 
 def main() -> int:
-    tailnet = os.environ.get("ANTON_TAILNET_NAME", "").strip()
-    if not tailnet:
-        return 0
-
-    needle = f"{tailnet}.ts.net"
-
     try:
         data = json.load(sys.stdin)
     except json.JSONDecodeError:
         return 0
-
-    tool = data.get("tool_name", "")
-    tool_input = data.get("tool_input", {}) or {}
-
-    texts: list[str] = []
-    if tool == "Write":
-        texts.append(tool_input.get("content") or "")
-    elif tool == "Edit":
-        texts.append(tool_input.get("new_string") or "")
-    elif tool == "MultiEdit":
-        for edit in tool_input.get("edits", []) or []:
-            texts.append(edit.get("new_string") or "")
-    elif tool == "Bash":
-        texts.append(tool_input.get("command") or "")
-    else:
+    violation = tailnet_content_violation(payload_texts(data))
+    if not violation:
         return 0
-
-    for text in texts:
-        if needle in text:
-            print(
-                f"Blocked: payload contains the real tailnet name '{needle}'.\n"
-                f"→ anton's CLAUDE.md requires the placeholder "
-                f"'<tailnet-name>.ts.net' in committed files.\n"
-                f"→ Replace the literal before writing.",
-                file=sys.stderr,
-            )
-            return 2
-
-    return 0
+    print(f"Blocked tailnet literal.\n→ {violation.message}", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

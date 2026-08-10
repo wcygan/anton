@@ -30,6 +30,18 @@
     "expected": "info"
   },
   {
+    "name": "unrecognized structured severity suppresses body heuristics",
+    "severity_text": "notice",
+    "body": "error request failed",
+    "expected": "info"
+  },
+  {
+    "name": "structured severity whitespace follows exact OTTL matching",
+    "severity_text": " warning ",
+    "body": "error request failed",
+    "expected": "info"
+  },
+  {
     "name": "trace prefix",
     "severity_text": null,
     "body": "trace request path",

@@ -22,11 +22,14 @@ Use `check_env` and `check_cli` before stateful work. Use `log <level> <message>
 
 ## Executable contracts
 
-Run `mise exec -- task contracts:validate` after changing Flux application rules, logging
-semantics, SeaweedFS provisioning, or target/preflight behavior. Keep shared
-implementations in `scripts/lib/`, thin adapters at agent/tool boundaries, and
-golden behavior under `scripts/tests/`. `scripts/cluster-targets.json` is the
-only committed fallback for Talos Tailscale endpoints.
+Run `mise exec -- task contracts:validate` after changing Flux application
+rules, logging semantics, SeaweedFS provisioning, target/preflight behavior, or
+agent safety policy. Keep shared implementations in `scripts/lib/`, thin
+adapters at agent/tool boundaries, and golden behavior under `scripts/tests/`.
+When Claude and Codex enforce the same meaning, change the shared policy and its
+cross-adapter fixtures rather than either transport adapter alone.
+`scripts/cluster-targets.json` is the only committed fallback for Talos
+Tailscale endpoints.
 
 ## Debugging
 

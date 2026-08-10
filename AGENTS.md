@@ -110,7 +110,7 @@ Use QMD before broad manual browsing when the task depends on Anton's ADRs, plan
 2. Edit the committed source of truth directly while preserving unrelated dirty work; finish when the diff contains only the requested change.
 3. For Talos source edits, run `mise exec -- task talos:generate-config`; finish when generated configs reflect the intended source change.
 4. For SOPS files, verify encryption with `sops filestatus`; finish only when every touched payload reports encrypted.
-5. Run the narrowest validation that proves the edited surface: YAML parse, skill or hook fixture, Docusaurus check, generated-config check, or read-only Flux/Talos status. Run `mise exec -- task contracts:validate` when changing Flux application policy, Kubernetes logging semantics, SeaweedFS bucket provisioning, or cluster target/preflight behavior.
+5. Run the narrowest validation that proves the edited surface: YAML parse, skill or hook fixture, Docusaurus check, generated-config check, or read-only Flux/Talos status. Run `mise exec -- task contracts:validate` when changing Flux application policy, Kubernetes logging semantics, SeaweedFS bucket provisioning, cluster target/preflight behavior, or shared agent safety policy.
 6. Summarize changed files, validation evidence, residual risks, and any operator-only follow-up. Do not reconcile or apply merely because repository validation passed.
 
 ## Codex Enablement

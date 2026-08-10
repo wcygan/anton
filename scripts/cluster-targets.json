@@ -5,7 +5,8 @@
     "fallback_context": "admin@anton"
   },
   "talos": {
-    "context": "anton",
+    "context": "kubernetes",
+    "cluster": "kubernetes",
     "nodes": [
       {"name": "k8s-1", "tailscale_ipv4": "100.75.61.79"},
       {"name": "k8s-2", "tailscale_ipv4": "100.87.89.3"},

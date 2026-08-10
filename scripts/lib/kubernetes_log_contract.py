@@ -9,13 +9,37 @@ from pathlib import Path
 
 
 SEVERITIES = ("fatal", "error", "warn", "info", "debug", "trace")
-SEVERITY_ALIASES = {
-    "critical": "fatal",
-    "panic": "fatal",
-    "err": "error",
-    "warning": "warn",
-}
 DEFAULT_SEVERITY = "info"
+
+BODY_SEVERITY_PATTERNS = (
+    (
+        "fatal",
+        r'''(?i)^(F[0-9]{4}|fatal|critical|panic)\b|(level|severity)["'=:\s]+["']?(fatal|critical|panic)\b''',
+    ),
+    (
+        "error",
+        r'''(?i)^(E[0-9]{4}|error|err|failed|failure|panic|exception)\b|(level|severity)["'=:\s]+["']?(error|err)\b''',
+    ),
+    (
+        "warn",
+        r'''(?i)^(W[0-9]{4}|warn|warning)\b|(level|severity)["'=:\s]+["']?(warn|warning)\b''',
+    ),
+    (
+        "debug",
+        r'''(?i)^(D[0-9]{4}|debug)\b|(level|severity)["'=:\s]+["']?debug\b''',
+    ),
+    (
+        "trace",
+        r'''(?i)^trace\b|(level|severity)["'=:\s]+["']?trace\b''',
+    ),
+)
+SEVERITY_TEXT_PATTERNS = (
+    ("fatal", r"(?i)^(fatal|critical|panic)$"),
+    ("error", r"(?i)^(error|err)$"),
+    ("warn", r"(?i)^(warn|warning)$"),
+    ("debug", r"(?i)^debug$"),
+    ("trace", r"(?i)^trace$"),
+)
 
 INDEXED_RESOURCE_ATTRIBUTES = (
     "k8s.namespace.name",
@@ -54,22 +78,66 @@ class ContractViolation:
 
 def normalize_severity(severity_text: str | None, body: str = "") -> str:
     """Normalize a fixture using the same public behavior as the OTel adapter."""
-    value = (severity_text or "").strip().lower()
-    value = SEVERITY_ALIASES.get(value, value)
-    if value in SEVERITIES:
-        return value
+    if severity_text is not None:
+        for normalized, pattern in SEVERITY_TEXT_PATTERNS:
+            if re.search(pattern, severity_text):
+                return normalized
+        return DEFAULT_SEVERITY
 
-    patterns = (
-        ("fatal", r'''(?i)^(F[0-9]{4}|fatal|critical|panic)\b|(level|severity)["'=:\s]+["']?(fatal|critical|panic)\b'''),
-        ("error", r'''(?i)^(E[0-9]{4}|error|err|failed|failure|exception)\b|(level|severity)["'=:\s]+["']?(error|err)\b'''),
-        ("warn", r'''(?i)^(W[0-9]{4}|warn|warning)\b|(level|severity)["'=:\s]+["']?(warn|warning)\b'''),
-        ("debug", r'''(?i)^(D[0-9]{4}|debug)\b|(level|severity)["'=:\s]+["']?debug\b'''),
-        ("trace", r'''(?i)^trace\b|(level|severity)["'=:\s]+["']?trace\b'''),
-    )
-    for normalized, pattern in patterns:
+    for normalized, pattern in BODY_SEVERITY_PATTERNS:
         if re.search(pattern, body):
             return normalized
     return DEFAULT_SEVERITY
+
+
+def _otel_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def expected_otel_statements() -> tuple[str, ...]:
+    statements = [
+        'delete_key(resource.attributes, "severity")',
+        'set(log.severity_text, log.attributes["severity_text"]) where log.attributes["severity_text"] != nil',
+        'set(log.severity_text, log.attributes["level"]) where log.attributes["level"] != nil',
+        'set(log.severity_text, log.attributes["severity"]) where log.attributes["severity"] != nil',
+    ]
+    statements.extend(
+        f'set(log.severity_text, "{severity}") where log.severity_text == nil and log.body != nil '
+        f'and IsMatch(log.body, "{_otel_string(pattern)}")'
+        for severity, pattern in BODY_SEVERITY_PATTERNS
+    )
+    statements.extend(
+        f'set(log.attributes["severity"], "{severity}") where log.severity_text != nil '
+        f'and IsMatch(log.severity_text, "{_otel_string(pattern)}")'
+        for severity, pattern in SEVERITY_TEXT_PATTERNS
+    )
+    statements.append('set(log.attributes["severity"], "info") where log.attributes["severity"] == nil')
+    return tuple(statements)
+
+
+def _otel_statements(text: str) -> tuple[str, ...]:
+    lines = text.splitlines()
+    start = next((index for index, line in enumerate(lines) if line.strip() == "transform/severity:"), None)
+    if start is None:
+        return ()
+    block_indent = len(lines[start]) - len(lines[start].lstrip())
+    statements_indent: int | None = None
+    statements: list[str] = []
+    for line in lines[start + 1 :]:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped and not stripped.startswith("#"):
+            if indent <= block_indent:
+                break
+        if statements_indent is None:
+            if stripped == "statements:":
+                statements_indent = indent
+            continue
+        if stripped and not stripped.startswith("#") and indent <= statements_indent:
+            break
+        if stripped.startswith("- "):
+            statements.append(stripped[2:])
+    return tuple(statements)
 
 
 def load_fixtures(path: Path) -> list[dict[str, str | None]]:
@@ -109,24 +177,28 @@ def validate_fixtures(path: Path) -> list[ContractViolation]:
 def validate_otel(path: Path) -> list[ContractViolation]:
     text = _read(path)
     violations: list[ContractViolation] = []
-    required_fragments = [
-        'delete_key(resource.attributes, "severity")',
-        'set(log.severity_text, log.attributes["severity_text"]) where log.attributes["severity_text"] != nil',
-        'set(log.severity_text, log.attributes["level"]) where log.attributes["level"] != nil',
-        'set(log.severity_text, log.attributes["severity"]) where log.attributes["severity"] != nil',
-        r'''IsMatch(log.body, "(?i)^(F[0-9]{4}|fatal|critical|panic)\\b|(level|severity)[\"'=:\\s]+[\"']?(fatal|critical|panic)\\b")''',
-        r'''IsMatch(log.body, "(?i)^(E[0-9]{4}|error|err|failed|failure|panic|exception)\\b|(level|severity)[\"'=:\\s]+[\"']?(error|err)\\b")''',
-        r'''IsMatch(log.body, "(?i)^(W[0-9]{4}|warn|warning)\\b|(level|severity)[\"'=:\\s]+[\"']?(warn|warning)\\b")''',
-        r'''IsMatch(log.body, "(?i)^(D[0-9]{4}|debug)\\b|(level|severity)[\"'=:\\s]+[\"']?debug\\b")''',
-        r'''IsMatch(log.body, "(?i)^trace\\b|(level|severity)[\"'=:\\s]+[\"']?trace\\b")''',
-        'set(log.attributes["severity"], "info") where log.attributes["severity"] == nil',
-        "groupbyattrs/severity:",
-        "start_at: end",
-    ]
-    required_fragments.extend(
-        f'set(log.attributes["severity"], "{severity}")' for severity in SEVERITIES if severity != "info"
+    definition_count = sum(
+        1 for line in text.splitlines() if line.strip() == "transform/severity:"
     )
-    for fragment in required_fragments:
+    if definition_count != 1:
+        violations.append(
+            ContractViolation(
+                "otel",
+                path,
+                f"expected exactly one transform/severity definition, found {definition_count}",
+            )
+        )
+    actual_statements = _otel_statements(text)
+    expected_statements = expected_otel_statements()
+    if actual_statements != expected_statements:
+        violations.append(
+            ContractViolation(
+                "otel",
+                path,
+                "transform/severity statements differ from the canonical normalization policy",
+            )
+        )
+    for fragment in ("groupbyattrs/severity:", "start_at: end"):
         if fragment not in text:
             violations.append(ContractViolation("otel", path, f"missing invariant {fragment!r}"))
 

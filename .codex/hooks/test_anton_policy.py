@@ -63,6 +63,19 @@ class AntonPolicyTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("context", result.stderr)
 
+    def test_cluster_preflight_resolves_repo_root_from_subdirectory(self) -> None:
+        result = run_hook(
+            "pre",
+            self.bash(
+                "kubectl apply -f app.yaml",
+                cwd=str(REPO / "scripts"),
+            ),
+            env={"ANTON_KUBE_CONTEXT": "definitely-not-the-current-context"},
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("context", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_destructive_approval_does_not_bypass_context_preflight(self) -> None:
         result = run_hook(
             "pre",
@@ -90,6 +103,46 @@ class AntonPolicyTests(unittest.TestCase):
             result = run_hook("pre", self.patch(patch, tmp))
         self.assertEqual(result.returncode, 2)
         self.assertIn("SOPS-encrypted", result.stderr)
+
+    def test_subdirectory_patch_resolves_against_event_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".codex").mkdir()
+            scripts = root / "scripts"
+            scripts.mkdir()
+            scripts.joinpath("cluster-targets.json").write_text("{}\n")
+            secret = root / "kubernetes" / "apps" / "x" / "secret.sops.yaml"
+            secret.parent.mkdir(parents=True)
+            secret.write_text("data:\n  password: ENC[AES256,data]\nsops: {}\n")
+            patch = (
+                "*** Begin Patch\n"
+                "*** Update File: ../kubernetes/apps/x/secret.sops.yaml\n"
+                "@@\n-data: {}\n+data: {}\n"
+                "*** End Patch\n"
+            )
+            result = run_hook("pre", self.patch(patch, str(scripts)))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("SOPS-encrypted", result.stderr)
+
+    def test_subdirectory_post_validation_uses_repo_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".codex").mkdir()
+            scripts = root / "scripts"
+            scripts.mkdir()
+            scripts.joinpath("cluster-targets.json").write_text("{}\n")
+            plan = root / "context" / "plans" / "0001-test.md"
+            plan.parent.mkdir(parents=True)
+            plan.write_text("---\nstatus: mystery\n---\n")
+            patch = (
+                "*** Begin Patch\n"
+                "*** Update File: ../context/plans/0001-test.md\n"
+                "@@\n-status: draft\n+status: mystery\n"
+                "*** End Patch\n"
+            )
+            result = run_hook("post", self.patch(patch, str(scripts)))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid status", result.stderr)
 
     def test_blocks_invalid_plan_status_after_patch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

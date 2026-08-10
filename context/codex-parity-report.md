@@ -8,6 +8,11 @@ Codex now has a repo-local Anton operating model that covers the highest-value C
 
 This is practical parity for day-to-day Codex use in Anton, not a full mechanical clone of `.claude/`. The remaining Claude-only pieces are either high-risk, lower-frequency, or better handled after the new Codex layer sees real use.
 
+Update 2026-08-10: Claude and Codex now share policy meaning through
+`scripts/lib/agent_policy_contract.py`; their hook files only adapt event shapes
+and feedback. Cross-adapter fixtures cover destructive commands, Secret output,
+tailnet literals, protected credentials and SOPS files, YAML, and plan status.
+
 ## What Codex Now Loads
 
 - Root instructions: `AGENTS.md`
@@ -42,7 +47,7 @@ This is practical parity for day-to-day Codex use in Anton, not a full mechanica
 
 The Codex hook adapter covers these policies:
 
-- Blocks dangerous Bash commands such as `task talos:reset`, `talosctl reset`, `talosctl apply-config`, destructive namespace/PV/PVC/CRD deletes, `helmfile destroy`, `flux uninstall`, unscoped `flux suspend`, and root/home recursive deletion.
+- Blocks dangerous Bash commands such as `task talos:reset`, `talosctl reset`, `talosctl apply-config`, destructive namespace/PV/PVC/CRD deletes, `helmfile destroy`, `flux uninstall`, `flux suspend`, and root/home recursive deletion.
 - Blocks `kubectl get secret ... -o yaml/json/jsonpath/...` patterns that would expose Secret `.data`.
 - Blocks patch edits to protected credential artifacts.
 - Blocks patch edits to existing encrypted SOPS files.
@@ -105,6 +110,14 @@ find . -name '*.sops.*' -not -name '.sops.yaml' -not -path './.private/*' -exec 
 ```
 
 Result: every SOPS payload file reported `{"encrypted":true}`. The SOPS config file `.sops.yaml` is intentionally excluded because it is not an encrypted payload.
+
+### 2026-08-10 policy reconvergence
+
+`mise exec -- task contracts:validate` passed all four contract validators, 47
+Flux applications, and 69 tests, including 17 Claude/Codex adapter-parity
+cases. `python3 .codex/hooks/test_anton_policy.py` separately passed all 13
+Codex transport fixtures. This evidence is repository-local and does not claim
+fresh interactive hook-trust or live-cluster execution.
 
 ## Remaining Claude-Only Gaps
 

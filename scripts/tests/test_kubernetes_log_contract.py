@@ -15,6 +15,7 @@ from kubernetes_log_contract import (  # noqa: E402
     load_fixtures,
     normalize_severity,
     validate_loki,
+    validate_otel,
     validate_query_catalog,
     validate_repository,
     validate_runbook,
@@ -37,6 +38,50 @@ class KubernetesLogContractTests(unittest.TestCase):
             path = Path(tmp) / "loki.yaml"
             path.write_text(source.read_text().replace('period: 6h', 'period: 24h', 1), encoding="utf-8")
             self.assertTrue(validate_loki(path))
+
+    def test_rejects_changed_otel_normalization_condition(self) -> None:
+        source = REPO / "kubernetes" / "apps" / "observability" / "otel-collector" / "app" / "helmrelease.yaml"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "otel.yaml"
+            path.write_text(
+                source.read_text().replace(
+                    'set(log.severity_text, "error") where log.severity_text == nil and log.body != nil',
+                    'set(log.severity_text, "error") where log.severity_text != nil and log.body != nil',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(validate_otel(path))
+
+    def test_rejects_unknown_otel_normalization_statement(self) -> None:
+        source = REPO / "kubernetes" / "apps" / "observability" / "otel-collector" / "app" / "helmrelease.yaml"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "otel.yaml"
+            path.write_text(
+                source.read_text().replace(
+                    '                - delete_key(resource.attributes, "severity")',
+                    '                - delete_key(resource.attributes, "severity")\n'
+                    '                - keep_keys(log.attributes, [])',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(validate_otel(path))
+
+    def test_rejects_duplicate_otel_normalization_processor(self) -> None:
+        source = REPO / "kubernetes" / "apps" / "observability" / "otel-collector" / "app" / "helmrelease.yaml"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "otel.yaml"
+            path.write_text(
+                source.read_text()
+                + "\n        transform/severity:\n"
+                + "          log_statements:\n"
+                + "            - context: log\n"
+                + "              statements:\n"
+                + "                - keep_keys(log.attributes, [])\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(validate_otel(path))
 
     def test_rejects_non_indexed_query_selector(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
