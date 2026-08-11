@@ -82,7 +82,8 @@ Use these metric-specific boundaries:
   Obtain separate read-only cluster and local-write authority before collection.
 - M3: Add only a new closed incident or a separately approved drill. Keep each
   scenario family separate. Do not replace missing outcomes with synthetic data.
-- M4: Keep the overall result partial. OOM remains `no_data`. API and storage
+- M4: Keep the overall result partial. The guarded restart-reason estimator
+  does not replace an authoritative OOM event counter. API and storage
   thresholds remain unapproved. Do not convert missing data to zero.
 
 The next live step requires new authority. Repository validation does not grant
@@ -109,6 +110,7 @@ commit, push, Flux reconciliation, cluster mutation, or live verification author
 - 2026-08-11: M1-E3 kept full-render strict substitution for every postBuild root after rejecting a slow candidate and a contract-incomplete candidate. Coverage changed from two of 37 to 37 of 37 roots. The final validator verifies Flux type, non-null postBuild configuration, sibling source path, and one restricted command environment. Four bounded workers keep results ordered. Fourteen focused tests and 163 contract tests passed in a 6.164-second aggregate guard. This improves a driver and does not establish the rolling outcome.
 - 2026-08-11: M1-E4 rejected and rolled back a pure accepted-revision model. Independent review proved that forged terminal mappings and reduced target sets could create an eligible rolling rate. Multi-target cause selection was also ambiguous. A trusted observer, target resolver, and approved durable store are required before another lifecycle attempt.
 - 2026-08-11: Final post-rollback verification passed 163 tests. Three external wall-time samples were 6.45, 6.21, and 6.33 seconds, so the M1-E3 seven-second keep threshold passed in all final samples. The hill-climbing run stopped after M1-E4 at the operator's request.
+- 2026-08-11: M4-E5 kept a guarded one-minute OOM restart-reason estimator. It conserved 17.130267 restart increments with zero residual and attributed two OOM restart increments by node and component. The authoritative OOM event counter remains unavailable, so overall M4 coverage stays partial.
 
 ## References
 

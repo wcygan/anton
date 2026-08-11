@@ -41,6 +41,15 @@ class QuerySpec:
     promql: str
 
 
+@dataclass(frozen=True)
+class ConservationResult:
+    state: str
+    raw_total: Decimal | None
+    attributed_total: Decimal | None
+    residual: Decimal | None
+    samples: list[dict[str, object]] | None
+
+
 QUERY_CATALOG = {
     "restart_total": QuerySpec(
         "restart_total",
@@ -54,6 +63,10 @@ QUERY_CATALOG = {
         "restart_attribution_by_node",
         f'''sum by (node) (sum_over_time(((increase(kube_pod_container_status_restarts_total{{namespace=~"{PLATFORM_SCOPE}",container!=""}}[1m])) * on (namespace,pod,uid) group_left(node) kube_pod_info{{node!=""}})[{ATTRIBUTION_SUBQUERY_RANGE}:1m]))''',
     ),
+    "oom_restart_attribution_detail": QuerySpec(
+        "oom_restart_attribution_detail",
+        f'''(sum by (node,namespace,container,reason) (sum_over_time((((increase(kube_pod_container_status_restarts_total{{namespace=~"{PLATFORM_SCOPE}",container!=""}}[1m])) * on (namespace,pod,uid,container) group_left(reason) kube_pod_container_status_last_terminated_reason{{reason!=""}}) * on (namespace,pod,uid) group_left(node) kube_pod_info{{node!=""}})[{ATTRIBUTION_SUBQUERY_RANGE}:1m]))) > 0''',
+    ),
     "running_container_hours": QuerySpec(
         "running_container_hours",
         f'''sum(sum_over_time(kube_pod_container_status_running{{namespace=~"{PLATFORM_SCOPE}",container!=""}}[15d:1h]))''',
@@ -64,10 +77,6 @@ QUERY_CATALOG = {
 or min_over_time(((count by (job) (min_over_time(up{job="kube-state-metrics"}[1m]) == 1) == bool 1) or label_replace(vector(0), "job", "kube-state-metrics", "", ""))[15d:1m])
 or min_over_time(((count by (job) (min_over_time(up{job="kubelet"}[1m]) == 1) == bool 9) or label_replace(vector(0), "job", "kubelet", "", ""))[15d:1m])
 or min_over_time(((count by (job) (min_over_time(up{job="node-exporter"}[1m]) == 1) == bool 3) or label_replace(vector(0), "job", "node-exporter", "", ""))[15d:1m])''',
-    ),
-    "oom_total": QuerySpec(
-        "oom_total",
-        f'''sum(increase(kube_pod_container_status_terminated_reason{{namespace=~"{PLATFORM_SCOPE}",container!="",reason="OOMKilled"}}[15d]))''',
     ),
     "cilium_memory_warning": QuerySpec(
         "cilium_memory_warning",
@@ -257,7 +266,12 @@ def _query_evidence(
         return evidence
     sample_state, samples = _samples(
         response,
-        retain_exact=spec.key in {"restart_attribution_total", "restart_attribution_by_node"},
+        retain_exact=spec.key
+        in {
+            "restart_attribution_total",
+            "restart_attribution_by_node",
+            "oom_restart_attribution_detail",
+        },
     )
     evidence["state"] = sample_state
     if sample_state == "observed":
@@ -292,6 +306,91 @@ def _exact_scalar(evidence: dict[str, object]) -> Decimal | None:
     if not isinstance(sample, dict) or sample.get("labels") != {}:
         return None
     return _decimal(sample.get("exact_value"))
+
+
+def _conserved_labeled_evidence(
+    raw_evidence: dict[str, object],
+    labeled_evidence: dict[str, object],
+    *,
+    label_names: tuple[str, ...],
+) -> ConservationResult:
+    """Validate exact labeled totals against one raw scalar."""
+
+    raw_state = str(raw_evidence["state"])
+    labeled_state = str(labeled_evidence["state"])
+    for failure_state in ("invalid_response", "query_error", "budget_exhausted"):
+        if failure_state in {raw_state, labeled_state}:
+            return ConservationResult(failure_state, None, None, None, None)
+    if raw_state == "no_data":
+        return ConservationResult("no_data", None, None, None, None)
+    if raw_state != "observed":
+        return ConservationResult("incomplete", None, None, None, None)
+
+    raw_total = _exact_scalar(raw_evidence)
+    if raw_total is None or raw_total < 0:
+        return ConservationResult("incomplete", raw_total, None, None, None)
+    if labeled_state == "no_data":
+        if raw_total == 0:
+            return ConservationResult("complete", raw_total, Decimal(0), Decimal(0), [])
+        return ConservationResult("no_data", raw_total, None, None, None)
+    if labeled_state != "observed":
+        return ConservationResult("incomplete", raw_total, None, None, None)
+
+    samples = labeled_evidence.get("samples")
+    if not isinstance(samples, list):
+        return ConservationResult("incomplete", raw_total, None, None, None)
+    expected_labels = set(label_names)
+    observed_labels: set[tuple[str, ...]] = set()
+    values: list[Decimal] = []
+    for sample in samples:
+        if not isinstance(sample, dict) or not isinstance(sample.get("labels"), dict):
+            return ConservationResult("incomplete", raw_total, None, None, samples)
+        labels = sample["labels"]
+        identity = tuple(str(labels.get(name, "")) for name in label_names)
+        value = _decimal(sample.get("exact_value"))
+        if (
+            set(labels) != expected_labels
+            or any(not item for item in identity)
+            or identity in observed_labels
+            or value is None
+            or value < 0
+        ):
+            return ConservationResult("incomplete", raw_total, None, None, samples)
+        observed_labels.add(identity)
+        values.append(value)
+
+    attributed_total = sum(values, Decimal(0))
+    residual = abs(raw_total - attributed_total)
+    state = "complete" if residual <= NUMBER_QUANTUM else "incomplete"
+    return ConservationResult(state, raw_total, attributed_total, residual, samples)
+
+
+def _aggregate_exact_samples(
+    samples: list[dict[str, object]] | None,
+    *,
+    group_labels: tuple[str, ...],
+    reason: str | None = None,
+) -> list[dict[str, object]]:
+    """Aggregate exact samples by selected labels."""
+
+    totals: dict[tuple[str, ...], Decimal] = {}
+    for sample in samples or []:
+        labels = sample["labels"]
+        if reason is not None and labels.get("reason") != reason:
+            continue
+        identity = tuple(str(labels[label]) for label in group_labels)
+        value = _decimal(sample.get("exact_value"))
+        if value is None:
+            continue
+        totals[identity] = totals.get(identity, Decimal(0)) + value
+    return [
+        {
+            "exact_value": str(value),
+            "labels": dict(zip(group_labels, identity, strict=True)),
+            "value": _number(value),
+        }
+        for identity, value in sorted(totals.items())
+    ]
 
 
 def _threshold_measure(
@@ -378,56 +477,116 @@ def _restart_attribution_measure(
 ) -> dict[str, object]:
     """Require the time-local node join to conserve restart increments."""
 
-    evidence_state = _state(raw_evidence, node_evidence)
-    raw_total = _exact_scalar(raw_evidence)
-    node_samples = node_evidence.get("samples")
-    node_total: Decimal | None = None
-    residual: Decimal | None = None
-    state = evidence_state
-
-    if evidence_state != "observed":
-        coverage_reasons.add(f"historical_restart_node_attribution_{evidence_state}")
-    elif raw_total is None or raw_total <= 0 or not isinstance(node_samples, list) or not node_samples:
-        state = "incomplete"
-        coverage_reasons.add("historical_restart_node_attribution_incomplete")
-    else:
-        observed_nodes: set[str] = set()
-        values: list[Decimal] = []
-        for sample in node_samples:
-            if not isinstance(sample, dict) or not isinstance(sample.get("labels"), dict):
-                state = "incomplete"
-                break
-            node = sample["labels"].get("node")
-            value = _decimal(sample.get("exact_value"))
-            if (
-                not isinstance(node, str)
-                or not node
-                or node in observed_nodes
-                or value is None
-                or value < 0
-            ):
-                state = "incomplete"
-                break
-            observed_nodes.add(node)
-            values.append(value)
-        if state == "observed":
-            node_total = sum(values, Decimal(0))
-            residual = abs(raw_total - node_total)
-            state = "complete" if residual <= NUMBER_QUANTUM else "incomplete"
-        if state != "complete":
-            coverage_reasons.add("historical_restart_node_attribution_incomplete")
+    conservation = _conserved_labeled_evidence(
+        raw_evidence,
+        node_evidence,
+        label_names=("node",),
+    )
+    if conservation.state != "complete":
+        coverage_reasons.add(f"historical_restart_node_attribution_{conservation.state}")
 
     return {
         "by_node_query": node_evidence,
         "comparison": "unrounded_prometheus_decimal",
         "interval_count": ATTRIBUTION_INTERVAL_COUNT,
-        "node_total_sum": _number(node_total) if node_total is not None else None,
-        "node_totals": node_samples if node_evidence["state"] == "observed" else None,
+        "node_total_sum": (
+            _number(conservation.attributed_total)
+            if conservation.attributed_total is not None
+            else None
+        ),
+        "node_totals": conservation.samples,
         "raw_total_query": raw_evidence,
+        "resolution": "1m",
+        "state": conservation.state,
+        "tolerance": _number(NUMBER_QUANTUM),
+        "unattributed_restart_increments": (
+            _number(conservation.residual) if conservation.residual is not None else None
+        ),
+    }
+
+
+def _oom_attribution_measure(
+    raw_evidence: dict[str, object],
+    detail_evidence: dict[str, object],
+    *,
+    running_hours_evidence: dict[str, object],
+    scrape_continuity: dict[str, object],
+    coverage_reasons: set[str],
+) -> dict[str, object]:
+    """Normalize OOM restart attribution evidence."""
+
+    conservation = _conserved_labeled_evidence(
+        raw_evidence,
+        detail_evidence,
+        label_names=("node", "namespace", "container", "reason"),
+    )
+    state = conservation.state
+    oom_total: Decimal | None = None
+    oom_rate: Decimal | None = None
+    if state == "complete":
+        oom_total = sum(
+            (
+                _decimal(sample.get("exact_value")) or Decimal(0)
+                for sample in conservation.samples or []
+                if sample["labels"].get("reason") == "OOMKilled"
+            ),
+            Decimal(0),
+        )
+    if state == "complete":
+        continuity_state = str(scrape_continuity["state"])
+        if continuity_state != "complete":
+            query = scrape_continuity.get("query")
+            query_state = str(query.get("state")) if isinstance(query, dict) else "incomplete"
+            state = query_state if query_state != "observed" else "incomplete"
+            coverage_reasons.add(f"oom_scrape_continuity_{state}")
+        else:
+            running_state = str(running_hours_evidence["state"])
+            if running_state != "observed":
+                state = running_state
+                coverage_reasons.add(f"oom_restart_denominator_{state}")
+            else:
+                running_hours = _scalar(running_hours_evidence)
+                if running_hours is None or running_hours <= 0:
+                    state = "no_data"
+                    coverage_reasons.add("oom_restart_denominator_no_data")
+                elif oom_total is not None:
+                    oom_rate = Decimal(1000) * oom_total / Decimal(str(running_hours))
+    if state != "complete" and not any(reason.startswith("oom_") for reason in coverage_reasons):
+        coverage_reasons.add(f"oom_restart_attribution_{state}")
+
+    return {
+        "attributed_restart_increments": (
+            _number(conservation.attributed_total)
+            if conservation.attributed_total is not None
+            else None
+        ),
+        "attribution_dimensions": ["node", "namespace", "container", "reason"],
+        "by_component": _aggregate_exact_samples(
+            conservation.samples,
+            group_labels=("namespace", "container"),
+            reason="OOMKilled",
+        ),
+        "by_node": _aggregate_exact_samples(
+            conservation.samples,
+            group_labels=("node",),
+            reason="OOMKilled",
+        ),
+        "detail_query": detail_evidence,
+        "comparison": "unrounded_prometheus_decimal",
+        "measurement_kind": "time_local_1m_restart_reason_estimator",
+        "rate_per_1000_container_hours": _number(oom_rate) if oom_rate is not None else None,
+        "raw_total_query": raw_evidence,
+        "reason_totals": _aggregate_exact_samples(
+            conservation.samples,
+            group_labels=("reason",),
+        ),
         "resolution": "1m",
         "state": state,
         "tolerance": _number(NUMBER_QUANTUM),
-        "unattributed_restart_increments": _number(residual) if residual is not None else None,
+        "total": _number(oom_total) if state == "complete" and oom_total is not None else None,
+        "unattributed_restart_increments": (
+            _number(conservation.residual) if conservation.residual is not None else None
+        ),
     }
 
 
@@ -474,14 +633,14 @@ def evaluate(
         restart_state = "no_data"
         coverage_reasons.add("restart_denominator_missing")
 
-    oom_total = _scalar(query_evidence["oom_total"])
-    oom_state = _state(query_evidence["oom_total"], query_evidence["running_container_hours"])
-    oom_rate: float | None = None
-    if oom_total is not None and running_hours is not None and running_hours > 0:
-        oom_rate = _number(Decimal(str(1000 * oom_total)) / Decimal(str(running_hours)))
-    elif oom_state == "observed":
-        oom_state = "no_data"
-        coverage_reasons.add("oom_denominator_missing")
+    oom_attribution = _oom_attribution_measure(
+        query_evidence["restart_attribution_total"],
+        query_evidence["oom_restart_attribution_detail"],
+        running_hours_evidence=query_evidence["running_container_hours"],
+        scrape_continuity=scrape_continuity,
+        coverage_reasons=coverage_reasons,
+    )
+    oom_state = "observed" if oom_attribution["state"] == "complete" else str(oom_attribution["state"])
 
     memory = {
         "cilium_warning": _threshold_measure(
@@ -557,6 +716,7 @@ def evaluate(
 
     outcome_gaps = {
         "api_thresholds_unapproved",
+        "oom_event_counter_unavailable",
         "storage_threshold_unapproved",
     }
     if oom_state != "observed":
@@ -590,12 +750,19 @@ def evaluate(
             },
             "memory": memory,
             "oom": {
-                "node_attribution": "unknown",
-                "rate_per_1000_container_hours": oom_rate,
+                "attribution": oom_attribution,
+                "authoritative_event_count_state": "no_data",
+                "component_attribution": (
+                    "time_local_1m_estimator" if oom_attribution["state"] == "complete" else "incomplete"
+                ),
+                "measurement_kind": oom_attribution["measurement_kind"],
+                "node_attribution": (
+                    "time_local_1m_estimator" if oom_attribution["state"] == "complete" else "incomplete"
+                ),
+                "rate_per_1000_container_hours": oom_attribution["rate_per_1000_container_hours"],
                 "running_container_hours": query_evidence["running_container_hours"],
                 "state": oom_state,
-                "total": oom_total,
-                "total_query": query_evidence["oom_total"],
+                "total": oom_attribution["total"],
             },
             "package_throttle": {
                 "breach_minutes": throttle.get("samples") if throttle["state"] == "observed" else None,

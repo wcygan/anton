@@ -1,0 +1,51 @@
+{
+  "attributed_restart_increments": 17.130267,
+  "authoritative_event_count_state": "no_data",
+  "by_component": [
+    {
+      "container": "external-secrets",
+      "namespace": "external-secrets",
+      "value": 2.0
+    }
+  ],
+  "by_node": [
+    {
+      "node": "k8s-3",
+      "value": 2.0
+    }
+  ],
+  "component_attribution": "time_local_1m_estimator",
+  "contract_version": 1,
+  "detail_query": "(sum by (node,namespace,container,reason) (sum_over_time((((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m])) * on (namespace,pod,uid,container) group_left(reason) kube_pod_container_status_last_terminated_reason{reason!=\"\"}) * on (namespace,pod,uid) group_left(node) kube_pod_info{node!=\"\"})[14d23h59m:1m]))) > 0",
+  "experiment_id": "M4-E5",
+  "measurement_kind": "time_local_1m_restart_reason_estimator",
+  "node_attribution": "time_local_1m_estimator",
+  "observed_at": "2026-08-11T14:26:25Z",
+  "oom_restart_increments": 2.0,
+  "outcome_gaps": [
+    "api_thresholds_unapproved",
+    "oom_event_counter_unavailable",
+    "storage_threshold_unapproved"
+  ],
+  "rate_per_1000_container_hours": 0.03914,
+  "raw_query": "sum(sum_over_time((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m]))[14d23h59m:1m]))",
+  "reason_totals": [
+    {
+      "reason": "Error",
+      "value": 15.130267
+    },
+    {
+      "reason": "OOMKilled",
+      "value": 2.0
+    }
+  ],
+  "running_container_hours": 51099.0,
+  "schema": 1,
+  "scrape_continuity_state": "complete",
+  "state": "observed",
+  "target_preflight": "passed",
+  "tolerance": 0.000001,
+  "unattributed_restart_increments": 0.0,
+  "window_days": 15,
+  "window_start": "2026-07-27T14:26:25Z"
+}

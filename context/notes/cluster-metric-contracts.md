@@ -1423,6 +1423,77 @@ Decision: Keep.
 Follow-up: This completes restart attribution coverage only. It does not make
 OOM absence authoritative or approve storage and API thresholds.
 
+### Experiment M4-E5
+
+Experiment ID: M4-E5.
+
+Metric contract version: 1.
+
+Type: Guarded OOM restart-reason estimator experiment.
+
+Hypothesis: A time-local reason and node join can estimate OOM-related restart
+increments without converting missing telemetry to zero.
+
+Single lever: Replace the unusable terminated-reason increase query with one
+conserved restart-reason estimator.
+
+Expected mechanism: Each one-minute restart increase joins its current pod UID,
+container termination reason, and node. Exact detailed totals must conserve the
+raw restart estimator before any OOM total or rate is reported.
+
+Baseline samples: The authoritative OOM event count was `no_data`. No guarded
+node or component OOM restart estimator existed.
+
+Target and tolerance: Require complete scrape continuity, a positive
+container-hour denominator, node and component labels, and a raw-to-detail
+residual at most 0.000001 restart increments. Preserve dependency error states.
+Allow a zero result only when the guarded restart evidence conserves.
+
+Guards: Keep API and storage thresholds unapproved. Retain an explicit
+`oom_event_counter_unavailable` outcome gap. Reject duplicate labels,
+nonfinite values, negative values, missing detail for positive restart totals,
+and unconserved attribution. Preserve `query_error`, `invalid_response`, and
+`budget_exhausted` states.
+
+Authority: Repository edits and target-bound read-only Prometheus queries only.
+No live mutation, commit, push, or reconciliation authority applied.
+
+Git checkpoint: Use the isolated worktree and exact experiment patches for the
+observer, fixture, tests, contract, plan, and sanitized evidence record.
+
+Stop and rollback triggers: Restore only experiment hunks if the query loses
+restart increments, error states become `no_data`, a missing source becomes
+zero, node or component labels disappear, or a guard fails.
+
+Commands and evidence time:
+
+```sh
+mise exec -- python3 -m unittest scripts.tests.test_platform_stability_evaluator
+mise exec -- python3 scripts/evaluate_platform_stability.py
+mise exec -- task contracts:validate
+```
+
+At 2026-08-11T14:26:25Z, the target-bound observer reported 17.130267
+attributed restart increments and zero residual. It attributed two OOM restart
+increments to one node and the `external-secrets/external-secrets` component.
+The denominator was 51,099 container-hours. The estimated rate was 0.039140
+OOM restart increments per 1,000 container-hours.
+
+Result: The estimator state was `observed`. Scrape continuity and node and
+component attribution were complete. The authoritative OOM event counter stayed
+`no_data`. Overall M4 coverage stayed partial because the event counter and API
+and storage thresholds remain unavailable.
+
+Decision: Keep as a guarded estimator. Do not call it an exact OOM event rate.
+
+Limit: Multiple restarts inside one minute can be assigned to the latest
+termination reason. This estimator cannot count non-restarting OOM terminations.
+
+Evidence: `context/notes/cluster-metric-evidence/2026-08-11T142625Z-m4-oom-restart-estimator.json`.
+
+Follow-up: Use an authoritative event counter before replacing the original OOM
+outcome gap or setting an OOM target.
+
 Primary PromQL queries:
 
 ```promql

@@ -31,6 +31,13 @@ LIVE_ATTRIBUTION_EVIDENCE = (
     / "cluster-metric-evidence"
     / "2026-08-11T013927Z-m4-restart-attribution.json"
 )
+LIVE_OOM_EVIDENCE = (
+    REPO
+    / "context"
+    / "notes"
+    / "cluster-metric-evidence"
+    / "2026-08-11T142625Z-m4-oom-restart-estimator.json"
+)
 
 SPEC = importlib.util.spec_from_file_location("evaluate_platform_stability", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
@@ -115,6 +122,54 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         )
         return MODULE.evaluate(self.observed_at, runner, prefix_provider=lambda: prefix), runner
 
+    def oom_measure(
+        self,
+        raw: dict[str, object],
+        detail: dict[str, object],
+        *,
+        running_hours: float = 51036.0,
+        running_state: str = "observed",
+        continuity_state: str = "complete",
+        continuity_query_state: str = "observed",
+        coverage_reasons: set[str] | None = None,
+    ) -> tuple[dict[str, object], set[str]]:
+        reasons = coverage_reasons if coverage_reasons is not None else set()
+        running_evidence: dict[str, object] = {"state": running_state}
+        if running_state == "observed":
+            running_evidence["samples"] = [{"labels": {}, "value": running_hours}]
+        continuity = {
+            "query": {"state": continuity_query_state},
+            "state": continuity_state,
+        }
+        measure = MODULE._oom_attribution_measure(
+            raw,
+            detail,
+            running_hours_evidence=running_evidence,
+            scrape_continuity=continuity,
+            coverage_reasons=reasons,
+        )
+        return measure, reasons
+
+    @staticmethod
+    def oom_detail_sample(
+        reason: str,
+        exact_value: str,
+        *,
+        node: str = "k8s-2",
+        namespace: str = "observability",
+        container: str = "platform-component",
+    ) -> dict[str, object]:
+        return {
+            "exact_value": exact_value,
+            "labels": {
+                "container": container,
+                "namespace": namespace,
+                "node": node,
+                "reason": reason,
+            },
+            "value": float(exact_value),
+        }
+
     def test_report_is_stable_and_keeps_each_measure_separate(self) -> None:
         report, runner = self.evaluate()
         repeated, _ = self.evaluate()
@@ -127,7 +182,11 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         self.assertEqual(report["coverage"]["observer_instrumentation_reasons"], [])
         self.assertEqual(
             report["coverage"]["outcome_gaps"],
-            ["api_thresholds_unapproved", "oom_no_data", "storage_threshold_unapproved"],
+            [
+                "api_thresholds_unapproved",
+                "oom_event_counter_unavailable",
+                "storage_threshold_unapproved",
+            ],
         )
         continuity = report["coverage"]["scrape_continuity"]
         self.assertEqual(continuity["state"], "complete")
@@ -147,8 +206,21 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         for measure in ("api_error", "api_latency", "storage"):
             self.assertEqual(report["measures"][measure]["threshold_state"], "unapproved")
             self.assertIsNone(report["measures"][measure]["breach_minutes"])
-        self.assertEqual(report["measures"]["oom"]["state"], "no_data")
-        self.assertIsNone(report["measures"]["oom"]["total"])
+        self.assertEqual(report["measures"]["oom"]["state"], "observed")
+        self.assertEqual(report["measures"]["oom"]["authoritative_event_count_state"], "no_data")
+        self.assertEqual(
+            report["measures"]["oom"]["measurement_kind"],
+            "time_local_1m_restart_reason_estimator",
+        )
+        self.assertEqual(report["measures"]["oom"]["total"], 2.0)
+        self.assertEqual(report["measures"]["oom"]["rate_per_1000_container_hours"], 0.03922)
+        self.assertEqual(report["measures"]["oom"]["attribution"]["state"], "complete")
+        self.assertEqual(report["measures"]["oom"]["node_attribution"], "time_local_1m_estimator")
+        self.assertEqual(report["measures"]["oom"]["component_attribution"], "time_local_1m_estimator")
+        self.assertEqual(
+            report["measures"]["oom"]["attribution"]["by_node"],
+            [{"exact_value": "2", "labels": {"node": "k8s-3"}, "value": 2.0}],
+        )
         self.assertEqual(report["measures"]["memory"]["multus"]["breach_minutes"][0]["value"], 120.0)
         api_latency = report["measures"]["api_latency"]
         self.assertEqual(api_latency["state"], "observed")
@@ -197,6 +269,160 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         self.assertIn("[14d23h59m:1m]", node_query)
         self.assertNotIn("[15d:1m]", node_query)
 
+    def test_oom_detail_query_uses_time_local_uid_and_node_joins(self) -> None:
+        query = MODULE.QUERY_CATALOG["oom_restart_attribution_detail"].promql
+        self.assertIn("increase(kube_pod_container_status_restarts_total", query)
+        self.assertIn(
+            "on (namespace,pod,uid,container) group_left(reason) "
+            "kube_pod_container_status_last_terminated_reason",
+            query,
+        )
+        self.assertIn("on (namespace,pod,uid) group_left(node) kube_pod_info", query)
+        self.assertIn("sum by (node,namespace,container,reason)", query)
+        self.assertIn(") > 0", query)
+        self.assertIn("[14d23h59m:1m]", query)
+        self.assertNotIn("[15d:1m]", query)
+
+    def test_oom_attribution_accepts_complete_reason_totals(self) -> None:
+        raw = {
+            "state": "observed",
+            "samples": [{"labels": {}, "value": 17.130267, "exact_value": "17.130267"}],
+        }
+        detail = {
+            "state": "observed",
+            "samples": [
+                self.oom_detail_sample("Error", "15.130267"),
+                self.oom_detail_sample(
+                    "OOMKilled",
+                    "2",
+                    node="k8s-3",
+                    namespace="external-secrets",
+                    container="external-secrets",
+                ),
+            ],
+        }
+        measure, coverage_reasons = self.oom_measure(raw, detail)
+        self.assertEqual(measure["state"], "complete")
+        self.assertEqual(measure["total"], 2.0)
+        self.assertEqual(coverage_reasons, set())
+
+    def test_oom_attribution_rejects_malformed_or_unconserved_evidence(self) -> None:
+        raw = {
+            "state": "observed",
+            "samples": [{"labels": {}, "value": 17.0, "exact_value": "17"}],
+        }
+        malformed = {
+            "state": "observed",
+            "samples": [
+                self.oom_detail_sample("OOMKilled", "2"),
+                self.oom_detail_sample("OOMKilled", "15"),
+            ],
+        }
+        measure, coverage_reasons = self.oom_measure(raw, malformed)
+        self.assertEqual(measure["state"], "incomplete")
+        self.assertIsNone(measure["total"])
+        self.assertIn("oom_restart_attribution_incomplete", coverage_reasons)
+
+        unconserved = deepcopy(malformed)
+        unconserved["samples"][1] = self.oom_detail_sample("Error", "14")
+        measure, coverage_reasons = self.oom_measure(raw, unconserved)
+        self.assertEqual(measure["state"], "incomplete")
+        self.assertEqual(measure["unattributed_restart_increments"], 1.0)
+        self.assertIsNone(measure["total"])
+
+    def test_oom_attribution_calculates_guarded_rate(self) -> None:
+        raw = {
+            "state": "observed",
+            "samples": [{"labels": {}, "value": 17.0, "exact_value": "17"}],
+        }
+        detail = {
+            "state": "observed",
+            "samples": [
+                self.oom_detail_sample("Error", "15"),
+                self.oom_detail_sample("OOMKilled", "2", node="k8s-3"),
+            ],
+        }
+        measure, _ = self.oom_measure(raw, detail)
+        self.assertEqual(measure["rate_per_1000_container_hours"], 0.039188)
+
+        missing_denominator, coverage_reasons = self.oom_measure(raw, detail, running_hours=0.0)
+        self.assertEqual(missing_denominator["state"], "no_data")
+        self.assertIsNone(missing_denominator["rate_per_1000_container_hours"])
+        self.assertIsNone(missing_denominator["total"])
+        self.assertIn("oom_restart_denominator_no_data", coverage_reasons)
+
+    def test_oom_attribution_requires_complete_scrape_continuity(self) -> None:
+        raw = {
+            "state": "observed",
+            "samples": [{"labels": {}, "value": 17.0, "exact_value": "17"}],
+        }
+        detail = {
+            "state": "observed",
+            "samples": [
+                self.oom_detail_sample("Error", "15"),
+                self.oom_detail_sample("OOMKilled", "2", node="k8s-3"),
+            ],
+        }
+        measure, coverage_reasons = self.oom_measure(
+            raw,
+            detail,
+            continuity_state="incomplete",
+        )
+        self.assertEqual(measure["state"], "incomplete")
+        self.assertIsNone(measure["total"])
+        self.assertIsNone(measure["rate_per_1000_container_hours"])
+        self.assertIn("oom_scrape_continuity_incomplete", coverage_reasons)
+
+    def test_oom_dependency_failures_remain_visible(self) -> None:
+        for query_key in ("running_container_hours", "scrape_continuity"):
+            with self.subTest(query_key=query_key):
+                responses = deepcopy(self.responses)
+                responses["queries"][query_key] = {"errorType": "bad_data", "status": "error"}
+                report, _ = self.evaluate(responses)
+                self.assertEqual(report["measures"]["oom"]["state"], "query_error")
+                self.assertIn("query_error", " ".join(report["coverage"]["reasons"]))
+
+    def test_oom_attribution_accepts_a_conserved_zero(self) -> None:
+        raw = {
+            "state": "observed",
+            "samples": [{"labels": {}, "value": 0.0, "exact_value": "0"}],
+        }
+        detail = {"state": "no_data"}
+        measure, coverage_reasons = self.oom_measure(raw, detail)
+        self.assertEqual(measure["state"], "complete")
+        self.assertEqual(measure["total"], 0.0)
+        self.assertEqual(measure["rate_per_1000_container_hours"], 0.0)
+        self.assertEqual(measure["reason_totals"], [])
+        self.assertEqual(coverage_reasons, set())
+
+    def test_oom_without_an_oom_reason_is_observed_zero(self) -> None:
+        raw = {
+            "state": "observed",
+            "samples": [{"labels": {}, "value": 3.0, "exact_value": "3"}],
+        }
+        detail = {
+            "state": "observed",
+            "samples": [
+                self.oom_detail_sample("Error", "3"),
+            ],
+        }
+        measure, coverage_reasons = self.oom_measure(raw, detail)
+        self.assertEqual(measure["state"], "complete")
+        self.assertEqual(measure["total"], 0.0)
+        self.assertEqual(measure["rate_per_1000_container_hours"], 0.0)
+        self.assertEqual(coverage_reasons, set())
+
+    def test_oom_empty_reason_data_remains_no_data_when_restarts_exist(self) -> None:
+        raw = {
+            "state": "observed",
+            "samples": [{"labels": {}, "value": 3.0, "exact_value": "3"}],
+        }
+        measure, coverage_reasons = self.oom_measure(raw, {"state": "no_data"})
+        self.assertEqual(measure["state"], "no_data")
+        self.assertIsNone(measure["total"])
+        self.assertIsNone(measure["rate_per_1000_container_hours"])
+        self.assertIn("oom_restart_attribution_no_data", coverage_reasons)
+
     def test_restart_attribution_requires_labels_and_conservation(self) -> None:
         missing_label = deepcopy(self.responses)
         missing_label["queries"]["restart_attribution_by_node"]["data"]["result"][0]["metric"] = {}
@@ -239,6 +465,34 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         self.assertEqual(
             evidence["outcome_gaps"],
             ["api_thresholds_unapproved", "oom_no_data", "storage_threshold_unapproved"],
+        )
+
+    def test_retained_oom_estimator_matches_the_evaluator_contract(self) -> None:
+        evidence = json.loads(LIVE_OOM_EVIDENCE.read_text(encoding="utf-8"))
+        self.assertEqual(evidence["target_preflight"], "passed")
+        self.assertEqual(evidence["experiment_id"], "M4-E5")
+        self.assertEqual(evidence["raw_query"], MODULE.QUERY_CATALOG["restart_attribution_total"].promql)
+        self.assertEqual(
+            evidence["detail_query"],
+            MODULE.QUERY_CATALOG["oom_restart_attribution_detail"].promql,
+        )
+        self.assertEqual(evidence["measurement_kind"], "time_local_1m_restart_reason_estimator")
+        self.assertEqual(evidence["authoritative_event_count_state"], "no_data")
+        self.assertEqual(evidence["oom_restart_increments"], 2.0)
+        self.assertEqual(evidence["unattributed_restart_increments"], 0.0)
+        self.assertLessEqual(evidence["unattributed_restart_increments"], evidence["tolerance"])
+        self.assertEqual(evidence["by_node"], [{"node": "k8s-3", "value": 2.0}])
+        self.assertEqual(
+            evidence["by_component"],
+            [{"container": "external-secrets", "namespace": "external-secrets", "value": 2.0}],
+        )
+        self.assertEqual(
+            evidence["outcome_gaps"],
+            [
+                "api_thresholds_unapproved",
+                "oom_event_counter_unavailable",
+                "storage_threshold_unapproved",
+            ],
         )
 
     def test_retained_scrape_evidence_matches_the_evaluator_contract(self) -> None:

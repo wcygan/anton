@@ -8,7 +8,7 @@
     "cilium_memory_critical": {"data": {"result": [{"metric": {"node": "k8s-2"}, "value": [0, "0"]}, {"metric": {"node": "k8s-1"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"},
     "cilium_memory_warning": {"data": {"result": [{"metric": {"node": "k8s-2"}, "value": [0, "0"]}, {"metric": {"node": "k8s-1"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"},
     "multus_memory": {"data": {"result": [{"metric": {"node": "k8s-1"}, "value": [0, "120"]}], "resultType": "vector"}, "status": "success"},
-    "oom_total": {"data": {"result": [], "resultType": "vector"}, "status": "success"},
+    "oom_restart_attribution_detail": {"data": {"result": [{"metric": {"container": "loki", "namespace": "observability", "node": "k8s-2", "reason": "Error"}, "value": [0, "15.130267"]}, {"metric": {"container": "external-secrets", "namespace": "external-secrets", "node": "k8s-3", "reason": "OOMKilled"}, "value": [0, "2"]}], "resultType": "vector"}, "status": "success"},
     "package_throttle": {"data": {"result": [{"metric": {"nodename": "k8s-1"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"},
     "restart_attribution_by_node": {"data": {"result": [{"metric": {"node": "k8s-1"}, "value": [0, "8.000000"]}, {"metric": {"node": "k8s-2"}, "value": [0, "5.000000"]}, {"metric": {"node": "k8s-3"}, "value": [0, "4.130266"]}], "resultType": "vector"}, "status": "success"},
     "restart_attribution_total": {"data": {"result": [{"metric": {}, "value": [0, "17.130267"]}], "resultType": "vector"}, "status": "success"},
