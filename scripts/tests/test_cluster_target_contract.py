@@ -13,6 +13,8 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts" / "lib"))
 
 from cluster_target_contract import (  # noqa: E402
+    TargetPreflightError,
+    anton_kubectl_prefix,
     classify_command,
     expected_talos_cluster,
     expected_talos_context,
@@ -65,6 +67,21 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertEqual(result.fallback_reason, "live node set incomplete")
         self.assertEqual(len(result.nodes), 3)
 
+    def test_uses_macos_tailscale_application_when_cli_is_not_on_path(self) -> None:
+        live = {"k8s-1": "100.64.0.1", "k8s-2": "100.64.0.2", "k8s-3": "100.64.0.3"}
+        runner = Runner(
+            {
+                ("tailscale", "status", "--json"): None,
+                (
+                    "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+                    "status",
+                    "--json",
+                ): status(live),
+            }
+        )
+        result = resolve_talos_targets(REPO, environ={}, runner=runner)
+        self.assertEqual(result.source, "live")
+
     def test_redacted_evidence_hides_addresses(self) -> None:
         result = resolve_talos_targets(REPO, source="fallback", environ={})
         evidence = result.evidence()
@@ -73,6 +90,168 @@ class ClusterTargetContractTests(unittest.TestCase):
     def test_address_list_preserves_resolved_node_order(self) -> None:
         result = resolve_talos_targets(REPO, source="fallback", environ={})
         self.assertEqual(result.addresses().split(","), [node.address for node in result.nodes])
+
+    def test_anton_kubectl_prefix_binds_verified_context_and_endpoint(self) -> None:
+        canonical = str(REPO / "kubeconfig")
+        expected = "expected-context"
+        expected_endpoint = "https://expected.invalid"
+        endpoint_query = ("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+        runner = Runner(
+            {
+                (
+                    "mise",
+                    "exec",
+                    "--",
+                    "kubectl",
+                    "--kubeconfig",
+                    canonical,
+                    "config",
+                    "current-context",
+                ): expected,
+                (
+                    "mise",
+                    "exec",
+                    "--",
+                    "kubectl",
+                    "--kubeconfig",
+                    canonical,
+                    "--context",
+                    expected,
+                    *endpoint_query,
+                ): expected_endpoint,
+            }
+        )
+        prefix = anton_kubectl_prefix(
+            REPO,
+            environ={"ANTON_KUBE_CONTEXT": expected, "ANTON_KUBE_ENDPOINT": expected_endpoint},
+            runner=runner,
+        )
+        self.assertEqual(
+            prefix,
+            (
+                "mise",
+                "exec",
+                "--",
+                "kubectl",
+                "--kubeconfig",
+                canonical,
+                "--context",
+                expected,
+            ),
+        )
+
+    def test_anton_kubectl_prefix_fails_closed_without_context(self) -> None:
+        runner = Runner({})
+        with self.assertRaisesRegex(TargetPreflightError, "cannot resolve Kubernetes context") as caught:
+            anton_kubectl_prefix(
+                REPO,
+                environ={"ANTON_KUBE_CONTEXT": "expected-context"},
+                runner=runner,
+            )
+        self.assertNotIn("expected-context", str(caught.exception))
+
+    def test_anton_kubectl_prefix_rejects_wrong_context_without_identity(self) -> None:
+        canonical = str(REPO / "kubeconfig")
+        runner = Runner(
+            {
+                (
+                    "mise",
+                    "exec",
+                    "--",
+                    "kubectl",
+                    "--kubeconfig",
+                    canonical,
+                    "config",
+                    "current-context",
+                ): "wrong-context",
+            }
+        )
+        with self.assertRaisesRegex(TargetPreflightError, "context is not the Anton target") as caught:
+            anton_kubectl_prefix(
+                REPO,
+                environ={
+                    "ANTON_KUBE_CONTEXT": "expected-context",
+                    "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
+                },
+                runner=runner,
+            )
+        self.assertNotIn("wrong-context", str(caught.exception))
+        self.assertNotIn("expected-context", str(caught.exception))
+
+    def test_anton_kubectl_prefix_rejects_wrong_endpoint_without_identity(self) -> None:
+        canonical = str(REPO / "kubeconfig")
+        expected = "expected-context"
+        endpoint_query = ("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+        runner = Runner(
+            {
+                (
+                    "mise",
+                    "exec",
+                    "--",
+                    "kubectl",
+                    "--kubeconfig",
+                    canonical,
+                    "config",
+                    "current-context",
+                ): expected,
+                (
+                    "mise",
+                    "exec",
+                    "--",
+                    "kubectl",
+                    "--kubeconfig",
+                    canonical,
+                    "--context",
+                    expected,
+                    *endpoint_query,
+                ): "https://wrong.invalid",
+            }
+        )
+        with self.assertRaisesRegex(TargetPreflightError, "endpoint is not the Anton target") as caught:
+            anton_kubectl_prefix(
+                REPO,
+                environ={
+                    "ANTON_KUBE_CONTEXT": expected,
+                    "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
+                },
+                runner=runner,
+            )
+        self.assertNotIn("wrong.invalid", str(caught.exception))
+        self.assertNotIn("expected.invalid", str(caught.exception))
+
+    def test_anton_kubectl_prefix_rejects_self_referential_operator_kubeconfig(self) -> None:
+        canonical = str(REPO / "kubeconfig")
+        untrusted_context = "tailscale-operator.untrusted.invalid"
+        endpoint_query = ("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+        runner = Runner(
+            {
+                ("tailscale", "status", "--json"): None,
+                (
+                    "mise",
+                    "exec",
+                    "--",
+                    "kubectl",
+                    "--kubeconfig",
+                    canonical,
+                    "config",
+                    "current-context",
+                ): untrusted_context,
+                (
+                    "mise",
+                    "exec",
+                    "--",
+                    "kubectl",
+                    "--kubeconfig",
+                    canonical,
+                    "--context",
+                    untrusted_context,
+                    *endpoint_query,
+                ): "https://untrusted.invalid:6443",
+            }
+        )
+        with self.assertRaisesRegex(TargetPreflightError, "context is not the Anton target") as caught:
+            anton_kubectl_prefix(REPO, environ={}, runner=runner)
+        self.assertNotIn("untrusted", str(caught.exception))
 
     def test_classifies_wrapped_commands(self) -> None:
         reads = classify_command("mise exec -- kubectl get pods -A")
@@ -534,7 +713,7 @@ class ClusterTargetContractTests(unittest.TestCase):
                     canonical_config,
                     *endpoint_query,
                 ): f"https://{expected}",
-                ("tailscale", "status", "--json"): None,
+                ("tailscale", "status", "--json"): live_status,
                 ("kubectl", "config", "current-context"): expected,
                 ("kubectl", "--context", expected, *endpoint_query): f"https://{expected}",
             }

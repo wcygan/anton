@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 
-: "${S3_ENDPOINT:?S3_ENDPOINT is required}"
-: "${ORDINARY_BUCKETS:?ORDINARY_BUCKETS is required}"
-: "${TABLE_BUCKETS:?TABLE_BUCKETS is required}"
+: "$${S3_ENDPOINT:?S3_ENDPOINT is required}"
+: "$${ORDINARY_BUCKETS:?ORDINARY_BUCKETS is required}"
+: "$${TABLE_BUCKETS:?TABLE_BUCKETS is required}"
 
 created=0
 present=0
@@ -22,7 +22,7 @@ log() {
 
 valid_bucket_name() {
   bucket="$1"
-  length="${#bucket}"
+  length="$${#bucket}"
   if [ "$length" -lt 3 ] || [ "$length" -gt 63 ]; then
     return 1
   fi

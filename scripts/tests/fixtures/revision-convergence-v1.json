@@ -1,0 +1,533 @@
+{
+  "now": "2026-08-10T23:40:43Z",
+  "source": {
+    "apiVersion": "source.toolkit.fluxcd.io/v1",
+    "kind": "GitRepository",
+    "metadata": {
+      "generation": 3,
+      "name": "flux-system",
+      "namespace": "flux-system"
+    },
+    "status": {
+      "artifact": {
+        "lastUpdateTime": "2026-08-10T21:34:40Z",
+        "revision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a"
+      },
+      "conditions": [
+        {
+          "observedGeneration": 3,
+          "status": "True",
+          "type": "Ready"
+        }
+      ],
+      "observedGeneration": 3
+    }
+  },
+  "kustomizations": {
+    "items": [
+      {
+        "metadata": {
+          "generation": 1,
+          "name": "flux-system",
+          "namespace": "flux-system"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 1,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 1
+        }
+      },
+      {
+        "metadata": {
+          "generation": 2,
+          "name": "cluster-apps",
+          "namespace": "flux-system"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 2,
+              "reason": "BuildFailed",
+              "status": "False",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:fc3f7940ea9d0f7d6d11e6f386431a6b895ca8d8",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 2
+        }
+      },
+      {
+        "metadata": {
+          "generation": 3,
+          "name": "flux-operator",
+          "namespace": "flux-system"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 3,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:fc3f7940ea9d0f7d6d11e6f386431a6b895ca8d8",
+          "lastAttemptedRevision": "refs/heads/main@sha1:fc3f7940ea9d0f7d6d11e6f386431a6b895ca8d8",
+          "observedGeneration": 3
+        }
+      },
+      {
+        "metadata": {
+          "generation": 4,
+          "name": "flux-instance",
+          "namespace": "flux-system"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 4,
+              "reason": "DependencyNotReady",
+              "status": "False",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:fc3f7940ea9d0f7d6d11e6f386431a6b895ca8d8",
+          "lastAttemptedRevision": "refs/heads/main@sha1:fc3f7940ea9d0f7d6d11e6f386431a6b895ca8d8",
+          "observedGeneration": 4
+        }
+      },
+      {
+        "metadata": {
+          "generation": 5,
+          "name": "coredns",
+          "namespace": "kube-system"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 5,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 5
+        }
+      },
+      {
+        "metadata": {
+          "generation": 6,
+          "name": "external-secrets",
+          "namespace": "external-secrets"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 6,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 6
+        }
+      },
+      {
+        "metadata": {
+          "generation": 7,
+          "name": "onepassword-store",
+          "namespace": "external-secrets"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 7,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 7
+        }
+      },
+      {
+        "metadata": {
+          "generation": 8,
+          "name": "envoy-gateway",
+          "namespace": "network"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 8,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 8
+        }
+      },
+      {
+        "metadata": {
+          "generation": 9,
+          "name": "cloudflare-dns",
+          "namespace": "network"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 9,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 9
+        }
+      },
+      {
+        "metadata": {
+          "generation": 10,
+          "name": "cloudflare-tunnel",
+          "namespace": "network"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 10,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 10
+        }
+      },
+      {
+        "metadata": {
+          "generation": 11,
+          "name": "k8s-gateway",
+          "namespace": "network"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 11,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 11
+        }
+      },
+      {
+        "metadata": {
+          "generation": 12,
+          "name": "longhorn-config",
+          "namespace": "storage"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 12,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 12
+        }
+      },
+      {
+        "metadata": {
+          "generation": 13,
+          "name": "longhorn",
+          "namespace": "storage"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 13,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 13
+        }
+      },
+      {
+        "metadata": {
+          "generation": 14,
+          "name": "seaweedfs",
+          "namespace": "storage"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 14,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 14
+        }
+      },
+      {
+        "metadata": {
+          "generation": 15,
+          "name": "seaweedfs-config",
+          "namespace": "storage"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 15,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 15
+        }
+      },
+      {
+        "metadata": {
+          "generation": 16,
+          "name": "kube-prometheus-stack",
+          "namespace": "observability"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 16,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 16
+        }
+      },
+      {
+        "metadata": {
+          "generation": 17,
+          "name": "ntfy",
+          "namespace": "observability"
+        },
+        "spec": {
+          "sourceRef": {
+            "kind": "GitRepository",
+            "name": "flux-system",
+            "namespace": "flux-system"
+          }
+        },
+        "status": {
+          "conditions": [
+            {
+              "observedGeneration": 17,
+              "reason": "ReconciliationSucceeded",
+              "status": "True",
+              "type": "Ready"
+            }
+          ],
+          "lastAppliedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "lastAttemptedRevision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a",
+          "observedGeneration": 17
+        }
+      }
+    ]
+  },
+  "critical": [
+    "flux-system/flux-system",
+    "flux-system/cluster-apps",
+    "flux-system/flux-operator",
+    "flux-system/flux-instance",
+    "kube-system/cilium",
+    "kube-system/coredns",
+    "external-secrets/external-secrets",
+    "external-secrets/onepassword-store",
+    "network/envoy-gateway",
+    "network/cloudflare-dns",
+    "network/cloudflare-tunnel",
+    "network/k8s-gateway",
+    "storage/longhorn-config",
+    "storage/longhorn",
+    "storage/seaweedfs",
+    "storage/seaweedfs-config",
+    "observability/kube-prometheus-stack",
+    "observability/ntfy"
+  ],
+  "expected": {
+    "age_seconds": 7563,
+    "classifications": {
+      "flux-system/cluster-apps": "current_failed",
+      "flux-system/flux-instance": "stale_failed",
+      "flux-system/flux-operator": "stale_ready",
+      "flux-system/flux-system": "current_ready",
+      "kube-system/cilium": "missing",
+      "kube-system/coredns": "current_ready",
+      "external-secrets/external-secrets": "current_ready",
+      "external-secrets/onepassword-store": "current_ready",
+      "network/envoy-gateway": "current_ready",
+      "network/cloudflare-dns": "current_ready",
+      "network/cloudflare-tunnel": "current_ready",
+      "network/k8s-gateway": "current_ready",
+      "storage/longhorn-config": "current_ready",
+      "storage/longhorn": "current_ready",
+      "storage/seaweedfs": "current_ready",
+      "storage/seaweedfs-config": "current_ready",
+      "observability/kube-prometheus-stack": "current_ready",
+      "observability/ntfy": "current_ready"
+    },
+    "incomplete_count": 4
+  }
+}

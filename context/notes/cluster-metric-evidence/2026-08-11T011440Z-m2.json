@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "evidence_type": "critical_revision_observation",
+  "observed_at": "2026-08-11T01:14:40Z",
+  "target_preflight": "passed",
+  "source": {
+    "artifact_last_update_time": "2026-08-10T21:34:40Z",
+    "kind": "GitRepository",
+    "namespace": "flux-system",
+    "name": "flux-system",
+    "revision": "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a"
+  },
+  "complete": false,
+  "incomplete_count": 1,
+  "critical_kustomizations": [
+    {"namespace": "flux-system", "name": "flux-system", "classification": "current_ready"},
+    {"namespace": "flux-system", "name": "cluster-apps", "classification": "current_ready"},
+    {"namespace": "flux-system", "name": "flux-operator", "classification": "current_ready"},
+    {"namespace": "flux-system", "name": "flux-instance", "classification": "current_ready"},
+    {"namespace": "kube-system", "name": "cilium", "classification": "current_ready"},
+    {"namespace": "kube-system", "name": "coredns", "classification": "current_ready"},
+    {"namespace": "external-secrets", "name": "external-secrets", "classification": "current_ready"},
+    {"namespace": "external-secrets", "name": "onepassword-store", "classification": "current_ready"},
+    {"namespace": "network", "name": "envoy-gateway", "classification": "current_ready"},
+    {"namespace": "network", "name": "cloudflare-dns", "classification": "current_ready"},
+    {"namespace": "network", "name": "cloudflare-tunnel", "classification": "current_ready"},
+    {"namespace": "network", "name": "k8s-gateway", "classification": "current_ready"},
+    {"namespace": "storage", "name": "longhorn-config", "classification": "current_ready"},
+    {"namespace": "storage", "name": "longhorn", "classification": "current_ready"},
+    {"namespace": "storage", "name": "seaweedfs", "classification": "current_ready"},
+    {"namespace": "storage", "name": "seaweedfs-config", "classification": "current_failed"},
+    {"namespace": "observability", "name": "kube-prometheus-stack", "classification": "current_ready"},
+    {"namespace": "observability", "name": "ntfy", "classification": "current_ready"}
+  ]
+}

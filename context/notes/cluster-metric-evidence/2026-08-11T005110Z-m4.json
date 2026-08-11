@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "evidence_type": "platform_scrape_continuity_observation",
+  "captured_at": "2026-08-11T01:15:33Z",
+  "observed_at": "2026-08-11T00:51:10Z",
+  "window_start": "2026-07-27T00:51:10Z",
+  "window_days": 15,
+  "target_preflight": "passed",
+  "query_resolution": "1m",
+  "expected_target_counts": {
+    "apiserver": 3,
+    "kube-state-metrics": 1,
+    "kubelet": 9,
+    "node-exporter": 3
+  },
+  "query": "min_over_time(((count by (job) (min_over_time(up{job=\"apiserver\"}[1m]) == 1) == bool 3) or label_replace(vector(0), \"job\", \"apiserver\", \"\", \"\"))[15d:1m])\nor min_over_time(((count by (job) (min_over_time(up{job=\"kube-state-metrics\"}[1m]) == 1) == bool 1) or label_replace(vector(0), \"job\", \"kube-state-metrics\", \"\", \"\"))[15d:1m])\nor min_over_time(((count by (job) (min_over_time(up{job=\"kubelet\"}[1m]) == 1) == bool 9) or label_replace(vector(0), \"job\", \"kubelet\", \"\", \"\"))[15d:1m])\nor min_over_time(((count by (job) (min_over_time(up{job=\"node-exporter\"}[1m]) == 1) == bool 3) or label_replace(vector(0), \"job\", \"node-exporter\", \"\", \"\"))[15d:1m])",
+  "samples": [
+    {"job": "apiserver", "value": 1.0},
+    {"job": "kube-state-metrics", "value": 1.0},
+    {"job": "kubelet", "value": 1.0},
+    {"job": "node-exporter", "value": 1.0}
+  ],
+  "coverage_state": "partial",
+  "coverage_reasons": ["historical_restart_node_attribution_unavailable"],
+  "oom_state": "no_data",
+  "oom_total": null,
+  "threshold_states": {
+    "api_error": "unapproved",
+    "api_latency": "unapproved",
+    "storage": "unapproved"
+  }
+}

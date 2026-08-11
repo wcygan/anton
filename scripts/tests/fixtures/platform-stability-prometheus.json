@@ -1,0 +1,22 @@
+{
+  "buildinfo": {"data": {"version": "3.11.2"}, "status": "success"},
+  "queries": {
+    "api_5xx_max_ratio": {"data": {"result": [{"metric": {}, "value": [0, "0.002467"]}], "resultType": "vector"}, "status": "success"},
+    "api_5xx_total": {"data": {"result": [{"metric": {}, "value": [0, "44.001"]}], "resultType": "vector"}, "status": "success"},
+    "api_p99_current_seconds": {"data": {"result": [{"metric": {}, "value": [0, "0.04535"]}], "resultType": "vector"}, "status": "success"},
+    "api_p99_historical_seconds": {"data": {"result": [{"metric": {}, "value": [0, "0.9838"]}], "resultType": "vector"}, "infos": ["PromQL info: input to histogram_quantile needed to be fixed for monotonicity"], "status": "success", "warnings": ["fixture warning"]},
+    "cilium_memory_critical": {"data": {"result": [{"metric": {"node": "k8s-2"}, "value": [0, "0"]}, {"metric": {"node": "k8s-1"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"},
+    "cilium_memory_warning": {"data": {"result": [{"metric": {"node": "k8s-2"}, "value": [0, "0"]}, {"metric": {"node": "k8s-1"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"},
+    "multus_memory": {"data": {"result": [{"metric": {"node": "k8s-1"}, "value": [0, "120"]}], "resultType": "vector"}, "status": "success"},
+    "oom_total": {"data": {"result": [], "resultType": "vector"}, "status": "success"},
+    "package_throttle": {"data": {"result": [{"metric": {"nodename": "k8s-1"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"},
+    "restart_attribution_by_node": {"data": {"result": [{"metric": {"node": "k8s-1"}, "value": [0, "8.000000"]}, {"metric": {"node": "k8s-2"}, "value": [0, "5.000000"]}, {"metric": {"node": "k8s-3"}, "value": [0, "4.130266"]}], "resultType": "vector"}, "status": "success"},
+    "restart_attribution_total": {"data": {"result": [{"metric": {}, "value": [0, "17.130267"]}], "resultType": "vector"}, "status": "success"},
+    "restart_total": {"data": {"result": [{"metric": {}, "value": [0, "24.10706976916668"]}], "resultType": "vector"}, "status": "success"},
+    "running_container_hours": {"data": {"result": [{"metric": {}, "value": [0, "50994"]}], "resultType": "vector"}, "status": "success"},
+    "scrape_continuity": {"data": {"result": [{"metric": {"job": "apiserver"}, "value": [0, "1"]}, {"metric": {"job": "kube-state-metrics"}, "value": [0, "1"]}, {"metric": {"job": "kubelet"}, "value": [0, "1"]}, {"metric": {"job": "node-exporter"}, "value": [0, "1"]}], "resultType": "vector"}, "status": "success"},
+    "storage_peak_percent": {"data": {"result": [{"metric": {"namespace": "observability", "persistentvolumeclaim": "prometheus"}, "value": [0, "33.67"]}], "resultType": "vector"}, "status": "success"},
+    "storage_vxlan_memory": {"data": {"result": [{"metric": {"node": "k8s-3"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"},
+    "whereabouts_memory": {"data": {"result": [{"metric": {"node": "k8s-2"}, "value": [0, "0"]}], "resultType": "vector"}, "status": "success"}
+  }
+}

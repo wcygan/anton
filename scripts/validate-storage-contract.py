@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,49 @@ CRONJOB = APP / "buckets-cronjob.yaml"
 KUSTOMIZATION = APP / "kustomization.yaml"
 LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
+
+
+def validate_provisioner_postbuild_substitution() -> str | None:
+    """Return a strict Flux substitution error for the generated ConfigMap."""
+    try:
+        rendered = subprocess.run(
+            ["kustomize", "build", str(APP)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if rendered.returncode != 0:
+            return f"Kustomize render: {rendered.stderr.strip()}"
+
+        provisioner = subprocess.run(
+            [
+                "yq",
+                'select(.kind == "ConfigMap" and .metadata.name == "seaweedfs-bucket-provisioner")',
+                "-",
+            ],
+            input=rendered.stdout,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if provisioner.returncode != 0:
+            return f"ConfigMap selection: {provisioner.stderr.strip()}"
+        if not provisioner.stdout.strip():
+            return "ConfigMap selection: seaweedfs-bucket-provisioner was not rendered"
+
+        strict = subprocess.run(
+            ["flux", "envsubst", "--strict"],
+            input=provisioner.stdout,
+            capture_output=True,
+            text=True,
+            env={"PATH": os.environ["PATH"]},
+            timeout=10,
+        )
+        if strict.returncode != 0:
+            return f"strict Flux postBuild substitution: {strict.stderr.strip()}"
+    except (KeyError, OSError, subprocess.TimeoutExpired) as error:
+        return f"strict Flux postBuild substitution check: {error}"
+    return None
 
 
 def main() -> int:
@@ -47,6 +91,10 @@ def main() -> int:
     failures.extend(
         f"Kustomization missing {value!r}" for value in required_kustomization if value not in kustomization
     )
+
+    postbuild_substitution_failure = validate_provisioner_postbuild_substitution()
+    if postbuild_substitution_failure is not None:
+        failures.append(postbuild_substitution_failure)
 
     removed = (
         APP / "harbor-bucket-cronjob.yaml",

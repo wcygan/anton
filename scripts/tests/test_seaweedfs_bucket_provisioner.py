@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
-PROVISIONER = REPO / "kubernetes" / "apps" / "storage" / "seaweedfs-config" / "app" / "provision-buckets.sh"
+APP = REPO / "kubernetes" / "apps" / "storage" / "seaweedfs-config" / "app"
 
 FAKE_AWS = textwrap.dedent(
     r"""
@@ -68,6 +68,57 @@ FAKE_AWS = textwrap.dedent(
 
 
 class SeaweedFSBucketProvisionerTests(unittest.TestCase):
+    @staticmethod
+    def strict_flux_substitution(manifest: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["flux", "envsubst", "--strict"],
+            input=manifest,
+            capture_output=True,
+            text=True,
+            env={"PATH": os.environ["PATH"]},
+            timeout=10,
+        )
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        rendered = subprocess.run(
+            ["kustomize", "build", str(APP)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if rendered.returncode != 0:
+            raise RuntimeError(rendered.stderr)
+
+        provisioner = subprocess.run(
+            [
+                "yq",
+                'select(.kind == "ConfigMap" and .metadata.name == "seaweedfs-bucket-provisioner")',
+                "-",
+            ],
+            input=rendered.stdout,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if provisioner.returncode != 0:
+            raise RuntimeError(provisioner.stderr)
+
+        strict = cls.strict_flux_substitution(provisioner.stdout)
+        if strict.returncode != 0:
+            raise RuntimeError(strict.stderr)
+
+        script = subprocess.run(
+            ["yq", "-r", '.data["provision-buckets.sh"]', "-"],
+            input=strict.stdout,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if script.returncode != 0:
+            raise RuntimeError(script.stderr)
+        cls.rendered_provisioner = script.stdout
+
     def run_provisioner(
         self,
         state: dict[str, list[str]],
@@ -93,9 +144,36 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
                 }
             )
             result = subprocess.run(
-                ["/bin/sh", str(PROVISIONER)], capture_output=True, text=True, env=env, timeout=10
+                ["/bin/sh", "-s"],
+                input=self.rendered_provisioner,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=10,
             )
             return result, json.loads(state_path.read_text(encoding="utf-8"))
+
+    def test_flux_strict_substitution_rejects_unescaped_shell_expansion(self) -> None:
+        result = self.strict_flux_substitution(
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "data:\n"
+            "  provision-buckets.sh: |-\n"
+            '    length="${#bucket}"\n'
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('variable not set (strict mode): "bucket"', result.stderr)
+
+    def test_flux_strict_substitution_preserves_escaped_shell_expansion(self) -> None:
+        result = self.strict_flux_substitution(
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "data:\n"
+            "  provision-buckets.sh: |-\n"
+            '    length="$${#bucket}"\n'
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('length="${#bucket}"', result.stdout)
 
     def test_create_then_idempotent_recheck(self) -> None:
         first, state = self.run_provisioner({"ordinary": [], "tables": []})

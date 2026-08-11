@@ -48,9 +48,10 @@ tasks:
     desc: Validate committed cluster operation contracts
     cmds:
       - python3 scripts/validate-flux-contract.py
+      - python3 scripts/validate-flux-postbuild-contract.py
       - python3 scripts/validate-log-contract.py
       - python3 scripts/validate-storage-contract.py
       - python3 scripts/validate-target-contract.py
       - python3 -m unittest discover -s scripts/tests -p 'test_*.py'
     preconditions:
-      - which python3
+      - which flux kustomize python3 yq

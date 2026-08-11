@@ -75,6 +75,10 @@ class PreflightViolation:
     message: str
 
 
+class TargetPreflightError(ValueError):
+    """The selected Kubernetes target cannot be proved as Anton."""
+
+
 READ_ONLY_KUBECTL = frozenset(
     {
         "get",
@@ -229,6 +233,10 @@ SHELL_BOUNDARIES = frozenset(
     }
 )
 KUBE_SERVER_JSONPATH = "jsonpath={.clusters[0].cluster.server}"
+TAILSCALE_EXECUTABLES = (
+    "tailscale",
+    "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+)
 
 
 def load_inventory(root: Path) -> dict:
@@ -281,14 +289,17 @@ def run_stdout(command: list[str]) -> str | None:
 
 
 def _tailscale_status(runner: RunStdout) -> dict | None:
-    output = runner(["tailscale", "status", "--json"])
-    if output is None:
-        return None
-    try:
-        data = json.loads(output)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
+    for executable in TAILSCALE_EXECUTABLES:
+        output = runner([executable, "status", "--json"])
+        if output is None:
+            continue
+        try:
+            data = json.loads(output)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
 
 
 def _live_nodes(status: dict, expected_names: tuple[str, ...]) -> tuple[NodeTarget, ...] | None:
@@ -358,24 +369,8 @@ def expected_kube_context(
     if override:
         return override
     inventory = load_inventory(root)
-    canonical = runner(
-        [
-            "mise",
-            "exec",
-            "--",
-            "kubectl",
-            "--kubeconfig",
-            str(root / "kubeconfig"),
-            "config",
-            "current-context",
-        ]
-    )
     operator_prefix = str(inventory["kubernetes"]["operator_context_prefix"])
     fallback_context = str(inventory["kubernetes"]["fallback_context"])
-    if canonical == fallback_context or (
-        canonical is not None and canonical.startswith(operator_prefix)
-    ):
-        return canonical
     status = _tailscale_status(runner)
     suffix = str(status.get("MagicDNSSuffix", "")).strip() if status else ""
     if suffix:
@@ -396,37 +391,6 @@ def expected_kube_endpoint(
     if override:
         return override
 
-    canonical_context = runner(
-        [
-            "mise",
-            "exec",
-            "--",
-            "kubectl",
-            "--kubeconfig",
-            str(root / "kubeconfig"),
-            "config",
-            "current-context",
-        ]
-    )
-    if canonical_context == expected_context:
-        canonical_endpoint = runner(
-            [
-                "mise",
-                "exec",
-                "--",
-                "kubectl",
-                "--kubeconfig",
-                str(root / "kubeconfig"),
-                "config",
-                "view",
-                "--minify",
-                "-o",
-                KUBE_SERVER_JSONPATH,
-            ]
-        )
-        if canonical_endpoint:
-            return canonical_endpoint
-
     kubernetes = load_inventory(root)["kubernetes"]
     operator_prefix = str(kubernetes["operator_context_prefix"])
     if expected_context.startswith(operator_prefix):
@@ -437,6 +401,83 @@ def expected_kube_endpoint(
     source = (root / "talos" / "talconfig.yaml").read_text(encoding="utf-8")
     match = re.search(r'(?m)^endpoint:\s*["\']?([^"\'\s]+)', source)
     return match.group(1) if match else None
+
+
+def anton_kubectl_prefix(
+    root: Path,
+    *,
+    environ: Mapping[str, str] | None = None,
+    runner: RunStdout = run_stdout,
+) -> tuple[str, ...]:
+    """Return a kubectl prefix bound to the verified Anton target."""
+
+    environment = os.environ if environ is None else environ
+    canonical = str(root / "kubeconfig")
+    try:
+        expected = expected_kube_context(root, environ=environment, runner=runner)
+        expected_endpoint = expected_kube_endpoint(
+            root,
+            expected,
+            environ=environment,
+            runner=runner,
+        )
+    except (OSError, ValueError) as error:
+        raise TargetPreflightError(
+            "Anton target preflight failed: cannot resolve Kubernetes context"
+        ) from error
+
+    actual = runner(
+        [
+            "mise",
+            "exec",
+            "--",
+            "kubectl",
+            "--kubeconfig",
+            canonical,
+            "config",
+            "current-context",
+        ]
+    )
+    if actual is None:
+        raise TargetPreflightError(
+            "Anton target preflight failed: cannot resolve Kubernetes context"
+        )
+    if actual != expected:
+        raise TargetPreflightError(
+            "Anton target preflight failed: Kubernetes context is not the Anton target"
+        )
+
+    actual_endpoint = runner(
+        [
+            "mise",
+            "exec",
+            "--",
+            "kubectl",
+            "--kubeconfig",
+            canonical,
+            "--context",
+            expected,
+            "config",
+            "view",
+            "--minify",
+            "-o",
+            KUBE_SERVER_JSONPATH,
+        ]
+    )
+    if not _same_endpoint(actual_endpoint, expected_endpoint):
+        raise TargetPreflightError(
+            "Anton target preflight failed: Kubernetes endpoint is not the Anton target"
+        )
+    return (
+        "mise",
+        "exec",
+        "--",
+        "kubectl",
+        "--kubeconfig",
+        canonical,
+        "--context",
+        expected,
+    )
 
 
 def expected_talos_context(root: Path, *, environ: Mapping[str, str] | None = None) -> str:

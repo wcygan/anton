@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "evidence_type": "platform_restart_node_attribution",
+  "observed_at": "2026-08-11T01:39:27Z",
+  "captured_at": "2026-08-11T01:49:19Z",
+  "target_preflight": "passed",
+  "platform_namespace_scope": "flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system",
+  "resolution": "1m",
+  "interval_count": 21600,
+  "raw_query": "sum(sum_over_time((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m]))[14d23h59m:1m]))",
+  "by_node_query": "sum by (node) (sum_over_time(((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m])) * on (namespace,pod,uid) group_left(node) kube_pod_info{node!=\"\"})[14d23h59m:1m]))",
+  "raw_state": "observed",
+  "by_node_state": "observed",
+  "raw_total": 17.130267,
+  "raw_total_exact": "17.130266666666667",
+  "node_total_sum": 17.130267,
+  "node_total_sum_exact": "17.130266666666668",
+  "node_totals": [
+    {"node": "k8s-1", "value": 0.0, "exact_value": "0"},
+    {"node": "k8s-2", "value": 10.565133, "exact_value": "10.565133333333334"},
+    {"node": "k8s-3", "value": 6.565133, "exact_value": "6.565133333333334"}
+  ],
+  "unattributed_restart_increments": 0.0,
+  "unattributed_restart_increments_exact": "0.000000000000001",
+  "tolerance": 0.000001,
+  "instrumentation_reason_count_before": 1,
+  "instrumentation_reason_count_after": 0,
+  "outcome_gaps": [
+    "api_thresholds_unapproved",
+    "oom_no_data",
+    "storage_threshold_unapproved"
+  ],
+  "oom_state": "no_data",
+  "threshold_states": {
+    "api_error": "unapproved",
+    "api_latency": "unapproved",
+    "storage": "unapproved"
+  }
+}
