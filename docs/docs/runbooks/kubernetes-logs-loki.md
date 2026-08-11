@@ -23,7 +23,7 @@ log sink is not this backend and must remain separate.
 
 ## Executable contract
 
-ADR 0030's severity vocabulary, indexed-label allowlist, and retention policy
+ADR 0032's severity vocabulary, indexed-label allowlist, and retention policy
 live in one executable contract. Display the current values instead of copying
 them into another operator document:
 

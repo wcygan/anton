@@ -4,7 +4,7 @@ opened: 2026-08-10
 closed: null
 affects: all
 intent: concrete-need
-related-adrs: [0027, 0030]
+related-adrs: [0027, 0032]
 review-by: null
 ---
 
@@ -117,7 +117,7 @@ commit, push, Flux reconciliation, cluster mutation, or live verification author
 - Metric contracts: `context/notes/cluster-metric-contracts.md`
 - Retained evidence: `context/notes/cluster-metric-evidence/README.md`
 - Flux dependency decision: `context/adrs/0027-platform-dependson-rule.md`
-- Logging decision: `context/adrs/0030-adopt-loki-for-kubernetes-logs.md`
+- Logging decision: `context/adrs/0032-honor-loki-stream-retention-minimum.md`
 - Completed contract initiative: `context/plans/0021-deepen-cluster-operation-contracts.md`
 - Flux cold-start initiative: `context/plans/0016-harden-flux-cold-start-ordering.md`
 - Reboot investigation: `context/plans/0013-cluster-wide-silent-reboot-localization.md`

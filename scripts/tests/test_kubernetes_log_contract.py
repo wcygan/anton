@@ -32,11 +32,18 @@ class KubernetesLogContractTests(unittest.TestCase):
                     fixture["expected"],
                 )
 
-    def test_rejects_stale_debug_retention(self) -> None:
+    def test_rejects_unsupported_debug_retention(self) -> None:
         source = REPO / "kubernetes" / "apps" / "observability" / "loki" / "app" / "helmrelease.yaml"
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "loki.yaml"
-            path.write_text(source.read_text().replace('period: 6h', 'period: 24h', 1), encoding="utf-8")
+            source_text = source.read_text()
+            expected = "selector: '{severity=~\"debug|trace\"}'\n            priority: 80\n            period: 24h"
+            replacement = "selector: '{severity=~\"debug|trace\"}'\n            priority: 80\n            period: 6h"
+            self.assertIn(expected, source_text)
+            path.write_text(
+                source_text.replace(expected, replacement, 1),
+                encoding="utf-8",
+            )
             self.assertTrue(validate_loki(path))
 
     def test_rejects_changed_otel_normalization_condition(self) -> None:

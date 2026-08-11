@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Superseded-by 0032
 date: 2026-08-02
 deciders: ['@wcygan']
 affects: observability

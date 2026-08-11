@@ -57,7 +57,7 @@ DEFAULT_RETENTION = "24h"
 RETENTION_STREAMS = {
     '{severity=~"fatal|error"}': "720h",
     '{severity="warn"}': "336h",
-    '{severity=~"debug|trace"}': "6h",
+    '{severity=~"debug|trace"}': "24h",
     '{severity=~"info|unknown"}': "24h",
 }
 
@@ -351,7 +351,7 @@ def validate_repository(root: Path) -> list[ContractViolation]:
 
 def contract_summary() -> str:
     lines = [
-        "Kubernetes logging contract (ADR 0030)",
+        "Kubernetes logging contract (ADR 0032)",
         f"severity: {', '.join(SEVERITIES)}; default={DEFAULT_SEVERITY}",
         f"indexed labels: {', '.join(INDEXED_LOKI_LABELS)}",
         f"default retention: {DEFAULT_RETENTION}",

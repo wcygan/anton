@@ -12,7 +12,7 @@ durable map of the resulting interfaces and rollout boundaries.
 | --- | --- | --- |
 | Flux application contract | Implemented | `scripts/lib/flux_application_contract.py` |
 | SeaweedFS storage provisioning | Implemented after fixture proof | `kubernetes/apps/storage/seaweedfs-config/app/provision-buckets.sh` |
-| Kubernetes log contract | Implemented; ADR drift resolved to the accepted decision | `scripts/lib/kubernetes_log_contract.py` |
+| Kubernetes log contract | Implemented; ADR 0032 sets Loki's 24-hour stream minimum | `scripts/lib/kubernetes_log_contract.py` |
 | Cluster target and preflight resolution | Implemented | `scripts/lib/cluster_target_contract.py` plus `scripts/cluster-targets.json` |
 | Shared agent safety policy | Implemented after adapter-parity proof | `scripts/lib/agent_policy_contract.py` |
 | Iceberg acceptance module | Deferred | ADR 0031 review on 2026-08-20 decides retain versus remove before more abstraction |
@@ -42,10 +42,10 @@ Loki policy, Grafana datasource, query catalog, runbook pointer, and query skill
 pointer. `python3 scripts/validate-log-contract.py --show` prints the current
 contract without another copied table.
 
-ADR 0030 is authoritative: debug and trace retention is six hours. Applying
-the changed Loki source lets the compactor delete older low-severity records.
-Reverting before Flux reconciliation is safe; reverting afterward changes
-future retention but cannot recover objects already deleted by compaction.
+ADR 0032 is authoritative: debug and trace retention is 24 hours, Loki's
+supported stream minimum. Applying the corrected Loki source restores desired
+state convergence. Reverting after reconciliation restores the failed value
+and can stall Loki again.
 
 ### SeaweedFS bucket provisioning
 

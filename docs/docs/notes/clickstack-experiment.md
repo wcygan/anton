@@ -9,7 +9,7 @@ narrow homepage-only collector; it did not become the production log backend.
 The successor architecture, retention contract, queries, rollout order, and
 operator-only teardown procedure are maintained in the canonical
 [Kubernetes logs: OTel Collector to Loki runbook](../runbooks/kubernetes-logs-loki.md)
-and [ADR 0030](../../../context/adrs/0030-adopt-loki-for-kubernetes-logs.md).
+and [ADR 0032](https://github.com/wcygan/anton/blob/main/context/adrs/0032-honor-loki-stream-retention-minimum.md).
 
 The separate temporary Talos log sink remains in place. It is not the
 Kubernetes pod-log backend and is intentionally not removed by this migration.

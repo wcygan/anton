@@ -86,7 +86,7 @@ spec:
             period: 336h
           - selector: '{severity=~"debug|trace"}'
             priority: 80
-            period: 6h
+            period: 24h
           - selector: '{severity=~"info|unknown"}'
             priority: 70
             period: 24h
