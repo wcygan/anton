@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "record_type": "cluster_metric_snapshot",
+  "observed_at": "2026-08-11T15:18:47Z",
+  "source_revision": "3a8c30caa60518d990b7c6eabf15d99f302dfb5a",
+  "collection": {
+    "comparison_role": "initial_aggregate_snapshot",
+    "live_mutations": false,
+    "mode": "read_only",
+    "synthetic_changes": false
+  },
+  "metrics": {
+    "m1_gitops_failure_escape": {
+      "application_roots": 47,
+      "current_failed_critical_resources": 0,
+      "current_ready_critical_resources": 18,
+      "postbuild_roots_expected": 37,
+      "postbuild_roots_passing": 37,
+      "state": "observed",
+      "strict_failure_count": 0
+    },
+    "m2_revision_convergence": {
+      "artifact_age_seconds": 682,
+      "convergence_duration_seconds": null,
+      "convergence_duration_state": "no_data",
+      "current_failed": 0,
+      "current_ready": 18,
+      "incomplete_count": 0,
+      "reason": "No approved durable start record exists for this revision.",
+      "state": "current_revision_complete"
+    },
+    "m3_critical_service_recovery": {
+      "aggregate_state": "insufficient_samples",
+      "current_recovery_time_minutes": null,
+      "new_qualifying_sample": false,
+      "recorded_scenario_samples": 2,
+      "reason": "No qualifying incident or approved drill supplied a new recovery sample.",
+      "state": "no_new_sample"
+    },
+    "m4_platform_stability": {
+      "api_error": {
+        "max_ratio": 0.002467,
+        "state": "observed",
+        "threshold_state": "unapproved",
+        "total_5xx": 44.001013
+      },
+      "api_latency": {
+        "current_p99_seconds": 0.058,
+        "historical_max_p99_seconds": 28.8,
+        "state": "observed",
+        "threshold_state": "unapproved"
+      },
+      "coverage": {
+        "observer_instrumentation_state": "complete",
+        "outcome_gaps": [
+          "api_thresholds_unapproved",
+          "oom_event_counter_unavailable",
+          "storage_threshold_unapproved"
+        ],
+        "scrape_continuity_state": "complete",
+        "state": "partial"
+      },
+      "memory": {
+        "cilium_critical": {
+          "breach_minutes_by_node": {
+            "k8s-1": 0.0,
+            "k8s-2": 0.0,
+            "k8s-3": 0.0
+          },
+          "state": "observed",
+          "threshold_mib": 3072,
+          "threshold_state": "deployed_rule"
+        },
+        "cilium_warning": {
+          "breach_minutes_by_node": {
+            "k8s-1": 0.0,
+            "k8s-2": 0.0,
+            "k8s-3": 0.0
+          },
+          "state": "observed",
+          "threshold_mib": 2048,
+          "threshold_state": "deployed_rule"
+        },
+        "multus": {
+          "breach_minutes_by_node": {
+            "k8s-1": 0.0,
+            "k8s-2": 0.0,
+            "k8s-3": 0.0
+          },
+          "state": "observed",
+          "threshold_mib": 400,
+          "threshold_state": "deployed_rule"
+        },
+        "storage_vxlan": {
+          "breach_minutes_by_node": {
+            "k8s-1": 0.0,
+            "k8s-2": 0.0,
+            "k8s-3": 0.0
+          },
+          "state": "observed",
+          "threshold_mib": 96,
+          "threshold_state": "deployed_rule"
+        },
+        "whereabouts": {
+          "breach_minutes_by_node": {
+            "k8s-1": 0.0,
+            "k8s-2": 0.0,
+            "k8s-3": 0.0
+          },
+          "state": "observed",
+          "threshold_mib": 400,
+          "threshold_state": "deployed_rule"
+        }
+      },
+      "oom_restart_estimator": {
+        "attributed_restart_increments": 17.130267,
+        "authoritative_event_count_state": "no_data",
+        "by_component": {
+          "external-secrets/external-secrets": 2.0
+        },
+        "by_node": {
+          "k8s-3": 2.0
+        },
+        "measurement_kind": "time_local_1m_restart_reason_estimator",
+        "rate_per_1000_container_hours": 0.039134,
+        "running_container_hours": 51106.0,
+        "state": "observed",
+        "total": 2.0,
+        "unattributed_restart_increments": 0.0
+      },
+      "package_throttle": {
+        "breach_minutes_by_node": {
+          "k8s-1": 0.0,
+          "k8s-2": 0.0,
+          "k8s-3": 0.0
+        },
+        "state": "observed",
+        "threshold_state": "event_condition"
+      },
+      "restarts": {
+        "attribution_state": "complete",
+        "rate_per_1000_container_hours": 0.47171,
+        "running_container_hours": 51106.0,
+        "state": "observed",
+        "total": 24.107197,
+        "unattributed_restart_increments": 0.0
+      },
+      "storage": {
+        "peak_percent_by_claim": {
+          "observability/alertmanager-kube-prometheus-stack-alertmanager-db-alertmanager-kube-prometheus-stack-alertmanager-0": 0.001807,
+          "observability/data-talos-log-sink-vector-0": 52.785433,
+          "observability/kube-prometheus-stack-grafana": 1.195919,
+          "observability/ntfy-cache": 0.058589,
+          "observability/prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0": 33.732229,
+          "observability/storage-loki-0": 0.041473,
+          "storage/mount0-seaweedfs-volume-0": 1.074068,
+          "storage/mount0-seaweedfs-volume-1": 6.261198,
+          "storage/mount0-seaweedfs-volume-2": 2.065082
+        },
+        "state": "observed",
+        "threshold_state": "unapproved"
+      },
+      "window_days": 15,
+      "window_start": "2026-07-27T15:18:47Z"
+    }
+  },
+  "comparison_contract": {
+    "aggregation": "Compare each metric independently. Do not create a composite score.",
+    "direction": "Use each M1-M4 contract direction.",
+    "missing_data": "Keep missing evidence null. Do not convert it to zero.",
+    "tolerance": "Use an approved metric tolerance. Report no trend when no tolerance exists.",
+    "window": "Use the fixed 15-day M4 window and one immutable record per observation."
+  },
+  "limits": [
+    "This record is a baseline and does not prove improvement.",
+    "M2 has no measured convergence duration without a durable start record.",
+    "M3 changes only after a qualifying incident or approved drill.",
+    "The OOM value is a restart-reason estimator, not an authoritative event count.",
+    "API and storage thresholds are not approved."
+  ]
+}
