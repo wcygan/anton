@@ -123,7 +123,7 @@ def validate_release(release: dict[str, Any]) -> list[str]:
         failures,
         "Airflow metadata Secret",
         nested(values, "data", "metadataSecretName"),
-        "airflow-postgres-app",
+        "airflow-postgres-bootstrap",
     )
     expect_equal(
         failures,
@@ -142,13 +142,19 @@ def validate_release(release: dict[str, Any]) -> list[str]:
         {
             "name": "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN",
             "valueFrom": {
-                "secretKeyRef": {"name": "airflow-postgres-app", "key": "uri"}
+                "secretKeyRef": {
+                    "name": "airflow-postgres-bootstrap",
+                    "key": "connection",
+                }
             },
         },
         {
             "name": "AIRFLOW_CONN_AIRFLOW_DB",
             "valueFrom": {
-                "secretKeyRef": {"name": "airflow-postgres-app", "key": "uri"}
+                "secretKeyRef": {
+                    "name": "airflow-postgres-bootstrap",
+                    "key": "connection",
+                }
             },
         },
     ]
@@ -363,7 +369,6 @@ def validate_database_source(failures: list[str]) -> None:
     )
     expected_health_checks = {
         ("v1", "Secret", "airflow-postgres-bootstrap", "airflow"),
-        ("v1", "Secret", "airflow-postgres-app", "airflow"),
         ("postgresql.cnpg.io/v1", "Cluster", "airflow-postgres", "airflow"),
     }
     observed_health_checks = {
@@ -431,9 +436,11 @@ def validate_credentials(credentials: dict[str, Any]) -> list[str]:
             failures,
             "Airflow ExternalSecret template keys",
             set(template_data),
-            {"username", "password", "fernet-key", "jwt-secret"},
+            {"username", "password", "connection", "fernet-key", "jwt-secret"},
         )
-        expect_absent(failures, "Airflow ExternalSecret database URI", template_data, "connection")
+        connection = template_data.get("connection")
+        if not isinstance(connection, str) or "urlquery" not in connection:
+            failures.append("Airflow ExternalSecret connection must URL-encode credentials")
     return failures
 
 

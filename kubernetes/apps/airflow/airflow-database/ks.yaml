@@ -25,10 +25,6 @@ spec:
       kind: Secret
       name: airflow-postgres-bootstrap
       namespace: airflow
-    - apiVersion: v1
-      kind: Secret
-      name: airflow-postgres-app
-      namespace: airflow
     - apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
       name: airflow-postgres

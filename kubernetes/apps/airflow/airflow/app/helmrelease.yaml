@@ -33,10 +33,10 @@ spec:
         tag: 9ccd3dcff1f11535c3915434c40602f443c4d5f160673c7f9ced4af094957065
         pullPolicy: IfNotPresent
 
-    # CNPG creates this Secret from the ESO-provided bootstrap credentials.
-    # Its URI is percent-encoded and avoids template interpolation of passwords.
+    # ESO creates one consumer-shaped Secret from the 1Password item.
+    # The connection value contains URL-encoded credentials.
     data:
-      metadataSecretName: airflow-postgres-app
+      metadataSecretName: airflow-postgres-bootstrap
     enableBuiltInSecretEnvVars:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: false
       AIRFLOW_CONN_AIRFLOW_DB: false
@@ -44,13 +44,13 @@ spec:
       - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
         valueFrom:
           secretKeyRef:
-            name: airflow-postgres-app
-            key: uri
+            name: airflow-postgres-bootstrap
+            key: connection
       - name: AIRFLOW_CONN_AIRFLOW_DB
         valueFrom:
           secretKeyRef:
-            name: airflow-postgres-app
-            key: uri
+            name: airflow-postgres-bootstrap
+            key: connection
     fernetKeySecretName: airflow-postgres-bootstrap
     jwtSecretName: airflow-postgres-bootstrap
 
@@ -133,13 +133,13 @@ spec:
         - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
           valueFrom:
             secretKeyRef:
-              name: airflow-postgres-app
-              key: uri
+              name: airflow-postgres-bootstrap
+              key: connection
         - name: AIRFLOW_CONN_AIRFLOW_DB
           valueFrom:
             secretKeyRef:
-              name: airflow-postgres-app
-              key: uri
+              name: airflow-postgres-bootstrap
+              key: connection
       resources:
         requests:
           cpu: 100m
