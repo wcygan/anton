@@ -5,7 +5,9 @@ metadata:
   name: barman-cloud-plugin-upstream
 spec:
   interval: 1h
-  path: ./config/default
+  # Use the release deployment overlay. The config/default Kubebuilder
+  # scaffold does not include the plugin TLS contract or operator subcommand.
+  path: ./kubernetes
   prune: true
   sourceRef:
     kind: GitRepository
@@ -14,27 +16,34 @@ spec:
   wait: true
   timeout: 5m
   images:
-    - name: controller
+    - name: ghcr.io/cloudnative-pg/plugin-barman-cloud-testing
       newName: ghcr.io/cloudnative-pg/plugin-barman-cloud
       # renovate: datasource=docker depName=ghcr.io/cloudnative-pg/plugin-barman-cloud
       newTag: v0.14.0@sha256:823a8893690980ba5830bbbb11196a35f695b0488db7d846abc33baebf32417c
   patches:
-    # The operator must run in the same namespace as CloudNativePG.
+    # Own the intake resource ceiling instead of inheriting upstream defaults.
     - target:
-        kind: Namespace
-        name: system
-      patch: |-
-        $patch: delete
-        apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: system
-    - target:
-        namespace: plugin-barman-cloud-system
+        kind: Deployment
+        name: barman-cloud
       patch: |-
         - op: replace
-          path: /metadata/namespace
-          value: databases
+          path: /spec/template/spec/containers/0/resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+    # Pin the sidecar image supplied to CNPG instance pods.
+    - target:
+        kind: Secret
+      patch: |-
+        - op: add
+          path: /stringData
+          value:
+            SIDECAR_IMAGE: ghcr.io/cloudnative-pg/plugin-barman-cloud-sidecar:v0.14.0@sha256:9880817c285c7afa4d195da2145064d21907405489ed6ec39abe59b1feb558a4
+    # Kustomize changes resource namespaces but not ServiceAccount subjects.
     - target:
         kind: RoleBinding
         name: barman-plugin-leader-election-rolebinding
@@ -56,17 +65,3 @@ spec:
         - op: replace
           path: /subjects/0/namespace
           value: databases
-    # Own the intake resource ceiling instead of inheriting upstream defaults.
-    - target:
-        kind: Deployment
-        name: controller-manager
-      patch: |-
-        - op: replace
-          path: /spec/template/spec/containers/0/resources
-          value:
-            requests:
-              cpu: 10m
-              memory: 64Mi
-            limits:
-              cpu: 500m
-              memory: 128Mi

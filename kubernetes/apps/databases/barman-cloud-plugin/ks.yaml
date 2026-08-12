@@ -15,6 +15,8 @@ spec:
   dependsOn:
     - name: cloudnative-pg
       namespace: databases
+    - name: cert-manager
+      namespace: cert-manager
   # Wait for the nested provider Kustomization. ObjectStore consumers depend
   # on this outer Kustomization and must not race the CRD or controller.
   wait: true

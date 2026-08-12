@@ -14,4 +14,9 @@ spec:
   ignore: |
     /*
     !/config/
-    !/config/**
+    !/config/crd/
+    !/config/crd/**
+    !/config/rbac/
+    !/config/rbac/**
+    !/kubernetes/
+    !/kubernetes/**
