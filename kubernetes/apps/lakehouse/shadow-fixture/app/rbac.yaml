@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: shadow-fixture
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shadow-fixture
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, configmaps]
+    verbs: [create, get, list, watch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shadow-fixture
+subjects:
+  - kind: ServiceAccount
+    name: shadow-fixture
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shadow-fixture

@@ -85,7 +85,7 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 47)
+        self.assertEqual(len(MODULE.discover_application_roots()), 49)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [
@@ -106,6 +106,7 @@ resources: []
                 "kubernetes/apps/kube-system/metrics-server/app",
                 "kubernetes/apps/kube-system/reloader/app",
                 "kubernetes/apps/kube-system/spegel/app",
+                "kubernetes/apps/lakehouse/shadow-fixture/app",
                 "kubernetes/apps/network/cloudflare-dns/app",
                 "kubernetes/apps/network/cloudflare-tunnel/app",
                 "kubernetes/apps/network/envoy-gateway/app",
@@ -120,6 +121,7 @@ resources: []
                 "kubernetes/apps/observability/talos-log-sink/app",
                 "kubernetes/apps/registries/harbor/app",
                 "kubernetes/apps/registries/harbor-config/app",
+                "kubernetes/apps/spark-system/spark-operator/app",
                 "kubernetes/apps/storage/longhorn/app",
                 "kubernetes/apps/storage/longhorn-config/app",
                 "kubernetes/apps/storage/seaweedfs/app",

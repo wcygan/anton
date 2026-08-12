@@ -1,0 +1,26 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: shadow-fixture
+  namespace: flux-system
+spec:
+  interval: 1h
+  targetNamespace: lakehouse
+  dependsOn:
+    - name: spark-operator
+      namespace: flux-system
+    - name: external-secrets
+      namespace: external-secrets
+    - name: seaweedfs-config
+      namespace: storage
+  path: ./kubernetes/apps/lakehouse/shadow-fixture/app
+  prune: true
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets

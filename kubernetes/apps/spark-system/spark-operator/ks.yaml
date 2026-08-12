@@ -1,0 +1,19 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: spark-operator
+  namespace: flux-system
+spec:
+  interval: 1h
+  targetNamespace: spark-system
+  path: ./kubernetes/apps/spark-system/spark-operator/app
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
