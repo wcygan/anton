@@ -25,7 +25,7 @@ spec:
   volume:
     replicas: 3                     # one per node
     requests:
-      storage: 100Gi
+      storage: 120Gi
     storageClassName: longhorn      # default Longhorn SC; no NAD attachment here
     # Phase 1 scratch shakeout showed `replicas: 3` alone does not spread
     # across nodes (all three landed on k8s-2). Chart 0.1.14's Seaweed CRD
