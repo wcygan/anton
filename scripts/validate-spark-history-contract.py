@@ -26,6 +26,8 @@ def main() -> int:
         "org.apache.spark.deploy.history.HistoryServer",
         "s3a://spark-events/events/",
         "spark.history.fs.cleaner.enabled false",
+        "name: SPARK_DAEMON_MEMORY",
+        "value: 768m",
         "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider",
         "automountServiceAccountToken: false",
         "name: spark-events-reader",

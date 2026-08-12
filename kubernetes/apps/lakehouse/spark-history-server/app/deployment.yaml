@@ -43,8 +43,8 @@ spec:
               value: us-east-1
             - name: HOME
               value: /tmp
-            - name: JAVA_TOOL_OPTIONS
-              value: -Xms256m -Xmx768m
+            - name: SPARK_DAEMON_MEMORY
+              value: 768m
             - name: SPARK_CONF_DIR
               value: /etc/spark-history
           ports:
