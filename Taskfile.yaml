@@ -55,7 +55,18 @@ tasks:
       - python3 scripts/validate-shadow-fixture-contract.py
       - python3 scripts/validate-spark-history-contract.py
       - python3 scripts/validate-airflow-foundation-contract.py
+      - python3 scripts/validate-external-secret-contract.py
       - python3 scripts/validate-target-contract.py
       - python3 -m unittest discover -s scripts/tests -p 'test_*.py'
     preconditions:
       - which flux kustomize python3 yq
+
+  external-secrets:force-refresh:
+    desc: Force one approved ExternalSecret to refresh from 1Password
+    prompt: This mutates one ExternalSecret annotation. Continue?
+    cmd: scripts/force-external-secret-refresh.sh "{{.NAMESPACE}}" "{{.NAME}}"
+    requires:
+      vars: [NAMESPACE, NAME]
+    preconditions:
+      - test -f {{.KUBECONFIG}}
+      - which kubectl mise python3

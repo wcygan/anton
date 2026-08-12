@@ -1,0 +1,52 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: external-secret-onepassword-guard
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["external-secrets.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["externalsecrets"]
+  validations:
+    - expression: >-
+        has(object.spec.secretStoreRef) &&
+        has(object.spec.secretStoreRef.kind) &&
+        object.spec.secretStoreRef.kind == 'ClusterSecretStore' &&
+        object.spec.secretStoreRef.name == 'onepassword-connect'
+      message: ExternalSecrets must use ClusterSecretStore onepassword-connect.
+    - expression: >-
+        has(object.metadata.annotations) &&
+        'anton.wcygan.net/secret-refresh-class' in object.metadata.annotations &&
+        object.metadata.annotations['anton.wcygan.net/secret-refresh-class'] in ['stable', 'development']
+      message: ExternalSecrets must declare a stable or development refresh class.
+    - expression: >-
+        object.spec.refreshPolicy == 'OnChange' ||
+        (object.spec.refreshPolicy == 'Periodic' &&
+        has(object.spec.refreshInterval) &&
+        duration(object.spec.refreshInterval) >= duration('24h'))
+      message: ExternalSecrets must use OnChange or a Periodic interval of at least 24h.
+    - expression: >-
+        !has(object.spec.data) || object.spec.data.all(entry,
+        has(entry.remoteRef) &&
+        has(entry.remoteRef.key) &&
+        entry.remoteRef.key.matches('^[^/\\s]+/[^/\\s]+$') &&
+        !has(entry.remoteRef.property))
+      message: Each direct 1Password reference must use one item/field key without property.
+    - expression: >-
+        !has(object.spec.dataFrom) || object.spec.dataFrom.all(entry,
+        has(entry.extract) &&
+        has(entry.extract.key) &&
+        entry.extract.key.matches('^[^/\\s]+$'))
+      message: dataFrom supports one non-empty extract item only.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: external-secret-onepassword-guard
+spec:
+  policyName: external-secret-onepassword-guard
+  validationActions: [Deny]
