@@ -9,7 +9,7 @@ spec:
   targetNamespace: lakehouse
   dependsOn:
     - name: spark-operator
-      namespace: flux-system
+      namespace: spark-system
     - name: external-secrets
       namespace: external-secrets
     - name: seaweedfs-config
