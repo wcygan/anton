@@ -124,10 +124,15 @@ def main() -> int:
 
     database = (DATABASE / "postgres-cluster.yaml").read_text(encoding="utf-8")
     credentials = (DATABASE / "externalsecret.yaml").read_text(encoding="utf-8")
-    scheduled = (DATABASE / "scheduled-backup.yaml").read_text(encoding="utf-8")
+    scheduled_path = DATABASE / "scheduled-backup.yaml"
+    database_kustomization = (DATABASE / "kustomization.yaml").read_text(encoding="utf-8")
+    if scheduled_path.exists():
+        failures.append("Airflow metadata database must not define the unsupported ScheduledBackup")
+    if "scheduled-backup.yaml" in database_kustomization:
+        failures.append("Airflow metadata database must not register the unsupported ScheduledBackup")
     require(
         failures,
-        database + credentials + scheduled,
+        database + credentials,
         (
             "name: airflow-postgres",
             "instances: 1",
@@ -135,10 +140,6 @@ def main() -> int:
             "name: airflow-postgres-credentials",
             "key: airflow-postgres/username",
             "key: airflow-postgres/password",
-            "method: volumeSnapshot",
-            "className: longhorn-backup",
-            "snapshotOwnerReference: backup",
-            "immediate: true",
         ),
         "Airflow metadata database",
     )
