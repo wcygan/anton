@@ -24,6 +24,10 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   volume:
     replicas: 3                     # one per node
+    # Bind to the injected pod IP. The headless Service DNS record can retain
+    # the old pod IP during a restart, which prevents the volume gRPC listener.
+    extraArgs:
+      - -ip=$(POD_IP)
     requests:
       storage: 120Gi
     storageClassName: longhorn      # default Longhorn SC; no NAD attachment here
