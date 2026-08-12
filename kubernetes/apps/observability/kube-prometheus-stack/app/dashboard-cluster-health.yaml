@@ -2157,6 +2157,77 @@ data:
               "instant": true
             }
           ]
+        },
+        {
+          "id": 905,
+          "type": "timeseries",
+          "title": "1Password SDK Calls per 5m",
+          "gridPos": { "x": 0, "y": 209, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "ESO 1Password SDK call attempts in each rolling five-minute window, grouped by operation and status. This is a traffic proxy, not the 1Password billing ledger.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": ["lastNotNull", "max"]
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (call, status) (increase(externalsecret_provider_api_calls_count{provider=\"1Password/SDK\"}[5m]))",
+              "legendFormat": "{{call}} · {{status}}"
+            }
+          ]
+        },
+        {
+          "id": 906,
+          "type": "timeseries",
+          "title": "1Password SDK Rolling 24h Operations",
+          "gridPos": { "x": 12, "y": 209, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Rolling 24-hour ESO 1Password SDK call attempts. Threshold lines reserve capacity below the 1,000-request account limit. This is not the 1Password billing ledger.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 500 },
+                  { "color": "red", "value": 800 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": ["lastNotNull", "max"]
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(externalsecret_provider_api_calls_count{provider=\"1Password/SDK\"}[24h])) or vector(0)",
+              "legendFormat": "rolling 24h operations"
+            }
+          ]
         }
       ]
     }
