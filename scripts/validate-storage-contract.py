@@ -18,6 +18,7 @@ APP = REPO / "kubernetes" / "apps" / "storage" / "seaweedfs-config" / "app"
 SCRIPT = APP / "provision-buckets.sh"
 CRONJOB = APP / "buckets-cronjob.yaml"
 KUSTOMIZATION = APP / "kustomization.yaml"
+S3_CONFIG = APP / "externalsecret.yaml"
 LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
 
@@ -90,6 +91,19 @@ def main() -> int:
     )
     failures.extend(
         f"Kustomization missing {value!r}" for value in required_kustomization if value not in kustomization
+    )
+
+    s3_config = S3_CONFIG.read_text(encoding="utf-8")
+    required_shadow_identity = (
+        '"name": "iceberg-shadow"',
+        '"Write:iceberg-shadow"',
+        'key: "seaweedfs-iceberg-shadow/shadow-access-key"',
+        'key: "seaweedfs-iceberg-shadow/shadow-secret-key"',
+    )
+    failures.extend(
+        f"SeaweedFS S3 identity missing {value!r}"
+        for value in required_shadow_identity
+        if value not in s3_config
     )
 
     postbuild_substitution_failure = validate_provisioner_postbuild_substitution()
