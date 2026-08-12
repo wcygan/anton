@@ -76,7 +76,7 @@ def main() -> int:
     cronjob = CRONJOB.read_text(encoding="utf-8")
     required_cronjob = (
         "name: seaweedfs-buckets-ensure",
-        "value: harbor loki iceberg-raw spark-events",
+        "value: harbor loki iceberg-raw spark-events longhorn-backups",
         "value: spark-events/events/",
         "value: iceberg-warehouse iceberg-shadow",
         "automountServiceAccountToken: false",
@@ -133,6 +133,20 @@ def main() -> int:
     failures.extend(
         f"SeaweedFS event-log identity missing {value!r}"
         for value in required_event_identity
+        if value not in s3_config
+    )
+
+    required_longhorn_identity = (
+        '"name": "longhorn-backup"',
+        '"Read:longhorn-backups"',
+        '"Write:longhorn-backups"',
+        '"List:longhorn-backups"',
+        'key: "seaweedfs-longhorn-backup/access-key"',
+        'key: "seaweedfs-longhorn-backup/secret-key"',
+    )
+    failures.extend(
+        f"SeaweedFS Longhorn identity missing {value!r}"
+        for value in required_longhorn_identity
         if value not in s3_config
     )
 

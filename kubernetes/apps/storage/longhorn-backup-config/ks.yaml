@@ -1,0 +1,29 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: longhorn-backup-config
+  namespace: flux-system
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/storage/longhorn-backup-config/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: storage
+  dependsOn:
+    - name: external-secrets
+      namespace: external-secrets
+    - name: snapshot-controller
+      namespace: kube-system
+  healthChecks:
+    - apiVersion: v1
+      kind: Secret
+      name: longhorn-backup-credentials
+      namespace: storage
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

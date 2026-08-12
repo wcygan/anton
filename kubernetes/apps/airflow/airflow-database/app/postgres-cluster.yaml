@@ -1,0 +1,44 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: airflow-postgres
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+
+  storage:
+    storageClass: longhorn
+    size: 10Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  postgresql:
+    parameters:
+      shared_buffers: "128MB"
+      effective_cache_size: "384MB"
+      maintenance_work_mem: "32MB"
+      max_connections: "50"
+
+  bootstrap:
+    initdb:
+      database: airflow
+      owner: airflow
+      dataChecksums: true
+      secret:
+        name: airflow-postgres-credentials
+
+  backup:
+    volumeSnapshot:
+      className: longhorn-backup
+      online: true
+      snapshotOwnerReference: backup
+
+  monitoring:
+    enablePodMonitor: true

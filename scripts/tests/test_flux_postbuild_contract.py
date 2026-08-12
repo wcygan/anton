@@ -86,10 +86,12 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 50)
+        self.assertEqual(len(MODULE.discover_application_roots()), 53)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [
+                "kubernetes/apps/airflow/airflow/app",
+                "kubernetes/apps/airflow/airflow-database/app",
                 "kubernetes/apps/bakery-site/server/app",
                 "kubernetes/apps/cert-manager/cert-manager/app",
                 "kubernetes/apps/databases/cloudnative-pg/app",
@@ -125,6 +127,7 @@ resources: []
                 "kubernetes/apps/registries/harbor-config/app",
                 "kubernetes/apps/spark-system/spark-operator/app",
                 "kubernetes/apps/storage/longhorn/app",
+                "kubernetes/apps/storage/longhorn-backup-config/app",
                 "kubernetes/apps/storage/longhorn-config/app",
                 "kubernetes/apps/storage/seaweedfs/app",
                 "kubernetes/apps/storage/seaweedfs-config/app",

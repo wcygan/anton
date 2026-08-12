@@ -20,6 +20,7 @@ spec:
   # cold-start. See plan 0016 and `storage/CLAUDE.md`.
   dependsOn:
     - name: longhorn-config
+    - name: longhorn-backup-config
     - name: storage-vxlan
       namespace: network
     # Longhorn's CSI snapshotter expects the cluster-level VolumeSnapshot

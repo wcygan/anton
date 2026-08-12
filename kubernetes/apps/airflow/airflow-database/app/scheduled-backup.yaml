@@ -1,0 +1,14 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: airflow-postgres-daily
+spec:
+  schedule: "0 17 3 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: airflow-postgres
+  immediate: true
+  method: volumeSnapshot
+  online: true
+  target: primary

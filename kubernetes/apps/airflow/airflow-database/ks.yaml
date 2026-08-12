@@ -1,0 +1,38 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: airflow-database
+  namespace: flux-system
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/airflow/airflow-database/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: airflow
+  dependsOn:
+    - name: cloudnative-pg
+      namespace: databases
+    - name: external-secrets
+      namespace: external-secrets
+    - name: longhorn
+      namespace: storage
+    - name: seaweedfs-config
+      namespace: storage
+  healthChecks:
+    - apiVersion: v1
+      kind: Secret
+      name: airflow-postgres-credentials
+      namespace: airflow
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: airflow-postgres
+      namespace: airflow
+  timeout: 15m
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret

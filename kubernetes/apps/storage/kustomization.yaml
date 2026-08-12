@@ -8,7 +8,8 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./longhorn/ks.yaml
   - ./longhorn-config/ks.yaml
+  - ./longhorn-backup-config/ks.yaml
+  - ./longhorn/ks.yaml
   - ./seaweedfs/ks.yaml
   - ./seaweedfs-config/ks.yaml

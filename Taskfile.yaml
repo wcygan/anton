@@ -54,6 +54,7 @@ tasks:
       - python3 scripts/validate-spark-runtime-contract.py
       - python3 scripts/validate-shadow-fixture-contract.py
       - python3 scripts/validate-spark-history-contract.py
+      - python3 scripts/validate-airflow-foundation-contract.py
       - python3 scripts/validate-target-contract.py
       - python3 -m unittest discover -s scripts/tests -p 'test_*.py'
     preconditions:

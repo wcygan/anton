@@ -1,0 +1,163 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: airflow
+spec:
+  interval: 1h
+  timeout: 20m
+  chart:
+    spec:
+      chart: airflow
+      version: 1.22.0
+      sourceRef:
+        kind: HelmRepository
+        name: apache-airflow
+      interval: 15m
+  values:
+    airflowVersion: "3.2.2"
+    executor: KubernetesExecutor
+    allowPodLaunching: true
+    multiNamespaceMode: false
+
+    images:
+      airflow:
+        repository: 192.168.1.106/library/airflow-runtime
+        tag: 3.2.2-ticket04.1
+        digest: sha256:9ccd3dcff1f11535c3915434c40602f443c4d5f160673c7f9ced4af094957065
+        pullPolicy: IfNotPresent
+      # The chart does not expose a digest field for the pod template image.
+      # Split the digest at its colon so the rendered reference stays pinned.
+      pod_template:
+        repository: 192.168.1.106/library/airflow-runtime@sha256
+        tag: 9ccd3dcff1f11535c3915434c40602f443c4d5f160673c7f9ced4af094957065
+        pullPolicy: IfNotPresent
+
+    data:
+      metadataSecretName: airflow-postgres-credentials
+    fernetKeySecretName: airflow-postgres-credentials
+    jwtSecretName: airflow-postgres-credentials
+
+    apiServer:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+
+    webserver:
+      enabled: false
+
+    scheduler:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 250m
+          memory: 768Mi
+        limits:
+          cpu: "1"
+          memory: 1536Mi
+      logGroomerSidecar:
+        enabled: false
+
+    dagProcessor:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+
+    triggerer:
+      enabled: true
+      replicas: 1
+      persistence:
+        enabled: false
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+      logGroomerSidecar:
+        enabled: false
+
+    workers:
+      kubernetes:
+        serviceAccount:
+          create: true
+          name: airflow-task
+          automountServiceAccountToken: false
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 768Mi
+        terminationGracePeriodSeconds: 30
+        safeToEvict: true
+
+    migrateDatabaseJob:
+      enabled: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 768Mi
+
+    createUserJob:
+      enabled: false
+
+    cleanup:
+      enabled: true
+      schedule: "*/15 * * * *"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi
+
+    dags:
+      persistence:
+        enabled: false
+      gitSync:
+        enabled: false
+
+    logs:
+      persistence:
+        enabled: false
+      emptyDirConfig:
+        sizeLimit: 512Mi
+
+    config:
+      core:
+        load_examples: "False"
+        dags_are_paused_at_creation: "False"
+      kubernetes_executor:
+        delete_worker_pods: "False"
+        delete_worker_pods_on_failure: "False"
+
+    postgresql:
+      enabled: false
+    redis:
+      enabled: false
+    pgbouncer:
+      enabled: false
+    statsd:
+      enabled: false
+    flower:
+      enabled: false

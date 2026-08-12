@@ -16,6 +16,11 @@ spec:
   values:
     namespaceOverride: storage
 
+    defaultBackupStore:
+      backupTarget: s3://longhorn-backups@us-east-1/
+      backupTargetCredentialSecret: longhorn-backup-credentials
+      pollInterval: 300
+
     # Talos friction: preUpgradeChecker job fails under Talos' read-only rootfs.
     # Disable per Phase 2 plan tasks (ADR 0005 follow-ups).
     preUpgradeChecker:
