@@ -4,6 +4,8 @@ kind: Seaweed
 metadata:
   name: seaweedfs
   namespace: storage
+  annotations:
+    secret.reloader.stakater.com/reload: seaweedfs-s3-config
 spec:
   image: chrislusf/seaweedfs:4.40
   master:
@@ -61,8 +63,6 @@ spec:
   s3:
     replicas: 2                     # standalone Deployment HA per ADR 0019
     iam: false                      # explicit override — operator default is true
-    annotations:
-      secret.reloader.stakater.com/reload: seaweedfs-s3-config
     # SeaweedFS 4.40's built-in Iceberg REST catalog is disabled unless this
     # listener is explicitly enabled. The operator exposes extraArgs but its
     # generated Service only publishes the S3 port, so the catalog gets a

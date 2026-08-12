@@ -6,7 +6,7 @@ It uses Airflow 3.2.2, Python 3.12, and Kubernetes provider 10.21.0.
 Build and run the image tests:
 
 ```sh
-docker build --platform linux/arm64 --target test \
+docker build --platform linux/amd64 --target test \
   --file images/airflow-runtime/Dockerfile .
 ```
 

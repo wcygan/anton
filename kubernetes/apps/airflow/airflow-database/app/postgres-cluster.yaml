@@ -32,13 +32,7 @@ spec:
       owner: airflow
       dataChecksums: true
       secret:
-        name: airflow-postgres-credentials
-
-  backup:
-    volumeSnapshot:
-      className: longhorn-backup
-      online: true
-      snapshotOwnerReference: backup
+        name: airflow-postgres-bootstrap
 
   monitoring:
     enablePodMonitor: true

@@ -19,8 +19,8 @@ SCRIPT = APP / "provision-buckets.sh"
 CRONJOB = APP / "buckets-cronjob.yaml"
 KUSTOMIZATION = APP / "kustomization.yaml"
 S3_CONFIG = APP / "externalsecret.yaml"
-SPARK_EVENTS = APP / "spark-events-bucket.yaml"
 SEAWEED = APP / "seaweed.yaml"
+SPARK_EVENTS = APP / "spark-events-bucket.yaml"
 LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
 
@@ -77,7 +77,7 @@ def main() -> int:
     cronjob = CRONJOB.read_text(encoding="utf-8")
     required_cronjob = (
         "name: seaweedfs-buckets-ensure",
-        "value: harbor loki iceberg-raw spark-events longhorn-backups",
+        "value: harbor loki iceberg-raw spark-events",
         "value: spark-events/events/",
         "value: iceberg-warehouse iceberg-shadow",
         "automountServiceAccountToken: false",
@@ -109,6 +109,9 @@ def main() -> int:
     )
 
     s3_config = S3_CONFIG.read_text(encoding="utf-8")
+    seaweed = SEAWEED.read_text(encoding="utf-8")
+    if "secret.reloader.stakater.com/reload: seaweedfs-s3-config" not in seaweed:
+        failures.append("SeaweedFS must reload after its S3 Secret changes")
     required_shadow_identity = (
         '"name": "iceberg-shadow"',
         '"Write:iceberg-shadow"',
@@ -137,20 +140,6 @@ def main() -> int:
         if value not in s3_config
     )
 
-    required_longhorn_identity = (
-        '"name": "longhorn-backup"',
-        '"Read:longhorn-backups"',
-        '"Write:longhorn-backups"',
-        '"List:longhorn-backups"',
-        'key: "seaweedfs-longhorn-backup/access-key"',
-        'key: "seaweedfs-longhorn-backup/secret-key"',
-    )
-    failures.extend(
-        f"SeaweedFS Longhorn identity missing {value!r}"
-        for value in required_longhorn_identity
-        if value not in s3_config
-    )
-
     event_storage = SPARK_EVENTS.read_text(encoding="utf-8")
     required_event_storage = (
         "kind: Bucket",
@@ -166,10 +155,6 @@ def main() -> int:
         for value in required_event_storage
         if value not in event_storage
     )
-
-    seaweed = SEAWEED.read_text(encoding="utf-8")
-    if "secret.reloader.stakater.com/reload: seaweedfs-s3-config" not in seaweed:
-        failures.append("SeaweedFS S3 pods must reload the generated identity Secret")
 
     postbuild_substitution_failure = validate_provisioner_postbuild_substitution()
     if postbuild_substitution_failure is not None:

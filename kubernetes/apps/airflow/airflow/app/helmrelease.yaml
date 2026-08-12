@@ -33,10 +33,26 @@ spec:
         tag: 9ccd3dcff1f11535c3915434c40602f443c4d5f160673c7f9ced4af094957065
         pullPolicy: IfNotPresent
 
+    # CNPG creates this Secret from the ESO-provided bootstrap credentials.
+    # Its URI is percent-encoded and avoids template interpolation of passwords.
     data:
-      metadataSecretName: airflow-postgres-credentials
-    fernetKeySecretName: airflow-postgres-credentials
-    jwtSecretName: airflow-postgres-credentials
+      metadataSecretName: airflow-postgres-app
+    enableBuiltInSecretEnvVars:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: false
+      AIRFLOW_CONN_AIRFLOW_DB: false
+    extraEnv: |-
+      - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+        valueFrom:
+          secretKeyRef:
+            name: airflow-postgres-app
+            key: uri
+      - name: AIRFLOW_CONN_AIRFLOW_DB
+        valueFrom:
+          secretKeyRef:
+            name: airflow-postgres-app
+            key: uri
+    fernetKeySecretName: airflow-postgres-bootstrap
+    jwtSecretName: airflow-postgres-bootstrap
 
     apiServer:
       enabled: true
@@ -109,6 +125,21 @@ spec:
 
     migrateDatabaseJob:
       enabled: true
+      # Flux waits for workloads during Helm actions. A post-install hook would
+      # run only after those workloads pass their migration init containers.
+      useHelmHooks: false
+      applyCustomEnv: false
+      env:
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              name: airflow-postgres-app
+              key: uri
+        - name: AIRFLOW_CONN_AIRFLOW_DB
+          valueFrom:
+            secretKeyRef:
+              name: airflow-postgres-app
+              key: uri
       resources:
         requests:
           cpu: 100m
