@@ -1,0 +1,17 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: barman-cloud-plugin-upstream
+spec:
+  interval: 24h
+  url: https://github.com/cloudnative-pg/plugin-barman-cloud
+  ref:
+    # renovate: datasource=github-releases depName=cloudnative-pg/plugin-barman-cloud
+    tag: v0.14.0
+    # Pin the manifest source because it owns cluster-wide CRDs and RBAC.
+    commit: 1e13020fe5f09fd8fc29ea03828f7b61375b3721
+  ignore: |
+    /*
+    !/config/
+    !/config/**

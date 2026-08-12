@@ -1,0 +1,72 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: barman-cloud-plugin-upstream
+spec:
+  interval: 1h
+  path: ./config/default
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: barman-cloud-plugin-upstream
+  targetNamespace: databases
+  wait: true
+  timeout: 5m
+  images:
+    - name: controller
+      newName: ghcr.io/cloudnative-pg/plugin-barman-cloud
+      # renovate: datasource=docker depName=ghcr.io/cloudnative-pg/plugin-barman-cloud
+      newTag: v0.14.0@sha256:823a8893690980ba5830bbbb11196a35f695b0488db7d846abc33baebf32417c
+  patches:
+    # The operator must run in the same namespace as CloudNativePG.
+    - target:
+        kind: Namespace
+        name: system
+      patch: |-
+        $patch: delete
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: system
+    - target:
+        namespace: plugin-barman-cloud-system
+      patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: databases
+    - target:
+        kind: RoleBinding
+        name: barman-plugin-leader-election-rolebinding
+      patch: |-
+        - op: replace
+          path: /subjects/0/namespace
+          value: databases
+    - target:
+        kind: ClusterRoleBinding
+        name: plugin-barman-cloud-binding
+      patch: |-
+        - op: replace
+          path: /subjects/0/namespace
+          value: databases
+    - target:
+        kind: ClusterRoleBinding
+        name: barman-plugin-metrics-auth-rolebinding
+      patch: |-
+        - op: replace
+          path: /subjects/0/namespace
+          value: databases
+    # Own the intake resource ceiling instead of inheriting upstream defaults.
+    - target:
+        kind: Deployment
+        name: controller-manager
+      patch: |-
+        - op: replace
+          path: /spec/template/spec/containers/0/resources
+          value:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi

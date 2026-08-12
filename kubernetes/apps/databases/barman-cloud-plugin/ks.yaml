@@ -1,0 +1,25 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: barman-cloud-plugin
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/databases/barman-cloud-plugin/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: databases
+  dependsOn:
+    - name: cloudnative-pg
+      namespace: databases
+  # Wait for the nested provider Kustomization. ObjectStore consumers depend
+  # on this outer Kustomization and must not race the CRD or controller.
+  wait: true
+  timeout: 10m
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
