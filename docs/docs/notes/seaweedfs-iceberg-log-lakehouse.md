@@ -4,6 +4,10 @@ title: SeaweedFS Iceberg log lakehouse demo
 
 # SeaweedFS Iceberg log lakehouse demo
 
+> This page preserves the ADR 0031 baseline. ADR 0033 superseded that design.
+> The current migration is in `context/plans/0023-roll-out-airflow-spark-lakehouse.md`.
+> Commands under `iceberg-demo` describe the legacy path.
+
 This is a time-boxed internal learning demo for review on 2026-08-20. It
 keeps SeaweedFS as both the S3 warehouse and the built-in Iceberg REST catalog;
 it does not add Polaris, Nessie, Hive Metastore, Kafka, Flink, Spark Operator,

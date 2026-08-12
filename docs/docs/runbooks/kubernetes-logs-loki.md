@@ -72,6 +72,41 @@ PVC usage, and SeaweedFS volume/object-store free space. If capacity grows
 unexpectedly, reduce low-severity retention or pause rollout before increasing
 storage.
 
+## Spark Application History
+
+Loki stores Spark driver and executor standard streams. Spark Application
+History is a separate path. Spark writes compressed rolling event files to
+`s3a://spark-events/events/`. A one-replica History Server reads those files.
+
+The History Server uses the pinned Spark runtime image and an S3 reader
+identity. It has no Kubernetes API token. Its S3 identity can read and list
+`spark-events`, but it cannot write or delete objects. The History Server
+cleaner is disabled. A storage-owned `BucketLifecyclePolicy` expires objects
+under `events/` after 30 days.
+
+Use these read-only checks before interpreting an empty History Server view:
+
+```sh
+mise exec -- flux get ks -A | rg 'spark-history-server|seaweedfs-config'
+mise exec -- kubectl -n lakehouse get deploy,pods -l app.kubernetes.io/name=spark-history-server
+mise exec -- kubectl -n lakehouse get sparkapplications
+mise exec -- kubectl -n storage get bucket spark-events
+mise exec -- kubectl -n storage get bucketlifecyclepolicy spark-events-30d
+```
+
+An approved localhost port-forward exposes the read-only History Server API:
+
+```sh
+mise exec -- kubectl -n lakehouse port-forward --address 127.0.0.1 \
+  svc/spark-history-server 18080:18080
+curl -fsS http://127.0.0.1:18080/api/v1/applications | jq
+```
+
+Stop the port-forward after the check. If applications are absent, inspect the
+Spark event-log configuration, the `spark-events` prefix, History Server logs,
+and External Secret conditions in that order. Do not use Loki output as proof
+that Spark event history exists.
+
 ## Queries
 
 In Grafana, open Explore, select `Loki`, choose the time range, and paste one

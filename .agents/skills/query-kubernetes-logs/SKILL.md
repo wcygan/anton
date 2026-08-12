@@ -82,6 +82,8 @@ Important names and behavior:
 - Loki has one 20 GiB Longhorn PVC. Chunks and ruler data use the existing
   SeaweedFS S3 service and `loki` bucket. SeaweedFS's 10,000 MB volume limit
   creates more logical volume slots; it is not a Loki retention quota.
+- Spark Application History is not a Loki stream. For applications, jobs,
+  stages, executors, or SQL history, use the runbook's History Server path.
 
 ## Standard workflow
 

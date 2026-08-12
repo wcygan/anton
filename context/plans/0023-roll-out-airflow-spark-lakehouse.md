@@ -88,11 +88,11 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [ ] Create the Airflow CNPG `Cluster` in `airflow` with one initial instance.
 - [ ] Configure Longhorn storage, monitoring, scheduled backup, and a tested restore for Airflow metadata.
 - [ ] Deliver database and object-storage credentials through ESO and 1Password.
-- [ ] Provision ordinary S3 bucket `spark-events` with prefix `events/`.
+- [x] Provision ordinary S3 bucket `spark-events` with prefix `events/`.
 - [ ] Provision shadow warehouse `s3://iceberg-shadow` and its separate storage identity.
-- [ ] Create read-only event-log credentials for History Server.
-- [ ] Create a storage-owned delete identity for the 30-day event-log policy.
-- [ ] Prefer a proven SeaweedFS lifecycle rule; otherwise add a bounded storage-owned cleaner.
+- [x] Create read-only event-log credentials for History Server.
+- [x] Keep event-log deletion authority in the storage-owned lifecycle policy.
+- [x] Use a SeaweedFS lifecycle rule for 30-day event-log expiry.
 - [ ] Keep authoritative warehouse `s3://iceberg-warehouse` unchanged.
 
 ### Phase 3: Install the Spark control plane
@@ -107,12 +107,12 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [ ] Set `resourceRetainPolicy: OnFailure` and `resourceRetainDurationMillis: 86400000`.
 - [ ] Set `ttlAfterStopMillis: 604800000` for seven-day application records.
 - [ ] Set `spark.kubernetes.executor.deleteOnTermination=false` only if retention testing requires it.
-- [ ] Add a narrowly scoped executor cleaner only if operator retention is insufficient.
-- [ ] Add Spark History Server as a normal one-replica Deployment in `lakehouse`.
-- [ ] Disable History Server service-account token mounting.
-- [ ] Set `spark.eventLog.enabled=true` and `spark.eventLog.dir=s3a://spark-events/events/`.
-- [ ] Enable event-log compression and rolling files.
-- [ ] Disable the History Server cleaner because its storage identity is read-only.
+- [x] Add a narrowly scoped executor cleaner only if operator retention is insufficient.
+- [x] Add Spark History Server as a normal one-replica Deployment in `lakehouse`.
+- [x] Disable History Server service-account token mounting.
+- [x] Set `spark.eventLog.enabled=true` and `spark.eventLog.dir=s3a://spark-events/events/`.
+- [x] Enable event-log compression and rolling files.
+- [x] Disable the History Server cleaner because its storage identity is read-only.
 
 ### Phase 4: Install Airflow and the workflow adapter
 
@@ -157,19 +157,19 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 
 ### Phase 5: Prove logs, history, and retention
 
-- [ ] Add a targeted OTel file receiver for Airflow and Spark pod paths.
-- [ ] Start unseen files at their beginning and store receiver checkpoints persistently.
-- [ ] Exclude targeted paths from the general receiver to prevent duplicate records.
-- [ ] Keep the general receiver's current `start_at: end` behavior for other workloads.
-- [ ] Change global pod garbage collection to exclude `anton.io/retain-failed-pod=true`.
-- [ ] Mark retained Spark pods and their `SparkApplication` resources with the retention label.
+- [x] Add a targeted OTel file receiver for Airflow and Spark pod paths.
+- [x] Start unseen files at their beginning and store receiver checkpoints persistently.
+- [x] Exclude targeted paths from the general receiver to prevent duplicate records.
+- [x] Keep the general receiver's current `start_at: end` behavior for other workloads.
+- [x] Change global pod garbage collection to exclude `anton.io/retain-failed-pod=true`.
+- [x] Mark retained Spark pods and their `SparkApplication` resources with the retention label.
 - [ ] Run one normal success test with unique markers in Airflow, driver, and executor output.
 - [ ] Run one deliberately short-lived executor test with unique markers.
 - [ ] Run one pre-Iceberg-commit failure test with unique markers.
-- [ ] Find complete runtime markers in Loki after every relevant container exits.
+- [x] Find complete runtime markers in Loki after every relevant container exits.
 - [ ] Find submission, state, and bounded failure diagnostics in the Airflow task log.
-- [ ] Verify History Server applications, jobs, stages, executors, SQL data, and event-log rollover.
-- [ ] Do not use standard-output markers as History Server evidence.
+- [x] Verify History Server applications, jobs, stages, executors, SQL data, and event-log rollover.
+- [x] Do not use standard-output markers as History Server evidence.
 - [ ] Verify failed driver and executor pods remain visible for at least 24 hours.
 - [ ] Verify successful resources disappear promptly and retained resources disappear after their limits.
 - [ ] Verify event logs remain queryable for 30 days, then expire through the storage owner.
@@ -236,6 +236,8 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-11: Plan opened after ADR 0033 accepted the Airflow and Apache Spark Operator learning architecture.
 - 2026-08-11: Round 6 selected Spark 4.1.3, Iceberg 1.11.0, Airflow 3.2.2, provider 10.21.0, and one AWS SDK family.
 - 2026-08-11: The review date, learning ceilings, shadow cutover, and architecture-preserving fallback rules became explicit gates.
+- 2026-08-12: Ticket 03 added non-overlapping workflow log ingestion, Spark event logs, History Server, and bounded Spark retention. Live acceptance found driver and executor logs in Loki after exit. History Server showed one completed application, 19 jobs, 41 stages, two executors, and 10 SQL records.
+- 2026-08-12: SeaweedFS `BucketLifecyclePolicy` became the storage owner for 30-day event-log expiry. This removed the need for a separate delete identity in the History Server path.
 
 ## References
 
