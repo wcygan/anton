@@ -20,31 +20,47 @@ kubectl get certificate -A -o custom-columns='NS:.metadata.namespace,NAME:.metad
 
 Any `Ready=False` row is a stuck issuance. cert-manager will retry on its own; if a Certificate has been `False` for more than an hour, drill into its `CertificateRequest`/`Order`/`Challenge` chain.
 
-## External Secrets + ClusterSecretStore
+## External Secrets + 1Password SDK
 
-**The #1 silent killer in this cluster.** If the store is not Ready, every ExternalSecret is frozen and no new data flows from 1Password.
+If the store is not Ready, ExternalSecrets keep their last values. New values cannot materialize.
+
+The store name is `onepassword-connect`. The provider uses the 1Password SDK, not a Connect server.
 
 ```sh
-kubectl -n external-secrets get pods
-kubectl get clustersecretstore onepassword-connect -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}{"\n"}'
+mise exec -- kubectl -n external-secrets get pods
+mise exec -- kubectl get clustersecretstore onepassword-connect \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}{"\n"}'
 ```
 
 If it is not `True`:
 
 ```sh
-kubectl describe clustersecretstore onepassword-connect
+mise exec -- kubectl describe clustersecretstore onepassword-connect
 ```
 
 Common causes:
 - 1Password service-account token expired or rotated without updating the referenced Secret → hand off to `rotate-credential`
-- Network reachability to 1Password API broken (check cloudflared / outbound DNS)
-- `onepassword-connect` Secret referenced by the store is missing entirely
+- The shared account daily quota has no remaining requests.
+- Network reachability to the 1Password API is broken.
+- The `onepassword-sdk-token` Secret is missing.
+- Controller restarts cleared the in-memory SDK cache.
 
 **Check frozen ExternalSecrets** (those whose store is broken):
 
 ```sh
-kubectl get externalsecret -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status' | grep -v True
+mise exec -- kubectl get externalsecret -A \
+  -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status' | rg -v True
 ```
+
+Open `Cluster Health Glance`. Inspect the `External Secrets and 1Password` section.
+
+Check the shared counter without revealing the token:
+
+```sh
+op service-account ratelimit <service-account-name-or-id> --format json
+```
+
+Token rotation does not reset the shared account daily counter.
 
 ## Envoy Gateway — the `Programmed` condition
 
@@ -101,14 +117,6 @@ Quick resolution test from inside the cluster (you need to know the Service IP �
 ```sh
 kubectl run -n default dnscheck --rm -it --restart=Never \
   --image=busybox:1.36 -- nslookup grafana.${CLOUDFLARE_DOMAIN} $(kubectl -n network get svc k8s-gateway -o jsonpath='{.spec.clusterIP}')
-```
-
-## 1Password Connect (if deployed in-cluster)
-
-The ESO ClusterSecretStore talks to it. If the Connect pods are unhealthy, the store goes NotReady (see ESO section above).
-
-```sh
-kubectl -n external-secrets get pods -l app.kubernetes.io/name=onepassword-connect
 ```
 
 ## One-shot platform pulse

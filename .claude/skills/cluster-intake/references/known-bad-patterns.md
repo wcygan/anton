@@ -56,7 +56,9 @@ The two patterns **without** a learning carve-out are #4 (duplicates at the Tier
 
 **Why it fails as concrete need**: Vault HA on 3 nodes is a known distributed-systems footgun; unseal workflows at 2am are the stuff of homelab nightmares; seal/unseal + auto-unseal + storage backend + audit log rotation add up to a real operational burden. You'd also have to migrate ESO off 1Password to actually use it as the store, which is a separate project.
 
-**Acceptable variant for concrete need**: ESO + 1Password Connect (anton's current setup). Bitwarden Secrets Manager or Infisical for the same pattern. Vault *only* if you already operate it professionally elsewhere and are reusing muscle memory.
+**Acceptable variant for concrete need**: ESO + 1Password SDK (Anton's current setup). Bitwarden Secrets Manager or Infisical can use the same pattern.
+
+Use Vault only when you already operate it professionally and reuse that experience.
 
 **Learning carve-out**: Running Vault (dev mode or HA) in its own namespace, populated with fake secrets you don't care about, purely to learn its auth methods, policies, transit engine, or PKI engine is legitimate learning intake. Do not migrate the real secrets to it. Do not point ESO at it. When the timebox expires, delete the namespace and go back to 1Password.
 

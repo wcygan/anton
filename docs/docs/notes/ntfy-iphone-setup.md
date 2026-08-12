@@ -107,7 +107,7 @@ unset NEW_TOPIC
 
 Then:
 
-1. Wait ~1 h for ESO to refresh the in-cluster Secret, or force it: `kubectl -n observability annotate externalsecret ntfy-topic force-sync=$(date +%s) --overwrite`
+1. Wait up to 24 hours for the stable refresh, or run `mise exec -- task external-secrets:force-refresh NAMESPACE=observability NAME=ntfy-topic`.
 2. Re-subscribe on the iPhone with the new topic value (the old subscription will silently stop receiving messages).
 
 Alertmanager's webhook URL is built from the `urlSecret` reference in the AlertmanagerConfig, so it picks up the rotated value automatically once the Secret refreshes — no manifest edit needed.

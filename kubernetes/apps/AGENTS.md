@@ -23,7 +23,15 @@ Use `kubernetes/apps/kube-system/reloader/` as the simple Helm exemplar. Use exi
 
 ## Secret Policy
 
-Use External Secrets Operator for new application secrets. It reads from the 1Password vault `anton` through the `onepassword-connect` `ClusterSecretStore`.
+Use External Secrets Operator for new application secrets. It reads vault `anton` through the 1Password SDK provider.
+
+The `onepassword-connect` store name is legacy. Anton does not deploy a 1Password Connect server.
+
+Set the required refresh class and policy. Use `stable` with `24h`, or `development` with `OnChange`.
+
+Register each approved item, field, target key, and class in `scripts/data/external-secret-contract.json`.
+
+Run `mise exec -- task contracts:validate` after each ExternalSecret change.
 
 Use SOPS for bootstrap or infrastructure secrets that must exist before ESO is ready. Verify every `*.sops.*` file with `sops filestatus <file>` before commit.
 

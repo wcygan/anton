@@ -79,7 +79,15 @@ flux get sources git -A    # READY=True with a recent revision
 
 Consumed by `external-secrets-operator` via `ClusterSecretStore` `onepassword-connect`. Secret: `kubernetes/apps/external-secrets/onepassword-store/app/secret.sops.yaml`, key `stringData.token`. Without it, every `ExternalSecret` in the cluster stops syncing.
 
-**Preconditions:** generate a new service-account token in 1Password admin scoped to vault `anton` only; baseline `kubectl get externalsecrets -A | rg SecretSynced | wc -l` (expect this count to stay constant after rotation).
+**Preconditions:** generate a new service-account token scoped to vault `anton` only. Check the shared account counter first:
+
+```sh
+op service-account ratelimit <service-account-name-or-id> --format json
+```
+
+Token rotation does not reset the shared daily account counter. Do not rotate a token to bypass quota exhaustion.
+
+Baseline `kubectl get externalsecrets -A | rg SecretSynced | wc -l`. Expect this count to stay constant.
 
 **Sequence:**
 ```sh
@@ -94,7 +102,9 @@ git push
 flux reconcile kustomization onepassword-store -n flux-system --with-source
 ```
 
-**Verification:** `kubectl get externalsecrets -A | rg -v SecretSynced` empty; ESO logs show no `unauthorized`: `kubectl logs -n external-secrets -l app.kubernetes.io/name=external-secrets --tail=50`.
+**Verification:** `kubectl get externalsecrets -A | rg -v SecretSynced` is empty. ESO logs show no `unauthorized` errors.
+
+Inspect the Grafana request and error panels. A controller restart clears the in-memory SDK cache.
 
 **Rollback:** revoke the new token in 1Password, `git revert HEAD`, push, reconcile. Old token must still be valid until rollback succeeds.
 

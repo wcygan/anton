@@ -4,6 +4,8 @@ High-level "what's running" map for anton. Exact versions live in the manifests 
 
 **Last verified:** 2026-04-19
 
+The secrets rows were reconciled on 2026-08-12. The other rows retain the full inventory date above.
+
 ## Node layer
 
 | Component | Role |
@@ -33,8 +35,10 @@ Everything past this point is Flux-managed.
 |---|---|
 | Flux CD | Reconciles `kubernetes/` from this repo. |
 | SOPS (age) | Bootstrap and infra secrets. Rules in `.sops.yaml`, files match `*.sops.*`. |
-| External Secrets Operator | App secrets. |
-| 1Password Connect (`onepassword-store`) | `ClusterSecretStore` backing ESO; vault `anton`. |
+| External Secrets Operator 2.9.0 | Materializes application secrets through one controller with one concurrent reconcile. |
+| 1Password SDK (`onepassword-store`) | Reads vault `anton` through a service-account token. The SDK cache uses a five-minute TTL. |
+
+The `ClusterSecretStore` keeps the legacy name `onepassword-connect`. Anton does not deploy a 1Password Connect server.
 
 SOPS-vs-ESO decision: see `anton-repo-conventions` skill.
 

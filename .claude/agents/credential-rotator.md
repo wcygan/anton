@@ -1,6 +1,6 @@
 ---
 name: credential-rotator
-description: Rotate credentials in anton — age key plus SOPS re-key across the repo, Flux GitHub deploy key, 1Password Connect token for ESO, or Cloudflare tunnel token. Handles preconditions, verification, and rollback.
+description: Rotate credentials in anton — age key plus SOPS re-key, Flux GitHub deploy key, 1Password SDK token, or Cloudflare tunnel token.
 tools: Read, Edit, Bash, Grep, Glob
 model: opus
 skills:

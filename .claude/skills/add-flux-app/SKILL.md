@@ -99,8 +99,10 @@ Pick one path; do not mix for the same secret.
 **Path 1 — ExternalSecret (default for new apps, pulls from 1Password).**
 1. Hand off creation of the item in the `anton` 1Password vault unless that external mutation was explicitly authorized. Field names are case-sensitive.
 2. Author `app/externalsecret.yaml` directly. Template shape and field-mapping rules: `anton-repo-conventions/references/secrets.md`. Copy from an in-tree ExternalSecret (e.g. `kubernetes/apps/network/cloudflare-tunnel/app/externalsecret.yaml`).
-3. Add `- ./externalsecret.yaml` to the app's `kustomization.yaml`.
-4. No encryption step. Verify after deploy:
+3. Register the approved references and target keys in `scripts/data/external-secret-contract.json`.
+4. Add `- ./externalsecret.yaml` to the app's `kustomization.yaml`.
+5. Run `mise exec -- task contracts:validate`.
+6. No encryption step. Verify after deploy:
    ```sh
    mise exec -- kubectl get externalsecret -n <ns> <name>
    mise exec -- kubectl get secret        -n <ns> <name>
@@ -122,6 +124,7 @@ That belongs to a different skill. Use `expose-service` for HTTPRoute, gateway c
 ## Pre-commit checklist
 
 - [ ] `python3 scripts/validate-flux-contract.py` passes
+- [ ] `mise exec -- task contracts:validate` passes after each ExternalSecret change
 - [ ] App is listed in `kubernetes/apps/<ns>/kustomization.yaml`
 - [ ] `ks.yaml` has `postBuild.substituteFrom: [{name: cluster-secrets, kind: Secret}]` if the app uses any `${VAR}`
 - [ ] Namespace kustomization includes `components: [../../components/sops]`

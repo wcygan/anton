@@ -72,7 +72,11 @@ apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: my-app-credentials
+  annotations:
+    anton.wcygan.net/secret-refresh-class: stable
 spec:
+  refreshPolicy: Periodic
+  refreshInterval: 24h
   secretStoreRef:
     kind: ClusterSecretStore
     name: onepassword-connect
@@ -116,15 +120,27 @@ dataFrom:
 Rules:
 - `apiVersion` MUST be `external-secrets.io/v1` (not `v1beta1` — the cluster runs the v1 CRD)
 - The 1Password vault is `anton`. The store is `onepassword-connect` (`ClusterSecretStore`).
+- The store name is legacy. The provider uses the 1Password SDK, not a Connect server.
+- Use class `stable`, policy `Periodic`, and interval `24h` for stable credentials.
+- Use class `development` and policy `OnChange` for rapid development.
+- Register each reference, extract, target key, and class in `scripts/data/external-secret-contract.json`.
+- Run `mise exec -- task contracts:validate` after each ExternalSecret change.
 - Field names are case-sensitive and must match the 1Password item exactly. A typo lands as `SecretSyncError: not found` in the ExternalSecret status.
 - Add `- ./externalsecret.yaml` to `app/kustomization.yaml`.
+
+Force one approved development refresh after deployment:
+
+```sh
+mise exec -- task external-secrets:force-refresh \
+  NAMESPACE=<ns> NAME=my-app-credentials
+```
 
 Verify after apply:
 
 ```sh
-kubectl get externalsecret -n <ns> my-app-credentials
-kubectl get secret        -n <ns> my-app-credentials
-kubectl describe externalsecret -n <ns> my-app-credentials | grep -A5 Status:
+mise exec -- kubectl get externalsecret -n <ns> my-app-credentials
+mise exec -- kubectl get secret -n <ns> my-app-credentials
+mise exec -- kubectl describe externalsecret -n <ns> my-app-credentials
 ```
 
 ## cluster-secrets.sops.yaml — the special one

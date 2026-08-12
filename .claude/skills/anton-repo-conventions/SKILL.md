@@ -98,7 +98,7 @@ Common failure: a literal `${SECRET_DOMAIN}` appearing in a deployed object → 
 | **SOPS Secret** (`*.sops.yaml`) | static, infrastructure-only, rarely rotates, must be in git for bootstrap | `kubernetes/apps/<ns>/<app>/app/secret.sops.yaml`, encrypted in place via `sops -e -i <file>` |
 | **ExternalSecret** (ESO → 1Password, preferred) | rotating credentials, app secrets, large payloads, anything sourced from 1Password | `kubernetes/apps/<ns>/<app>/app/externalsecret.yaml`, no encryption step |
 
-Both share the same Age recipient (defined in `.sops.yaml`); ESO uses the `onepassword-connect` `ClusterSecretStore` against the `anton` 1Password vault. Full templates and field-mapping rules: see `references/secrets.md`.
+Both share the same Age recipient. ESO uses the SDK-backed `onepassword-connect` store with vault `anton`. See `references/secrets.md`.
 
 `cluster-secrets.sops.yaml` itself stays SOPS — it must be in git so Flux can substitute from it before any app is up.
 

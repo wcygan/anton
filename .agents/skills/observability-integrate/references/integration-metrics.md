@@ -112,6 +112,11 @@ Standard host metrics on every Talos node.
 | `externalsecret_sync_calls_total{status=...}` | Per-ExternalSecret sync outcome. Failing syncs surface here. |
 | `externalsecret_status_condition` | Ready / Deleted / SecretSynced per ES. |
 | `clustersecretstore_status_condition` | Store health (our `onepassword-connect` store). |
+| `externalsecret_provider_api_calls_count{call=...,status=...}` | 1Password SDK provider call attempts. This is a traffic proxy, not the billing ledger. |
+
+The `Cluster Health Glance` dashboard includes five-minute and rolling daily traffic panels.
+
+The ESO chart also installs its packaged Grafana dashboard through the Grafana sidecar.
 
 ## Cloudflare tunnel (job `cloudflare-tunnel`)
 
