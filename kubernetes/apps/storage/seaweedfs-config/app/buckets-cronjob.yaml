@@ -15,7 +15,7 @@ spec:
     spec:
       ttlSecondsAfterFinished: 86400
       backoffLimit: 2
-      activeDeadlineSeconds: 300
+      activeDeadlineSeconds: 900
       template:
         spec:
           restartPolicy: OnFailure
