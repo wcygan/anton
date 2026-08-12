@@ -16,7 +16,9 @@ REQUIRED = (
     "timeToLiveSeconds: 604800", "deleteOnTermination: false",
     "anton.io/retain-failed-pod", "spark.eventLog.enabled", "s3a://spark-events/events/",
     "spark.eventLog.compress", "spark.eventLog.rolling.enabled", "spark.eventLog.rolling.maxFileSize",
-    "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider",
+    "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider", "core-site.xml",
+    "seaweedfs-spark-events/writer-access-key", "seaweedfs-spark-events/writer-secret-key",
+    "HADOOP_CONF_DIR", "/etc/hadoop-event-log",
 )
 missing = [item for item in REQUIRED if item not in TEXT]
 if missing:

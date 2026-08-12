@@ -112,6 +112,10 @@ def main() -> int:
         '"actions": ["Read:spark-events", "List:spark-events"]',
         'key: "seaweedfs-spark-events/reader-access-key"',
         'key: "seaweedfs-spark-events/reader-secret-key"',
+        '"name": "spark-events-writer"',
+        '"actions": ["Read:spark-events", "Write:spark-events", "List:spark-events"]',
+        'key: "seaweedfs-spark-events/writer-access-key"',
+        'key: "seaweedfs-spark-events/writer-secret-key"',
     )
     failures.extend(
         f"SeaweedFS event-log identity missing {value!r}"
