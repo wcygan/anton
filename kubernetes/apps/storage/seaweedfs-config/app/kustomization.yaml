@@ -12,5 +12,6 @@ resources:
   - ./iceberg-service.yaml
   - ./externalsecret.yaml
   - ./buckets-cronjob.yaml
+  - ./spark-events-bucket.yaml
   - ./lakehouse-s3-smoke-job.yaml
   - ./httproute.yaml

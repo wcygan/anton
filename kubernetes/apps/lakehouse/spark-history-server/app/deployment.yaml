@@ -1,0 +1,91 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-history-server
+  labels:
+    app.kubernetes.io/name: spark-history-server
+    app.kubernetes.io/part-of: lakehouse
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spark-history-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spark-history-server
+        app.kubernetes.io/part-of: lakehouse
+    spec:
+      serviceAccountName: spark-history-server
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 185
+        runAsGroup: 185
+        fsGroup: 185
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: history-server
+          image: 192.168.1.106/library/spark-runtime@sha256:28efc7381ed7560ee806aeead8ba864daf989126bdb8f0f5b7d668beeafcb056
+          imagePullPolicy: IfNotPresent
+          command:
+            - /opt/spark/bin/spark-class
+            - org.apache.spark.deploy.history.HistoryServer
+          envFrom:
+            - secretRef:
+                name: spark-events-reader
+          env:
+            - name: AWS_REGION
+              value: us-east-1
+            - name: HOME
+              value: /tmp
+            - name: JAVA_TOOL_OPTIONS
+              value: -Xms256m -Xmx768m
+            - name: SPARK_CONF_DIR
+              value: /etc/spark-history
+          ports:
+            - name: http
+              containerPort: 18080
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/spark-history
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: spark-history-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

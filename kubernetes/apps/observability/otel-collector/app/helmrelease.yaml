@@ -70,6 +70,9 @@ spec:
         file_log:
           include:
             - /var/log/pods/*/*/*.log
+          exclude:
+            - /var/log/pods/airflow_*/*/*.log
+            - /var/log/pods/lakehouse_*/*/*.log
           start_at: end
           include_file_name: false
           include_file_path: true
@@ -79,6 +82,23 @@ spec:
               max_log_size: 256KiB
             - type: json_parser
               id: json-severity
+              parse_from: body
+              parse_to: attributes
+              if: 'body matches "^\\s*\\{"'
+        file_log/workflows:
+          include:
+            - /var/log/pods/airflow_*/*/*.log
+            - /var/log/pods/lakehouse_*/*/*.log
+          start_at: beginning
+          storage: file_storage
+          include_file_name: false
+          include_file_path: true
+          operators:
+            - type: container
+              id: workflow-container-parser
+              max_log_size: 256KiB
+            - type: json_parser
+              id: workflow-json-severity
               parse_from: body
               parse_to: attributes
               if: 'body matches "^\\s*\\{"'
@@ -149,6 +169,7 @@ spec:
           logs:
             receivers:
               - file_log
+              - file_log/workflows
             processors:
               - memory_limiter
               - transform/severity

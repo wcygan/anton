@@ -198,9 +198,35 @@ def validate_otel(path: Path) -> list[ContractViolation]:
                 "transform/severity statements differ from the canonical normalization policy",
             )
         )
-    for fragment in ("groupbyattrs/severity:", "start_at: end"):
+    for fragment in (
+        "groupbyattrs/severity:",
+        "start_at: end",
+        "file_log/workflows:",
+        "start_at: beginning",
+        "storage: file_storage",
+        "- /var/log/pods/airflow_*/*/*.log",
+        "- /var/log/pods/lakehouse_*/*/*.log",
+    ):
         if fragment not in text:
             violations.append(ContractViolation("otel", path, f"missing invariant {fragment!r}"))
+
+    for path_glob in (
+        "/var/log/pods/airflow_*/*/*.log",
+        "/var/log/pods/lakehouse_*/*/*.log",
+    ):
+        if text.count(f"- {path_glob}") != 2:
+            violations.append(
+                ContractViolation(
+                    "otel",
+                    path,
+                    f"targeted path {path_glob!r} must appear once in include and once in exclude",
+                )
+            )
+
+    if text.count("              - file_log/workflows") != 1:
+        violations.append(
+            ContractViolation("otel", path, "workflow receiver must appear exactly once in the logs pipeline")
+        )
 
     pipeline_order = [
         text.rfind("              - transform/severity"),

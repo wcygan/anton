@@ -13,6 +13,10 @@ REQUIRED = (
     "AWS_REGION", "us-east-1", "ICEBERG_WAREHOUSE", "s3://iceberg-shadow", "org.apache.iceberg", "ExternalSecret",
     "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
     "persistentvolumeclaims", "deletecollection",
+    "timeToLiveSeconds: 604800", "deleteOnTermination: false",
+    "anton.io/retain-failed-pod", "spark.eventLog.enabled", "s3a://spark-events/events/",
+    "spark.eventLog.compress", "spark.eventLog.rolling.enabled", "spark.eventLog.rolling.maxFileSize",
+    "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider",
 )
 missing = [item for item in REQUIRED if item not in TEXT]
 if missing:

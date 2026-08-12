@@ -19,6 +19,7 @@ SCRIPT = APP / "provision-buckets.sh"
 CRONJOB = APP / "buckets-cronjob.yaml"
 KUSTOMIZATION = APP / "kustomization.yaml"
 S3_CONFIG = APP / "externalsecret.yaml"
+SPARK_EVENTS = APP / "spark-events-bucket.yaml"
 LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
 
@@ -75,7 +76,7 @@ def main() -> int:
     cronjob = CRONJOB.read_text(encoding="utf-8")
     required_cronjob = (
         "name: seaweedfs-buckets-ensure",
-        "value: harbor loki iceberg-raw",
+        "value: harbor loki iceberg-raw spark-events",
         "value: iceberg-warehouse iceberg-shadow",
         "automountServiceAccountToken: false",
         "readOnlyRootFilesystem: true",
@@ -104,6 +105,34 @@ def main() -> int:
         f"SeaweedFS S3 identity missing {value!r}"
         for value in required_shadow_identity
         if value not in s3_config
+    )
+
+    required_event_identity = (
+        '"name": "spark-events-reader"',
+        '"actions": ["Read:spark-events", "List:spark-events"]',
+        'key: "seaweedfs-spark-events/reader-access-key"',
+        'key: "seaweedfs-spark-events/reader-secret-key"',
+    )
+    failures.extend(
+        f"SeaweedFS event-log identity missing {value!r}"
+        for value in required_event_identity
+        if value not in s3_config
+    )
+
+    event_storage = SPARK_EVENTS.read_text(encoding="utf-8")
+    required_event_storage = (
+        "kind: Bucket",
+        "name: spark-events",
+        "adoptExisting: true",
+        "reclaimPolicy: Retain",
+        "kind: BucketLifecyclePolicy",
+        "prefix: events/",
+        "days: 30",
+    )
+    failures.extend(
+        f"Spark event storage missing {value!r}"
+        for value in required_event_storage
+        if value not in event_storage
     )
 
     postbuild_substitution_failure = validate_provisioner_postbuild_substitution()

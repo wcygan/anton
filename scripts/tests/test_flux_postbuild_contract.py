@@ -74,10 +74,11 @@ resources: []
             )
         return app_root
 
-    def test_generated_configmap_baseline_remains_two_roots(self) -> None:
+    def test_generated_configmap_baseline_remains_three_roots(self) -> None:
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in MODULE.discover_configmap_roots()],
             [
+                "kubernetes/apps/lakehouse/spark-history-server/app",
                 "kubernetes/apps/registries/harbor-config/app",
                 "kubernetes/apps/storage/seaweedfs-config/app",
             ],
@@ -85,7 +86,7 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 49)
+        self.assertEqual(len(MODULE.discover_application_roots()), 50)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [
@@ -107,6 +108,7 @@ resources: []
                 "kubernetes/apps/kube-system/reloader/app",
                 "kubernetes/apps/kube-system/spegel/app",
                 "kubernetes/apps/lakehouse/shadow-fixture/app",
+                "kubernetes/apps/lakehouse/spark-history-server/app",
                 "kubernetes/apps/network/cloudflare-dns/app",
                 "kubernetes/apps/network/cloudflare-tunnel/app",
                 "kubernetes/apps/network/envoy-gateway/app",

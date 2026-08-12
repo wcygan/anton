@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] The primary runtime uses Spark 4.1.3, Scala 2.13, Java 21, Python 3.12, Iceberg 1.11.0, and Hadoop 3.4.2.
 - [ ] The final image is pinned by digest and performs no runtime dependency downloads.

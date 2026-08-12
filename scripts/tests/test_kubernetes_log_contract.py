@@ -90,6 +90,20 @@ class KubernetesLogContractTests(unittest.TestCase):
             )
             self.assertTrue(validate_otel(path))
 
+    def test_rejects_overlapping_workflow_log_paths(self) -> None:
+        source = REPO / "kubernetes" / "apps" / "observability" / "otel-collector" / "app" / "helmrelease.yaml"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "otel.yaml"
+            path.write_text(
+                source.read_text().replace(
+                    "          exclude:\n            - /var/log/pods/airflow_*/*/*.log\n",
+                    "          exclude:\n",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(validate_otel(path))
+
     def test_rejects_non_indexed_query_selector(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "queries.md"

@@ -41,6 +41,7 @@ spec:
                 - pod
                 - --all-namespaces
                 - --field-selector=status.phase=Failed
+                - --selector=anton.io/retain-failed-pod!=true
                 - --ignore-not-found=true
               resources:
                 requests:

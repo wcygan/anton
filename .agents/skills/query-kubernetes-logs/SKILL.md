@@ -67,9 +67,10 @@ Important names and behavior:
 - Loki service: `loki.observability.svc.cluster.local:3100`.
 - Grafana datasource: `Loki`, UID `loki`.
 - OTel DaemonSet: `otel-collector-opentelemetry-collector-agent`.
-- The collector tails `/var/log/pods/*/*/*.log`, starts at file end, and uses
-  a host checkpoint directory. A newly installed collector intentionally does
-  not replay old file history.
+- The general receiver tails pod files outside `airflow` and `lakehouse`. It
+  starts at file end.
+- The workflow receiver tails `airflow` and `lakehouse` pod files. It starts
+  unseen files at the beginning and stores checkpoints on the node.
 - Indexed labels and normalized severities come from
   `scripts/validate-log-contract.py --show`; use that output rather than a
   copied list.
@@ -177,13 +178,13 @@ If a query is empty, follow this order:
 2. Confirm the OTel DaemonSet has one Ready pod per eligible node.
 3. Inspect recent collector logs for file discovery, parser failures,
    checkpoint, queue, retry, export, or HTTP 5xx errors.
-4. Inspect the rendered collector ConfigMap for exactly one `file_log`
-   receiver, a read-only `/var/log/pods` mount, checkpoint storage, and the
-   `groupbyattrs/severity` processor before batching.
+4. Inspect the rendered collector ConfigMap for two non-overlapping `file_log`
+   receivers, a read-only pod-log mount, checkpoint storage, and severity
+   grouping before batching.
 5. Query indexed labels first. Then use structured metadata for pod name or
    a line filter for content.
-6. Remember `start_at: end`: logs written before the collector began tailing
-   are not expected to appear unless the file later receives new lines.
+6. Apply `start_at: end` only to the general receiver. Airflow and lakehouse
+   files start at the beginning and resume from persistent checkpoints.
 7. If Loki reports object-store or writable-volume errors, inspect SeaweedFS
    S3 health and free capacity without printing credentials:
 

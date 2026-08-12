@@ -15,11 +15,12 @@ node /var/log/pods (read-only)
 ```
 
 The collector uses the official OpenTelemetry chart `0.165.0` and collector
-image `0.156.0`. It uses the Kubernetes container-log parser, starts at the
-end of files for migration, persists checkpoints under a bounded node-local
-hostPath, and excludes collector self-logs. Loki uses chart `18.7.1` with
-Loki `3.7.4` in single-binary/monolithic mode. The separate temporary Talos
-log sink is not this backend and must remain separate.
+image `0.156.0`. The general receiver starts files at the end. A separate
+receiver starts Airflow and lakehouse files at the beginning. The receivers
+use non-overlapping paths. The workflow receiver stores checkpoints on a
+bounded node-local host path. Both receivers use the Kubernetes container-log
+parser. Loki uses chart `18.7.1` with Loki `3.7.4` in monolithic mode. The
+separate Talos log sink is not this backend and must remain separate.
 
 ## Executable contract
 
@@ -109,9 +110,9 @@ and stop the process immediately after collecting bounded evidence.
 ## Diagnosis
 
 1. Collector: check DaemonSet scheduling, readiness, and recent logs. Confirm
-   `/var/log/pods` is mounted read-only, the checkpoint hostPath is writable by
-   the collector, and the collector queue/export metrics show no sustained
-   drops. Do not enable collector self-log ingestion.
+   `/var/log/pods` is read-only. Confirm the workflow receiver uses the writable
+   checkpoint host path. Confirm the receiver path sets do not overlap. Check
+   queue and export metrics for sustained drops.
 2. Loki: check the single StatefulSet pod, readiness, ServiceMonitor errors,
    compactor messages, PVC usage, and the storage-owned
    `seaweedfs-buckets-ensure` CronJob. Confirm the in-cluster SeaweedFS S3
@@ -120,9 +121,10 @@ and stop the process immediately after collecting bounded evidence.
    `http://loki.observability.svc.cluster.local:3100`, and is not being
    overridden by manual state. Test the same query in Explore and inspect
    Grafana datasource/proxy errors.
-4. If only new logs are absent, remember that migration starts at file end;
-   old node log history is intentionally not replayed. Check pod restarts and
-   the collector's file discovery before changing retention or storage.
+4. If only new logs are absent, identify the owning receiver. General streams
+   do not replay old files. Airflow and lakehouse streams start new files at
+   the beginning and resume known files from checkpoints. Check file discovery
+   before changing retention or storage.
 
 ## Rollout and ClickStack teardown
 

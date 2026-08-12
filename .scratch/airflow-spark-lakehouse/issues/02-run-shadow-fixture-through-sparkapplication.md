@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Qualify the immutable Spark runtime.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Flux owns separate Spark operator, lakehouse workload, and Trino namespaces.
 - [ ] Spark Operator uses chart 1.8.0, operator 1.0.0, and the `spark.apache.org/v1` API.

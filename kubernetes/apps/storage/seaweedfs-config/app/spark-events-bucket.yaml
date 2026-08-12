@@ -1,0 +1,28 @@
+---
+# The shared provisioner creates this ordinary bucket. This resource adopts it
+# so the operator can own the lifecycle policy without deleting event data.
+apiVersion: seaweed.seaweedfs.com/v1
+kind: Bucket
+metadata:
+  name: spark-events
+spec:
+  clusterRef:
+    name: seaweedfs
+  name: spark-events
+  adoptExisting: true
+  reclaimPolicy: Retain
+---
+apiVersion: seaweed.seaweedfs.com/v1
+kind: BucketLifecyclePolicy
+metadata:
+  name: spark-events-30d
+spec:
+  bucketRef:
+    name: spark-events
+  reclaimPolicy: Delete
+  rules:
+    - id: expire-spark-events
+      prefix: events/
+      status: Enabled
+      expiration:
+        days: 30
