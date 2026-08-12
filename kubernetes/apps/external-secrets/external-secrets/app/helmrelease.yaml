@@ -10,7 +10,11 @@ spec:
   interval: 1h
   values:
     installCRDs: true
+    replicaCount: 1
+    concurrent: 1
     serviceMonitor:
+      enabled: true
+    grafanaDashboard:
       enabled: true
     # External-secrets gates secret reconciliation cluster-wide; an eviction
     # under pressure stalls every ExternalSecret. Set per-component because
