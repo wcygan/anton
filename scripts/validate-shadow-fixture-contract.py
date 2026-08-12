@@ -12,6 +12,7 @@ REQUIRED = (
     "sparkVersion: 4.1.3", "type: Never", "instances: 1", "memory: 768m", "memoryOverhead: 256m",
     "ICEBERG_WAREHOUSE", "s3://iceberg-shadow", "org.apache.iceberg", "ExternalSecret",
     "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+    "persistentvolumeclaims", "deletecollection",
 )
 missing = [item for item in REQUIRED if item not in TEXT]
 if missing:
