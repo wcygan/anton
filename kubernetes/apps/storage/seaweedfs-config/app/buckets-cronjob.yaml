@@ -42,6 +42,8 @@ spec:
                   value: http://seaweedfs-s3.storage.svc.cluster.local:8333
                 - name: ORDINARY_BUCKETS
                   value: harbor loki iceberg-raw spark-events
+                - name: ORDINARY_PREFIXES
+                  value: spark-events/events/
                 - name: TABLE_BUCKETS
                   value: iceberg-warehouse iceberg-shadow
               command:

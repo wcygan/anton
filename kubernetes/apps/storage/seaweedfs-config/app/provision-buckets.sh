@@ -4,6 +4,7 @@ set -eu
 : "$${S3_ENDPOINT:?S3_ENDPOINT is required}"
 : "$${ORDINARY_BUCKETS:?ORDINARY_BUCKETS is required}"
 : "$${TABLE_BUCKETS:?TABLE_BUCKETS is required}"
+ORDINARY_PREFIXES="$${ORDINARY_PREFIXES:-}"
 
 created=0
 present=0
@@ -93,6 +94,30 @@ ensure_ordinary_bucket() {
   log info "bucket created" "kind=ordinary" "bucket=$bucket"
 }
 
+ensure_ordinary_prefix() {
+  intent="$1"
+  bucket="$${intent%%/*}"
+  key="$${intent#*/}"
+  if [ "$bucket" = "$intent" ] || [ -z "$key" ]; then
+    log error "invalid prefix intent" "intent=$intent" >&2
+    return 1
+  fi
+  case " $ORDINARY_BUCKETS " in
+    *" $bucket "*) ;;
+    *)
+      log error "prefix bucket is not declared ordinary" "bucket=$bucket" "key=$key" >&2
+      return 1
+      ;;
+  esac
+  if aws --endpoint-url="$S3_ENDPOINT" s3api head-object --bucket "$bucket" --key "$key" >/dev/null 2>&1; then
+    log info "prefix present" "bucket=$bucket" "key=$key"
+    return 0
+  fi
+  aws --endpoint-url="$S3_ENDPOINT" s3api put-object --bucket "$bucket" --key "$key" --body /dev/null >/dev/null
+  aws --endpoint-url="$S3_ENDPOINT" s3api head-object --bucket "$bucket" --key "$key" >/dev/null
+  log info "prefix created" "bucket=$bucket" "key=$key"
+}
+
 ensure_table_bucket() {
   bucket="$1"
   if ! valid_bucket_name "$bucket"; then
@@ -157,6 +182,10 @@ done
 
 for bucket in $TABLE_BUCKETS; do
   ensure_table_bucket "$bucket"
+done
+
+for prefix in $ORDINARY_PREFIXES; do
+  ensure_ordinary_prefix "$prefix"
 done
 
 log info "bucket provisioning complete" "created=$created" "present=$present"

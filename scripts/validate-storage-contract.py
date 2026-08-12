@@ -77,6 +77,7 @@ def main() -> int:
     required_cronjob = (
         "name: seaweedfs-buckets-ensure",
         "value: harbor loki iceberg-raw spark-events",
+        "value: spark-events/events/",
         "value: iceberg-warehouse iceberg-shadow",
         "automountServiceAccountToken: false",
         "readOnlyRootFilesystem: true",
@@ -92,6 +93,18 @@ def main() -> int:
     )
     failures.extend(
         f"Kustomization missing {value!r}" for value in required_kustomization if value not in kustomization
+    )
+
+    required_prefix_provisioning = (
+        'ensure_ordinary_prefix() {',
+        's3api put-object --bucket "$bucket" --key "$key" --body /dev/null',
+        'for prefix in $ORDINARY_PREFIXES; do',
+    )
+    script_text = SCRIPT.read_text(encoding="utf-8")
+    failures.extend(
+        f"provisioner missing prefix contract {value!r}"
+        for value in required_prefix_provisioning
+        if value not in script_text
     )
 
     s3_config = S3_CONFIG.read_text(encoding="utf-8")
