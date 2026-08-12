@@ -17,7 +17,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.iceberg</groupId>
-      <artifactId>iceberg-aws-bundle</artifactId>
+      <artifactId>iceberg-aws</artifactId>
       <version>${iceberg.version}</version>
     </dependency>
     <dependency>

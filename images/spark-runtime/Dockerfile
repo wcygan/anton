@@ -35,7 +35,7 @@ ENV PATH=/opt/python/bin:${PATH} \
     LD_LIBRARY_PATH=/opt/python/lib \
     PYSPARK_PYTHON=/opt/python/bin/python3.12 \
     PYTHONPATH=/opt/spark/python/lib/pyspark.zip:/opt/spark/python/lib/py4j-0.10.9.9-src.zip
-RUN python3 --version | grep -E '^Python 3\\.12\\.' \
+RUN python3 --version | grep -E '^Python 3[.]12[.]' \
  && python3 /opt/spark/runtime-contract/verify-runtime.py --build \
  && chown -R 185:185 /opt/spark/jars /opt/spark/runtime-contract /opt/spark/work-dir
 USER 185

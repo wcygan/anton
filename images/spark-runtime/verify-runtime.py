@@ -40,11 +40,14 @@ def jar_inventory() -> list[dict[str, str]]:
 def aws_sdk_classes() -> dict[str, set[str]]:
     classes: dict[str, set[str]] = {}
     for jar in JARS.glob("*.jar"):
-        with zipfile.ZipFile(jar) as archive:
-            for name in archive.namelist():
-                if not name.startswith("software/amazon/awssdk/") or not name.endswith(".class"):
-                    continue
-                classes.setdefault(name, set()).add(hashlib.sha256(archive.read(name)).hexdigest())
+        try:
+            with zipfile.ZipFile(jar) as archive:
+                for name in archive.namelist():
+                    if not name.startswith("software/amazon/awssdk/") or not name.endswith(".class"):
+                        continue
+                    classes.setdefault(name, set()).add(hashlib.sha256(archive.read(name)).hexdigest())
+        except zipfile.BadZipFile as error:
+            fail(f"invalid JAR {jar.name}: {error}")
     return classes
 
 

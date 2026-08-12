@@ -33,14 +33,14 @@ def main() -> int:
             "ARG PYTHON_SHA256=7b8d59af8216044d2313de8120bfc2cc00a9bd2e542f15795e1d616c51faf3d6",
             "PYSPARK_PYTHON=/opt/python/bin/python3.12",
             "PYTHONPATH=/opt/spark/python/lib/pyspark.zip",
-            "python3 --version | grep -E '^Python 3\\\\.12\\\\.'",
+            "python3 --version | grep -E '^Python 3[.]12[.]'",
             "verify-runtime.py --build",
         ),
         "pom.xml": (
             "iceberg-spark-runtime-4.1_2.13",
             "<iceberg.version>1.11.0</iceberg.version>",
             "<hadoop.version>3.4.2</hadoop.version>",
-            "iceberg-aws-bundle",
+            "iceberg-aws",
             "hadoop-aws",
         ),
         "verify-runtime.py": (
