@@ -5,6 +5,7 @@ configMapGenerator:
   - name: seaweedfs-bucket-provisioner
     files:
       - provision-buckets.sh=./provision-buckets.sh
+      - prefix-marker=./prefix-marker
     options:
       disableNameSuffixHash: true
 resources:

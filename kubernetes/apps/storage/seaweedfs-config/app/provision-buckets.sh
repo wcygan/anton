@@ -113,7 +113,7 @@ ensure_ordinary_prefix() {
     log info "prefix present" "bucket=$bucket" "key=$key"
     return 0
   fi
-  aws --endpoint-url="$S3_ENDPOINT" s3api put-object --bucket "$bucket" --key "$key" --body /dev/null >/dev/null
+  aws --endpoint-url="$S3_ENDPOINT" s3api put-object --bucket "$bucket" --key "$key" --body /opt/anton/prefix-marker >/dev/null
   aws --endpoint-url="$S3_ENDPOINT" s3api head-object --bucket "$bucket" --key "$key" >/dev/null
   log info "prefix created" "bucket=$bucket" "key=$key"
 }

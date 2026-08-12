@@ -97,7 +97,7 @@ def main() -> int:
 
     required_prefix_provisioning = (
         'ensure_ordinary_prefix() {',
-        's3api put-object --bucket "$bucket" --key "$key" --body /dev/null',
+        's3api put-object --bucket "$bucket" --key "$key" --body /opt/anton/prefix-marker',
         'for prefix in $ORDINARY_PREFIXES; do',
     )
     script_text = SCRIPT.read_text(encoding="utf-8")
