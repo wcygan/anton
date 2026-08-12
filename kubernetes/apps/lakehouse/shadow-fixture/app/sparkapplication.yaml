@@ -29,6 +29,8 @@ spec:
       - secretRef:
           name: shadow-fixture-s3
     env:
+      - name: AWS_REGION
+        value: us-east-1
       - name: ICEBERG_WAREHOUSE
         value: s3://iceberg-shadow
       - name: ICEBERG_CATALOG_URI
@@ -44,3 +46,6 @@ spec:
     envFrom:
       - secretRef:
           name: shadow-fixture-s3
+    env:
+      - name: AWS_REGION
+        value: us-east-1
