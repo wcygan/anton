@@ -14,6 +14,20 @@ Stop when: the read-only question has an evidence-backed answer, or the authoriz
 
 Anton is a hand-edited Talos + Flux cluster. `kubernetes/`, `talos/`, and `bootstrap/` are committed directly; there is no repository render step. Talos machine configs are generated from `talos/talconfig.yaml` plus `talos/talenv.yaml` with talhelper. After bootstrap, Flux renders and applies the committed desired state.
 
+## Agent skills
+
+### Issue tracker
+
+Specs and tickets use Local Markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Local issue status uses the five canonical triage roles. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Anton uses one domain context with durable records under `context/`. See `docs/agents/domain.md`.
+
 ## Route First
 
 Read the matching `.agents/skills/<name>/SKILL.md` before following that branch:
