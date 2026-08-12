@@ -20,6 +20,7 @@ CRONJOB = APP / "buckets-cronjob.yaml"
 KUSTOMIZATION = APP / "kustomization.yaml"
 S3_CONFIG = APP / "externalsecret.yaml"
 SPARK_EVENTS = APP / "spark-events-bucket.yaml"
+SEAWEED = APP / "seaweed.yaml"
 LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
 
@@ -165,6 +166,10 @@ def main() -> int:
         for value in required_event_storage
         if value not in event_storage
     )
+
+    seaweed = SEAWEED.read_text(encoding="utf-8")
+    if "secret.reloader.stakater.com/reload: seaweedfs-s3-config" not in seaweed:
+        failures.append("SeaweedFS S3 pods must reload the generated identity Secret")
 
     postbuild_substitution_failure = validate_provisioner_postbuild_substitution()
     if postbuild_substitution_failure is not None:

@@ -23,6 +23,7 @@ STORAGE_ROOT = REPO / "kubernetes" / "apps" / "storage" / "kustomization.yaml"
 LONGHORN_KS = REPO / "kubernetes" / "apps" / "storage" / "longhorn" / "ks.yaml"
 SEAWEED_CRONJOB = REPO / "kubernetes" / "apps" / "storage" / "seaweedfs-config" / "app" / "buckets-cronjob.yaml"
 SEAWEED_SECRET = REPO / "kubernetes" / "apps" / "storage" / "seaweedfs-config" / "app" / "externalsecret.yaml"
+SEAWEED = REPO / "kubernetes" / "apps" / "storage" / "seaweedfs-config" / "app" / "seaweed.yaml"
 
 IMAGE_DIGEST = "sha256:9ccd3dcff1f11535c3915434c40602f443c4d5f160673c7f9ced4af094957065"
 
@@ -165,7 +166,11 @@ def main() -> int:
         "Longhorn backup",
     )
 
-    seaweed = SEAWEED_CRONJOB.read_text(encoding="utf-8") + SEAWEED_SECRET.read_text(encoding="utf-8")
+    seaweed = (
+        SEAWEED_CRONJOB.read_text(encoding="utf-8")
+        + SEAWEED_SECRET.read_text(encoding="utf-8")
+        + SEAWEED.read_text(encoding="utf-8")
+    )
     require(
         failures,
         seaweed,
@@ -175,6 +180,7 @@ def main() -> int:
             '"Write:longhorn-backups"',
             'key: "seaweedfs-longhorn-backup/access-key"',
             'key: "seaweedfs-longhorn-backup/secret-key"',
+            "secret.reloader.stakater.com/reload: seaweedfs-s3-config",
         ),
         "SeaweedFS backup target",
     )
