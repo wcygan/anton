@@ -2,7 +2,7 @@
 # Grafana sidecar picks this up via `grafana_dashboard=1` label.
 # searchNamespace: ALL in the HelmRelease values means this can live anywhere;
 # it's co-located here so the dashboard and app churn together.
-# Layout: ADR 0013 Phase 1 — header stat strip + 8 rows (all default-expanded).
+# Layout: ADR 0013 Phase 1 — header stat strip + 9 rows (all default-expanded).
 # Preserve `uid: cluster-health-glance` so existing bookmarks keep working.
 # All authoring is in-repo; sidecar has `allowUiUpdates: false` so UI edits
 # are discarded on pod restart.
@@ -2003,6 +2003,158 @@ data:
                 },
                 "indexByName": { "instance": 0, "Value #A": 1, "Value #B": 2 }
               }
+            }
+          ]
+        },
+        {
+          "id": 900,
+          "type": "row",
+          "title": "External Secrets and 1Password",
+          "collapsed": false,
+          "gridPos": { "x": 0, "y": 203, "w": 24, "h": 1 },
+          "panels": []
+        },
+        {
+          "id": 901,
+          "type": "stat",
+          "title": "1Password SDK Operations (24h)",
+          "gridPos": { "x": 0, "y": 204, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "ESO 1Password SDK call attempts during 24 hours. This is a quota proxy, not the 1Password billing ledger. The warning and critical thresholds preserve capacity below the 1,000-request account limit.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 500 },
+                  { "color": "red", "value": 800 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(externalsecret_provider_api_calls_count{provider=\"1Password/SDK\"}[24h])) or vector(0)",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 902,
+          "type": "stat",
+          "title": "1Password SDK Errors (15m)",
+          "gridPos": { "x": 6, "y": 204, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Failed 1Password SDK calls during 15 minutes. Any value above zero needs investigation because failed reads are not cached.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [{ "type": "value", "options": { "0": { "text": "0 — healthy" } } }],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(externalsecret_provider_api_calls_count{provider=\"1Password/SDK\",status=\"error\"}[15m])) or vector(0)",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 903,
+          "type": "stat",
+          "title": "ExternalSecrets Not Ready",
+          "gridPos": { "x": 12, "y": 204, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "ExternalSecret resources whose Ready condition is false.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [{ "type": "value", "options": { "0": { "text": "0 — healthy" } } }],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(externalsecret_status_condition{condition=\"Ready\",status=\"False\"}) or vector(0)",
+              "instant": true
+            }
+          ]
+        },
+        {
+          "id": 904,
+          "type": "stat",
+          "title": "ESO Controller Restarts (24h)",
+          "gridPos": { "x": 18, "y": 204, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Main ESO controller restarts during 24 hours. Restarts clear the in-memory 1Password SDK cache and can create a cold-read burst.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [{ "type": "value", "options": { "0": { "text": "0 — healthy" } } }],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "orientation": "auto",
+            "textMode": "value",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"external-secrets\",container=\"external-secrets\"}[24h])) or vector(0)",
+              "instant": true
             }
           ]
         }
