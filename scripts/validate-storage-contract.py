@@ -75,7 +75,7 @@ def main() -> int:
     required_cronjob = (
         "name: seaweedfs-buckets-ensure",
         "value: harbor loki iceberg-raw",
-        "value: iceberg-warehouse",
+        "value: iceberg-warehouse iceberg-shadow",
         "automountServiceAccountToken: false",
         "readOnlyRootFilesystem: true",
         "name: seaweedfs-bucket-provisioner",

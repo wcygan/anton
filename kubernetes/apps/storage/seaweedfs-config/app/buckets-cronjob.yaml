@@ -43,7 +43,7 @@ spec:
                 - name: ORDINARY_BUCKETS
                   value: harbor loki iceberg-raw
                 - name: TABLE_BUCKETS
-                  value: iceberg-warehouse
+                  value: iceberg-warehouse iceberg-shadow
               command:
                 - /bin/sh
                 - /opt/anton/provision-buckets.sh

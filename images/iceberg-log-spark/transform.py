@@ -53,7 +53,7 @@ def main() -> None:
     spark.sql(f"""CREATE TABLE IF NOT EXISTS {CATALOG}.logs.normalized (
       event_id string, ts timestamp, service string, level string, message string,
       event_date date
-    ) USING iceberg PARTITIONED BY (event_date)""")
+    ) USING iceberg PARTITIONED BY (event_date) TBLPROPERTIES ('format-version'='2')""")
     normalized.createOrReplaceTempView("incoming_normalized")
     spark.sql(f"""MERGE INTO {CATALOG}.logs.normalized t USING incoming_normalized s
       ON t.event_id = s.event_id WHEN MATCHED THEN UPDATE SET *
@@ -62,7 +62,7 @@ def main() -> None:
               .groupBy("hour", "service", "level").agg(F.count("*").alias("event_count")))
     spark.sql(f"""CREATE TABLE IF NOT EXISTS {CATALOG}.logs.hourly (
       hour timestamp, service string, level string, event_count bigint
-    ) USING iceberg PARTITIONED BY (days(hour))""")
+    ) USING iceberg PARTITIONED BY (days(hour)) TBLPROPERTIES ('format-version'='2')""")
     hourly.createOrReplaceTempView("incoming_hourly")
     # Rebuild the tiny derived aggregate from the deduplicated normalized table.
     # This avoids an Iceberg 1.5/Spark 3.5 MERGE planner bug with transformed

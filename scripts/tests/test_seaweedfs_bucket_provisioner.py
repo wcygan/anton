@@ -124,7 +124,7 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
         state: dict[str, list[str]],
         *,
         ordinary: str = "harbor loki iceberg-raw",
-        tables: str = "iceberg-warehouse",
+        tables: str = "iceberg-warehouse iceberg-shadow",
     ) -> tuple[subprocess.CompletedProcess[str], dict]:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -178,13 +178,13 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
     def test_create_then_idempotent_recheck(self) -> None:
         first, state = self.run_provisioner({"ordinary": [], "tables": []})
         self.assertEqual(first.returncode, 0, first.stderr)
-        self.assertIn("created=4 present=0", first.stdout)
+        self.assertIn("created=5 present=0", first.stdout)
         self.assertEqual(sorted(state["ordinary"]), ["harbor", "iceberg-raw", "loki"])
-        self.assertEqual(state["tables"], ["iceberg-warehouse"])
+        self.assertEqual(state["tables"], ["iceberg-warehouse", "iceberg-shadow"])
 
         second, unchanged = self.run_provisioner(state)
         self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertIn("created=0 present=4", second.stdout)
+        self.assertIn("created=0 present=5", second.stdout)
         self.assertEqual(unchanged, state)
 
     def test_refuses_ordinary_bucket_at_table_intent(self) -> None:
