@@ -242,6 +242,7 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-12: SeaweedFS `BucketLifecyclePolicy` became the storage owner for 30-day event-log expiry. This removed the need for a separate delete identity in the History Server path.
 - 2026-08-12: Added a read-only five-run shadow-gate ledger validator. It binds each run to the DAG Spark digest and retained evidence. Live gate execution remains pending operator approval.
 - 2026-08-12: Implemented Ticket 08's manual shadow-only Loki source workflow. It enforces a five-minute window, a 1000-entry completeness fence, deterministic raw snapshots in `iceberg-raw`, bucket-specific S3A credentials, and the existing Spark Attempt Lease/retry/cancellation path. Image publication, Ticket 07 completion, Flux reconciliation, and one approved source run remain pending.
+- 2026-08-13: Published and pinned the Ticket 08 Airflow and Spark runtime images at immutable digests. The Spark image now avoids a recursive ownership layer that duplicated the large runtime payload during source rebuilds. Ticket 07 evidence, Flux rollout, and one approved Loki source run with Trino evidence remain pending.
 
 ## References
 

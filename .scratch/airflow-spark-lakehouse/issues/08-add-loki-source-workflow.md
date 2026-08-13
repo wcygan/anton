@@ -23,5 +23,6 @@
 - Added bucket-scoped ESO credentials in `airflow` and `lakehouse`; Spark uses bucket-specific S3A credentials for raw input and event logs.
 - Reused the fail-closed prior-output validator for same-window retries; raw JSONL retains Loki stream labels for correlation evidence.
 - The Airflow image test stage passed 26 tests, and `mise exec -- task contracts:validate` passed 207 repository tests.
-- The local Spark runtime image build passed its runtime contract; no image was published or pinned in Git.
-- Live acceptance remains pending: publish the rebuilt Airflow and Spark images, update their immutable digests, pass Ticket 07, reconcile Flux, and retain one approved source run with Trino evidence.
+- Published `airflow-runtime:3.2.2-ticket08.1` at digest `sha256:033982a99d850a01f35c7dc98638db9aa4769eb7e228e182b103b89a42b7e80d` and `spark-runtime:4.1.3-ticket08.1` at digest `sha256:77a9e545a49b5eb6ea23fe8e92d78f1ef751ea5aae5a209afd02e0caa46beaf3`.
+- Pinned both published digests in Git and removed the Spark image's recursive ownership layer so source rebuilds do not transfer duplicate runtime data.
+- Live acceptance remains pending: pass Ticket 07, reconcile Flux, and retain one approved source run with Trino evidence.

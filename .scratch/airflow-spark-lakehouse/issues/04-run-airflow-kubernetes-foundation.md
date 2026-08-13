@@ -39,3 +39,4 @@
 - Flux applied `eafc25d3`. Airflow, CNPG, and Longhorn remained Ready after removal.
 - Two orphaned Barman TLS Secrets were deleted after their certificate owners were pruned.
 - Ticket 04 closes without a backup or disaster-recovery claim.
+- 2026-08-13: Published `airflow-runtime:3.2.2-ticket08.1` at digest `sha256:033982a99d850a01f35c7dc98638db9aa4769eb7e228e182b103b89a42b7e80d`; this supersedes the Ticket 04.1 image pin for the Ticket 08 workflow.

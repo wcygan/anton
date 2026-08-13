@@ -27,15 +27,14 @@ FROM apache/spark:4.1.3-scala2.13-java21-python3-ubuntu@sha256:bf9d035a7c32a8ca4
 USER root
 COPY --from=python /opt/python /opt/python
 COPY --from=dependencies /build/jars/ /opt/spark/jars/
-COPY --from=dependencies /build/dependency-tree.txt /opt/spark/runtime-contract/dependency-tree.txt
-COPY images/spark-runtime/verify-runtime.py /opt/spark/runtime-contract/verify-runtime.py
-COPY images/iceberg-log-spark/transform.py /opt/spark/work-dir/transform.py
-COPY images/iceberg-log-spark/fixture.jsonl /opt/spark/work-dir/fixture.jsonl
+COPY --chown=185:185 --from=dependencies /build/dependency-tree.txt /opt/spark/runtime-contract/dependency-tree.txt
+COPY --chown=185:185 images/spark-runtime/verify-runtime.py /opt/spark/runtime-contract/verify-runtime.py
+COPY --chown=185:185 images/iceberg-log-spark/transform.py /opt/spark/work-dir/transform.py
+COPY --chown=185:185 images/iceberg-log-spark/fixture.jsonl /opt/spark/work-dir/fixture.jsonl
 ENV PATH=/opt/python/bin:${PATH} \
     LD_LIBRARY_PATH=/opt/python/lib \
     PYSPARK_PYTHON=/opt/python/bin/python3.12 \
     PYTHONPATH=/opt/spark/python/lib/pyspark.zip:/opt/spark/python/lib/py4j-0.10.9.9-src.zip
 RUN python3 --version | grep -E '^Python 3[.]12[.]' \
- && python3 /opt/spark/runtime-contract/verify-runtime.py --build \
- && chown -R 185:185 /opt/spark/jars /opt/spark/runtime-contract /opt/spark/work-dir
+ && python3 /opt/spark/runtime-contract/verify-runtime.py --build
 USER 185
