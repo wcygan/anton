@@ -21,3 +21,5 @@
 - [ ] Every controlled test retains identities, resource states, logs, and validation output.
 
 ## Comments
+
+- 2026-08-12: Added bounded Spark Attempt receipts for submission, identity, state transitions, terminal state, Lease renewal, retry decisions, cancellation, and failure diagnostics. Added local controlled adapter tests for success, short-lived executor diagnostics, pre-commit failure classification, scheduler and triggerer recovery, duplicate delivery, retry reuse, cancellation, and expired Lease takeover. The prior-output validator fails closed until an independent validation sets `anton.io/prior-output-valid=true` on a completed application. These tests do not replace the authorized live Trino, Loki, History Server, or retention evidence gates.

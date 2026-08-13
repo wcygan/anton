@@ -487,7 +487,7 @@ def validate_image_source(failures: list[str]) -> None:
         "pip check",
         "FROM runtime AS test",
         "COPY --from=test /tmp/airflow-runtime-tests.pass /opt/airflow/runtime-contract/tests.pass",
-        'assert anton_airflow.spark.PACKAGE_VERSION == "0.2.0"',
+        'assert anton_airflow.spark.PACKAGE_VERSION == "0.3.0"',
     )
     failures.extend(
         f"Airflow image missing {value!r}" for value in required_dockerfile if value not in dockerfile
@@ -502,9 +502,11 @@ def validate_image_source(failures: list[str]) -> None:
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "state.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "lease.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "adapter.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "receipts.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "operator.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "trigger.py",
             IMAGE_ROOT / "tests" / "test_adapter_package.py",
+            IMAGE_ROOT / "tests" / "test_ticket06_recovery.py",
             IMAGE_ROOT / "dags" / "airflow_spark_lakehouse.py",
         )
     )
@@ -522,6 +524,11 @@ def validate_image_source(failures: list[str]) -> None:
         "class SparkApplicationTrigger",
         "stateTransitionHistory",
         "class LeaseCoordinator",
+        "spark_attempt_receipt",
+        "task_completion",
+        "prior_shadow_output_is_valid",
+        "prior_output_validator",
+        "test_triggerer_recovery_renews_lease_before_terminal_observation",
         "spark.apache.org",
         "schedule=\"23 * * * *\"",
         "catchup=False",

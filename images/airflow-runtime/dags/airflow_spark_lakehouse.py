@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any, Mapping
+
 import pendulum
 
 from airflow.sdk import dag
 
 from anton_airflow.spark import ApacheSparkApplicationOperator
+from anton_airflow.spark import AttemptState, classify_application
+from anton_airflow.spark.state import terminal_state
 
 
 SHADOW_APPLICATION_SPEC = {
@@ -79,6 +83,24 @@ SHADOW_APPLICATION_SPEC = {
 }
 
 
+def prior_shadow_output_is_valid(resource: Mapping[str, Any]) -> bool:
+    """Accept only a completed Spark commit as an idempotent retry result.
+
+    A separate Trino validation must set ``anton.io/prior-output-valid=true``.
+    Missing validation metadata fails closed and creates a new Spark Attempt.
+    """
+    if classify_application(resource) is not AttemptState.SUCCEEDED:
+        return False
+    metadata = resource.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return False
+    annotations = metadata.get("annotations")
+    if not isinstance(annotations, Mapping):
+        annotations = {}
+    explicit = annotations.get("anton.io/prior-output-valid")
+    return str(explicit).lower() == "true" and terminal_state(resource) == "COMPLETED"
+
+
 @dag(
     dag_id="airflow_spark_lakehouse",
     schedule="23 * * * *",
@@ -95,6 +117,7 @@ def airflow_spark_lakehouse():
         application_spec=SHADOW_APPLICATION_SPEC,
         target="shadow",
         namespace="lakehouse",
+        prior_output_validator=prior_shadow_output_is_valid,
         poll_interval=10.0,
         deferrable=True,
     )

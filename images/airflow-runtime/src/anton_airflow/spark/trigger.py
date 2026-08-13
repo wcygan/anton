@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 
+from .receipts import ReceiptBuffer
 from .state import AttemptState
 
 
@@ -47,11 +49,19 @@ class SparkApplicationTrigger(BaseTrigger):
         # the operator's provider hook in the triggerer process.
         from .operator import _airflow_adapter
 
-        adapter = _airflow_adapter(conn_id=self.kubernetes_conn_id, namespace=self.namespace, target=self.target)
+        receipt_buffer = ReceiptBuffer()
+        adapter = _airflow_adapter(
+            conn_id=self.kubernetes_conn_id,
+            namespace=self.namespace,
+            target=self.target,
+            receipt_logger=logging.getLogger("anton_airflow.spark.trigger"),
+            receipt_sink=receipt_buffer,
+        )
         while True:
             observation = await asyncio.to_thread(adapter.observe, self.attempt_name)
             if observation.state is AttemptState.ACTIVE:
                 await asyncio.to_thread(adapter.leases.renew, self.attempt_name)
+                adapter.record_receipt("lease_renewed", self.attempt_name, state=observation.state)
                 watcher = getattr(adapter.applications, "watch", None)
                 if watcher is None:
                     await asyncio.sleep(self.poll_interval)
@@ -66,17 +76,33 @@ class SparkApplicationTrigger(BaseTrigger):
             if observation.state is AttemptState.SUCCEEDED:
                 await asyncio.to_thread(adapter.leases.release, self.attempt_name)
                 self._finished = True
-                yield TriggerEvent({"state": "succeeded", "attempt": self.attempt_name})
+                yield TriggerEvent(
+                    {"state": "succeeded", "attempt": self.attempt_name, "receipts": receipt_buffer.items[-50:]}
+                )
                 return
             if observation.state is AttemptState.FAILED:
                 diagnostics = await asyncio.to_thread(adapter.collect_diagnostics, self.attempt_name)
                 await asyncio.to_thread(adapter.leases.release, self.attempt_name)
                 self._finished = True
-                yield TriggerEvent({"state": "failed", "attempt": self.attempt_name, "diagnostics": diagnostics})
+                yield TriggerEvent(
+                    {
+                        "state": "failed",
+                        "attempt": self.attempt_name,
+                        "diagnostics": diagnostics,
+                        "receipts": receipt_buffer.items[-50:],
+                    }
+                )
                 return
             diagnostics = await asyncio.to_thread(adapter.collect_diagnostics, self.attempt_name)
             self._finished = True
-            yield TriggerEvent({"state": "ambiguous", "attempt": self.attempt_name, "diagnostics": diagnostics})
+            yield TriggerEvent(
+                {
+                    "state": "ambiguous",
+                    "attempt": self.attempt_name,
+                    "diagnostics": diagnostics,
+                    "receipts": receipt_buffer.items[-50:],
+                }
+            )
             return
 
     async def cleanup(self) -> None:
@@ -85,5 +111,10 @@ class SparkApplicationTrigger(BaseTrigger):
             return
         from .operator import _airflow_adapter
 
-        adapter = _airflow_adapter(conn_id=self.kubernetes_conn_id, namespace=self.namespace, target=self.target)
+        adapter = _airflow_adapter(
+            conn_id=self.kubernetes_conn_id,
+            namespace=self.namespace,
+            target=self.target,
+            receipt_logger=logging.getLogger("anton_airflow.spark.trigger"),
+        )
         await asyncio.to_thread(adapter.cancel_attempt, self.attempt_name)

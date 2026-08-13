@@ -1,7 +1,7 @@
 # Airflow runtime
 
-This image provides the Airflow control plane, task-pod runtime, and Ticket 05
-Apache Spark Operator adapter.
+This image provides the Airflow control plane, task-pod runtime, and the
+Apache Spark Operator adapter with Ticket 06 recovery receipts.
 It uses Airflow 3.2.2, Python 3.12, and Kubernetes provider 10.21.0.
 
 Build and run the image tests:

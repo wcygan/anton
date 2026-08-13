@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Mapping
 
 from airflow.exceptions import AirflowException
@@ -10,10 +11,18 @@ from airflow.models import BaseOperator
 from .adapter import KubernetesSparkApplicationClient, SparkApplicationAdapter
 from .identity import AttemptIdentity
 from .lease import LeaseCoordinator
+from .receipts import LoggingReceiptSink, ReceiptSink
 from .trigger import SparkApplicationTrigger
 
 
-def _airflow_adapter(*, conn_id: str, namespace: str, target: str) -> SparkApplicationAdapter:
+def _airflow_adapter(
+    *,
+    conn_id: str,
+    namespace: str,
+    target: str,
+    receipt_logger: Any | None = None,
+    receipt_sink: ReceiptSink | None = None,
+) -> SparkApplicationAdapter:
     from kubernetes import client
     from airflow.providers.cncf.kubernetes.hooks.kubernetes import KubernetesHook
 
@@ -68,6 +77,7 @@ def _airflow_adapter(*, conn_id: str, namespace: str, target: str) -> SparkAppli
         leases=LeaseCoordinator(LeaseApi(), namespace=namespace, target=target),
         pods=Pods(),
         namespace=namespace,
+        receipts=receipt_sink or LoggingReceiptSink(receipt_logger or logging.getLogger("anton_airflow.spark")),
     )
 
 
@@ -100,7 +110,12 @@ class ApacheSparkApplicationOperator(BaseOperator):
 
     def execute(self, context: Mapping[str, Any]) -> Any:
         self._identity = AttemptIdentity.from_context(context)
-        adapter = _airflow_adapter(conn_id=self.kubernetes_conn_id, namespace=self.namespace, target=self.target)
+        adapter = _airflow_adapter(
+            conn_id=self.kubernetes_conn_id,
+            namespace=self.namespace,
+            target=self.target,
+            receipt_logger=self.log,
+        )
         previous_identity = AttemptIdentity(
             self._identity.dag_id,
             self._identity.run_id,
@@ -149,14 +164,34 @@ class ApacheSparkApplicationOperator(BaseOperator):
 
     def execute_complete(self, context: Mapping[str, Any], event: Mapping[str, Any] | None = None) -> Any:
         event = event or {}
+        diagnostics = tuple(event.get("diagnostics", ()) or ())
+        attempt_name = str(event.get("attempt")) if event.get("attempt") else None
+        task_receipts = list(event.get("receipts", ()) or ())
+        sink = LoggingReceiptSink(self.log)
+        for receipt in task_receipts[-50:]:
+            sink.record(receipt)
+        sink.record(
+            {
+                "event": "task_completion",
+                "attempt": attempt_name,
+                "state": str(event.get("state", "ambiguous")),
+                "diagnostics": "\n".join(diagnostics)[-4000:],
+                "receipt_count": len(task_receipts),
+            }
+        )
         return self._complete(
             str(event.get("state", "ambiguous")),
-            event.get("diagnostics", ()),
-            str(event.get("attempt")) if event.get("attempt") else None,
+            diagnostics,
+            attempt_name,
         )
 
     def on_kill(self) -> None:
         if self._identity is None:
             return
-        adapter = _airflow_adapter(conn_id=self.kubernetes_conn_id, namespace=self.namespace, target=self.target)
+        adapter = _airflow_adapter(
+            conn_id=self.kubernetes_conn_id,
+            namespace=self.namespace,
+            target=self.target,
+            receipt_logger=self.log,
+        )
         adapter.cancel(self._identity)

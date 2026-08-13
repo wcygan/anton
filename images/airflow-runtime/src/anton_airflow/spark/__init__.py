@@ -8,7 +8,7 @@ from importlib.metadata import version
 import airflow
 
 
-PACKAGE_VERSION = "0.2.0"
+PACKAGE_VERSION = "0.3.0"
 
 from .adapter import AttemptObservation, SparkApplicationAdapter, build_spark_application
 from .identity import AttemptIdentity, attempt_name, identity_hash
