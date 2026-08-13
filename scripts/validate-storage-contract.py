@@ -23,6 +23,9 @@ SEAWEED = APP / "seaweed.yaml"
 SPARK_EVENTS = APP / "spark-events-bucket.yaml"
 LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
+TRINO_APP = REPO / "kubernetes" / "apps" / "iceberg-demo" / "trino" / "app"
+TRINO_SECRET = TRINO_APP / "externalsecret.yaml"
+TRINO_RELEASE = TRINO_APP / "helmrelease.yaml"
 
 
 def validate_provisioner_postbuild_substitution() -> str | None:
@@ -123,6 +126,50 @@ def main() -> int:
         for value in required_shadow_identity
         if value not in s3_config
     )
+
+    required_reader_identity = (
+        '"name": "iceberg-warehouse-reader"',
+        '"actions": ["Read:iceberg-warehouse", "List:iceberg-warehouse", "s3tables:GetNamespace:iceberg-warehouse", "s3tables:ListNamespaces:iceberg-warehouse", "s3tables:GetTable:iceberg-warehouse", "s3tables:ListTables:iceberg-warehouse"]',
+        '"name": "iceberg-shadow-reader"',
+        '"actions": ["Read:iceberg-shadow", "List:iceberg-shadow", "s3tables:GetNamespace:iceberg-shadow", "s3tables:ListNamespaces:iceberg-shadow", "s3tables:GetTable:iceberg-shadow", "s3tables:ListTables:iceberg-shadow"]',
+        'key: "seaweedfs-iceberg-reader/reader-access-key"',
+        'key: "seaweedfs-iceberg-reader/reader-secret-key"',
+        'key: "seaweedfs-iceberg-shadow-reader/reader-access-key"',
+        'key: "seaweedfs-iceberg-shadow-reader/reader-secret-key"',
+    )
+    failures.extend(
+        f"SeaweedFS reader identity missing {value!r}"
+        for value in required_reader_identity
+        if value not in s3_config
+    )
+
+    trino_secret = TRINO_SECRET.read_text(encoding="utf-8")
+    trino_release = TRINO_RELEASE.read_text(encoding="utf-8")
+    required_trino_secret = (
+        "name: trino-iceberg-credentials",
+        'key: "seaweedfs-iceberg-reader/reader-access-key"',
+        'key: "seaweedfs-iceberg-reader/reader-secret-key"',
+        'key: "seaweedfs-iceberg-shadow-reader/reader-access-key"',
+        'key: "seaweedfs-iceberg-shadow-reader/reader-secret-key"',
+    )
+    failures.extend(
+        f"Trino reader Secret missing {value!r}"
+        for value in required_trino_secret
+        if value not in trino_secret
+    )
+    required_trino_catalog = (
+        "iceberg.rest-catalog.warehouse=s3://iceberg-warehouse",
+        "iceberg_shadow: |",
+        "iceberg.rest-catalog.warehouse=s3://iceberg-shadow",
+        "name: trino-iceberg-credentials",
+    )
+    failures.extend(
+        f"Trino catalog missing {value!r}"
+        for value in required_trino_catalog
+        if value not in trino_release
+    )
+    if trino_release.count("iceberg.security=READ_ONLY") != 2:
+        failures.append("Trino must set READ_ONLY on both Iceberg catalogs")
 
     required_event_identity = (
         '"name": "spark-events-reader"',
