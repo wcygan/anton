@@ -13,15 +13,15 @@ object storage (ADR 0019) for image blobs.
 | Remote web UI | `registry.<tailnet-name>.ts.net` | HTTPS (Tailscale-provisioned TLS) | Admin console, robot-account management |
 
 The LoadBalancer VIP `192.168.1.106` is the Docker v2 API and auth-realm
-endpoint. The Tailscale ingress is web-UI-only — pushing and pulling blobs
-through it works but the Tailscale path isn't where nodes pull from.
+endpoint. Use the Tailscale ingress for the web UI. Its authenticated OCI path
+has the token-realm mismatch described below.
 
 ## Architecture
 
 ```
                  ┌──────────────────────────────┐
                  │ Tailscale Operator Ingress   │
-                 │ registry.<tailnet>.ts.net    │
+                 │ registry.<tailnet-name>.ts.net │
                  │ (web UI, browser-trusted TLS)│
                  └──────────────┬───────────────┘
                                 │
@@ -86,23 +86,15 @@ All three live in the `registries` namespace. The admin password lands
 in a Secret via ESO; never committed.
 
 **Bootstrap-password pitfall.** Harbor reads `existingSecretAdminPassword`
-only at first install and persists the password in its Postgres DB; later
-Secret updates are *not* re-read. If the Secret is empty when Harbor first
-installs (e.g. the 1Password item doesn't exist yet), you'll need a
-one-time `PUT /api/v2.0/users/1/password` to sync the real password:
+only during first installation. It then stores the password in PostgreSQL.
+Later Secret updates do not replace the stored password.
 
-```sh
-ADMIN_PASS=$(kubectl -n registries get secret harbor-admin-secret \
-  -o jsonpath='{.data.HARBOR_ADMIN_PASSWORD}' | base64 -d)
-kubectl -n registries exec deploy/harbor-core -- curl -s \
-  -u "admin:" -H "Content-Type: application/json" \
-  -X PUT 'http://127.0.0.1:8080/api/v2.0/users/1/password' \
-  -d "{\"old_password\":\"\",\"new_password\":\"$ADMIN_PASS\"}"
-unset ADMIN_PASS
-```
+Treat password repair as credential rotation. Use the application-credential
+branch in `rotate-credential`. Keep the value out of shell variables, command
+arguments, output, and retained evidence.
 
-For a clean re-install, create the 1Password item *before* the HelmRelease
-first reconciles.
+For a clean installation, create the 1Password item before the first
+HelmRelease reconciliation.
 
 ## Node-level wiring (Talos + Spegel)
 
@@ -116,7 +108,7 @@ first reconciles.
           endpoints:
             - "http://192.168.1.106"
   ```
-  Applied via `task talos:apply-node IP=<node>` (non-destructive, no reboot;
+  Applied via `mise exec -- task talos:apply-node IP=<node>` (non-destructive, no reboot;
   containerd re-reads registry config on apply).
 - **Spegel P2P mirror** (`kubernetes/apps/kube-system/spegel/app/helmrelease.yaml`)
   includes `http://192.168.1.106` in `mirroredRegistries` with
@@ -153,26 +145,21 @@ per-namespace `docker-registry` Secrets.
 
 ```sh
 # Harbor health
-kubectl -n registries exec deploy/harbor-core -- \
+mise exec -- kubectl -n registries exec deploy/harbor-core -- \
   curl -s http://127.0.0.1:8080/api/v2.0/health | jq
 
 # HelmRelease + CR status
-flux -n registries get hr harbor
-kubectl -n registries get cluster,dragonfly,helmrelease
-kubectl -n registries get pods
+mise exec -- flux -n registries get hr harbor
+mise exec -- kubectl -n registries get cluster,dragonfly,helmrelease
+mise exec -- kubectl -n registries get pods
 
-# S3 backend holds blobs after first push
-AK=$(kubectl -n storage get secret seaweedfs-s3-config \
-  -o jsonpath='{.data.s3\.json}' | base64 -d \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["identities"][0]["credentials"][0]["accessKey"])')
-# (+ SK the same way)
-kubectl -n storage run s3-ls --rm --restart=Never \
-  --image=amazon/aws-cli:2.17.0 \
-  --env=AWS_ACCESS_KEY_ID=$AK --env=AWS_SECRET_ACCESS_KEY=$SK \
-  --env=AWS_EC2_METADATA_DISABLED=true \
-  --command -- aws --endpoint-url=http://seaweedfs-s3.storage.svc.cluster.local:8333 \
-    s3 ls s3://harbor/docker/registry/v2/repositories/ --recursive
+# Registry logs show successful S3-backed blob work after one approved push.
+mise exec -- kubectl -n registries logs deploy/harbor-registry \
+  -c registry --tail=100 | rg 's3|blob|error'
 ```
+
+Do not extract storage credentials for verification. Retain the pushed digest,
+Harbor response, and bounded registry logs.
 
 ## File locations
 
@@ -199,20 +186,12 @@ note the `http://` scheme. The Tailscale operator Ingress only serves port 443 (
 its `Ingress` object lists `80, 443`), so the realm URL isn't reachable and Docker's auth
 flow stalls.
 
-Workarounds for laptop push until this is fixed:
+Use the host-native flow in
+[the Harbor developer guide](./harbor-developer-guide.md). It validates the
+client network namespace, challenge realm, archive, remote digest, and cleanup.
 
-```sh
-# Option 1 — port-forward (works from anywhere with cluster access):
-kubectl -n registries port-forward svc/harbor 8080:80 &
-docker login localhost:8080 -u admin        # password from harbor-admin-secret
-docker tag myapp:v1 localhost:8080/library/myapp:v1
-docker push localhost:8080/library/myapp:v1
-
-# Option 2 — LAN push (requires Docker Desktop: Settings → Docker Engine →
-# add 192.168.1.106 to insecure-registries, then restart Docker):
-docker login 192.168.1.106
-docker push 192.168.1.106/library/myapp:v1
-```
+Docker Desktop can run its engine in a virtual machine. Its `localhost` might
+not reach a Mac host port-forward.
 
 Anonymous in-cluster pulls are unaffected — they don't hit the auth realm. The issue
 surfaces only for authenticated flows (laptop push, private-project pulls).
@@ -222,7 +201,7 @@ surfaces only for authenticated flows (laptop push, private-project pulls).
 Likely the Talos machine-registries patch isn't applied on the node. Check:
 
 ```sh
-talosctl --endpoints <tailscale-ip> --nodes <tailscale-ip> \
+mise exec -- talosctl --endpoints <tailscale-ip> --nodes <tailscale-ip> \
   get machineconfig -o yaml | yq '.spec.machine.registries'
 ```
 
@@ -238,7 +217,8 @@ bootstrap-password pitfall above, or reset via the Harbor UI.
 Check SeaweedFS is reachable and the `harbor` bucket exists:
 
 ```sh
-kubectl -n registries logs deploy/harbor-registry -c registry --tail=30
+mise exec -- kubectl -n registries logs deploy/harbor-registry \
+  -c registry --tail=30
 ```
 
 Look for `s3aws` or `S3` errors referencing the SeaweedFS endpoint.

@@ -15,6 +15,7 @@ import sys
 sys.path.insert(0, str(LIB))
 
 from airflow_shadow_gate import (  # noqa: E402
+    ShadowGateError,
     SPARK_API_VERSION,
     evaluate_shadow_gate,
     expected_spark_image_digest,
@@ -26,6 +27,7 @@ def passed_run(index: int, digest: str) -> dict:
     return {
         "run_id": f"scheduled__2026-08-12T00:{index:02d}:00Z",
         "workflow_run": f"scheduled__2026-08-12T00:{index:02d}:00Z",
+        "credential_epoch": "seaweedfs-iceberg-shadow-v2",
         "observed_at": f"2026-08-12T00:{index:02d}:00Z",
         "status": "passed",
         "target": "shadow",
@@ -80,18 +82,49 @@ def passed_run(index: int, digest: str) -> dict:
 def ledger(runs: list[dict]) -> dict:
     digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "candidate": {
             "source_revision": "5c2967c5",
             "airflow_image_digest": "sha256:" + "a" * 64,
             "spark_image_digest": digest,
             "spark_api_version": SPARK_API_VERSION,
+            "credential_version": 2,
+            "credential_owner": "1password-item:seaweedfs-iceberg-shadow",
+            "credential_epoch": "seaweedfs-iceberg-shadow-v2",
+            "credential_rotation_receipt": "credential-rotation.json",
         },
         "runs": runs,
     }
 
 
 def write_artifacts(root: Path, value: dict) -> None:
+    receipt = root / value["candidate"]["credential_rotation_receipt"]
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "status": "accepted",
+                "candidate_revision": value["candidate"]["source_revision"],
+                "credential_version": value["candidate"]["credential_version"],
+                "credential_owner": value["candidate"]["credential_owner"],
+                "credential_epoch": value["candidate"]["credential_epoch"],
+                "rotation_completed_at": "2026-08-12T00:00:00Z",
+                "rotation_completed_before_run_id": value["runs"][0]["run_id"],
+                "source": {
+                    "observed_at": "2026-08-12T00:00:30Z",
+                    "command": (
+                        "mise exec -- op item get seaweedfs-iceberg-shadow --format json "
+                        "| mise exec -- jq '{version,updated_at}'"
+                    ),
+                    "result": {
+                        "version": value["candidate"]["credential_version"],
+                        "updated_at": "2026-08-12T00:00:00Z",
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     for run in value["runs"]:
         if run["status"] != "passed":
             continue
@@ -206,6 +239,7 @@ class AirflowShadowGateTests(unittest.TestCase):
         digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
         failed = {
             "run_id": "scheduled__failure",
+            "credential_epoch": "seaweedfs-iceberg-shadow-v2",
             "observed_at": "2026-08-12T00:03:30Z",
             "status": "failed",
             "failure_reason": "bounded test failure",
@@ -228,6 +262,110 @@ class AirflowShadowGateTests(unittest.TestCase):
             result = evaluate_shadow_gate(value, expected_digest=digest, evidence_root=Path(directory))
         self.assertFalse(result["eligible"])
         self.assertTrue(any("image_digest" in error for error in result["errors"]))
+
+    def test_mixed_credential_epoch_blocks_the_gate(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        value = ledger([passed_run(index, digest) for index in range(1, 6)])
+        value["runs"][4]["credential_epoch"] = "seaweedfs-iceberg-shadow-v3"
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.evaluate(value, directory)
+        self.assertFalse(result["eligible"])
+        self.assertTrue(any("credential_epoch" in error for error in result["errors"]))
+
+    def test_credential_version_must_be_a_positive_integer(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        value = ledger([passed_run(index, digest) for index in range(1, 6)])
+        value["candidate"]["credential_version"] = "version 2"
+        with self.assertRaisesRegex(ShadowGateError, "positive integer"):
+            evaluate_shadow_gate(value, expected_digest=digest)
+
+    def test_rotation_receipt_must_name_the_first_run(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        value = ledger([passed_run(index, digest) for index in range(1, 6)])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_artifacts(root, value)
+            receipt_path = root / value["candidate"]["credential_rotation_receipt"]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["rotation_completed_before_run_id"] = value["runs"][1]["run_id"]
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            result = evaluate_shadow_gate(value, expected_digest=digest, evidence_root=root)
+        self.assertFalse(result["eligible"])
+        self.assertTrue(any("rotation_completed_before_run_id" in error for error in result["errors"]))
+
+    def test_rotation_receipt_requires_observed_source_output(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        value = ledger([passed_run(index, digest) for index in range(1, 6)])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_artifacts(root, value)
+            receipt_path = root / value["candidate"]["credential_rotation_receipt"]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt.pop("source")
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            result = evaluate_shadow_gate(value, expected_digest=digest, evidence_root=root)
+        self.assertFalse(result["eligible"])
+        self.assertTrue(any("source must be an object" in error for error in result["errors"]))
+
+    def test_rotation_must_precede_the_first_run(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        value = ledger([passed_run(index, digest) for index in range(1, 6)])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_artifacts(root, value)
+            receipt_path = root / value["candidate"]["credential_rotation_receipt"]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["rotation_completed_at"] = value["runs"][0]["observed_at"]
+            receipt["source"]["result"]["updated_at"] = value["runs"][0]["observed_at"]
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            result = evaluate_shadow_gate(value, expected_digest=digest, evidence_root=root)
+        self.assertFalse(result["eligible"])
+        self.assertTrue(any("must precede the first run" in error for error in result["errors"]))
+
+    def test_unwrapped_host_command_is_rejected(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        commands = (
+            "kubectl -n lakehouse get sparkapplication example",
+            "flux get hr -A",
+            "docker run --rm image:test",
+            "task contracts:validate",
+            "printf '%s' test | kubectl -n lakehouse get pods",
+            "env flux get hr -A",
+            "KUBECONFIG=./kubeconfig kubectl get pods",
+            "sudo /usr/bin/docker push example.test/image:v1",
+            "sh -c 'kubectl get pods'",
+            "! task contracts:validate",
+            "`kubectl get pods`",
+            "result=`flux get hr -A`",
+        )
+        for command in commands:
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as directory:
+                value = ledger([passed_run(index, digest) for index in range(1, 6)])
+                root = Path(directory)
+                write_artifacts(root, value)
+                artifact_path = root / value["runs"][-1]["evidence"]["spark_application"]
+                artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+                artifact["source"]["command"] = command
+                artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+                result = evaluate_shadow_gate(value, expected_digest=digest, evidence_root=root)
+            self.assertFalse(result["eligible"])
+            self.assertTrue(any("mise exec --" in error for error in result["errors"]))
+
+    def test_wrapped_host_commands_are_accepted(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        value = ledger([passed_run(index, digest) for index in range(1, 6)])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_artifacts(root, value)
+            artifact_path = root / value["runs"][-1]["evidence"]["spark_application"]
+            artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+            artifact["source"]["command"] = (
+                "mise exec -- kubectl -n lakehouse get sparkapplication example; "
+                "mise exec -- flux get hr -A"
+            )
+            artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+            result = evaluate_shadow_gate(value, expected_digest=digest, evidence_root=root)
+        self.assertTrue(result["eligible"])
 
     def test_missing_trino_check_blocks_the_gate(self) -> None:
         digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")

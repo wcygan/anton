@@ -1,16 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "candidate": {
     "source_revision": "5c811f207d983b10f46630b3984ba76ee0012332",
     "airflow_image_digest": "sha256:ff4e18adc9397a47524d0b7a5103f0e7d70a6d418918a1005f67ebe9eca23bc2",
     "spark_image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
     "spark_api_version": "spark.apache.org/v1",
-    "credential_version": "seaweedfs-iceberg-shadow item version 2"
+    "credential_version": 2,
+    "credential_owner": "1password-item:seaweedfs-iceberg-shadow",
+    "credential_epoch": "seaweedfs-iceberg-shadow-v2",
+    "credential_rotation_receipt": "README.json"
   },
   "runs": [
     {
       "run_id": "manual__rotated_gate_1_20260813T140000Z",
       "workflow_run": "manual__rotated_gate_1_20260813T140000Z",
+      "credential_epoch": "seaweedfs-iceberg-shadow-v2",
       "observed_at": "2026-08-13T13:59:12.121202Z",
       "status": "passed",
       "target": "shadow",
@@ -65,6 +69,7 @@
     {
       "run_id": "manual__rotated_gate_2_20260813T140000Z",
       "workflow_run": "manual__rotated_gate_2_20260813T140000Z",
+      "credential_epoch": "seaweedfs-iceberg-shadow-v2",
       "observed_at": "2026-08-13T14:00:26.027875Z",
       "status": "passed",
       "target": "shadow",
@@ -119,6 +124,7 @@
     {
       "run_id": "manual__rotated_gate_3_20260813T140100Z",
       "workflow_run": "manual__rotated_gate_3_20260813T140100Z",
+      "credential_epoch": "seaweedfs-iceberg-shadow-v2",
       "observed_at": "2026-08-13T14:01:39.447691Z",
       "status": "passed",
       "target": "shadow",
@@ -173,6 +179,7 @@
     {
       "run_id": "manual__rotated_gate_4_20260813T140200Z",
       "workflow_run": "manual__rotated_gate_4_20260813T140200Z",
+      "credential_epoch": "seaweedfs-iceberg-shadow-v2",
       "observed_at": "2026-08-13T14:02:45.916717Z",
       "status": "passed",
       "target": "shadow",
@@ -227,6 +234,7 @@
     {
       "run_id": "manual__rotated_gate_5_20260813T140300Z",
       "workflow_run": "manual__rotated_gate_5_20260813T140300Z",
+      "credential_epoch": "seaweedfs-iceberg-shadow-v2",
       "observed_at": "2026-08-13T14:04:08.183472Z",
       "status": "passed",
       "target": "shadow",

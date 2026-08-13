@@ -1,80 +1,185 @@
 # Harbor Developer Guide
 
-Quick reference for pushing and pulling container images against anton's
-Harbor registry.
+Use this guide to push and pull container images through Anton's Harbor
+registry. Keep credentials outside command arguments, logs, and retained output.
 
-## TL;DR endpoints
+## Endpoint and client matrix
 
-| Use | Endpoint | Auth |
-|---|---|---|
-| `docker push` (on-LAN laptop) | `192.168.1.106` | admin or robot account |
-| `docker push` (remote laptop) | `registry.<tailnet-name>.ts.net` | admin or robot account, via Tailscale |
-| `docker pull` from cluster Pod | `192.168.1.106/library/<image>` | **none** — `library` is anonymous-pull |
-| Web UI | `https://registry.<tailnet-name>.ts.net` | admin or your account |
+| Use | Endpoint | Client location | Transport |
+|---|---|---|---|
+| LAN push or pull | `192.168.1.106` | Laptop or cluster node | HTTP |
+| Local tunnel push | `127.0.0.1:18081` | Host-native client | HTTP |
+| Cluster image pull | `192.168.1.106/library/<image>` | Kubernetes node | HTTP |
+| Web UI | `https://registry.<tailnet-name>.ts.net` | Browser | HTTPS |
 
-**Platform note.** Cluster nodes run `linux/amd64`. On an Apple Silicon Mac,
-always build with `--platform linux/amd64` or Pods will fail to start.
+Cluster nodes run `linux/amd64`. Build and publish that platform explicitly.
 
-## Getting credentials
+The Docker engine can use a different network namespace from the command-line
+process. Docker Desktop and similar runtimes can place the engine in a virtual
+machine. That engine's `127.0.0.1` might not reach a Mac host port-forward.
 
-```sh
-# Admin password (for the Harbor web UI and for pushing)
-kubectl -n registries get secret harbor-admin-secret \
-  -o jsonpath='{.data.HARBOR_ADMIN_PASSWORD}' | base64 -d
-```
+## Credential boundary
 
-You'll typically create a scoped **robot account** in the Harbor UI for
-scripted/CI pushes rather than reusing the admin credentials directly.
+Use a scoped Harbor robot account for image pushes. Keep its token in the
+approved secret manager. Use protected standard input for authentication.
 
-## Docker insecure-registry setup (LAN)
+Do not retrieve the Harbor admin password from a Kubernetes Secret for routine
+pushes. Do not place any password or token in a command argument.
 
-Harbor's LAN endpoint is HTTP. Docker requires explicit opt-in.
+Obtain explicit approval before each image push. A local port-forward needs
+separate approval.
 
-**Docker Desktop** → *Settings* → *Docker Engine* → add:
-
-```json
-{
-  "insecure-registries": ["192.168.1.106"]
-}
-```
-
-Apply & restart the engine.
-
-**Remote/Tailscale path** is HTTPS via the operator's issued cert; no
-insecure-registry flag is needed there, but `docker login` targets the
-Tailscale hostname.
-
-## Push an image
+Create one isolated authentication directory before either push flow:
 
 ```sh
-# On-LAN, HTTP (requires insecure-registries config above):
-docker login 192.168.1.106
-docker tag myapp:v1 192.168.1.106/library/myapp:v1
-docker push 192.168.1.106/library/myapp:v1
+harbor_auth_dir="$(mktemp -d /tmp/anton-harbor-auth.XXXXXX)"
+chmod 700 "$harbor_auth_dir"
 ```
 
-Both resolve to the same Harbor and the same SeaweedFS `harbor` bucket.
-`library` is the default public project; ask for a new project in the
-Harbor UI if you want auth-gated pulls or per-team separation.
+Use this directory for every authenticated client command. Run the cleanup
+gate after a success or failure.
 
-**Direct push to `registry.<tailnet-name>.ts.net` is currently broken.**
-Harbor's auth realm returns an `http://` URL on the tailnet hostname,
-but the Tailscale operator ingress only serves 443. Use port-forward
-as a workaround:
+## Repository paths
+
+OCI image references use this shape:
+
+```text
+<registry>/library/<image>:<tag>
+```
+
+Harbor management API references use this separate shape:
+
+```text
+/api/v2.0/projects/library/repositories/<url-encoded-repository>
+```
+
+The `library` project permits anonymous pulls. Pushes still require authentication.
+
+## LAN push
+
+Harbor's LAN endpoint uses HTTP. Configure the Docker engine to treat
+`192.168.1.106` as an insecure registry before this flow.
 
 ```sh
-kubectl -n registries port-forward svc/harbor 8080:80 &
-docker login localhost:8080 -u admin
-docker tag myapp:v1 localhost:8080/library/myapp:v1
-docker push localhost:8080/library/myapp:v1
+DOCKER_CONFIG="$harbor_auth_dir" mise exec -- docker login \
+  192.168.1.106 --username <robot-account>
+DOCKER_CONFIG="$harbor_auth_dir" mise exec -- docker buildx build \
+  --platform linux/amd64 \
+  --tag 192.168.1.106/library/myapp:v1 \
+  --push .
 ```
 
-Details + fix options: `harbor-registry.md` troubleshooting section.
+The login command prompts for the token. Keep terminal logging disabled.
 
-## Pull from Kubernetes (no pull secret needed)
+## Local port-forward push
 
-`library` is configured for anonymous pull, so cluster Pods can reference
-Harbor images directly:
+Use this flow when LAN access is unavailable. Obtain approval before starting
+the port-forward.
+
+Start the tunnel in a dedicated terminal. Keep it in the foreground:
+
+```sh
+mise exec -- kubectl -n registries port-forward svc/harbor 18081:80
+```
+
+From another terminal, inspect the unauthenticated challenge:
+
+```sh
+mise exec -- curl -sS -D - -o /dev/null http://127.0.0.1:18081/v2/ \
+  | rg -i '^www-authenticate:'
+```
+
+The upload endpoint and token realm must be reachable from the same client
+network namespace. Stop when the challenge points to an unreachable address.
+
+### Build and verify the archive
+
+Use Docker only for the local build and archive creation:
+
+```sh
+mise exec -- docker buildx build \
+  --platform linux/amd64 \
+  --load \
+  --tag myapp:v1 .
+mise exec -- docker image inspect myapp:v1 \
+  --format '{{.Os}}/{{.Architecture}}'
+mise exec -- docker save --output /tmp/myapp-v1-linux-amd64.tar myapp:v1
+mise exec -- wc -c /tmp/myapp-v1-linux-amd64.tar
+mise exec -- shasum -a 256 /tmp/myapp-v1-linux-amd64.tar
+mise exec -- tar -tf /tmp/myapp-v1-linux-amd64.tar >/dev/null
+```
+
+Require `linux/amd64` and a successful archive listing. Stop after an
+unexpected EOF, changed byte count, or failed archive listing.
+
+The prior large-image incident did not retain enough evidence for a narrower
+truncation repair. Recreate the archive before another push.
+
+If an archive crosses a process or host boundary, verify its byte count and
+checksum at both ends before import. Do not trust the transfer exit alone.
+
+### Authenticate and push from the host
+
+Pass the robot token from the approved secret manager through standard input:
+
+```sh
+mise exec -- op read 'op://anton/<harbor-robot-item>/<token-field>' \
+  | DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane auth login \
+      --insecure 127.0.0.1:18081 \
+      --username <robot-account> \
+      --password-stdin
+```
+
+Push one archive to one repository tag:
+
+```sh
+DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane push \
+  --insecure \
+  /tmp/myapp-v1-linux-amd64.tar \
+  127.0.0.1:18081/library/myapp:v1
+```
+
+Do not substitute `docker push localhost:18081` on macOS without proving the
+Docker engine shares the host loopback path.
+
+### Verify the remote image
+
+```sh
+DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane digest \
+  --insecure 127.0.0.1:18081/library/myapp:v1
+DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane config \
+  --insecure 127.0.0.1:18081/library/myapp:v1 \
+  | mise exec -- jq -r '"\(.os)/\(.architecture)"'
+```
+
+Record the digest and require `linux/amd64` before editing any manifest.
+
+### Clean up
+
+Stop the foreground port-forward with `Ctrl-C`. Remove the run-owned
+authentication directory and archive:
+
+```sh
+case "$harbor_auth_dir" in
+  /tmp/anton-harbor-auth.*|/private/tmp/anton-harbor-auth.*)
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+rm -f -- "$harbor_auth_dir/config.json"
+rmdir -- "$harbor_auth_dir"
+rm -f -- /tmp/myapp-v1-linux-amd64.tar
+```
+
+If `rmdir` fails, inspect the directory. Obtain approval before recursive deletion.
+
+Verify that no temporary listener remains. Keep only the remote digest and
+nonsecret archive checksum in retained evidence.
+
+## Kubernetes pulls
+
+The public `library` project does not require an image pull Secret:
 
 ```yaml
 apiVersion: v1
@@ -88,76 +193,37 @@ spec:
       image: 192.168.1.106/library/myapp:v1
 ```
 
-No `imagePullSecrets`, no ServiceAccount patching, no per-namespace
-`docker-registry` Secret. The Talos machine-registries patch plus the
-Spegel peer cache handles discovery; anonymous-pull handles auth.
-
-For **private projects**, create a robot account in the Harbor UI with
-`Pull` scope on that project, stash its token in 1Password, and pull it
-into the target namespace via an ExternalSecret of kind
-`kubernetes.io/dockerconfigjson`.
-
-## Build + push in one shot (ARM Mac)
-
-```sh
-docker build --platform linux/amd64 -t 192.168.1.106/library/myapp:v1 .
-docker push 192.168.1.106/library/myapp:v1
-```
-
-Verify the manifest architecture:
-
-```sh
-docker manifest inspect 192.168.1.106/library/myapp:v1 \
-  | jq '.manifests // [{architecture}] | .[].platform // .[].architecture'
-```
-
-## Off-LAN push — use kubectl port-forward until the auth-realm issue is fixed
-
-Off-LAN with a working Tailscale session, the port-forward pattern also
-works since `kubectl` routes through Tailscale:
-
-```sh
-kubectl -n registries port-forward svc/harbor 8080:80 &
-docker login localhost:8080 -u admin
-docker push localhost:8080/library/myapp:v1
-```
-
-The Tailscale hostname direct-push (`registry.<tailnet-name>.ts.net`) is
-currently blocked by a Harbor realm-URL issue documented in
-`harbor-registry.md`. Pulls (anonymous, from in-cluster Pods) are
-unaffected.
+Private projects require a scoped robot account and an ExternalSecret-managed
+`kubernetes.io/dockerconfigjson` Secret.
 
 ## Troubleshooting
 
-### `unauthorized` on push/pull
+### Direct tailnet push fails
 
-Robot tokens expire or admin passwords drift. `docker login` again.
+Harbor currently returns an HTTP token realm for the tailnet hostname. The
+Tailscale ingress serves HTTPS. Use the approved host-native tunnel flow.
 
-### `Image pull failed` from a Pod
+### The local tunnel works with curl, but Docker fails
 
-Two likely causes:
+Confirm where the Docker engine runs. Host curl success does not prove that a
+virtual-machine engine can reach host loopback.
 
-1. **Talos machine-registries patch not applied on that node.** Verify:
-   ```sh
-   talosctl --endpoints <tailscale-ip> --nodes <tailscale-ip> \
-     get machineconfig -o yaml | yq '.spec.machine.registries.mirrors'
-   ```
-   Should show `192.168.1.106 → http://192.168.1.106`.
-2. **Non-`library` project without auth.** Create a robot account for the
-   project and project-scoped `imagePullSecret`.
+### Push fails before upload
 
-### Architecture mismatch
+Check the registry scheme, token realm, client namespace, and repository path.
+An HTTP tunnel must use an insecure-capable client.
 
-Check `docker inspect myapp:v1 | jq '.[0].Architecture'`. If it says `arm64`,
-rebuild with `--platform linux/amd64`.
+### Push stops during a large layer
 
-### Can reach `curl http://192.168.1.106` but push fails with TLS
+Retain the client exit status and archive byte count. Recheck the archive
+checksum and listing. Recreate the archive when either value changes.
 
-You didn't add `192.168.1.106` to Docker's `insecure-registries`.
+### A Pod reports an architecture error
+
+Inspect the remote image configuration. Publish `linux/amd64`, then update the
+committed digest through review.
 
 ## Further reading
 
-- [Harbor registry architecture](./harbor-registry.md) — endpoints, storage
-  backend, admin credentials, troubleshooting the cluster side.
-- ADR 0015 — the decision record for running Harbor on SeaweedFS S3 with
-  anonymous pull on `library`.
+- [Harbor registry architecture](./harbor-registry.md)
+- ADR 0015 for Harbor storage and anonymous-pull decisions.

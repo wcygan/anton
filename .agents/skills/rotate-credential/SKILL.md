@@ -1,12 +1,18 @@
 ---
 name: rotate-credential
-description: Credential rotation for Anton — rotate age key plus SOPS key rotation across the repo, generate a new deploy key for Flux, rotate the 1password token for ESO, or rotate the cloudflare token for the tunnel. Preconditions, verification, rollback.
+description: Credential rotation for Anton. Use for the age key, Flux deploy key, ESO token, Cloudflare tunnel token, or application credential exposure. Includes preconditions, verification, evidence epochs, and rollback.
 allowed-tools: Read, Bash
 ---
 
 # Rotate a credential
 
-Task skill for the four credentials that gate Anton. Each ritual is preconditions → command sequence → verification → rollback. Run only one rotation at a time. Never rotate `age.key` and a downstream secret in the same change — recover from the age rotation first.
+Task skill for Anton platform and application credentials. Each ritual is
+preconditions → command sequence → verification → rollback. Run one rotation
+at a time. Finish age-key recovery before any downstream rotation.
+
+For an exposed application credential, read
+[application-credential-exposure.md](references/application-credential-exposure.md)
+before creating a replacement or collecting new acceptance evidence.
 
 > **Sources of truth:**
 > - Age public recipient (committed): `.sops.yaml`, currently `age1de4xdcq6h5yk4jjyyqe6qws344xsk055rdzvpr79mehvv7q7rdfqnyetjc`
@@ -143,3 +149,4 @@ kubectl -n network rollout status deploy/cloudflare-tunnel
 
 - Triaging Flux when reconciliation breaks after a rotation → `debug-flux-reconciliation`
 - The SOPS vs ExternalSecret decision tree (which credentials live where) → `anton-repo-conventions`
+- Airflow shadow-gate evidence epochs → `airflow-spark-lakehouse`

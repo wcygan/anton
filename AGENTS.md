@@ -38,6 +38,7 @@ Read the matching `.agents/skills/<name>/SKILL.md` before following that branch:
 | Broad cluster health or an unclear symptom | `anton-cluster-health`; start with `talos-inspect` for node, etcd, disk, route, or interface symptoms |
 | Stuck Flux source, Kustomization, HelmRelease, SOPS, postBuild, or dependency | `debug-flux-reconciliation` |
 | Incident logs, LogQL, missing logs, or the OTel-to-Loki path | `query-kubernetes-logs` |
+| Airflow lakehouse Workflow Runs, Spark Attempts, shadow gates, writer cutover, or recovery | `airflow-spark-lakehouse` |
 | Flux manifest authoring or review | `anton-repo-conventions` plus the task-specific app, exposure, storage, database, or observability skill |
 | Node replacement, upgrades, credential rotation, restore, or storage-node work | The matching high-risk skill; retain all of its preconditions, approval gates, and rollback checks |
 
@@ -114,6 +115,7 @@ Use QMD before broad manual browsing when the task depends on Anton's ADRs, plan
 - Keep the literal tailnet name out of committed files. Use `<tailnet-name>.ts.net`.
 - Keep existing `*.sops.*` files encrypted. Edit them with `sops <file>` and verify with `sops filestatus <file>`.
 - Keep bootstrap credentials out of edits and output: `age.key`, `github-deploy.key`, `cloudflare-tunnel.json`, and token files.
+- If a credential reaches output or evidence, stop its use. Rotate it before new acceptance work, and retain only epoch metadata.
 - Prefer namespaced, bounded reads such as `kubectl get`, `kubectl describe`, `kubectl logs`, `talosctl get`, `talosctl read`, `talosctl logs`, `talosctl health`, `flux get`, and `flux logs`. Inspect secret metadata and delivery conditions without reading Secret data.
 - Present the exact target and effect, then obtain explicit operator approval before any live-cluster mutation, credential rotation, Talos reset/upgrade/apply, namespace or storage deletion, Flux suspend/uninstall/reconcile, or recursive deletion.
 - Verify kube and Talos context immediately before an approved mutation. The expected Kubernetes context is the Tailscale operator proxy, with `admin@anton` only as fallback.

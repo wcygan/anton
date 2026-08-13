@@ -9,9 +9,10 @@ description: >-
 
 # SeaweedFS Iceberg Data Access
 
-This skill covers the data plane for Anton's internal SeaweedFS Iceberg demo.
-Use `seaweedfs-iceberg-lakehouse` for deployment, Flux, credentials, Harbor,
-reconciliation, and teardown operations.
+This skill covers the data plane for Anton's internal SeaweedFS Iceberg
+lakehouse. Use `seaweedfs-iceberg-lakehouse` for storage, catalog service,
+Harbor, legacy fixture deployment, credential prerequisites, and teardown.
+Use `airflow-spark-lakehouse` for workflow operations.
 
 The shared contract is:
 
@@ -25,20 +26,23 @@ Spark / Trino
     +-- tables:                normalized, hourly
 ```
 
-The demo is internal and time-boxed for review on 2026-08-20. Never expose the
-catalog or S3 endpoint publicly, and never add a second catalog service.
+The learning platform is internal and reviewed by 2026-09-10 under ADR 0033.
+Keep the catalog and S3 endpoint private. Keep one catalog service.
 
 ## Read first
 
 1. Read repository `AGENTS.md`.
-2. Read `context/adrs/0031-adopt-seaweedfs-iceberg-log-demo.md` for the
-   architectural contract.
-3. Read `context/plans/0020-implement-seaweedfs-iceberg-log-lakehouse.md` for
-   current acceptance evidence.
-4. Read `docs/docs/notes/seaweedfs-iceberg-log-lakehouse.md` for the table
+2. Read `context/adrs/0033-adopt-airflow-spark-operator-lakehouse.md` for the
+   current architectural contract.
+3. Read `context/plans/0023-roll-out-airflow-spark-lakehouse.md` for current
+   writer ownership.
+4. Read ADR 0031 and Plan 0020 for the underlying table history.
+5. Read `docs/docs/notes/seaweedfs-iceberg-log-lakehouse.md` for the table
    layout and known limitations.
-5. Read the source configuration in:
-   - `images/iceberg-log-spark/transform.py`
+6. Read the source configuration in:
+   - `images/airflow-runtime/dags/airflow_spark_lakehouse.py`
+   - `images/spark-runtime/`
+   - `images/iceberg-log-spark/transform.py` for the legacy writer
    - `kubernetes/apps/iceberg-demo/trino/app/helmrelease.yaml`
    - `kubernetes/apps/iceberg-demo/trino/validation.sql`
 
@@ -88,9 +92,8 @@ event_count bigint
 
 - Location: `s3://iceberg-warehouse/logs/hourly`
 - Partitioning: `day(hour)`
-- It is rebuilt with bounded `DELETE` followed by `INSERT` because the pinned
-  Spark 3.5.3/Iceberg 1.5.2 combination has a transformed-partition `MERGE`
-  planner failure.
+- It retains bounded `DELETE` followed by `INSERT` through the platform
+  migration. A transformed-partition `MERGE` remains a separate experiment.
 - The two table writes are not one atomic transaction.
 
 ## Trino access
@@ -143,7 +146,7 @@ With operator approval for the local connection:
 
 ```sh
 mise exec -- kubectl -n iceberg-demo port-forward svc/trino 18082:8080
-trino --server http://127.0.0.1:18082 --user validation
+mise exec -- trino --server http://127.0.0.1:18082 --user validation
 ```
 
 The Trino server retains its ESO-backed catalog credentials; the local CLI
@@ -183,16 +186,11 @@ Expected rows are:
 
 ## Spark access
 
-Spark is deployed as native Kubernetes submission, not as a notebook or a
-long-running Spark service. The Flux-owned CronJob is the canonical writer:
+Airflow-created `SparkApplication` resources own the current shadow workflow.
+The Flux-owned legacy CronJob remains authoritative until approved cutover.
 
-```sh
-mise exec -- kubectl -n iceberg-demo create job \
-  --from=cronjob/iceberg-log-spark iceberg-log-spark-manual-<timestamp>
-```
-
-Require both the submission Job and the driver result. A submission Job can
-finish even when the driver failed, so inspect the driver explicitly:
+Use `airflow-spark-lakehouse` before any Spark run, retry, or writer change.
+For legacy read-only inspection, require both submission and driver results:
 
 ```sh
 mise exec -- kubectl -n iceberg-demo get pods -l spark-role=driver -o wide
@@ -235,9 +233,8 @@ spark.table("lake.logs.normalized").show(truncate=False)
 spark.table("lake.logs.hourly").orderBy("hour", "service", "level").show()
 ```
 
-For the committed fixture, use the existing
-`images/iceberg-log-spark/transform.py` and CronJob rather than inventing a
-second credential or warehouse configuration.
+Use the committed Airflow DAG and Spark runtime for current shadow work. Keep
+the legacy transform only for rollback until the cutover observation gate passes.
 
 ## Cross-engine comparison
 
@@ -249,8 +246,9 @@ SELECT count(*) AS row_count FROM iceberg.logs.hourly;
 SELECT coalesce(sum(event_count), 0) AS event_count FROM iceberg.logs.hourly;
 ```
 
-Acceptance requires Spark driver output of `5 / 5` followed by Trino output of
-`5 / 5 / 5`. If Trino can read the table but Spark cannot, inspect Spark's REST
+Deterministic fixture acceptance requires Spark output of `5 / 5` followed by
+Trino output of `5 / 5 / 5`. Loki-source runs use their retained window counts.
+If Trino can read the table but Spark cannot, inspect Spark's REST
 credential and catalog URI first. If Spark succeeds but Trino cannot read,
 inspect the Trino catalog file, worker environment, and S3 endpoint.
 

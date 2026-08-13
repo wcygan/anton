@@ -1,20 +1,19 @@
 ---
 name: seaweedfs-iceberg-lakehouse
 description: >-
-  Operate and validate Anton's internal SeaweedFS Iceberg log lakehouse demo.
-  Use for Spark fixture runs, SeaweedFS Iceberg REST catalog checks, Trino
-  cross-engine validation, Harbor image handoff, ESO/1Password prerequisites,
-  Flux reconciliation, rerun/idempotency checks, or demo cleanup.
+  Operate Anton's SeaweedFS and Iceberg lakehouse data path. Use for storage,
+  catalog service, legacy fixture deployment, Harbor image handoff, ESO
+  prerequisites, infrastructure validation, or storage cleanup.
 ---
 
 # SeaweedFS Iceberg Lakehouse
 
-Use this skill for the time-boxed internal lakehouse demo described by ADR 0031
-and plan 0020. The validated path is:
+Use this skill for the SeaweedFS, Iceberg, Trino, and Harbor data path retained
+by ADR 0033. ADR 0031 and Plan 0020 remain historical storage evidence.
 
-For table-level Spark and Trino reads, writes, schemas, locations, and
-cross-engine queries, use the companion
-`seaweedfs-iceberg-data-access` skill.
+Use `seaweedfs-iceberg-data-access` for table schemas, locations, reads,
+writes, and cross-engine queries. Use `airflow-spark-lakehouse` for Workflow
+Runs, Spark Attempts, shadow gates, writer cutover, retry, and cancellation.
 
 ```text
 1Password -> ESO -> SeaweedFS S3 identities
@@ -23,25 +22,26 @@ SeaweedFS S3 :8333 <--------+--------> Iceberg REST :8181
        |                                  |
        +-- iceberg-raw                    +-- iceberg-warehouse S3 Table bucket
                                               |
-                          Spark fixture -----> logs.normalized / logs.hourly
+            Airflow -> SparkApplication ----> logs.normalized / logs.hourly
+                          legacy CronJob -----^ until approved cutover
                                               |
                                       Trino 480 reads the same tables
 ```
 
-This is a learning demo, not a production lakehouse. Keep it internal and
-time-boxed for review on 2026-08-20. Do not add Polaris, Nessie, Hive
-Metastore, Kafka, Flink, Spark Operator, Airflow, or Dagster.
+This is a learning lakehouse, not a production service. Keep it internal and
+review the Airflow and Spark platform by 2026-09-10 under ADR 0033.
 
 ## Read first
 
 1. Read the repository `AGENTS.md` and verify the Kubernetes context.
-2. Read `context/adrs/0031-adopt-seaweedfs-iceberg-log-demo.md` as the
-   architectural authority.
-3. Read `context/plans/0020-implement-seaweedfs-iceberg-log-lakehouse.md` as
-   the execution record.
-4. Read `docs/docs/notes/seaweedfs-iceberg-log-lakehouse.md` for the current
+2. Read `context/adrs/0033-adopt-airflow-spark-operator-lakehouse.md` as the
+   current architectural authority.
+3. Read `context/plans/0023-roll-out-airflow-spark-lakehouse.md` for current
+   writer ownership and migration state.
+4. Read ADR 0031 and Plan 0020 for the underlying storage history.
+5. Read `docs/docs/notes/seaweedfs-iceberg-log-lakehouse.md` for the current
    validation evidence and cleanup procedure.
-5. When changing manifests, read `kubernetes/apps/AGENTS.md` and
+6. When changing manifests, read `kubernetes/apps/AGENTS.md` and
    `kubernetes/apps/storage/AGENTS.md`.
 
 Use the repository's `mise exec --` wrapper for normal cluster commands. In
@@ -71,9 +71,13 @@ this checkout, `KUBECONFIG=./kubeconfig` is the equivalent explicit form.
 - Shared bucket provisioner: `kubernetes/apps/storage/seaweedfs-config/app/buckets-cronjob.yaml`
 - Provisioning implementation: `kubernetes/apps/storage/seaweedfs-config/app/provision-buckets.sh`
 - Raw S3 smoke test: `kubernetes/apps/storage/seaweedfs-config/app/lakehouse-s3-smoke-job.yaml`
-- Spark CronJob and RBAC: `kubernetes/apps/iceberg-demo/spark-fixture/app/`
+- Legacy Spark CronJob and RBAC: `kubernetes/apps/iceberg-demo/spark-fixture/app/`
+- Airflow DAG and adapter: `images/airflow-runtime/`
+- Spark runtime image: `images/spark-runtime/`
+- Shadow SparkApplication: `kubernetes/apps/lakehouse/shadow-fixture/app/`
+- Spark control plane: `kubernetes/apps/spark-system/spark-operator/app/`
 - Trino HelmRelease and query: `kubernetes/apps/iceberg-demo/trino/`
-- Spark image: `images/iceberg-log-spark/`
+- Legacy Spark image: `images/iceberg-log-spark/`
 
 The warehouse identity needs both ordinary S3 bucket actions and the
 bucket-scoped SeaweedFS S3 Tables action `s3tables:*:iceberg-warehouse`.
@@ -111,20 +115,10 @@ warehouse-secret-key
 ```
 
 Do not retrieve or echo the values. Verify only that ESO is synced. Images are
-pinned to Harbor digests in the manifests. If Harbor is unreachable from the
-laptop, obtain operator approval and use a temporary port-forward:
+pinned to Harbor digests in the manifests.
 
-```sh
-mise exec -- kubectl -n registries port-forward svc/harbor 18081:80
-docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
-  --file /tmp/trino-amd64/Dockerfile \
-  --tag 127.0.0.1:18081/library/trino:480-amd64 \
-  --push /tmp/trino-amd64
-```
-
-Use the actual Spark Dockerfile for the Spark image. Verify the resulting
-digest before editing the committed image reference. Stop and review the diff
-before pushing or reconciling.
+Read [harbor-image-handoff.md](references/harbor-image-handoff.md) before an
+image build, archive transfer, local port-forward, or Harbor push.
 
 ## Ordered validation flow
 
@@ -146,10 +140,12 @@ Table bucket `iceberg-warehouse`. The smoke job must verify scoped raw
 identity write/read/delete. An ordinary bucket named `iceberg-warehouse` is a
 collision and must not be replaced automatically.
 
-### 2. Spark fixture
+### 2. Legacy Spark fixture
 
-After approval for a live run, create a unique Job from the Flux-owned
-CronJob:
+The legacy CronJob remains the authoritative writer until Ticket 09 completes.
+Use `airflow-spark-lakehouse` for shadow or Airflow-owned runs.
+
+After approval for a legacy live run, create a unique Job from the Flux-owned CronJob:
 
 ```sh
 mise exec -- kubectl -n iceberg-demo create job \
@@ -172,10 +168,9 @@ expected normalized rows=5 actual=5
 expected hourly rows=5 actual=5
 ```
 
-The normalized table is deduplicated by `event_id`. The hourly table uses a
-bounded delete followed by insert because Spark 3.5.3/Iceberg 1.5.2 has a
-transformed-partition `MERGE` planner failure. The two writes are not one
-atomic transaction.
+The normalized table is deduplicated by `event_id`. The migration contract
+retains the hourly delete and insert through cutover. Test transformed-partition
+`MERGE` in a separate experiment. The two writes are not one atomic transaction.
 
 ### 3. Trino cross-engine query
 
@@ -217,7 +212,8 @@ and `day(hour)` respectively.
 Run the identical fixture a second time with a new Job name. Counts should
 remain five in both tables. The rerun adds Iceberg snapshots even when the
 final row set is unchanged. Record Flux revision, driver names and output,
-Trino output, and any non-fatal REST metrics warnings in plan 0020.
+Trino output, and any non-fatal REST metrics warnings in the active ticket and
+Plan 0023. Keep Plan 0020 as historical evidence.
 
 ## Failure triage
 
@@ -237,12 +233,13 @@ Trino output, and any non-fatal REST metrics warnings in plan 0020.
 
 ## Cleanup and stop conditions
 
-Stop when deterministic Spark and Trino acceptance is green. Do not add Loki
-ingestion until that gate is explicitly reviewed. For teardown, retain the
-plan evidence, suspend the demo Kustomizations, and only then remove the
-`iceberg-demo` namespace, dedicated buckets, and 1Password identities with
-operator approval. SeaweedFS uses `defaultReplication: "000"`; demo data is
-disposable and has no independent Seaweed durability guarantee.
+Stop when the requested storage and data-path checks pass. Route workflow
+acceptance and writer changes to `airflow-spark-lakehouse`.
+
+For teardown, retain plan evidence and stop writers before resource removal.
+Namespace, bucket, and credential removal require separate operator approval.
+SeaweedFS uses `defaultReplication: "000"`; learning data has no independent
+Seaweed durability guarantee.
 
 ## Report format
 

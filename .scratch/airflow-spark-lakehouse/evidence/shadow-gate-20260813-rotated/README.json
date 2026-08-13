@@ -3,6 +3,18 @@
   "status": "accepted",
   "candidate_revision": "5c811f207d983b10f46630b3984ba76ee0012332",
   "credential_version": 2,
+  "credential_owner": "1password-item:seaweedfs-iceberg-shadow",
+  "credential_epoch": "seaweedfs-iceberg-shadow-v2",
+  "rotation_completed_at": "2026-08-13T08:55:59.339326-05:00",
+  "rotation_completed_before_run_id": "manual__rotated_gate_1_20260813T140000Z",
+  "source": {
+    "observed_at": "2026-08-13T16:30:48Z",
+    "command": "mise exec -- op item get seaweedfs-iceberg-shadow --vault anton --format json | mise exec -- jq -e -c '{version,updated_at}'",
+    "result": {
+      "version": 2,
+      "updated_at": "2026-08-13T08:55:59.339326-05:00"
+    }
+  },
   "notes": [
     "This set supersedes shadow-gate-20260813.",
     "Each artifact retains a command, timestamp, and observed result.",

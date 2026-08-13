@@ -9,7 +9,9 @@ import re
 from typing import Any, Mapping
 
 
-SCHEMA_VERSION = 1
+LEDGER_SCHEMA_VERSION = 2
+EVIDENCE_SCHEMA_VERSION = 1
+CREDENTIAL_RECEIPT_SCHEMA_VERSION = 1
 REQUIRED_RUNS = 5
 SPARK_API_VERSION = "spark.apache.org/v1"
 REQUIRED_TRINO_CHECKS = (
@@ -46,6 +48,15 @@ REQUIRED_EVIDENCE_ARTIFACTS = (
     "history_server",
 )
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_HOST_COMMAND = re.compile(
+    r"(?:^|[\s;&|()'\"!`])"
+    r"(?P<executable>"
+    r"(?:(?:/(?:[A-Za-z0-9_.+-]+/)*)|(?:\./(?:[A-Za-z0-9_.+-]+/)*)|"
+    r"(?:\.\./(?:[A-Za-z0-9_.+-]+/)*))?"
+    r"(?:docker|flux|kubectl|task))"
+    r"(?=$|[\s;&|()'\"!`])"
+)
+_MISE_PREFIX = re.compile(r"(?:^|[;&|()'\"`\n])\s*mise\s+exec\s+--\s*$")
 
 
 class ShadowGateError(ValueError):
@@ -68,6 +79,32 @@ def _boolean(value: Any, field: str) -> bool:
     if not isinstance(value, bool):
         raise ShadowGateError(f"{field} must be true or false")
     return value
+
+
+def _positive_integer(value: Any, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ShadowGateError(f"{field} must be a positive integer")
+    return value
+
+
+def _timestamp(value: Any, field: str) -> datetime:
+    timestamp = _string(value, field)
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ShadowGateError(f"{field} must be an ISO-8601 timestamp") from error
+    if parsed.tzinfo is None:
+        raise ShadowGateError(f"{field} must include a timezone")
+    return parsed
+
+
+def _source_command(value: Any, field: str) -> str:
+    command = _string(value, field)
+    for match in _HOST_COMMAND.finditer(command):
+        prefix = command[: match.start("executable")]
+        if not _MISE_PREFIX.search(prefix):
+            raise ShadowGateError(f"{field} host commands must use mise exec --")
+    return command
 
 
 def _true_checks(value: Any, field: str, required: tuple[str, ...]) -> None:
@@ -97,14 +134,18 @@ def _artifact_path(root: Path | None, value: Any, field: str) -> Path:
     return resolved
 
 
-def _artifact_payload(root: Path | None, value: Any, field: str, *, run_id: str, artifact: str) -> Mapping[str, Any]:
+def _retained_json(root: Path | None, value: Any, field: str) -> Mapping[str, Any]:
     path = _artifact_path(root, value, field)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ShadowGateError(f"{field} is not valid JSON evidence") from error
-    envelope = _mapping(payload, field)
-    if envelope.get("schema_version") != SCHEMA_VERSION:
+    return _mapping(payload, field)
+
+
+def _artifact_payload(root: Path | None, value: Any, field: str, *, run_id: str, artifact: str) -> Mapping[str, Any]:
+    envelope = _retained_json(root, value, field)
+    if envelope.get("schema_version") != EVIDENCE_SCHEMA_VERSION:
         raise ShadowGateError(f"{field}.schema_version is unsupported")
     if envelope.get("run_id") != run_id:
         raise ShadowGateError(f"{field}.run_id does not match the Workflow Run")
@@ -112,15 +153,9 @@ def _artifact_payload(root: Path | None, value: Any, field: str, *, run_id: str,
         raise ShadowGateError(f"{field}.artifact must be {artifact}")
     if envelope.get("passed") is not True:
         raise ShadowGateError(f"{field}.passed must be true")
-    observed_at = _string(envelope.get("observed_at"), f"{field}.observed_at")
-    try:
-        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ShadowGateError(f"{field}.observed_at must be an ISO-8601 timestamp") from error
-    if observed.tzinfo is None:
-        raise ShadowGateError(f"{field}.observed_at must include a timezone")
+    _timestamp(envelope.get("observed_at"), f"{field}.observed_at")
     source = _mapping(envelope.get("source"), f"{field}.source")
-    _string(source.get("command"), f"{field}.source.command")
+    _source_command(source.get("command"), f"{field}.source.command")
     result = source.get("result")
     if result in (None, "", [], {}):
         raise ShadowGateError(f"{field}.source.result must contain retained output")
@@ -133,6 +168,67 @@ def _artifacts(value: Any, *, root: Path | None, run_id: str, field: str = "evid
     for name in REQUIRED_EVIDENCE_ARTIFACTS:
         details[name] = _artifact_payload(root, artifacts.get(name), f"{field}.{name}", run_id=run_id, artifact=name)
     return details
+
+
+def _validate_credential_rotation(
+    candidate: Mapping[str, Any],
+    runs: list[dict[str, Any]],
+    *,
+    evidence_root: Path | None,
+) -> None:
+    field = "candidate.credential_rotation_receipt"
+    receipt = _retained_json(
+        evidence_root,
+        candidate.get("credential_rotation_receipt"),
+        field,
+    )
+    if receipt.get("schema_version") != CREDENTIAL_RECEIPT_SCHEMA_VERSION:
+        raise ShadowGateError(f"{field}.schema_version is unsupported")
+    if receipt.get("status") != "accepted":
+        raise ShadowGateError(f"{field}.status must be accepted")
+    if receipt.get("candidate_revision") != candidate.get("source_revision"):
+        raise ShadowGateError(f"{field}.candidate_revision does not match the candidate")
+    if receipt.get("credential_version") != candidate.get("credential_version"):
+        raise ShadowGateError(f"{field}.credential_version does not match the candidate")
+    if receipt.get("credential_owner") != candidate.get("credential_owner"):
+        raise ShadowGateError(f"{field}.credential_owner does not match the candidate")
+    if receipt.get("credential_epoch") != candidate.get("credential_epoch"):
+        raise ShadowGateError(f"{field}.credential_epoch does not match the candidate")
+    first_run = _mapping(runs[0], "runs[1]")
+    first_run_id = _string(first_run.get("run_id"), "runs[1].run_id")
+    if receipt.get("rotation_completed_before_run_id") != first_run_id:
+        raise ShadowGateError(
+            f"{field}.rotation_completed_before_run_id must identify the first ledger run"
+        )
+    rotation_completed_at = _timestamp(
+        receipt.get("rotation_completed_at"),
+        f"{field}.rotation_completed_at",
+    )
+    first_run_observed_at = _timestamp(
+        first_run.get("observed_at"),
+        "runs[1].observed_at",
+    )
+    if rotation_completed_at >= first_run_observed_at:
+        raise ShadowGateError(f"{field}.rotation_completed_at must precede the first run")
+    source = _mapping(receipt.get("source"), f"{field}.source")
+    source_observed_at = _timestamp(
+        source.get("observed_at"),
+        f"{field}.source.observed_at",
+    )
+    if source_observed_at < rotation_completed_at:
+        raise ShadowGateError(f"{field}.source.observed_at predates the rotation")
+    _source_command(source.get("command"), f"{field}.source.command")
+    result = _mapping(source.get("result"), f"{field}.source.result")
+    if result.get("version") != candidate.get("credential_version"):
+        raise ShadowGateError(f"{field}.source.result.version does not match the candidate")
+    result_updated_at = _timestamp(
+        result.get("updated_at"),
+        f"{field}.source.result.updated_at",
+    )
+    if result_updated_at != rotation_completed_at:
+        raise ShadowGateError(
+            f"{field}.source.result.updated_at does not match rotation_completed_at"
+        )
 
 
 def _validate_compatibility(value: Any, field: str) -> None:
@@ -183,13 +279,7 @@ def _validate_compatibility(value: Any, field: str) -> None:
 
 def _validate_passed_run(run: Mapping[str, Any], expected_digest: str, *, evidence_root: Path | None) -> None:
     _string(run.get("run_id"), "run_id")
-    _string(run.get("observed_at"), "observed_at")
-    try:
-        observed_at = datetime.fromisoformat(str(run["observed_at"]).replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ShadowGateError("observed_at must be an ISO-8601 timestamp") from error
-    if observed_at.tzinfo is None:
-        raise ShadowGateError("observed_at must include a timezone")
+    _timestamp(run.get("observed_at"), "observed_at")
     if run.get("status") != "passed":
         raise ShadowGateError("passed run status must be passed")
     _string(run.get("workflow_run"), "workflow_run")
@@ -269,13 +359,7 @@ def _validate_passed_run(run: Mapping[str, Any], expected_digest: str, *, eviden
 
 def _validate_failed_run(run: Mapping[str, Any]) -> None:
     _string(run.get("run_id"), "run_id")
-    _string(run.get("observed_at"), "observed_at")
-    try:
-        observed_at = datetime.fromisoformat(str(run["observed_at"]).replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ShadowGateError("observed_at must be an ISO-8601 timestamp") from error
-    if observed_at.tzinfo is None:
-        raise ShadowGateError("observed_at must include a timezone")
+    _timestamp(run.get("observed_at"), "observed_at")
     if run.get("status") != "failed":
         raise ShadowGateError("run status must be passed or failed")
     _string(run.get("failure_reason"), "failure_reason")
@@ -288,25 +372,7 @@ def load_shadow_gate(path: Path) -> dict[str, Any]:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ShadowGateError("shadow gate ledger cannot be read") from error
-    envelope = _mapping(value, "ledger")
-    if envelope.get("schema_version") != SCHEMA_VERSION:
-        raise ShadowGateError("unsupported shadow gate schema version")
-    candidate = _mapping(envelope.get("candidate"), "candidate")
-    digest = _string(candidate.get("spark_image_digest"), "candidate.spark_image_digest")
-    if not _DIGEST.fullmatch(digest):
-        raise ShadowGateError("candidate.spark_image_digest must be a SHA-256 digest")
-    if candidate.get("spark_api_version") != SPARK_API_VERSION:
-        raise ShadowGateError(f"candidate.spark_api_version must be {SPARK_API_VERSION}")
-    _string(candidate.get("source_revision"), "candidate.source_revision")
-    airflow_digest = _string(candidate.get("airflow_image_digest"), "candidate.airflow_image_digest")
-    if not _DIGEST.fullmatch(airflow_digest):
-        raise ShadowGateError("candidate.airflow_image_digest must be a SHA-256 digest")
-    runs = envelope.get("runs")
-    if not isinstance(runs, list) or not runs:
-        raise ShadowGateError("runs must be a non-empty list")
-    if any(not isinstance(run, Mapping) for run in runs):
-        raise ShadowGateError("runs must contain objects")
-    return {"schema_version": SCHEMA_VERSION, "candidate": dict(candidate), "runs": [dict(run) for run in runs]}
+    return load_shadow_gate_from_mapping(value)
 
 
 def expected_spark_image_digest(dag_path: Path) -> str:
@@ -329,9 +395,14 @@ def evaluate_shadow_gate(
         raise ShadowGateError("expected digest must be a SHA-256 digest")
     loaded = load_shadow_gate_from_mapping(ledger)
     candidate = loaded["candidate"]
+    credential_epoch = str(candidate["credential_epoch"])
     errors: list[str] = []
     if candidate["spark_image_digest"] != expected_digest:
         errors.append("candidate digest does not match the expected digest")
+    try:
+        _validate_credential_rotation(candidate, loaded["runs"], evidence_root=evidence_root)
+    except ShadowGateError as error:
+        errors.append(str(error))
     seen_run_ids: set[str] = set()
     seen_workflow_runs: set[str] = set()
     seen_attempts: set[str] = set()
@@ -344,12 +415,12 @@ def evaluate_shadow_gate(
             if run_id in seen_run_ids:
                 raise ShadowGateError("run_id is duplicated")
             seen_run_ids.add(run_id)
-            observed = datetime.fromisoformat(str(run.get("observed_at")).replace("Z", "+00:00"))
-            if observed.tzinfo is None:
-                raise ShadowGateError("observed_at must include a timezone")
+            observed = _timestamp(run.get("observed_at"), f"runs[{index}].observed_at")
             if previous_observed_at and observed <= previous_observed_at:
                 raise ShadowGateError("observed_at values must increase")
             previous_observed_at = observed
+            if run.get("credential_epoch") != credential_epoch:
+                raise ShadowGateError("credential_epoch does not match the candidate epoch")
             if run.get("status") == "passed":
                 workflow_run = _string(run.get("workflow_run"), f"runs[{index}].workflow_run")
                 if workflow_run in seen_workflow_runs:
@@ -394,7 +465,7 @@ def evaluate_shadow_gate(
 def load_shadow_gate_from_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     """Validate an in-memory ledger with the same schema as the file reader."""
     envelope = _mapping(value, "ledger")
-    if envelope.get("schema_version") != SCHEMA_VERSION:
+    if envelope.get("schema_version") != LEDGER_SCHEMA_VERSION:
         raise ShadowGateError("unsupported shadow gate schema version")
     candidate = _mapping(envelope.get("candidate"), "candidate")
     digest = _string(candidate.get("spark_image_digest"), "candidate.spark_image_digest")
@@ -406,9 +477,17 @@ def load_shadow_gate_from_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     airflow_digest = _string(candidate.get("airflow_image_digest"), "candidate.airflow_image_digest")
     if not _DIGEST.fullmatch(airflow_digest):
         raise ShadowGateError("candidate.airflow_image_digest must be a SHA-256 digest")
+    _positive_integer(candidate.get("credential_version"), "candidate.credential_version")
+    _string(candidate.get("credential_owner"), "candidate.credential_owner")
+    _string(candidate.get("credential_epoch"), "candidate.credential_epoch")
+    _string(candidate.get("credential_rotation_receipt"), "candidate.credential_rotation_receipt")
     runs = envelope.get("runs")
     if not isinstance(runs, list) or not runs:
         raise ShadowGateError("runs must be a non-empty list")
     if any(not isinstance(run, Mapping) for run in runs):
         raise ShadowGateError("runs must contain objects")
-    return {"schema_version": SCHEMA_VERSION, "candidate": dict(candidate), "runs": [dict(run) for run in runs]}
+    return {
+        "schema_version": LEDGER_SCHEMA_VERSION,
+        "candidate": dict(candidate),
+        "runs": [dict(run) for run in runs],
+    }
