@@ -6,7 +6,7 @@
   "details": {
     "dag_id": "airflow_spark_lakehouse",
     "status": "success",
-    "started_at": "2026-08-13T04:50:00Z",
+    "started_at": "2026-08-13T04:49:53.555419Z",
     "ended_at": "2026-08-13T04:50:44.844243Z"
   }
 }
