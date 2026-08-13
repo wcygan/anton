@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** in-progress
+**Status:** resolved
 
 - [x] The custom image uses Airflow 3.2.2, Python 3.12, Kubernetes provider 10.21.0, and official constraints.
 - [x] The image contains the Workflow Run source and its tested Spark adapter package.
@@ -34,3 +34,8 @@
 - All 197 repository tests passed. Scheduled ESO traffic is estimated at 24 operations daily.
 - Scheduler replacement proved ordinary metadata persistence. It did not prove backup or disaster recovery.
 - ADR 0035 accepts complete Airflow metadata loss during the experimental phase. Backup and restore remain required before authoritative cutover.
+- Revision `eafc25d3` removes the unused Barman controller, source, RBAC, certificates, and CRD.
+- Pre-removal checks found no `ObjectStore`, CNPG plugin reference, backup, or scheduled backup.
+- Flux applied `eafc25d3`. Airflow, CNPG, and Longhorn remained Ready after removal.
+- Two orphaned Barman TLS Secrets were deleted after their certificate owners were pruned.
+- Ticket 04 closes without a backup or disaster-recovery claim.
