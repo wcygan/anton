@@ -383,6 +383,70 @@ class Ticket06RecoveryTests(unittest.TestCase):
         self.assertEqual(fake.releases, 1)
         self.assertIn("lease_renewed", fake.receipts)
 
+    def test_triggerer_waits_for_the_first_operator_status(self) -> None:
+        class TriggerAdapter:
+            def __init__(self) -> None:
+                self.observations = iter(
+                    (
+                        type(
+                            "Observation",
+                            (),
+                            {"state": AttemptState.AMBIGUOUS, "resource": {"metadata": {"name": "lh-attempt"}}},
+                        )(),
+                        type(
+                            "Observation",
+                            (),
+                            {
+                                "state": AttemptState.SUCCEEDED,
+                                "resource": {
+                                    "status": {
+                                        "currentState": {"currentStateSummary": "Succeeded"},
+                                        "stateTransitionHistory": {
+                                            "1": {"currentStateSummary": "Succeeded"}
+                                        },
+                                    }
+                                },
+                            },
+                        )(),
+                    )
+                )
+                self.renewals = 0
+                self.releases = 0
+                self.receipts: list[str] = []
+                self.leases = self
+
+            def observe(self, name: str):
+                return next(self.observations)
+
+            def renew(self, holder: str):
+                self.renewals += 1
+
+            def release(self, holder: str):
+                self.releases += 1
+
+            def record_receipt(self, event: str, name: str, **kwargs: Any):
+                self.receipts.append(event)
+
+        fake = TriggerAdapter()
+        trigger = SparkApplicationTrigger(
+            attempt_name="lh-attempt",
+            target="shadow",
+            namespace="lakehouse",
+            poll_interval=0.001,
+            startup_timeout=1.0,
+        )
+
+        async def collect() -> list[Mapping[str, Any]]:
+            return [event async for event in trigger.run()]
+
+        with patch("anton_airflow.spark.operator._airflow_adapter", return_value=fake):
+            events = asyncio.run(collect())
+
+        self.assertEqual(events[0].payload["state"], "succeeded")
+        self.assertEqual(fake.renewals, 1)
+        self.assertEqual(fake.releases, 1)
+        self.assertIn("status_pending", fake.receipts)
+
 
 if __name__ == "__main__":
     unittest.main()

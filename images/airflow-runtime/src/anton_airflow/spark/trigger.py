@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Mapping
 
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 
@@ -23,6 +23,7 @@ class SparkApplicationTrigger(BaseTrigger):
         namespace: str = "lakehouse",
         kubernetes_conn_id: str = "kubernetes_default",
         poll_interval: float = 10.0,
+        startup_timeout: float = 60.0,
     ) -> None:
         super().__init__()
         self.attempt_name = attempt_name
@@ -30,6 +31,7 @@ class SparkApplicationTrigger(BaseTrigger):
         self.namespace = namespace
         self.kubernetes_conn_id = kubernetes_conn_id
         self.poll_interval = poll_interval
+        self.startup_timeout = startup_timeout
         self._finished = False
 
     def serialize(self) -> tuple[str, dict[str, Any]]:
@@ -41,6 +43,7 @@ class SparkApplicationTrigger(BaseTrigger):
                 "namespace": self.namespace,
                 "kubernetes_conn_id": self.kubernetes_conn_id,
                 "poll_interval": self.poll_interval,
+                "startup_timeout": self.startup_timeout,
             },
         )
 
@@ -57,6 +60,7 @@ class SparkApplicationTrigger(BaseTrigger):
             receipt_logger=logging.getLogger("anton_airflow.spark.trigger"),
             receipt_sink=receipt_buffer,
         )
+        startup_deadline = asyncio.get_running_loop().time() + self.startup_timeout
         while True:
             observation = await asyncio.to_thread(adapter.observe, self.attempt_name)
             if observation.state is AttemptState.ACTIVE:
@@ -93,6 +97,11 @@ class SparkApplicationTrigger(BaseTrigger):
                     }
                 )
                 return
+            if _status_is_pending(observation.resource) and asyncio.get_running_loop().time() < startup_deadline:
+                await asyncio.to_thread(adapter.leases.renew, self.attempt_name)
+                adapter.record_receipt("status_pending", self.attempt_name, state=observation.state)
+                await asyncio.sleep(self.poll_interval)
+                continue
             diagnostics = await asyncio.to_thread(adapter.collect_diagnostics, self.attempt_name)
             self._finished = True
             yield TriggerEvent(
@@ -118,3 +127,11 @@ class SparkApplicationTrigger(BaseTrigger):
             receipt_logger=logging.getLogger("anton_airflow.spark.trigger"),
         )
         await asyncio.to_thread(adapter.cancel_attempt, self.attempt_name)
+
+
+def _status_is_pending(resource: Mapping[str, Any] | None) -> bool:
+    """Return true before the Apache operator writes its first status."""
+    if not isinstance(resource, Mapping):
+        return False
+    status = resource.get("status")
+    return status is None or status == {}

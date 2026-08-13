@@ -4,19 +4,19 @@
 
 **Blocked by:** 06 — Prove failure and recovery paths.
 
-**Status:** resolved
+**Status:** in-progress
 
-- [x] Five consecutive scheduled or equivalent Workflow Runs pass against the shadow target.
-- [x] Every run uses the expected Spark image digest and Apache `SparkApplication` control plane.
-- [x] Every run passes Trino schema, count, partition, snapshot, location, and time-travel checks.
-- [x] Trino write-denial tests pass for both authoritative and shadow catalogs.
-- [x] Authoritative table metadata and data remain unchanged during all shadow runs.
-- [x] Kubernetes 1.36 acceptance covers Airflow task pods, custom-resource observation, and Spark workloads.
-- [x] Runtime identity, classpath, S3FileIO, S3A, Loki, and History Server evidence remains complete.
+- [ ] Five consecutive scheduled or equivalent Workflow Runs pass against the shadow target.
+- [ ] Every run uses the expected Spark image digest and Apache `SparkApplication` control plane.
+- [ ] Every run passes Trino schema, count, partition, snapshot, location, and time-travel checks.
+- [ ] Trino write-denial tests pass for both authoritative and shadow catalogs.
+- [ ] Authoritative table metadata and data remain unchanged during all shadow runs.
+- [ ] Kubernetes 1.36 acceptance covers Airflow task pods, custom-resource observation, and Spark workloads.
+- [ ] Runtime identity, classpath, S3FileIO, S3A, Loki, and History Server evidence remains complete.
 - [x] Any unexplained failure resets the consecutive-run count.
 - [x] A Spark 4.1.3 blocker follows the documented repair and compatibility ladder before fallback.
 - [x] No fallback changes the Apache `SparkApplication` architecture.
-- [x] Cutover remains blocked unless every mandatory criterion has retained evidence.
+- [ ] Cutover remains blocked unless every mandatory criterion has retained evidence.
 
 ## Comments
 
@@ -39,3 +39,5 @@
 - Retained evidence passed `scripts/validate-airflow-shadow-gate.py` with five consecutive passes and no errors.
 - Evidence is stored under `.scratch/airflow-spark-lakehouse/evidence/shadow-gate-20260813/`.
 - A follow-up run proved clean Spark shutdown after adding `deletecollection` to the workload Role.
+- 2026-08-13 review: The first ledger mixed pre-catalog Spark runs with post-catalog Trino checks.
+- The retained summaries were insufficient as source evidence. The gate remains open until a fixed candidate passes five complete per-run checks.
