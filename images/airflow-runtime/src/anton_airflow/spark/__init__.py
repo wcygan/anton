@@ -1,4 +1,4 @@
-"""Stable package boundary for the Airflow Spark adapter."""
+"""Airflow adapter for Apache Spark Operator custom resources."""
 
 from __future__ import annotations
 
@@ -8,7 +8,13 @@ from importlib.metadata import version
 import airflow
 
 
-PACKAGE_VERSION = "0.1.0"
+PACKAGE_VERSION = "0.2.0"
+
+from .adapter import AttemptObservation, SparkApplicationAdapter, build_spark_application
+from .identity import AttemptIdentity, attempt_name, identity_hash
+from .operator import ApacheSparkApplicationOperator
+from .state import AttemptState, classify_application
+from .trigger import SparkApplicationTrigger
 
 
 def foundation_marker(*, run_id: str, pod_name: str) -> dict[str, str]:

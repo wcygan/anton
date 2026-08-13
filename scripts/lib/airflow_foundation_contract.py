@@ -1,4 +1,4 @@
-"""Structured source contract for the ticket 04 Airflow foundation."""
+"""Structured source contract for the Airflow foundation and Spark adapter."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ RETIRED_BACKUP_APP = REPO / "kubernetes" / "apps" / "storage" / "longhorn-backup
 IMAGE_TAG = "3.2.2-ticket04.1"
 IMAGE_DIGEST = "sha256:9ccd3dcff1f11535c3915434c40602f443c4d5f160673c7f9ced4af094957065"
 IMAGE_DIGEST_HEX = IMAGE_DIGEST.removeprefix("sha256:")
+AIRFLOW_SPARK_RBAC = REPO / "kubernetes" / "apps" / "lakehouse" / "airflow-spark-rbac.yaml"
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -221,8 +222,8 @@ def validate_release(release: dict[str, Any]) -> list[str]:
 
     expected_task_account = {
         "create": True,
-        "name": "airflow-task",
-        "automountServiceAccountToken": False,
+        "name": "airflow-spark-submit",
+        "automountServiceAccountToken": True,
     }
     expect_equal(
         failures,
@@ -486,6 +487,7 @@ def validate_image_source(failures: list[str]) -> None:
         "pip check",
         "FROM runtime AS test",
         "COPY --from=test /tmp/airflow-runtime-tests.pass /opt/airflow/runtime-contract/tests.pass",
+        'assert anton_airflow.spark.PACKAGE_VERSION == "0.2.0"',
     )
     failures.extend(
         f"Airflow image missing {value!r}" for value in required_dockerfile if value not in dockerfile
@@ -496,7 +498,14 @@ def validate_image_source(failures: list[str]) -> None:
         for path in (
             IMAGE_ROOT / "dags" / "airflow_kubernetes_foundation.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "__init__.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "identity.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "state.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "lease.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "adapter.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "operator.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "trigger.py",
             IMAGE_ROOT / "tests" / "test_adapter_package.py",
+            IMAGE_ROOT / "dags" / "airflow_spark_lakehouse.py",
         )
     )
     required_source = (
@@ -507,9 +516,73 @@ def validate_image_source(failures: list[str]) -> None:
         "def foundation_marker(",
         "test_runtime_versions_are_exact",
         "test_foundation_dag_is_manual_and_bounded",
+        "class AttemptIdentity",
+        "NUL separators",
+        "class ApacheSparkApplicationOperator",
+        "class SparkApplicationTrigger",
+        "stateTransitionHistory",
+        "class LeaseCoordinator",
+        "spark.apache.org",
+        "schedule=\"23 * * * *\"",
+        "catchup=False",
+        "max_active_runs=1",
     )
     failures.extend(
         f"Airflow image content missing {value!r}" for value in required_source if value not in source
+    )
+
+
+def validate_spark_rbac(failures: list[str]) -> None:
+    """Validate the namespace-only Airflow permissions for Spark attempts."""
+    try:
+        result = subprocess.run(
+            ["yq", "eval-all", "-o=json", "-I=0", "[.]", str(AIRFLOW_SPARK_RBAC)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        documents = json.loads(result.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as error:
+        failures.append(f"Airflow Spark RBAC parse failed: {error}")
+        return
+    if not isinstance(documents, list) or not all(isinstance(item, dict) for item in documents):
+        failures.append("Airflow Spark RBAC must contain Role and RoleBinding documents")
+        return
+    role = next((item for item in documents if item.get("kind") == "Role"), None)
+    binding = next((item for item in documents if item.get("kind") == "RoleBinding"), None)
+    if role is None or binding is None:
+        failures.append("Airflow Spark RBAC must contain one Role and one RoleBinding")
+        return
+    expected_rules = {
+        ("spark.apache.org", "sparkapplications"): {"get", "list", "watch", "create", "delete"},
+        ("coordination.k8s.io", "leases"): {"get", "list", "watch", "create", "update", "patch", "delete"},
+        ("", "pods"): {"get", "list", "watch"},
+        ("", "pods/log"): {"get"},
+        ("", "events"): {"get", "list", "watch"},
+    }
+    observed: dict[tuple[str, str], set[str]] = {}
+    rules = role.get("rules", [])
+    if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+        failures.append("Airflow Spark Role rules must be mappings")
+        return
+    for rule in rules:
+        groups = rule.get("apiGroups", [])
+        resources = rule.get("resources", [])
+        if len(groups) == 1:
+            for resource in resources:
+                observed[(groups[0], resource)] = set(rule.get("verbs", []))
+    expect_equal(failures, "Airflow Spark Role rules", observed, expected_rules)
+    binding_subjects = binding.get("subjects", [])
+    if not isinstance(binding_subjects, list) or not all(isinstance(item, dict) for item in binding_subjects):
+        failures.append("Airflow Spark RoleBinding subjects must be mappings")
+        return
+    subjects = {(item.get("kind"), item.get("name"), item.get("namespace")) for item in binding_subjects}
+    expect_equal(
+        failures,
+        "Airflow Spark RoleBinding subjects",
+        subjects,
+        {("ServiceAccount", "airflow-spark-submit", "airflow"), ("ServiceAccount", "airflow-triggerer", "airflow")},
     )
 
 
@@ -582,6 +655,7 @@ def main() -> int:
     failures: list[str] = []
     try:
         validate_image_source(failures)
+        validate_spark_rbac(failures)
         validate_namespace_source(failures)
         failures.extend(validate_release(load_yaml(RELEASE_APP / "helmrelease.yaml")))
         validate_database_source(failures)

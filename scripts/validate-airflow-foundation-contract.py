@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the structured source contract for the ticket 04 Airflow foundation."""
+"""Run the structured source contract for the Airflow foundation and Spark adapter."""
 
 from __future__ import annotations
 

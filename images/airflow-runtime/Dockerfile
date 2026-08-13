@@ -73,7 +73,7 @@ import anton_airflow.spark
 assert airflow.__version__ == "3.2.2"
 assert sys.version_info[:2] == (3, 12)
 assert version("apache-airflow-providers-cncf-kubernetes") == "10.21.0"
-assert anton_airflow.spark.PACKAGE_VERSION == "0.1.0"
+assert anton_airflow.spark.PACKAGE_VERSION == "0.2.0"
 PY
 
 FROM runtime AS test

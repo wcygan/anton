@@ -111,8 +111,8 @@ spec:
       kubernetes:
         serviceAccount:
           create: true
-          name: airflow-task
-          automountServiceAccountToken: false
+          name: airflow-spark-submit
+          automountServiceAccountToken: true
         resources:
           requests:
             cpu: 100m

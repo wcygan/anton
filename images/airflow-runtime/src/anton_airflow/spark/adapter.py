@@ -1,0 +1,351 @@
+"""Generic Kubernetes adapter for Apache Spark Operator custom resources."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass
+import time
+from typing import Any, Callable, Mapping, Protocol
+
+from .identity import AttemptIdentity
+from .lease import LeaseCoordinator
+from .state import AttemptState, classify_application
+
+
+GROUP = "spark.apache.org"
+VERSION = "v1"
+PLURAL = "sparkapplications"
+
+
+class SparkApplicationClient(Protocol):
+    def get(self, *, namespace: str, name: str) -> Mapping[str, Any]: ...
+
+    def create(self, *, namespace: str, body: Mapping[str, Any]) -> Mapping[str, Any]: ...
+
+    def list(self, *, namespace: str, label_selector: str) -> list[Mapping[str, Any]]: ...
+
+    def delete(self, *, namespace: str, name: str) -> Any: ...
+
+    def watch(self, *, namespace: str, name: str, timeout_seconds: int) -> list[Mapping[str, Any]]: ...
+
+
+class PodDiagnostics(Protocol):
+    def list_pods(self, *, namespace: str, label_selector: str) -> list[Mapping[str, Any]]: ...
+
+    def read_log(self, *, namespace: str, name: str, container: str) -> str: ...
+
+    def list_events(self, *, namespace: str, field_selector: str) -> list[Mapping[str, Any]]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class AttemptObservation:
+    name: str
+    state: AttemptState
+    resource: Mapping[str, Any] | None = None
+    diagnostics: tuple[str, ...] = ()
+
+
+def _merge_env(existing: Any, correlation: Mapping[str, str]) -> list[dict[str, str]]:
+    values = [dict(item) for item in existing or [] if isinstance(item, Mapping) and item.get("name")]
+    by_name = {item["name"]: item for item in values}
+    for name, value in correlation.items():
+        by_name[name] = {"name": name, "value": value}
+    return list(by_name.values())
+
+
+def build_spark_application(
+    identity: AttemptIdentity,
+    *,
+    application_spec: Mapping[str, Any],
+    namespace: str,
+    target: str,
+) -> dict[str, Any]:
+    """Build one generic ``spark.apache.org/v1`` SparkApplication resource."""
+    if target not in {"shadow", "authoritative"}:
+        raise ValueError("target must be shadow or authoritative")
+    resource = deepcopy(dict(application_spec))
+    metadata = dict(resource.get("metadata") or {})
+    metadata.update(
+        {
+            "name": identity.name,
+            "namespace": namespace,
+            "labels": {**(metadata.get("labels") or {}), **identity.labels(target=target)},
+            "annotations": {**(metadata.get("annotations") or {}), **identity.annotations()},
+        }
+    )
+    resource.update({"apiVersion": f"{GROUP}/{VERSION}", "kind": "SparkApplication", "metadata": metadata})
+    spec = dict(resource.get("spec") or {})
+    restart = dict(spec.get("restartPolicy") or {})
+    restart["type"] = "Never"
+    spec["restartPolicy"] = restart
+
+    correlation = {
+        "ANTON_SPARK_ATTEMPT": identity.name,
+        "ANTON_SPARK_IDENTITY_HASH": identity.hash,
+        "ANTON_AIRFLOW_DAG_ID": identity.dag_id,
+        "ANTON_AIRFLOW_RUN_ID": identity.run_id,
+        "ANTON_AIRFLOW_TASK_ID": identity.task_id,
+        "ANTON_AIRFLOW_MAP_INDEX": str(identity.map_index),
+        "ANTON_AIRFLOW_TRY_NUMBER": str(identity.try_number),
+        "ANTON_LAKEHOUSE_TARGET": target,
+    }
+    for role in ("driver", "executor"):
+        template = dict(spec.get(role) or {})
+        template["labels"] = {**(template.get("labels") or {}), **identity.labels(target=target), "anton.io/attempt-name": identity.name}
+        template["annotations"] = {**(template.get("annotations") or {}), **identity.annotations()}
+        template["env"] = _merge_env(template.get("env"), correlation)
+        spec[role] = template
+    resource["spec"] = spec
+    return resource
+
+
+class SparkApplicationAdapter:
+    """Create, observe, recover, and cancel SparkApplication attempts."""
+
+    def __init__(
+        self,
+        *,
+        applications: SparkApplicationClient,
+        leases: LeaseCoordinator,
+        pods: PodDiagnostics | None = None,
+        namespace: str = "lakehouse",
+        diagnostics_limit: int = 2000,
+    ) -> None:
+        self.applications = applications
+        self.leases = leases
+        self.pods = pods
+        self.namespace = namespace
+        self.diagnostics_limit = diagnostics_limit
+
+    def observe(self, name: str) -> AttemptObservation:
+        try:
+            resource = self.applications.get(namespace=self.namespace, name=name)
+        except Exception as error:
+            if getattr(error, "status", None) == 404:
+                return AttemptObservation(name, AttemptState.ABSENT)
+            raise
+        return AttemptObservation(name, classify_application(resource), resource)
+
+    def submit_or_reattach(
+        self,
+        identity: AttemptIdentity,
+        *,
+        application_spec: Mapping[str, Any],
+        target: str,
+    ) -> AttemptObservation:
+        """Create one attempt, or reattach to the exact same attempt after recovery."""
+        existing = self.observe(identity.name)
+        if existing.state is not AttemptState.ABSENT:
+            if existing.state is AttemptState.AMBIGUOUS:
+                raise RuntimeError(f"ambiguous SparkApplication state for {identity.name}")
+            if existing.state is AttemptState.SUCCEEDED:
+                self.leases.release_if_held(identity.name)
+            elif existing.state is AttemptState.FAILED:
+                diagnostics = self.collect_diagnostics(identity.name)
+                self.leases.release_if_held(identity.name)
+                return AttemptObservation(
+                    identity.name,
+                    existing.state,
+                    existing.resource,
+                    diagnostics,
+                )
+            return existing
+        prior_application_active = False
+        current_lease = self.leases.current()
+        current_holder = (current_lease.get("spec") or {}).get("holderIdentity") if current_lease else None
+        if current_holder and current_holder != identity.name:
+            prior_application_active = self.prior_attempt_active(str(current_holder))
+        self.leases.acquire(identity.name, prior_application_active=prior_application_active)
+        body = build_spark_application(
+            identity,
+            application_spec=application_spec,
+            namespace=self.namespace,
+            target=target,
+        )
+        try:
+            created = self.applications.create(namespace=self.namespace, body=body)
+        except Exception as error:
+            # A duplicate delivery races only with the same deterministic name.
+            if getattr(error, "status", None) != 409:
+                self.leases.release(identity.name)
+                raise
+            return self.observe(identity.name)
+        # A new custom resource can have no status until Spark Operator accepts it.
+        # Creation itself is the submission boundary, so defer as an active attempt.
+        return AttemptObservation(identity.name, AttemptState.ACTIVE, created)
+
+    def prior_attempt_active(self, name: str) -> bool:
+        """Require both a settled CR and no running pods before Lease takeover."""
+        prior = self.observe(name)
+        if prior.state not in {AttemptState.ABSENT, AttemptState.SUCCEEDED, AttemptState.FAILED}:
+            return True
+        if self.pods is None:
+            # No pod evidence is not proof of inactivity.
+            return True
+        for pod in self.pods.list_pods(namespace=self.namespace, label_selector=f"anton.io/attempt-name={name}"):
+            phase = str((pod.get("status") or {}).get("phase", "Unknown"))
+            if phase not in {"Succeeded", "Failed"}:
+                return True
+        return False
+
+    def retry(
+        self,
+        previous_identity: AttemptIdentity,
+        next_identity: AttemptIdentity,
+        *,
+        application_spec: Mapping[str, Any],
+        target: str,
+        prior_output_valid: Callable[[Mapping[str, Any]], bool] | None = None,
+    ) -> AttemptObservation:
+        """Create a new try only after the previous attempt has a settled outcome."""
+        previous = self.observe(previous_identity.name)
+        if previous.state is AttemptState.ACTIVE:
+            raise RuntimeError(f"cannot retry active SparkApplication {previous_identity.name}")
+        if previous.state is AttemptState.AMBIGUOUS:
+            raise RuntimeError(f"cannot retry ambiguous SparkApplication {previous_identity.name}")
+        if previous.state is AttemptState.SUCCEEDED and prior_output_valid and previous.resource:
+            if prior_output_valid(previous.resource):
+                self.leases.release_if_held(previous_identity.name)
+                return AttemptObservation(
+                    previous.name,
+                    AttemptState.SUCCEEDED,
+                    previous.resource,
+                    previous.diagnostics,
+                )
+        return self.submit_or_reattach(next_identity, application_spec=application_spec, target=target)
+
+    def collect_diagnostics(self, name: str) -> tuple[str, ...]:
+        """Collect bounded pod tails and events without reading Secret data."""
+        if self.pods is None:
+            return ()
+        lines: list[str] = []
+        selector = f"anton.io/attempt-name={name}"
+        for pod in self.pods.list_pods(namespace=self.namespace, label_selector=selector):
+            pod_name = str((pod.get("metadata") or {}).get("name", "unknown"))
+            containers = (pod.get("spec") or {}).get("containers") or []
+            for container in containers:
+                container_name = str(container.get("name", ""))
+                if not container_name:
+                    continue
+                try:
+                    output = self.pods.read_log(namespace=self.namespace, name=pod_name, container=container_name)
+                except Exception as error:  # diagnostics must not mask the terminal state
+                    output = f"log read failed: {type(error).__name__}"
+                lines.append(f"pod/{pod_name} container/{container_name}:\n{output[-self.diagnostics_limit:]}")
+        for event in self.pods.list_events(
+            namespace=self.namespace,
+            field_selector=f"involvedObject.name={name}",
+        ):
+            reason = event.get("reason", "")
+            message = event.get("message", "")
+            lines.append(f"event {reason}: {message}"[-self.diagnostics_limit :])
+        return tuple(lines)[-20:]
+
+    def wait_for_completion(
+        self,
+        name: str,
+        *,
+        timeout: float = 3600.0,
+        interval: float = 10.0,
+    ) -> AttemptObservation:
+        """Support the explicit non-deferrable mode without leaking ownership."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            observation = self.observe(name)
+            if observation.state is AttemptState.ACTIVE:
+                time.sleep(interval)
+                continue
+            if observation.state is AttemptState.AMBIGUOUS:
+                raise RuntimeError(f"ambiguous SparkApplication state for {name}")
+            if observation.state in {AttemptState.SUCCEEDED, AttemptState.FAILED}:
+                self.leases.release(name)
+                if observation.state is AttemptState.FAILED:
+                    return AttemptObservation(
+                        name,
+                        observation.state,
+                        observation.resource,
+                        self.collect_diagnostics(name),
+                    )
+                return observation
+            raise RuntimeError(f"SparkApplication {name} disappeared before completion")
+        raise TimeoutError(f"SparkApplication {name} did not complete within {timeout:g}s")
+
+    def wait_for_stop(self, name: str, *, timeout: float = 30.0, interval: float = 1.0) -> AttemptObservation:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            observation = self.observe(name)
+            if observation.state is AttemptState.ABSENT:
+                if self.pods is not None:
+                    active_pods = [
+                        pod
+                        for pod in self.pods.list_pods(
+                            namespace=self.namespace,
+                            label_selector=f"anton.io/attempt-name={name}",
+                        )
+                        if str((pod.get("status") or {}).get("phase", "Unknown"))
+                        not in {"Succeeded", "Failed"}
+                    ]
+                    if active_pods:
+                        time.sleep(interval)
+                        continue
+                return observation
+            time.sleep(interval)
+        raise TimeoutError(f"SparkApplication {name} did not stop within {timeout:g}s")
+
+    def cancel(self, identity: AttemptIdentity, *, timeout: float = 30.0) -> tuple[str, ...]:
+        """Delete the exact CR, verify stop, then release its target Lease."""
+        return self.cancel_attempt(identity.name, timeout=timeout)
+
+    def cancel_attempt(self, name: str, *, timeout: float = 30.0) -> tuple[str, ...]:
+        """Cancel by the exact persisted Spark Attempt name."""
+        diagnostics = self.collect_diagnostics(name)
+        try:
+            self.applications.delete(namespace=self.namespace, name=name)
+        except Exception as error:
+            if getattr(error, "status", None) != 404:
+                raise
+        self.wait_for_stop(name, timeout=timeout)
+        # Releasing before stop could permit a second writer to overlap.
+        self.leases.release(name)
+        return diagnostics
+
+
+class KubernetesSparkApplicationClient:
+    """Small generic custom-resource client used by the operator and trigger."""
+
+    def __init__(self, api: Any) -> None:
+        self.api = api
+
+    def get(self, *, namespace: str, name: str) -> Mapping[str, Any]:
+        return self.api.get_namespaced_custom_object(GROUP, VERSION, namespace, PLURAL, name)
+
+    def create(self, *, namespace: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
+        return self.api.create_namespaced_custom_object(GROUP, VERSION, namespace, PLURAL, body)
+
+    def list(self, *, namespace: str, label_selector: str) -> list[Mapping[str, Any]]:
+        response = self.api.list_namespaced_custom_object(
+            GROUP,
+            VERSION,
+            namespace,
+            PLURAL,
+            label_selector=label_selector,
+        )
+        return list(response.get("items", []))
+
+    def delete(self, *, namespace: str, name: str) -> Any:
+        return self.api.delete_namespaced_custom_object(GROUP, VERSION, namespace, PLURAL, name)
+
+    def watch(self, *, namespace: str, name: str, timeout_seconds: int) -> list[Mapping[str, Any]]:
+        """Read bounded custom-resource watch events from the generic Kubernetes API."""
+        from kubernetes import watch
+
+        stream = watch.Watch().stream(
+            self.api.get_namespaced_custom_object,
+            GROUP,
+            VERSION,
+            namespace,
+            PLURAL,
+            name,
+            timeout_seconds=timeout_seconds,
+        )
+        return [event for event in stream if isinstance(event, Mapping)]

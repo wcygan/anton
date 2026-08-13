@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: lakehouse
 resources:
   - ./namespace.yaml
+  - ./airflow-spark-rbac.yaml
   - ./spark-history-server/ks.yaml
   - ./shadow-fixture/ks.yaml
 components:

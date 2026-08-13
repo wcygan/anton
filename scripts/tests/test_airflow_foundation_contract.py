@@ -178,7 +178,7 @@ class AirflowFoundationContractTests(unittest.TestCase):
                 [
                     "yq",
                     "-i",
-                    ".spec.values.workers.kubernetes.serviceAccount.automountServiceAccountToken = true",
+                    ".spec.values.workers.kubernetes.serviceAccount.automountServiceAccountToken = false",
                     str(candidate),
                 ],
                 cwd=REPO,

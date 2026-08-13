@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — Run the shadow fixture through SparkApplication; 04 — Run the Airflow Kubernetes foundation.
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] A typed deferrable Airflow adapter creates and watches Apache `SparkApplication` resources.
 - [ ] The adapter uses generic Kubernetes custom-resource facilities and not legacy Spark integrations.
