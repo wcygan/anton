@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "observed_at": "2026-08-13T17:57:06Z",
+  "scope": {
+    "cluster": "anton",
+    "context": "tailscale-operator.<tailnet-name>.ts.net",
+    "namespaces": [
+      "airflow",
+      "iceberg-demo",
+      "lakehouse",
+      "observability"
+    ],
+    "target": "shadow",
+    "source_revision": "de30b5f77eb23bb0e531ad8ac1ff873ee42b859b",
+    "flux_revision": "refs/heads/main@sha1:de30b5f7",
+    "airflow_image_digest": "sha256:dd4188bc7fdc8e34a8c975ecbb1cab070350e5902ae30023c582e1e71bee607b",
+    "spark_image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+    "authoritative_writer_changed": false
+  },
+  "inherited_evidence": {
+    "normal_success_short_life_and_history": ".scratch/airflow-spark-lakehouse/evidence/ticket06-readonly-audit-20260813/ledger.json",
+    "five_run_gate": ".scratch/airflow-spark-lakehouse/evidence/shadow-gate-20260813-rotated/ledger.json",
+    "retention_acceptance": {
+      "source": ".scratch/airflow-spark-lakehouse/issues/03-preserve-spark-logs-and-history.md",
+      "accepted_revision": "b7f56657",
+      "failed_pod_minimum_seconds": 86400,
+      "successful_pod_limit_seconds": 3600,
+      "application_record_limit_seconds": 604800,
+      "same_current_policy": true
+    }
+  },
+  "controlled_cases": {
+    "scheduler_recovery": {
+      "run_id": "manual__ticket06_scheduler_recovery_v2_20260813T172500Z",
+      "attempt": "lh-airflow-run-shad-b08e0ed73a58-a1",
+      "mutation": "Deleted only airflow-scheduler-8b79684cf-nj4jl while the attempt was DriverRequested.",
+      "replacement_pod": "airflow-scheduler-8b79684cf-j4fdl",
+      "spark_state": "ResourceReleased",
+      "airflow_run_state": "success",
+      "airflow_task_state": "success",
+      "resource_count": 1,
+      "lease_after": "absent",
+      "passed": true
+    },
+    "triggerer_recovery": {
+      "run_id": "manual__ticket06_triggerer_recovery_v2_20260813T175500Z",
+      "attempt": "lh-airflow-run-shad-4becb49a7255-a1",
+      "mutation": "Stopped the shadow driver JVM, replaced only the triggerer pod, then resumed the JVM.",
+      "replaced_pod": "airflow-triggerer-77b598f8b8-vsv5d",
+      "replacement_pod": "airflow-triggerer-77b598f8b8-9tnt2",
+      "replacement_started_at": "2026-08-13T17:55:20Z",
+      "lease_before_restart": "2026-08-13T17:54:55.423787Z",
+      "lease_after_replacement_start": "2026-08-13T17:56:12.384614Z",
+      "lease_holder": "lh-airflow-run-shad-4becb49a7255-a1",
+      "spark_state": "ResourceReleased",
+      "airflow_task_state": "success",
+      "lease_after": "absent",
+      "passed": true
+    },
+    "duplicate_delivery": {
+      "run_id": "manual__ticket06_duplicate_delivery_20260813T171500Z",
+      "attempt": "lh-airflow-run-shad-117521f52961-a1",
+      "source_command": "Production adapter submit_or_reattach with the exact active AttemptIdentity.",
+      "adapter_result": "active",
+      "receipt": "reattach",
+      "resource_count": 1,
+      "spark_state": "ResourceReleased",
+      "airflow_task_state": "success",
+      "passed": true
+    },
+    "bounded_retry": {
+      "run_id": "manual__ticket06_retry_20260813T172000Z",
+      "attempts": [
+        "lh-airflow-run-shad-1575f085de0b-a1",
+        "lh-airflow-run-shad-1575f085de0b-a2"
+      ],
+      "try_numbers": [
+        1,
+        2
+      ],
+      "retry_evaluation": {
+        "previous_state": "succeeded",
+        "prior_output_valid": false,
+        "decision": "create a new attempt"
+      },
+      "retry_submission_previous_attempt": "lh-airflow-run-shad-1575f085de0b-a1",
+      "spark_states": [
+        "ResourceReleased",
+        "ResourceReleased"
+      ],
+      "airflow_task_state": "success",
+      "passed": true
+    },
+    "cancellation": {
+      "run_id": "manual__ticket06_cancellation_20260813T172500Z",
+      "attempt": "lh-airflow-run-shad-41a7a3d05a30-a1",
+      "source_command": "Production SparkApplicationTrigger.cleanup for the exact attempt.",
+      "receipt_order": [
+        "cancellation_requested",
+        "failure_diagnostics",
+        "state_change:absent",
+        "cancellation_stopped"
+      ],
+      "driver_tail_count": 1,
+      "executor_tail_count": 1,
+      "spark_application_after": "absent",
+      "pods_after": 0,
+      "lease_after": "absent",
+      "airflow_task_state": "failed",
+      "passed": true
+    },
+    "expired_lease_refusal": {
+      "run_id": "manual__ticket06_expired_lease_v3_20260813T173800Z",
+      "attempt": "lh-airflow-run-shad-86917a7e8209-a1",
+      "probe_attempt": "lh-airflow-run-shad-7d75d3cbffd3-a1",
+      "expired_renew_time": "2026-08-13T00:00:00.000000Z",
+      "prior_state_during_probe": "DriverRequested",
+      "result": "LeaseTakeoverBlocked",
+      "probe_resource": "absent",
+      "renewed_at": "2026-08-13T17:38:39.354099Z",
+      "original_spark_state": "ResourceReleased",
+      "original_task_state": "success",
+      "lease_after": "absent",
+      "passed": true
+    },
+    "precommit_failure": {
+      "run_id": "manual__ticket06_precommit_failure_v5_20260813T174800Z",
+      "attempt": "lh-airflow-run-shad-d4c55e9d25da-a1",
+      "mutation": "Stopped the driver JVM after executor creation and before an Iceberg commit.",
+      "spark_state": "TerminatedWithoutReleaseResources",
+      "state_history": [
+        "Submitted",
+        "DriverRequested",
+        "Failed",
+        "TerminatedWithoutReleaseResources"
+      ],
+      "driver": {
+        "pod": "lh-airflow-run-shad-d4c55e9d25da-a1-0-driver",
+        "phase": "Failed",
+        "exit_code": 137,
+        "retained": true,
+        "loki_samples_after_exit": 66
+      },
+      "executor": {
+        "pod": "iceberg-log-fixture-6623e49ffc3d619a-exec-1",
+        "phase": "Succeeded",
+        "exit_code": 0,
+        "retained": true,
+        "loki_samples_after_exit": 56
+      },
+      "airflow": {
+        "run_state": "failed",
+        "task_state": "failed",
+        "loki_samples": 65,
+        "receipt_events": [
+          "submission",
+          "lease_acquired",
+          "lease_renewed",
+          "state_change",
+          "state_transition",
+          "terminal_state",
+          "failure_diagnostics",
+          "task_completion"
+        ],
+        "diagnostic_records": 2,
+        "driver_tail_count": 1,
+        "executor_tail_count": 1,
+        "task_diagnostic_length": 4000
+      },
+      "shadow_snapshot_before": "6584017577001615138",
+      "shadow_snapshot_after": "6584017577001615138",
+      "shadow_snapshot_changed": false,
+      "lease_after": "absent",
+      "passed": true
+    }
+  },
+  "retention_continuity": {
+    "current_failed_attempt": "lh-airflow-run-shad-d4c55e9d25da-a1",
+    "current_driver_and_executor_present": true,
+    "retention_label": "anton.io/retain-failed-pod=true",
+    "cleaner_schedule": "17,47 * * * *",
+    "last_cleaner_success": "2026-08-13T17:47:12Z",
+    "minimum_24_hour_live_test": "accepted by resolved Ticket 03",
+    "bounded_cleanup_live_test": "accepted by resolved Ticket 03",
+    "passed": true
+  },
+  "rejected_trials": [
+    {
+      "case": "scheduler setup",
+      "reason": "A future logical date created an empty run. The exact run was failed before any Spark resource existed."
+    },
+    {
+      "case": "expired Lease setup",
+      "reason": "Two probes missed the fast job or used an invalid MicroTime. Neither probe created a Spark resource."
+    },
+    {
+      "case": "precommit failure versions 1 through 4",
+      "reason": "The trials lacked executor Loki evidence, could not stop the driver, or changed the shadow snapshot. They do not support acceptance."
+    }
+  ],
+  "acceptance": {
+    "normal_success": true,
+    "short_lived_executor_logs": true,
+    "history_server": true,
+    "precommit_failure": true,
+    "bounded_airflow_failure_diagnostics": true,
+    "unique_airflow_driver_executor_loki_markers": true,
+    "scheduler_recovery_same_attempt": true,
+    "triggerer_recovery_and_renewal": true,
+    "duplicate_delivery_single_attempt": true,
+    "retry_prior_output_validation": true,
+    "cancellation_stop_then_release": true,
+    "expired_lease_refusal": true,
+    "retained_evidence": true,
+    "eligible": true,
+    "errors": []
+  }
+}

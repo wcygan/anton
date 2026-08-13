@@ -20,7 +20,7 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 
 - [ ] Flux owns healthy Airflow, Spark Operator, History Server, and CNPG resources with bounded resources and namespace-scoped access.
 - [ ] The selected Spark runtime passes the complete image, Iceberg, catalog, SeaweedFS, Trino, Kubernetes, and classpath matrix.
-- [ ] Airflow task logs, Loki runtime logs, and Spark History Server pass success, short-life, and pre-commit failure tests.
+- [x] Airflow task logs, Loki runtime logs, and Spark History Server pass success, short-life, and pre-commit failure tests.
 - [ ] Five shadow runs and 24 authoritative scheduled runs pass without two active writers or an unexplained failure.
 - [ ] Rollback, retention, removal, and the 2026-09-10 learning review have retained evidence.
 - [ ] Backup and restore pass before authoritative cutover, as required by ADR 0033.
@@ -165,15 +165,15 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [x] Keep the general receiver's current `start_at: end` behavior for other workloads.
 - [x] Change global pod garbage collection to exclude `anton.io/retain-failed-pod=true`.
 - [x] Mark retained Spark pods and their `SparkApplication` resources with the retention label.
-- [ ] Run one normal success test with unique markers in Airflow, driver, and executor output.
-- [ ] Run one deliberately short-lived executor test with unique markers.
-- [ ] Run one pre-Iceberg-commit failure test with unique markers.
+- [x] Run one normal success test with unique markers in Airflow, driver, and executor output.
+- [x] Run one deliberately short-lived executor test with unique markers.
+- [x] Run one pre-Iceberg-commit failure test with unique markers.
 - [x] Find complete runtime markers in Loki after every relevant container exits.
-- [ ] Find submission, state, and bounded failure diagnostics in the Airflow task log.
+- [x] Find submission, state, and bounded failure diagnostics in the Airflow task log.
 - [x] Verify History Server applications, jobs, stages, executors, SQL data, and event-log rollover.
 - [x] Do not use standard-output markers as History Server evidence.
-- [ ] Verify failed driver and executor pods remain visible for at least 24 hours.
-- [ ] Verify successful resources disappear promptly and retained resources disappear after their limits.
+- [x] Verify failed driver and executor pods remain visible for at least 24 hours.
+- [x] Verify successful resources disappear promptly and retained resources disappear after their limits.
 - [ ] Verify event logs remain queryable for 30 days, then expire through the storage owner.
 
 ### Phase 6: Pass compatibility and shadow gates
@@ -188,7 +188,7 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [x] Prove normalized `MERGE`, hourly delete-and-insert, idempotency, and expected snapshot changes.
 - [x] Run the full fixture workflow five consecutive times against the shadow target.
 - [x] Add the bounded Loki-source workflow only after all fixture gates pass.
-- [ ] Run failure, retry, cancellation, Lease, triggerer-recovery, and scheduler-recovery tests.
+- [x] Run failure, retry, cancellation, Lease, triggerer-recovery, and scheduler-recovery tests.
 - [x] Save image digests, dependency evidence, Kubernetes objects, queries, logs, and history results.
 - [x] Reject cutover if any mandatory check lacks retained evidence.
 
@@ -249,7 +249,9 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-13: The first Ticket 07 candidate lacked separate Trino reader identities. The accepted rotated ledger superseded that incomplete state.
 - 2026-08-13: Ticket 07 is resolved. Its rotated ledger reports five passes, `eligible=true`, and no errors.
 - 2026-08-13: Ticket 05 passed its focused contract and current shadow runtime checks.
-- 2026-08-13: Ticket 06 accepted normal success, short-life logs, and History Server evidence. Controlled recovery tests remain open.
+- 2026-08-13: The Ticket 06 read-only audit accepted normal success, short-life logs, and History Server evidence. Controlled recovery tests remained open.
+- 2026-08-13: Ticket 06 is resolved. Its live ledger passed failure, retry, cancellation, Lease, duplicate-delivery, scheduler, and triggerer tests.
+- 2026-08-13: The accepted pre-commit failure retained driver and executor diagnostics without changing shadow snapshot `6584017577001615138`.
 
 ## References
 
