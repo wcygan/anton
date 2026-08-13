@@ -519,12 +519,12 @@ class KubernetesSparkApplicationClient:
         from kubernetes import watch
 
         stream = watch.Watch().stream(
-            self.api.get_namespaced_custom_object,
+            self.api.list_namespaced_custom_object,
             GROUP,
             VERSION,
             namespace,
             PLURAL,
-            name,
+            field_selector=f"metadata.name={name}",
             timeout_seconds=timeout_seconds,
         )
         return [event for event in stream if isinstance(event, Mapping)]

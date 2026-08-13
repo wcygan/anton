@@ -7,6 +7,7 @@ import sys
 import unittest
 from importlib.metadata import version
 from pathlib import Path
+from unittest.mock import patch
 
 import airflow
 
@@ -21,7 +22,7 @@ from anton_airflow.spark import (
     foundation_marker,
     identity_hash,
 )
-from anton_airflow.spark.adapter import SparkApplicationAdapter
+from anton_airflow.spark.adapter import KubernetesSparkApplicationClient, SparkApplicationAdapter
 from anton_airflow.spark.lease import LeaseCoordinator, LeaseTakeoverBlocked
 
 
@@ -112,6 +113,31 @@ class AdapterPackageTests(unittest.TestCase):
             ),
             AttemptState.SUCCEEDED,
         )
+
+    def test_custom_resource_watch_uses_a_name_filtered_list(self) -> None:
+        class Api:
+            def list_namespaced_custom_object(self, *args, **kwargs):
+                return {"items": []}
+
+        class FakeWatch:
+            def __init__(self) -> None:
+                self.call = None
+
+            def stream(self, function, *args, **kwargs):
+                self.call = (function, args, kwargs)
+                return [{"type": "MODIFIED", "object": {"metadata": {"name": "attempt"}}}]
+
+        api = Api()
+        fake_watch = FakeWatch()
+        client = KubernetesSparkApplicationClient(api)
+        with patch("kubernetes.watch.Watch", return_value=fake_watch):
+            events = client.watch(namespace="lakehouse", name="attempt", timeout_seconds=30)
+
+        self.assertEqual(len(events), 1)
+        self.assertIs(fake_watch.call[0].__self__, api)
+        self.assertEqual(fake_watch.call[0].__name__, "list_namespaced_custom_object")
+        self.assertEqual(fake_watch.call[2]["field_selector"], "metadata.name=attempt")
+        self.assertEqual(fake_watch.call[2]["timeout_seconds"], 30)
 
     def test_lease_takeover_requires_expiry_and_inactive_prior_application(self) -> None:
         class Api:
