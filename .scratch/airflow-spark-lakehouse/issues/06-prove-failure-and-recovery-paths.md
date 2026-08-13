@@ -22,4 +22,8 @@
 
 ## Comments
 
-- 2026-08-12: Added bounded Spark Attempt receipts for submission, identity, state transitions, terminal state, Lease renewal, retry decisions, cancellation, and failure diagnostics. Added local controlled adapter tests for success, short-lived executor diagnostics, pre-commit failure classification, scheduler and triggerer recovery, duplicate delivery, retry reuse, cancellation, and expired Lease takeover. The prior-output validator fails closed until an independent validation sets `anton.io/prior-output-valid=true` on a completed application. These tests do not replace the authorized live Trino, Loki, History Server, or retention evidence gates.
+- 2026-08-12: Added bounded Spark Attempt receipts.
+- Receipts record identity, submission, state changes, terminal state, Lease renewal, retry decisions, cancellation, and failure diagnostics.
+- Added local adapter tests for success, failures, recovery, duplicate delivery, retry, cancellation, and expired Lease takeover.
+- Prior-output reuse requires an independent `anton.io/prior-output-valid=true` marker.
+- Local tests do not replace live Trino, Loki, History Server, or retention evidence.
