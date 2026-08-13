@@ -7,13 +7,16 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "kubernetes/apps/lakehouse/shadow-fixture/app"
 TEXT = "\n".join(path.read_text() for path in APP.glob("*.yaml"))
 REQUIRED = (
-    "apiVersion: sparkoperator.k8s.io/v1beta2", "kind: SparkApplication",
-    "image: 192.168.1.106/library/spark-runtime@sha256:",
-    "sparkVersion: 4.1.3", "type: Never", "instances: 1", "memory: 768m", "memoryOverhead: 256m",
+    "apiVersion: spark.apache.org/v1", "kind: SparkApplication",
+    "spark.kubernetes.container.image: 192.168.1.106/library/spark-runtime@sha256:",
+    "runtimeVersions", "sparkVersion: \"4.1.3\"",
+    "pyFiles: \"local:///opt/spark/work-dir/transform.py\"", "deploymentMode: ClusterMode",
+    "applicationTolerations", "restartPolicy: Never", "resourceRetainPolicy: OnFailure",
+    "spark.executor.instances", "spark.driver.memory: 768m", "spark.driver.memoryOverhead: 256m",
+    "spark-kubernetes-driver", "spark-kubernetes-executor",
     "AWS_REGION", "us-east-1", "ICEBERG_WAREHOUSE", "s3://iceberg-shadow", "org.apache.iceberg", "ExternalSecret",
     "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
     "persistentvolumeclaims", "deletecollection",
-    "timeToLiveSeconds: 604800", "deleteOnTermination: false",
     "anton.io/retain-failed-pod", "spark.eventLog.enabled", "s3a://spark-events/events/",
     "spark.eventLog.compress", "spark.eventLog.rolling.enabled", "spark.eventLog.rolling.maxFileSize",
     "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider", "core-site.xml",

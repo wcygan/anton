@@ -20,5 +20,5 @@ def prior_shadow_output_is_valid(resource: Mapping[str, Any]) -> bool:
         annotations = {}
     return (
         str(annotations.get("anton.io/prior-output-valid")).lower() == "true"
-        and terminal_state(resource) == "COMPLETED"
+        and terminal_state(resource) == "SUCCEEDED"
     )

@@ -56,15 +56,35 @@ class AdapterPackageTests(unittest.TestCase):
         identity = AttemptIdentity("lakehouse", "run-1", "fixture", -1, 1, "2026-08-12T00:00:00+00:00")
         resource = build_spark_application(
             identity,
-            application_spec={"spec": {"driver": {}, "executor": {}, "restartPolicy": {"type": "OnFailure"}}},
+            application_spec={
+                "spec": {
+                    "driverSpec": {
+                        "podTemplateSpec": {
+                            "spec": {"containers": [{"name": "spark-kubernetes-driver", "env": []}]}
+                        }
+                    },
+                    "executorSpec": {
+                        "podTemplateSpec": {
+                            "spec": {"containers": [{"name": "spark-kubernetes-executor", "env": []}]}
+                        }
+                    },
+                    "applicationTolerations": {"restartConfig": {"restartPolicy": "OnFailure"}},
+                }
+            },
             namespace="lakehouse",
             target="shadow",
         )
         self.assertEqual(resource["apiVersion"], "spark.apache.org/v1")
-        self.assertEqual(resource["spec"]["restartPolicy"], {"type": "Never"})
+        self.assertEqual(
+            resource["spec"]["applicationTolerations"]["restartConfig"]["restartPolicy"],
+            "Never",
+        )
         for role in ("driver", "executor"):
-            labels = resource["spec"][role]["labels"]
-            environment = {item["name"]: item["value"] for item in resource["spec"][role]["env"]}
+            role_spec = resource["spec"][f"{role}Spec"]["podTemplateSpec"]
+            labels = role_spec["metadata"]["labels"]
+            environment = {
+                item["name"]: item["value"] for item in role_spec["spec"]["containers"][0]["env"]
+            }
             self.assertEqual(labels["anton.io/attempt-name"], identity.name)
             self.assertEqual(environment["ANTON_SPARK_ATTEMPT"], identity.name)
             self.assertEqual(environment["ANTON_AIRFLOW_RUN_ID"], "run-1")
@@ -72,7 +92,12 @@ class AdapterPackageTests(unittest.TestCase):
     def test_resource_released_without_terminal_history_is_ambiguous(self) -> None:
         self.assertEqual(
             classify_application(
-                {"status": {"applicationState": {"state": "RESOURCE_RELEASED"}, "stateTransitionHistory": []}}
+                {
+                    "status": {
+                        "currentState": {"currentStateSummary": "ResourceReleased"},
+                        "stateTransitionHistory": {},
+                    }
+                }
             ),
             AttemptState.AMBIGUOUS,
         )
@@ -80,8 +105,8 @@ class AdapterPackageTests(unittest.TestCase):
             classify_application(
                 {
                     "status": {
-                        "applicationState": {"state": "RESOURCE_RELEASED"},
-                        "stateTransitionHistory": [{"state": "COMPLETED"}],
+                        "currentState": {"currentStateSummary": "ResourceReleased"},
+                        "stateTransitionHistory": {"1": {"currentStateSummary": "Succeeded"}},
                     }
                 }
             ),
@@ -140,8 +165,8 @@ class AdapterPackageTests(unittest.TestCase):
                 self.resources[body["metadata"]["name"]] = {
                     **body,
                     "status": {
-                        "applicationState": {"state": "RUNNING"},
-                        "stateTransitionHistory": [{"state": "SUBMITTED"}],
+                        "currentState": {"currentStateSummary": "Submitted"},
+                        "stateTransitionHistory": {"1": {"currentStateSummary": "Submitted"}},
                     },
                 }
 
@@ -183,8 +208,8 @@ class AdapterPackageTests(unittest.TestCase):
         )
         adapter.submit_or_reattach(first, application_spec={"spec": {}}, target="shadow")
         applications.resources[first.name]["status"] = {
-            "applicationState": {"state": "FAILED"},
-            "stateTransitionHistory": [{"state": "FAILED"}],
+            "currentState": {"currentStateSummary": "Failed"},
+            "stateTransitionHistory": {"1": {"currentStateSummary": "Failed"}},
         }
         lease_api.resource = None
         adapter.submit_or_reattach(second, application_spec={"spec": {}}, target="shadow")
@@ -204,7 +229,13 @@ class AdapterPackageTests(unittest.TestCase):
                 return self.resource
 
             def create(self, *, namespace, body):
-                self.resource = {**body, "status": {"applicationState": {"state": "RUNNING"}}}
+                self.resource = {
+                    **body,
+                    "status": {
+                        "currentState": {"currentStateSummary": "Submitted"},
+                        "stateTransitionHistory": {"1": {"currentStateSummary": "Submitted"}},
+                    },
+                }
 
             def delete(self, *, namespace, name):
                 self.resource = None

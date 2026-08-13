@@ -54,6 +54,13 @@ def _merge_env(existing: Any, correlation: Mapping[str, str]) -> list[dict[str, 
     return list(by_name.values())
 
 
+# Container names the Apache operator's submission worker expects in the
+# driver/executor PodTemplateSpec. Matching them lets Spark pick up the image,
+# env, envFrom, and volumeMounts from the pod template file.
+DRIVER_CONTAINER = "spark-kubernetes-driver"
+EXECUTOR_CONTAINER = "spark-kubernetes-executor"
+
+
 def build_spark_application(
     identity: AttemptIdentity,
     *,
@@ -61,7 +68,12 @@ def build_spark_application(
     namespace: str,
     target: str,
 ) -> dict[str, Any]:
-    """Build one generic ``spark.apache.org/v1`` SparkApplication resource."""
+    """Build one generic ``spark.apache.org/v1`` SparkApplication resource.
+
+    The Apache operator expresses the driver and executor as full Kubernetes
+    ``podTemplateSpec`` objects, restarts under ``applicationTolerations``, and
+    passes the container image and service account through ``sparkConf``.
+    """
     if target not in {"shadow", "authoritative"}:
         raise ValueError("target must be shadow or authoritative")
     resource = deepcopy(dict(application_spec))
@@ -76,9 +88,13 @@ def build_spark_application(
     )
     resource.update({"apiVersion": f"{GROUP}/{VERSION}", "kind": "SparkApplication", "metadata": metadata})
     spec = dict(resource.get("spec") or {})
-    restart = dict(spec.get("restartPolicy") or {})
-    restart["type"] = "Never"
-    spec["restartPolicy"] = restart
+
+    # Never restart: the Airflow operator owns bounded, identity-aware retries.
+    tolerations = dict(spec.get("applicationTolerations") or {})
+    restart = dict(tolerations.get("restartConfig") or {})
+    restart["restartPolicy"] = "Never"
+    tolerations["restartConfig"] = restart
+    spec["applicationTolerations"] = tolerations
 
     correlation = {
         "ANTON_SPARK_ATTEMPT": identity.name,
@@ -90,12 +106,30 @@ def build_spark_application(
         "ANTON_AIRFLOW_TRY_NUMBER": str(identity.try_number),
         "ANTON_LAKEHOUSE_TARGET": target,
     }
-    for role in ("driver", "executor"):
-        template = dict(spec.get(role) or {})
-        template["labels"] = {**(template.get("labels") or {}), **identity.labels(target=target), "anton.io/attempt-name": identity.name}
-        template["annotations"] = {**(template.get("annotations") or {}), **identity.annotations()}
-        template["env"] = _merge_env(template.get("env"), correlation)
-        spec[role] = template
+    for role, container_name in (
+        ("driver", DRIVER_CONTAINER),
+        ("executor", EXECUTOR_CONTAINER),
+    ):
+        role_spec = dict(spec.get(f"{role}Spec") or {})
+        template = dict(role_spec.get("podTemplateSpec") or {})
+        meta = dict(template.get("metadata") or {})
+        meta["labels"] = {
+            **(meta.get("labels") or {}),
+            **identity.labels(target=target),
+            "anton.io/attempt-name": identity.name,
+        }
+        meta["annotations"] = {**(meta.get("annotations") or {}), **identity.annotations()}
+        template["metadata"] = meta
+        pod = dict(template.get("spec") or {})
+        containers = list(pod.get("containers") or [])
+        for index, container in enumerate(containers):
+            merged = dict(container)
+            merged["env"] = _merge_env(merged.get("env"), correlation)
+            containers[index] = merged
+        pod["containers"] = containers
+        template["spec"] = pod
+        role_spec["podTemplateSpec"] = template
+        spec[f"{role}Spec"] = role_spec
     resource["spec"] = spec
     return resource
 

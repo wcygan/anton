@@ -1,4 +1,12 @@
-"""Fail-closed SparkApplication state classification."""
+"""Fail-closed SparkApplication state classification for the Apache operator.
+
+The Apache Spark Kubernetes Operator (spark.apache.org) tracks application
+state in ``status.currentState.currentStateSummary`` and appends every state
+transition to ``status.stateTransitionHistory`` (a map keyed by attempt state
+sequence). Each ``ApplicationState`` carries a ``currentStateSummary`` enum and
+an optional ``message``. This module normalizes that shape so the adapter and
+receipts classify outcomes without assuming Kubeflow's ``applicationState``.
+"""
 
 from __future__ import annotations
 
@@ -14,18 +22,30 @@ class AttemptState(StrEnum):
     AMBIGUOUS = "ambiguous"
 
 
+# Apache operator ApplicationStateSummary enum values, normalized to
+# upper-case with no separators. Intermediate/running states are not outcomes.
 ACTIVE_STATES = {
-    "NEW",
-    "PENDING",
     "SUBMITTED",
-    "RUNNING",
-    "FAILING",
-    "SUCCEEDING",
-    "INVALIDATING",
-    "SHUTTING_DOWN",
+    "SCHEDULEDTORESTART",
+    "DRIVERREQUESTED",
+    "DRIVERSTARTED",
+    "DRIVERREADY",
+    "INITIALIZEDBELOWTHRESHOLDEXECUTORS",
+    "RUNNINGHEALTHY",
+    "RUNNINGWITHPARTIALCAPACITY",
+    "RUNNINGWITHBELOWTHRESHOLDEXECUTORS",
 }
-SUCCESS_STATES = {"COMPLETED", "SUCCEEDED", "SUCCESS"}
-FAILURE_STATES = {"FAILED", "FAILURE", "SUBMISSION_FAILED", "INVALID", "ERROR", "DEAD"}
+SUCCESS_STATES = {"SUCCEEDED"}
+FAILURE_STATES = {
+    "FAILED",
+    "SCHEDULINGFAILURE",
+    "DRIVERSTARTTIMEDOUT",
+    "EXECUTORSSTARTTIMEDOUT",
+    "DRIVERREADYTIMEDOUT",
+    "DRIVEREVICTED",
+}
+# Resource-cleanup states are not outcomes on their own.
+RESOURCE_CLEANUP_STATES = {"RESOURCERELEASED", "TERMINATEDWITHOUTRELEASERESOURCES"}
 
 
 def _state(value: Any) -> str:
@@ -33,12 +53,71 @@ def _state(value: Any) -> str:
 
 
 def state_transition_history(resource: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    """Read Spark Operator's state transition history without assuming its shape."""
+    """Read the Apache operator's transition history without assuming its shape.
+
+    Returns a chronological list of ``{state, transitionTime, message}`` items
+    normalized from either the Apache map or a list-shaped history.
+    """
     status = resource.get("status") if isinstance(resource, Mapping) else None
-    history = status.get("stateTransitionHistory") if isinstance(status, Mapping) else None
-    if not isinstance(history, list):
+    if not isinstance(status, Mapping):
         return []
-    return [item for item in history if isinstance(item, Mapping)]
+    raw = status.get("stateTransitionHistory")
+    entries: list[tuple[Any, Mapping[str, Any]]] = []
+    if isinstance(raw, dict):
+        for key, item in raw.items():
+            if isinstance(item, Mapping) and _entry_state(item) is not None:
+                entries.append((key, item))
+        entries.sort(key=lambda pair: _sort_key(pair[0]))
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, Mapping) and _entry_state(item) is not None:
+                entries.append((-1, item))
+    elif isinstance(raw, Mapping):
+        for key, item in raw.items():
+            if isinstance(item, Mapping) and _entry_state(item) is not None:
+                entries.append((key, item))
+        entries.sort(key=lambda pair: _sort_key(pair[0]))
+    result: list[Mapping[str, Any]] = []
+    for _, item in entries:
+        result.append(
+            {
+                "state": _state(_entry_state(item)),
+                "transitionTime": (
+                    item.get("lastTransitionTime")
+                    or item.get("transitionTime")
+                    or item.get("timestamp")
+                    or ""
+                ),
+                "message": item.get("message") or "",
+            }
+        )
+    return result
+
+
+def _entry_state(item: Mapping[str, Any]) -> Any:
+    value = item.get("currentStateSummary")
+    if value is None:
+        value = item.get("state")
+    return value
+
+
+def _sort_key(key: Any) -> tuple[bool, Any]:
+    # Numeric attempt sequence keys sort naturally; anything else sorts last.
+    try:
+        return (False, int(key))
+    except (TypeError, ValueError):
+        return (True, str(key))
+
+
+def _current_summary(status: Mapping[str, Any]) -> str:
+    current = status.get("currentState")
+    if isinstance(current, Mapping) and current.get("currentStateSummary") is not None:
+        return _state(current["currentStateSummary"])
+    # Tolerate a legacy shallow shape for read-only fallback.
+    legacy = status.get("applicationState")
+    if isinstance(legacy, Mapping) and legacy.get("state") is not None:
+        return _state(legacy["state"])
+    return ""
 
 
 def classify_application(resource: Mapping[str, Any] | None) -> AttemptState:
@@ -49,15 +128,18 @@ def classify_application(resource: Mapping[str, Any] | None) -> AttemptState:
     if not isinstance(status, Mapping):
         return AttemptState.AMBIGUOUS
 
-    history_states = [_state(item.get("state")) for item in state_transition_history(resource)]
-    # The terminal history is authoritative. ResourceReleased alone is not.
-    terminal = next((value for value in reversed(history_states) if value in SUCCESS_STATES | FAILURE_STATES), None)
+    history_states = [item.get("state") for item in state_transition_history(resource)]
+    # The terminal history is authoritative. Resource cleanup is not an outcome.
+    terminal = next(
+        (value for value in reversed(history_states) if value in SUCCESS_STATES | FAILURE_STATES),
+        None,
+    )
     if terminal in SUCCESS_STATES:
         return AttemptState.SUCCEEDED
     if terminal in FAILURE_STATES:
         return AttemptState.FAILED
 
-    current = _state((status.get("applicationState") or {}).get("state"))
+    current = _current_summary(status)
     # A current terminal value without a transition history is not an outcome
     # record. Treat it as ambiguous so a retry cannot write blindly.
     if not history_states:
@@ -72,7 +154,7 @@ def classify_application(resource: Mapping[str, Any] | None) -> AttemptState:
 def terminal_state(resource: Mapping[str, Any]) -> str | None:
     """Return the authoritative terminal state from transition history."""
     for item in reversed(state_transition_history(resource)):
-        state = _state(item.get("state"))
+        state = item.get("state")
         if state in SUCCESS_STATES | FAILURE_STATES:
             return state
     return None

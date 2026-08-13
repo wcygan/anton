@@ -92,18 +92,23 @@ class LokiSourceSparkOperator(ApacheSparkApplicationOperator):
         metadata["annotations"] = annotations
         self.application_spec["metadata"] = metadata
         spec = dict(self.application_spec.get("spec") or {})
+        loki_env = {
+            "LOKI_INPUT_URI": snapshot.uri,
+            "LOKI_SOURCE_WINDOW_START": window.start.isoformat(),
+            "LOKI_SOURCE_WINDOW_END": window.end.isoformat(),
+            "LOKI_SOURCE_WINDOW_HASH": source_hash,
+        }
         for role in ("driver", "executor"):
-            template = dict(spec.get(role) or {})
-            template["env"] = _env_with(
-                template.get("env"),
-                {
-                    "LOKI_INPUT_URI": snapshot.uri,
-                    "LOKI_SOURCE_WINDOW_START": window.start.isoformat(),
-                    "LOKI_SOURCE_WINDOW_END": window.end.isoformat(),
-                    "LOKI_SOURCE_WINDOW_HASH": source_hash,
-                },
-            )
-            spec[role] = template
+            role_spec = dict(spec.get(f"{role}Spec") or {})
+            template = dict(role_spec.get("podTemplateSpec") or {})
+            pod = dict(template.get("spec") or {})
+            containers = [dict(item) for item in pod.get("containers") or []]
+            if containers:
+                containers[0]["env"] = _env_with(containers[0].get("env"), loki_env)
+            pod["containers"] = containers
+            template["spec"] = pod
+            role_spec["podTemplateSpec"] = template
+            spec[f"{role}Spec"] = role_spec
         self.application_spec["spec"] = spec
         self.log.info(
             "loki_source_receipt %s",

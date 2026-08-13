@@ -206,9 +206,15 @@ class Ticket08LokiSourceTests(unittest.TestCase):
         self.assertEqual(fake.calls[0][0], "{job=\"test\"}")
         self.assertEqual(operator.target, "shadow")
         self.assertIsNotNone(operator.prior_output_validator)
-        driver_env = {item["name"]: item["value"] for item in operator.application_spec["spec"]["driver"]["env"]}
+        driver_env = {
+            item["name"]: item["value"]
+            for item in operator.application_spec["spec"]["driverSpec"]["podTemplateSpec"]["spec"]["containers"][0]["env"]
+        }
         self.assertEqual(driver_env["LOKI_INPUT_URI"], snapshot.uri)
-        self.assertEqual(operator.application_spec["metadata"]["annotations"]["anton.io/source-kind"], "loki")
+        self.assertEqual(
+            operator.application_spec["metadata"]["annotations"]["anton.io/source-kind"],
+            "loki",
+        )
 
         with self.assertRaises(ValueError):
             LokiSourceSparkOperator(

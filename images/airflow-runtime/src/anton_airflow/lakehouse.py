@@ -12,20 +12,78 @@ SPARK_RUNTIME_IMAGE = (
 )
 CATALOG_URI = "http://seaweedfs-iceberg.storage.svc.cluster.local:8181"
 S3_ENDPOINT = "http://seaweedfs-s3.storage.svc.cluster.local:8333"
+# Container names the Apache submission worker expects in the pod template.
+ADAPTER_DRIVER_CONTAINER = "spark-kubernetes-driver"
+ADAPTER_EXECUTOR_CONTAINER = "spark-kubernetes-executor"
 
 
 def _application_spec(*, secret_name: str) -> dict[str, Any]:
+    """Return one Apache ``spark.apache.org/v1`` SparkApplication spec.
+
+    The Apache operator drives the driver and executor as full Kubernetes pod
+    templates. The container image, service account, executor count, and
+    resources are carried in ``sparkConf``, and the entrypoint is ``pyFiles``.
+    """
+    shared_env = [
+        {"name": "AWS_REGION", "value": "us-east-1"},
+        {"name": "HADOOP_CONF_DIR", "value": "/etc/hadoop-event-log"},
+        {"name": "ICEBERG_WAREHOUSE", "value": "s3://iceberg-shadow"},
+        {"name": "ICEBERG_CATALOG_URI", "value": CATALOG_URI},
+        {"name": "S3_ENDPOINT", "value": S3_ENDPOINT},
+    ]
+    event_log_secret_volume = {
+        "name": "event-log-hadoop-config",
+        "secret": {
+            "secretName": secret_name,
+            "items": [{"key": "core-site.xml", "path": "core-site.xml"}],
+        },
+    }
+    event_log_volume_mount = {
+        "name": "event-log-hadoop-config",
+        "mountPath": "/etc/hadoop-event-log",
+        "readOnly": True,
+    }
+    driver_pod = {
+        "containers": [
+            {
+                "name": ADAPTER_DRIVER_CONTAINER,
+                "imagePullPolicy": "IfNotPresent",
+                "envFrom": [{"secretRef": {"name": secret_name}}],
+                "env": deepcopy(shared_env),
+                "volumeMounts": [deepcopy(event_log_volume_mount)],
+            }
+        ],
+        "volumes": [deepcopy(event_log_secret_volume)],
+    }
+    executor_pod = {
+        "containers": [
+            {
+                "name": ADAPTER_EXECUTOR_CONTAINER,
+                "imagePullPolicy": "IfNotPresent",
+                "envFrom": [{"secretRef": {"name": secret_name}}],
+                "env": deepcopy(shared_env),
+                "volumeMounts": [deepcopy(event_log_volume_mount)],
+            }
+        ],
+        "volumes": [deepcopy(event_log_secret_volume)],
+    }
     return {
         "spec": {
-            "type": "Python",
-            "pythonVersion": "3",
-            "mode": "cluster",
-            "image": SPARK_RUNTIME_IMAGE,
-            "imagePullPolicy": "IfNotPresent",
-            "mainApplicationFile": "local:///opt/spark/work-dir/transform.py",
-            "sparkVersion": "4.1.3",
-            "timeToLiveSeconds": 604800,
+            "pyFiles": "local:///opt/spark/work-dir/transform.py",
+            "deploymentMode": "ClusterMode",
+            "runtimeVersions": {"sparkVersion": "4.1.3"},
             "sparkConf": {
+                "spark.kubernetes.container.image": SPARK_RUNTIME_IMAGE,
+                "spark.kubernetes.authenticate.driver.serviceAccountName": "spark",
+                "spark.executor.instances": "1",
+                "spark.driver.cores": "1",
+                "spark.driver.memory": "768m",
+                "spark.driver.memoryOverhead": "256m",
+                "spark.executor.cores": "1",
+                "spark.executor.memory": "768m",
+                "spark.executor.memoryOverhead": "256m",
+                "spark.kubernetes.driver.request.cores": "100m",
+                "spark.kubernetes.executor.request.cores": "100m",
                 "spark.eventLog.enabled": "true",
                 "spark.eventLog.dir": "s3a://spark-events/events/",
                 "spark.eventLog.compress": "true",
@@ -38,56 +96,21 @@ def _application_spec(*, secret_name: str) -> dict[str, Any]:
                 "spark.sql.catalog.lake.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
                 "spark.sql.iceberg.write.format-version": "2",
             },
-            "volumes": [
-                {
-                    "name": "event-log-hadoop-config",
-                    "secret": {
-                        "secretName": secret_name,
-                        "items": [{"key": "core-site.xml", "path": "core-site.xml"}],
-                    },
-                }
-            ],
-            "driver": {
-                "cores": 1,
-                "coreRequest": "100m",
-                "memory": "768m",
-                "memoryOverhead": "256m",
-                "serviceAccount": "shadow-fixture",
-                "volumeMounts": [
-                    {
-                        "name": "event-log-hadoop-config",
-                        "mountPath": "/etc/hadoop-event-log",
-                        "readOnly": True,
-                    }
-                ],
-                "envFrom": [{"secretRef": {"name": secret_name}}],
-                "env": [
-                    {"name": "AWS_REGION", "value": "us-east-1"},
-                    {"name": "HADOOP_CONF_DIR", "value": "/etc/hadoop-event-log"},
-                    {"name": "ICEBERG_WAREHOUSE", "value": "s3://iceberg-shadow"},
-                    {"name": "ICEBERG_CATALOG_URI", "value": CATALOG_URI},
-                    {"name": "S3_ENDPOINT", "value": S3_ENDPOINT},
-                ],
+            "driverSpec": {
+                "podTemplateSpec": {
+                    "metadata": {"labels": {"anton.io/retain-failed-pod": "true"}},
+                    "spec": driver_pod,
+                },
             },
-            "executor": {
-                "instances": 1,
-                "deleteOnTermination": False,
-                "cores": 1,
-                "coreRequest": "100m",
-                "memory": "768m",
-                "memoryOverhead": "256m",
-                "volumeMounts": [
-                    {
-                        "name": "event-log-hadoop-config",
-                        "mountPath": "/etc/hadoop-event-log",
-                        "readOnly": True,
-                    }
-                ],
-                "envFrom": [{"secretRef": {"name": secret_name}}],
-                "env": [
-                    {"name": "AWS_REGION", "value": "us-east-1"},
-                    {"name": "HADOOP_CONF_DIR", "value": "/etc/hadoop-event-log"},
-                ],
+            "executorSpec": {
+                "podTemplateSpec": {
+                    "metadata": {"labels": {"anton.io/retain-failed-pod": "true"}},
+                    "spec": executor_pod,
+                },
+            },
+            "applicationTolerations": {
+                "restartConfig": {"restartPolicy": "Never"},
+                "resourceRetainPolicy": "OnFailure",
             },
         }
     }

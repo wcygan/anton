@@ -5,4 +5,4 @@ metadata:
   name: spark-operator
 spec:
   interval: 1h
-  url: https://kubeflow.github.io/spark-operator
+  url: https://apache.github.io/spark-kubernetes-operator/

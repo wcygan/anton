@@ -1,5 +1,5 @@
 ---
-apiVersion: sparkoperator.k8s.io/v1beta2
+apiVersion: spark.apache.org/v1
 kind: SparkApplication
 metadata:
   name: lakehouse-shadow-fixture
@@ -7,24 +7,22 @@ metadata:
     app.kubernetes.io/name: lakehouse-shadow-fixture
     anton.io/retain-failed-pod: "true"
 spec:
-  type: Python
-  pythonVersion: "3"
-  mode: cluster
-  image: 192.168.1.106/library/spark-runtime@sha256:28efc7381ed7560ee806aeead8ba864daf989126bdb8f0f5b7d668beeafcb056
-  imagePullPolicy: IfNotPresent
-  mainApplicationFile: local:///opt/spark/work-dir/transform.py
-  sparkVersion: 4.1.3
-  volumes:
-    - name: event-log-hadoop-config
-      secret:
-        secretName: shadow-fixture-s3
-        items:
-          - key: core-site.xml
-            path: core-site.xml
-  restartPolicy:
-    type: Never
-  timeToLiveSeconds: 604800
+  pyFiles: "local:///opt/spark/work-dir/transform.py"
+  deploymentMode: ClusterMode
+  runtimeVersions:
+    sparkVersion: "4.1.3"
   sparkConf:
+    spark.kubernetes.container.image: 192.168.1.106/library/spark-runtime@sha256:77a9e545a49b5eb6ea23fe8e92d78f1ef751ea5aae5a209afd02e0caa46beaf3
+    spark.kubernetes.authenticate.driver.serviceAccountName: shadow-fixture
+    spark.executor.instances: "1"
+    spark.driver.cores: "1"
+    spark.driver.memory: 768m
+    spark.driver.memoryOverhead: 256m
+    spark.executor.cores: "1"
+    spark.executor.memory: 768m
+    spark.executor.memoryOverhead: 256m
+    spark.kubernetes.driver.request.cores: 100m
+    spark.kubernetes.executor.request.cores: 100m
     spark.eventLog.enabled: "true"
     spark.eventLog.dir: s3a://spark-events/events/
     spark.eventLog.compress: "true"
@@ -36,50 +34,75 @@ spec:
     spark.sql.catalog.lake: org.apache.iceberg.spark.SparkCatalog
     spark.sql.catalog.lake.io-impl: org.apache.iceberg.aws.s3.S3FileIO
     spark.sql.iceberg.write.format-version: "2"
-  driver:
-    cores: 1
-    coreRequest: 100m
-    memory: 768m
-    memoryOverhead: 256m
-    serviceAccount: shadow-fixture
-    labels:
-      anton.io/retain-failed-pod: "true"
-    volumeMounts:
-      - name: event-log-hadoop-config
-        mountPath: /etc/hadoop-event-log
-        readOnly: true
-    envFrom:
-      - secretRef:
-          name: shadow-fixture-s3
-    env:
-      - name: AWS_REGION
-        value: us-east-1
-      - name: HADOOP_CONF_DIR
-        value: /etc/hadoop-event-log
-      - name: ICEBERG_WAREHOUSE
-        value: s3://iceberg-shadow
-      - name: ICEBERG_CATALOG_URI
-        value: http://seaweedfs-iceberg.storage.svc.cluster.local:8181
-      - name: S3_ENDPOINT
-        value: http://seaweedfs-s3.storage.svc.cluster.local:8333
-  executor:
-    instances: 1
-    deleteOnTermination: false
-    cores: 1
-    coreRequest: 100m
-    memory: 768m
-    memoryOverhead: 256m
-    labels:
-      anton.io/retain-failed-pod: "true"
-    volumeMounts:
-      - name: event-log-hadoop-config
-        mountPath: /etc/hadoop-event-log
-        readOnly: true
-    envFrom:
-      - secretRef:
-          name: shadow-fixture-s3
-    env:
-      - name: AWS_REGION
-        value: us-east-1
-      - name: HADOOP_CONF_DIR
-        value: /etc/hadoop-event-log
+  driverSpec:
+    podTemplateSpec:
+      metadata:
+        labels:
+          anton.io/retain-failed-pod: "true"
+      spec:
+        containers:
+          - name: spark-kubernetes-driver
+            imagePullPolicy: IfNotPresent
+            envFrom:
+              - secretRef:
+                  name: shadow-fixture-s3
+            env:
+              - name: AWS_REGION
+                value: us-east-1
+              - name: HADOOP_CONF_DIR
+                value: /etc/hadoop-event-log
+              - name: ICEBERG_WAREHOUSE
+                value: s3://iceberg-shadow
+              - name: ICEBERG_CATALOG_URI
+                value: http://seaweedfs-iceberg.storage.svc.cluster.local:8181
+              - name: S3_ENDPOINT
+                value: http://seaweedfs-s3.storage.svc.cluster.local:8333
+            volumeMounts:
+              - name: event-log-hadoop-config
+                mountPath: /etc/hadoop-event-log
+                readOnly: true
+        volumes:
+          - name: event-log-hadoop-config
+            secret:
+              secretName: shadow-fixture-s3
+              items:
+                - key: core-site.xml
+                  path: core-site.xml
+  executorSpec:
+    podTemplateSpec:
+      metadata:
+        labels:
+          anton.io/retain-failed-pod: "true"
+      spec:
+        containers:
+          - name: spark-kubernetes-executor
+            imagePullPolicy: IfNotPresent
+            envFrom:
+              - secretRef:
+                  name: shadow-fixture-s3
+            env:
+              - name: AWS_REGION
+                value: us-east-1
+              - name: HADOOP_CONF_DIR
+                value: /etc/hadoop-event-log
+              - name: ICEBERG_WAREHOUSE
+                value: s3://iceberg-shadow
+              - name: ICEBERG_CATALOG_URI
+                value: http://seaweedfs-iceberg.storage.svc.cluster.local:8181
+              - name: S3_ENDPOINT
+                value: http://seaweedfs-s3.storage.svc.cluster.local:8333
+            volumeMounts:
+              - name: event-log-hadoop-config
+                mountPath: /etc/hadoop-event-log
+                readOnly: true
+        volumes:
+          - name: event-log-hadoop-config
+            secret:
+              secretName: shadow-fixture-s3
+              items:
+                - key: core-site.xml
+                  path: core-site.xml
+  applicationTolerations:
+    restartConfig:
+      restartPolicy: Never
+    resourceRetainPolicy: OnFailure

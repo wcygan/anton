@@ -43,7 +43,9 @@ def main() -> int:
         failures.append("History Server must disable token mounting on its ServiceAccount and pod")
 
     fixture = FIXTURE.read_text(encoding="utf-8")
-    fixture_image = re.search(r"(?m)^  image: (.+@sha256:[0-9a-f]{64})$", fixture)
+    fixture_image = re.search(
+        r"(?m)^    spark\.kubernetes\.container\.image: (.+@sha256:[0-9a-f]{64})$", fixture
+    )
     history_image = re.search(r"(?m)^          image: (.+@sha256:[0-9a-f]{64})$", text)
     if fixture_image is None or history_image is None or fixture_image.group(1) != history_image.group(1):
         failures.append("History Server must use the exact fixture Spark image digest")

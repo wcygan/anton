@@ -52,8 +52,10 @@ class Applications:
             raise Conflict()
         resource = dict(body)
         resource["status"] = {
-            "applicationState": {"state": "RUNNING"},
-            "stateTransitionHistory": [{"state": "SUBMITTED"}],
+            "currentState": {"currentStateSummary": "Submitted"},
+            "stateTransitionHistory": {
+                "1": {"currentStateSummary": "Submitted"},
+            },
         }
         self.resources[name] = resource
         self.created.append(name)
@@ -180,8 +182,8 @@ class Ticket06RecoveryTests(unittest.TestCase):
         completed = {
             "metadata": {"annotations": {"anton.io/prior-output-valid": "true"}},
             "status": {
-                "applicationState": {"state": "COMPLETED"},
-                "stateTransitionHistory": [{"state": "COMPLETED"}],
+                "currentState": {"currentStateSummary": "Succeeded"},
+                "stateTransitionHistory": {"1": {"currentStateSummary": "Succeeded"}},
             },
         }
         rejected = {
@@ -199,8 +201,11 @@ class Ticket06RecoveryTests(unittest.TestCase):
 
         adapter.submit_or_reattach(identity, application_spec={"spec": {}}, target="shadow")
         applications.resources[identity.name]["status"] = {
-            "applicationState": {"state": "COMPLETED"},
-            "stateTransitionHistory": [{"state": "SUBMITTED"}, {"state": "COMPLETED"}],
+            "currentState": {"currentStateSummary": "Succeeded"},
+            "stateTransitionHistory": {
+                "1": {"currentStateSummary": "Submitted"},
+                "2": {"currentStateSummary": "Succeeded"},
+            },
         }
         result = adapter.wait_for_completion(identity.name, timeout=0.1, interval=0.001)
 
@@ -216,8 +221,11 @@ class Ticket06RecoveryTests(unittest.TestCase):
         adapter, _ = adapter_for(applications, pods=pods, receipts=receipts, diagnostics_limit=64)
         adapter.submit_or_reattach(identity, application_spec={"spec": {}}, target="shadow")
         applications.resources[identity.name]["status"] = {
-            "applicationState": {"state": "FAILED"},
-            "stateTransitionHistory": [{"state": "SUBMITTED"}, {"state": "FAILED"}],
+            "currentState": {"currentStateSummary": "Failed"},
+            "stateTransitionHistory": {
+                "1": {"currentStateSummary": "Submitted"},
+                "2": {"currentStateSummary": "Failed"},
+            },
         }
 
         result = adapter.submit_or_reattach(identity, application_spec={"spec": {}}, target="shadow")
@@ -258,8 +266,8 @@ class Ticket06RecoveryTests(unittest.TestCase):
         second = AttemptIdentity("lakehouse", "run-retry", "fixture", -1, 2)
         adapter.submit_or_reattach(first, application_spec={"spec": {}}, target="shadow")
         applications.resources[first.name]["status"] = {
-            "applicationState": {"state": "COMPLETED"},
-            "stateTransitionHistory": [{"state": "COMPLETED"}],
+            "currentState": {"currentStateSummary": "Succeeded"},
+            "stateTransitionHistory": {"1": {"currentStateSummary": "Succeeded"}},
         }
         lease_api.resource = None
 
@@ -307,8 +315,8 @@ class Ticket06RecoveryTests(unittest.TestCase):
         applications.resources[prior.name] = {
             "metadata": {"name": prior.name},
             "status": {
-                "applicationState": {"state": "RUNNING"},
-                "stateTransitionHistory": [{"state": "RUNNING"}],
+                "currentState": {"currentStateSummary": "Submitted"},
+                "stateTransitionHistory": {"1": {"currentStateSummary": "Submitted"}},
             },
         }
         expired = {
