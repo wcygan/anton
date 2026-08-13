@@ -10,3 +10,4 @@ resources:
   - ./namespace.yaml
   - ./airflow-database/ks.yaml
   - ./airflow/ks.yaml
+  - ./loki-source/ks.yaml

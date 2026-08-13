@@ -4,7 +4,7 @@
 
 **Blocked by:** 07 — Pass the five-run shadow gate.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 - [ ] The Workflow Run captures one bounded Loki source window with explicit time limits.
 - [ ] Source extraction cannot issue unbounded Loki queries or write authoritative Iceberg data during shadow validation.
@@ -17,3 +17,11 @@
 - [ ] One approved end-to-end source run retains bounded input details and complete validation evidence.
 
 ## Comments
+
+- Implemented the bounded Loki extractor, deterministic raw snapshot writer, and shadow-only `LokiSourceSparkOperator`.
+- Added the manual `airflow_loki_source` DAG with a five-minute window and a 1000-entry completeness fence.
+- Added bucket-scoped ESO credentials in `airflow` and `lakehouse`; Spark uses bucket-specific S3A credentials for raw input and event logs.
+- Reused the fail-closed prior-output validator for same-window retries; raw JSONL retains Loki stream labels for correlation evidence.
+- The Airflow image test stage passed 26 tests, and `mise exec -- task contracts:validate` passed 207 repository tests.
+- The local Spark runtime image build passed its runtime contract; no image was published or pinned in Git.
+- Live acceptance remains pending: publish the rebuilt Airflow and Spark images, update their immutable digests, pass Ticket 07, reconcile Flux, and retain one approved source run with Trino evidence.

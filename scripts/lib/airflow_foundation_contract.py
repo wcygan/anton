@@ -505,9 +505,15 @@ def validate_image_source(failures: list[str]) -> None:
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "receipts.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "operator.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "trigger.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "lakehouse.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "loki.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "loki_operator.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "shadow_validation.py",
             IMAGE_ROOT / "tests" / "test_adapter_package.py",
             IMAGE_ROOT / "tests" / "test_ticket06_recovery.py",
+            IMAGE_ROOT / "tests" / "test_ticket08_loki_source.py",
             IMAGE_ROOT / "dags" / "airflow_spark_lakehouse.py",
+            IMAGE_ROOT / "dags" / "airflow_loki_source.py",
         )
     )
     required_source = (
@@ -529,6 +535,15 @@ def validate_image_source(failures: list[str]) -> None:
         "prior_shadow_output_is_valid",
         "prior_output_validator",
         "test_triggerer_recovery_renews_lease_before_terminal_observation",
+        "class LokiWindow",
+        "class LokiSnapshotExtractor",
+        "query_range",
+        "class LokiSourceSparkOperator",
+        "Loki source validation is shadow-only",
+        'dag_id="airflow_loki_source"',
+        "LOKI_INPUT_URI",
+        "loki_source_receipt",
+        "test_loki_window_rejects_unbounded_duration",
         "spark.apache.org",
         "schedule=\"23 * * * *\"",
         "catchup=False",
@@ -599,7 +614,7 @@ def validate_namespace_source(failures: list[str]) -> None:
         failures,
         "Airflow namespace resources",
         kustomization.get("resources"),
-        ["./namespace.yaml", "./airflow-database/ks.yaml", "./airflow/ks.yaml"],
+        ["./namespace.yaml", "./airflow-database/ks.yaml", "./airflow/ks.yaml", "./loki-source/ks.yaml"],
     )
     readme = (AIRFLOW_ROOT / "README.md").read_text(encoding="utf-8")
     if "Kubernetes 1.36" not in readme:

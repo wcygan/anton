@@ -14,8 +14,15 @@ WAREHOUSE = os.getenv("ICEBERG_WAREHOUSE", "s3://iceberg-warehouse")
 
 
 def main() -> None:
+    source_uri = os.getenv("LOKI_INPUT_URI")
+    attempt = os.getenv("ANTON_SPARK_ATTEMPT")
+    if source_uri and os.getenv("ANTON_LAKEHOUSE_TARGET") != "shadow":
+        raise RuntimeError("Loki source input is restricted to the shadow target")
+    app_name = "iceberg-log-loki" if source_uri else "iceberg-log-fixture"
+    if source_uri and attempt:
+        app_name = f"{app_name}-{attempt}"
     builder = (
-        SparkSession.builder.appName("iceberg-log-fixture")
+        SparkSession.builder.appName(app_name)
         .config(f"spark.sql.catalog.{CATALOG}", "org.apache.iceberg.spark.SparkCatalog")
         .config(f"spark.sql.catalog.{CATALOG}.catalog-impl", "org.apache.iceberg.rest.RESTCatalog")
         .config(f"spark.sql.catalog.{CATALOG}.uri", CATALOG_URI)
@@ -45,9 +52,8 @@ def main() -> None:
         T.StructField("service", T.StringType(), False), T.StructField("level", T.StringType(), False),
         T.StructField("message", T.StringType(), False),
     ])
-    raw = spark.read.schema(schema).json("/opt/spark/work-dir/fixture.jsonl")
-    # iceberg-raw is provisioned for the optional bounded Loki snapshot gate;
-    # this first deterministic gate intentionally reads its fixture locally.
+    input_path = source_uri or "/opt/spark/work-dir/fixture.jsonl"
+    raw = spark.read.schema(schema).json(input_path)
     normalized = raw.dropDuplicates(["event_id"]).withColumn("event_date", F.to_date("ts"))
     spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {CATALOG}.logs")
     spark.sql(f"""CREATE TABLE IF NOT EXISTS {CATALOG}.logs.normalized (
@@ -69,8 +75,14 @@ def main() -> None:
     # day partitions while remaining idempotent: every run has the same rows.
     spark.sql(f"DELETE FROM {CATALOG}.logs.hourly")
     spark.sql(f"INSERT INTO {CATALOG}.logs.hourly SELECT hour, service, level, event_count FROM incoming_hourly")
-    print(f"expected normalized rows=5 actual={normalized.count()}")
-    print(f"expected hourly rows=5 actual={hourly.count()}")
+    input_count = normalized.count()
+    print(f"source={'loki' if source_uri else 'fixture'} input={input_path}")
+    if source_uri:
+        print(f"normalized rows={input_count}")
+        print(f"hourly rows={hourly.count()}")
+    else:
+        print(f"expected normalized rows=5 actual={input_count}")
+        print(f"expected hourly rows=5 actual={hourly.count()}")
     spark.stop()
 
 
