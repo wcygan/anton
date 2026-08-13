@@ -38,6 +38,8 @@ Use `query-kubernetes-logs` for detailed Loki queries.
   for identity, watch, Lease, retry, cancellation, or source-window work.
 - Read [shadow-gate-evidence.md](references/shadow-gate-evidence.md) for
   evidence collection, validation, candidate changes, or gate failures.
+- Read [live-recovery-scenarios.md](references/live-recovery-scenarios.md) for
+  scheduler, triggerer, retry, cancellation, Lease, or pre-commit tests.
 - Read [cutover-and-cleanup.md](references/cutover-and-cleanup.md) for writer
   transfer, rollback, observation, legacy removal, or experiment cleanup.
 
@@ -64,6 +66,12 @@ mise exec -- kubectl -n lakehouse get sparkapplications,pods,leases
 Expected state depends on the active rollout phase. Compare it with Plan 0023
 and the current ticket before interpreting a missing resource.
 
+Use the structured preflight before a manual run or recovery test:
+
+```sh
+mise exec -- task airflow:gate-preflight
+```
+
 ## Diagnose one workflow
 
 1. Record the DAG ID, run ID, task ID, map index, and try number.
@@ -80,6 +88,7 @@ Timestamp proximity alone does not prove causality.
 
 ```sh
 mise exec -- python3 -m unittest scripts.tests.test_airflow_shadow_gate
+mise exec -- python3 -m unittest scripts.tests.test_airflow_lakehouse_operations
 mise exec -- task airflow:shadow-gate \
   LEDGER=.scratch/airflow-spark-lakehouse/evidence/shadow-gate-20260813-rotated/ledger.json
 mise exec -- task contracts:validate

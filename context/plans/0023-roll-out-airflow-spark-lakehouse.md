@@ -240,9 +240,9 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-11: The review date, learning ceilings, shadow cutover, and architecture-preserving fallback rules became explicit gates.
 - 2026-08-12: Ticket 03 added non-overlapping workflow log ingestion, Spark event logs, History Server, and bounded Spark retention. Live acceptance found driver and executor logs in Loki after exit. History Server showed one completed application, 19 jobs, 41 stages, two executors, and 10 SQL records.
 - 2026-08-12: SeaweedFS `BucketLifecyclePolicy` became the storage owner for 30-day event-log expiry. This removed the need for a separate delete identity in the History Server path.
-- 2026-08-12: Added a read-only five-run shadow-gate ledger validator. It binds each run to the DAG Spark digest and retained evidence. Live gate execution remains pending operator approval.
-- 2026-08-12: Implemented Ticket 08's manual shadow-only Loki source workflow. It enforces a five-minute window, a 1000-entry completeness fence, deterministic raw snapshots in `iceberg-raw`, bucket-specific S3A credentials, and the existing Spark Attempt Lease/retry/cancellation path. Image publication, Ticket 07 completion, Flux reconciliation, and one approved source run remain pending.
-- 2026-08-13: Published and pinned the Ticket 08 Airflow and Spark runtime images at immutable digests. The Spark image now avoids a recursive ownership layer that duplicated the large runtime payload during source rebuilds. Ticket 07 evidence, Flux rollout, and one approved Loki source run with Trino evidence remain pending.
+- 2026-08-12: Added a read-only five-run shadow-gate ledger validator. It binds each run to the DAG Spark digest and retained evidence. The accepted 2026-08-13 rotated ledger superseded this pre-execution state.
+- 2026-08-12: Implemented Ticket 08's manual shadow-only Loki source workflow. It enforces a five-minute window, a 1000-entry completeness fence, deterministic raw snapshots in `iceberg-raw`, bucket-specific S3A credentials, and the existing Spark Attempt Lease/retry/cancellation path. Later entries record image publication, Ticket 07 completion, Flux rollout, and the approved source run.
+- 2026-08-13: Published and pinned the Ticket 08 Airflow and Spark runtime images at immutable digests. The Spark image now avoids a recursive ownership layer that duplicated the large runtime payload during source rebuilds. Later entries record Ticket 07 acceptance, Flux rollout, and the approved Loki source run with Trino evidence.
 - 2026-08-13: Recovered the Apache operator rollout by removing its failed stateless Deployment and forcing one Helm reconcile. Helm then created the committed ClusterRole and the operator became ready without RBAC errors.
 - 2026-08-13: Live acceptance found and fixed two runtime defects. Spark now stages `transform.py` from `/opt/spark/application`, and the Airflow trigger watches an exact-name filtered custom-resource list.
 - 2026-08-13: Five consecutive manual shadow Workflow Runs succeeded with Spark digest `sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7` and Airflow digest `sha256:91c0ed0a723902782a77d602faedaa1b6f612359df1de9191bab0557e83fe4bd`.
@@ -252,6 +252,7 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-13: The Ticket 06 read-only audit accepted normal success, short-life logs, and History Server evidence. Controlled recovery tests remained open.
 - 2026-08-13: Ticket 06 is resolved. Its live ledger passed failure, retry, cancellation, Lease, duplicate-delivery, scheduler, and triggerer tests.
 - 2026-08-13: The accepted pre-commit failure retained driver and executor diagnostics without changing shadow snapshot `6584017577001615138`.
+- 2026-08-13: Added guarded preflight, trigger, evidence, and recovery commands after the Ticket 05 and 06 learning review.
 
 ## References
 

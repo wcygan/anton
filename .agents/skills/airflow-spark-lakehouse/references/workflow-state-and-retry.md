@@ -19,6 +19,30 @@ custom resource. A new try must use a new custom resource.
 Logical date is optional metadata. It does not participate in identity.
 Manual runs can have no logical date.
 
+## Manual trigger contract
+
+Plan the command before execution:
+
+```sh
+mise exec -- task airflow:trigger-shadow-run \
+  RUN_ID=manual__<bounded-identity>
+```
+
+The dry run resolves the exact scheduler pod. It does not create a Workflow Run.
+
+Use the execute target only after the structured gate preflight passes:
+
+```sh
+mise exec -- task airflow:trigger-shadow-run:execute \
+  RUN_ID=manual__<bounded-identity>
+```
+
+The command requires the task prompt and an internal approval token. It then
+confirms that Airflow created a task instance.
+
+Do not set a future logical date or source-window end. Omit the logical date
+unless the test requires exact historical metadata.
+
 ## Source-window contract
 
 The Loki-source operator selects its window end in this order:
@@ -86,3 +110,14 @@ events, source-window receipt, terminal state, and retry decision.
 
 Completion requires one consistent identity chain from Airflow through Spark,
 Trino, Loki, and History Server.
+
+Collect the current evidence by exact identity:
+
+```sh
+mise exec -- task airflow:attempt-evidence \
+  RUN_ID=manual__<bounded-identity> \
+  TRY_NUMBER=1
+```
+
+Use `airflow:attempt-evidence:complete` with an accepted ledger when retained
+Trino and gate artifacts must also pass.

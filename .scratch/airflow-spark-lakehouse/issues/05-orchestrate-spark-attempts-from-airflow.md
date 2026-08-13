@@ -32,3 +32,6 @@
 - The attempt reached `Succeeded` before `ResourceReleased` and retained full Airflow identity.
 - Airflow task receipts recorded submission, Lease renewal, state changes, terminal state, and task completion.
 - The read-only evidence is in `evidence/ticket06-readonly-audit-20260813/ledger.json`.
+- 2026-08-13: Added guarded preflight, manual trigger, and exact-attempt evidence commands.
+- The commands require exact identity, reject future dates, and separate dry runs from execution.
+- The aggregate contract gate passed 235 tests, and the Airflow image test target passed.

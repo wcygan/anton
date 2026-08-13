@@ -49,3 +49,17 @@ it probes the complete set before running the server-side health check.
 ## Mutation Handoff
 
 For apply, upgrade, reset, drain, delete, or reconcile commands, first present the exact command, target node or namespace, expected effect, and rollback or verification step. Proceed only after the operator explicitly approves that action.
+
+## Exact-target mutation
+
+Use this order for a permitted mutation:
+
+1. Resolve the target with a read-only command.
+2. Record the literal context, namespace, kind, and resource name.
+3. Build one command for only that resource.
+4. State the expected transition, timeout, and stop condition.
+5. Run the command after explicit approval.
+6. Observe the predicted transition before another mutation.
+7. Stop when the transition differs from the prediction.
+
+Do not use a selector for deletion when one exact resource name is available.

@@ -48,3 +48,6 @@
 - The shadow snapshot stayed `6584017577001615138` across the accepted failure.
 - Ticket 03 supplies the accepted 24-hour and bounded-cleanup retention tests.
 - The complete live ledger is `evidence/ticket06-live-20260813/ledger.json`.
+- 2026-08-13: Added one guarded runner for all seven accepted recovery scenarios.
+- Each plan arms its watcher before Workflow Run creation and keeps the target shadow-only.
+- The accepted Ticket 07 ledger remained eligible, and exact-attempt evidence was complete.

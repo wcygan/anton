@@ -1,6 +1,126 @@
 version: '3'
 
 tasks:
+  gate-preflight:
+    desc: Check the Airflow shadow gate without live mutation
+    silent: true
+    cmd: mise exec -- python3 scripts/airflow-lakehouse.py gate-preflight
+    preconditions:
+      - test -f kubeconfig
+      - which mise python3
+
+  trigger-shadow-run:
+    desc: Plan one manual Airflow shadow Workflow Run
+    silent: true
+    env:
+      RUN_ID: '{{.RUN_ID}}'
+      LOGICAL_DATE: '{{.LOGICAL_DATE | default ""}}'
+      SOURCE_WINDOW_END: '{{.SOURCE_WINDOW_END | default ""}}'
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py trigger-shadow-run
+      --run-id "$RUN_ID"
+      --logical-date "$LOGICAL_DATE"
+      --source-window-end "$SOURCE_WINDOW_END"
+    requires:
+      vars: [RUN_ID]
+    preconditions:
+      - test -f kubeconfig
+      - which mise python3
+
+  trigger-shadow-run:execute:
+    desc: Create one approved manual Airflow shadow Workflow Run
+    silent: true
+    prompt: This creates one shadow Workflow Run. Continue?
+    env:
+      RUN_ID: '{{.RUN_ID}}'
+      LOGICAL_DATE: '{{.LOGICAL_DATE | default ""}}'
+      SOURCE_WINDOW_END: '{{.SOURCE_WINDOW_END | default ""}}'
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py trigger-shadow-run
+      --run-id "$RUN_ID"
+      --logical-date "$LOGICAL_DATE"
+      --source-window-end "$SOURCE_WINDOW_END"
+      --execute
+      --approval-token shadow-live-mutation
+    requires:
+      vars: [RUN_ID]
+    preconditions:
+      - test -f kubeconfig
+      - which mise python3
+
+  attempt-evidence:
+    desc: Collect read-only evidence for one exact Spark Attempt
+    silent: true
+    env:
+      RUN_ID: '{{.RUN_ID}}'
+      TRY_NUMBER: '{{.TRY_NUMBER | default "1"}}'
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
+      --run-id "$RUN_ID"
+      --try-number "$TRY_NUMBER"
+    requires:
+      vars: [RUN_ID]
+    preconditions:
+      - test -f kubeconfig
+      - which mise python3
+
+  attempt-evidence:complete:
+    desc: Require complete live and retained evidence for one Spark Attempt
+    silent: true
+    env:
+      RUN_ID: '{{.RUN_ID}}'
+      TRY_NUMBER: '{{.TRY_NUMBER | default "1"}}'
+      LEDGER: '{{.LEDGER}}'
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
+      --run-id "$RUN_ID"
+      --try-number "$TRY_NUMBER"
+      --ledger "$LEDGER"
+      --require-complete
+    requires:
+      vars: [RUN_ID, LEDGER]
+    preconditions:
+      - test -f "$LEDGER"
+      - test -f kubeconfig
+      - which mise python3
+
+  recovery-case:
+    desc: Plan one bounded Airflow shadow recovery case
+    silent: true
+    env:
+      CASE: '{{.CASE}}'
+      RUN_ID: '{{.RUN_ID}}'
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py recovery-case
+      --case "$CASE"
+      --run-id "$RUN_ID"
+    requires:
+      vars: [CASE, RUN_ID]
+    preconditions:
+      - test -f kubeconfig
+      - which mise python3
+
+  recovery-case:execute:
+    desc: Execute one approved Airflow shadow recovery case
+    silent: true
+    prompt: This mutates one shadow recovery test. Continue?
+    env:
+      CASE: '{{.CASE}}'
+      RUN_ID: '{{.RUN_ID}}'
+      TIMEOUT_SECONDS: '{{.TIMEOUT_SECONDS | default "600"}}'
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py recovery-case
+      --case "$CASE"
+      --run-id "$RUN_ID"
+      --timeout-seconds "$TIMEOUT_SECONDS"
+      --execute
+      --approval-token shadow-live-mutation
+    requires:
+      vars: [CASE, RUN_ID]
+    preconditions:
+      - test -f kubeconfig
+      - which mise python3
+
   shadow-gate:
     desc: Validate retained evidence for the five-run Airflow shadow gate
     cmds:
