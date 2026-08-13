@@ -1,7 +1,7 @@
 {
   "observed_at": "2026-08-13T15:23:30Z",
   "source": {
-    "command": "docker run --rm --workdir /tmp/airflow-runtime-tests airflow-runtime:3.2.2-apache.7-test python -m unittest -v <five focused retry, cancellation, Lease, and fail-closed tests>",
+    "command": "mise exec -- docker run --rm --workdir /tmp/airflow-runtime-tests airflow-runtime:3.2.2-apache.7-test python -m unittest -v <five focused retry, cancellation, Lease, and fail-closed tests>",
     "result": {
       "tests_run": 5,
       "failures": 0,
