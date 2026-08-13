@@ -24,9 +24,11 @@ spec:
         create: true
         name: spark-operator
       clusterRole:
-        create: false
+        create: true
+        name: spark-operator-clusterrole
       clusterRoleBinding:
-        create: false
+        create: true
+        name: spark-operator-clusterrolebinding
       role:
         create: true
         name: spark-operator-role
