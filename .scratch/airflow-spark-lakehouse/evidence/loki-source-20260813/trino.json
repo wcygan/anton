@@ -1,0 +1,28 @@
+{
+  "observed_at": "2026-08-13T14:12:30Z",
+  "source": {
+    "command": "Trino CLI schema, count, partition, snapshot, location, and time-travel queries against iceberg_shadow",
+    "result": "normalized=303 hourly_rows=4 hourly_event_sum=298 before_count=5 after_count=303"
+  },
+  "details": {
+    "catalog": "iceberg_shadow",
+    "normalized": {
+      "count": 303,
+      "partitioning": ["event_date"],
+      "location": "s3://iceberg-shadow/logs/normalized",
+      "before_snapshot_id": "6726405450252133514",
+      "before_count": 5,
+      "after_snapshot_id": "4361066661671021201",
+      "after_committed_at": "2026-08-13T14:11:16.686Z",
+      "after_count": 303
+    },
+    "hourly": {
+      "row_count": 4,
+      "event_sum": 298,
+      "partitioning": ["day(hour)"],
+      "location": "s3://iceberg-shadow/logs/hourly"
+    },
+    "writer": "Spark",
+    "trino_write_access": "denied"
+  }
+}

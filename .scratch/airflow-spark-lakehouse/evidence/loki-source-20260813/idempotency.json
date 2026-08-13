@@ -1,0 +1,30 @@
+{
+  "observed_at": "2026-08-13T15:17:10Z",
+  "source": {
+    "command": "Trigger airflow_loki_source with source_window_end=2026-08-13T14:10:26.417061Z, then compare Loki receipt and Trino snapshots",
+    "result": "success; same 298 entries, 433634 bytes, object key, window hash, and checksum; primary_count=303 retry_count=303"
+  },
+  "details": {
+    "accepted": true,
+    "run_id": "manual__ticket08_exact_retry_2_20260813T151500Z",
+    "start_date": "2026-08-13T15:15:44.562844Z",
+    "end_date": "2026-08-13T15:16:44.930752Z",
+    "spark_attempt": "lh-airflow-run-loki-97792315ff50-a1",
+    "spark_application_uid": "c6bf595e-585c-4fbf-ad40-bece9a94ec7a",
+    "expected_window_end": "2026-08-13T14:10:26.417061Z",
+    "actual_window_end": "2026-08-13T14:10:26.417061Z",
+    "entries": 298,
+    "bytes": 433634,
+    "window_hash": "5489df5240f3d7e7",
+    "snapshot_key": "loki/snapshots/1786629926417061120-1786630226417061120-5600adc5f5d69f41.jsonl",
+    "expected_snapshot_sha256": "c59923b259e6df2894973f6fe6ab9b4bf9c8d1215df156ec43d1161d5a211ff2",
+    "actual_snapshot_sha256": "c59923b259e6df2894973f6fe6ab9b4bf9c8d1215df156ec43d1161d5a211ff2",
+    "primary_snapshot_id": "4361066661671021201",
+    "retry_snapshot_id": "6110462134322762238",
+    "primary_snapshot_count": 303,
+    "retry_snapshot_count": 303,
+    "normalized_count_after_retry": 303,
+    "hourly_rows_after_retry": 4,
+    "hourly_event_sum_after_retry": 298
+  }
+}

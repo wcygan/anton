@@ -1,0 +1,21 @@
+{
+  "observed_at": "2026-08-13T14:12:00Z",
+  "source": {
+    "command": "Loki query for run_id and loki_source_receipt from 2026-08-13T14:10:00Z through 2026-08-13T14:12:00Z",
+    "result": "entries=298 bytes=433634 sha256=c59923b259e6df2894973f6fe6ab9b4bf9c8d1215df156ec43d1161d5a211ff2"
+  },
+  "details": {
+    "query": "{k8s_namespace_name=~\"airflow|lakehouse\"}",
+    "window_start": "2026-08-13T14:05:26.417061Z",
+    "window_end": "2026-08-13T14:10:26.417061Z",
+    "window_seconds": 300,
+    "window_hash": "5489df5240f3d7e7",
+    "maximum_entries": 1000,
+    "entries": 298,
+    "bytes": 433634,
+    "sha256": "c59923b259e6df2894973f6fe6ab9b4bf9c8d1215df156ec43d1161d5a211ff2",
+    "snapshot_key": "loki/snapshots/1786629926417061120-1786630226417061120-5600adc5f5d69f41.jsonl",
+    "snapshot_uri": "s3a://iceberg-raw/loki/snapshots/1786629926417061120-1786630226417061120-5600adc5f5d69f41.jsonl",
+    "target": "shadow"
+  }
+}

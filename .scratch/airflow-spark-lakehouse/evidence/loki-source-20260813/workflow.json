@@ -1,0 +1,15 @@
+{
+  "observed_at": "2026-08-13T14:12:00Z",
+  "source": {
+    "command": "airflow dags list-runs airflow_loki_source -o json",
+    "result": "manual__ticket08_acceptance_20260813T141000Z success 2026-08-13T14:10:28.670430Z 2026-08-13T14:11:40.943075Z"
+  },
+  "details": {
+    "dag_id": "airflow_loki_source",
+    "run_id": "manual__ticket08_acceptance_20260813T141000Z",
+    "state": "success",
+    "start_date": "2026-08-13T14:10:28.670430Z",
+    "end_date": "2026-08-13T14:11:40.943075Z",
+    "task_id": "run_loki_source_spark_attempt"
+  }
+}

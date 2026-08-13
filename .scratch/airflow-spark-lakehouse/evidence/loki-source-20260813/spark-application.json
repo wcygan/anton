@@ -1,0 +1,21 @@
+{
+  "observed_at": "2026-08-13T15:08:25Z",
+  "source": {
+    "command": "kubectl -n lakehouse get sparkapplication lh-airflow-run-loki-15a1f0610a33-a1 -o json",
+    "result": "Submitted > DriverRequested > DriverStarted > DriverReady > RunningHealthy > Succeeded > ResourceReleased; exitCode=0"
+  },
+  "details": {
+    "api_version": "spark.apache.org/v1",
+    "name": "lh-airflow-run-loki-15a1f0610a33-a1",
+    "uid": "bfe9dbf9-0309-4dd0-8c3f-ad22a65a3a43",
+    "resource_version": "249354553",
+    "run_id": "manual__ticket08_acceptance_20260813T141000Z",
+    "try_number": 1,
+    "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+    "driver_started_at": "2026-08-13T14:11:02Z",
+    "driver_finished_at": "2026-08-13T14:11:20Z",
+    "exit_code": 0,
+    "restart_count": 0,
+    "terminal_state": "ResourceReleased"
+  }
+}

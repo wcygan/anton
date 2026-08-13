@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-08-13T14:12:30Z",
+  "source": {
+    "command": "Compare Airflow run identity, SparkApplication annotations, Loki logs, and Spark History API",
+    "result": "All four sources identify manual__ticket08_acceptance_20260813T141000Z and lh-airflow-run-loki-15a1f0610a33-a1"
+  },
+  "details": {
+    "airflow_run_id": "manual__ticket08_acceptance_20260813T141000Z",
+    "spark_attempt": "lh-airflow-run-loki-15a1f0610a33-a1",
+    "identity_hash": "15a1f0610a33",
+    "spark_application_uid": "bfe9dbf9-0309-4dd0-8c3f-ad22a65a3a43",
+    "source_window_hash": "5489df5240f3d7e7",
+    "history_state": "COMPLETED",
+    "spark_version": "4.1.3"
+  }
+}
