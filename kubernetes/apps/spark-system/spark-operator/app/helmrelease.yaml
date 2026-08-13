@@ -12,6 +12,18 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: spark-operator
+  # The chart omits deletecollection from the Spark workload Role. Spark uses
+  # this verb to remove selector-scoped Services and PVCs during shutdown.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Role
+              name: spark-workload-role
+            patch: |
+              - op: add
+                path: /rules/0/verbs/-
+                value: deletecollection
   values:
     image:
       repository: apache/spark-kubernetes-operator

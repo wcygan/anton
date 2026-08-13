@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "kubernetes/apps/lakehouse/shadow-fixture/app"
 TEXT = "\n".join(path.read_text() for path in APP.glob("*.yaml"))
+OPERATOR_RELEASE = ROOT / "kubernetes/apps/spark-system/spark-operator/app/helmrelease.yaml"
 REQUIRED = (
     "apiVersion: spark.apache.org/v1", "kind: SparkApplication",
     "spark.kubernetes.container.image: 192.168.1.106/library/spark-runtime@sha256:",
@@ -24,6 +25,13 @@ REQUIRED = (
     "HADOOP_CONF_DIR", "/etc/hadoop-event-log",
 )
 missing = [item for item in REQUIRED if item not in TEXT]
+operator_text = OPERATOR_RELEASE.read_text()
+operator_required = (
+    "name: spark-workload-role",
+    "path: /rules/0/verbs/-",
+    "value: deletecollection",
+)
+missing.extend(f"Spark operator {item}" for item in operator_required if item not in operator_text)
 if missing:
     print("[shadow.fixture] missing: " + ", ".join(missing), file=sys.stderr)
     raise SystemExit(1)
