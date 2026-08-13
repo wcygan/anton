@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__rotated_gate_1_20260813T140000Z",
+  "artifact": "authoritative_state",
+  "passed": true,
+  "observed_at": "2026-08-13T13:59:12.121202Z",
+  "source": {
+    "command": "trino --execute 'SELECT snapshot_id, committed_at FROM iceberg.logs.\"normalized$snapshots\" ORDER BY committed_at DESC LIMIT 1' before and after manual__rotated_gate_1_20260813T140000Z",
+    "result": {
+      "before": {
+        "snapshot": "6645585271169030465",
+        "committed_at": "2026-08-13 13:23:33.736 UTC"
+      },
+      "after": {
+        "snapshot": "6645585271169030465",
+        "committed_at": "2026-08-13 13:23:33.736 UTC"
+      }
+    }
+  },
+  "details": {
+    "before": {
+      "snapshot": "6645585271169030465",
+      "committed_at": "2026-08-13 13:23:33.736 UTC"
+    },
+    "after": {
+      "snapshot": "6645585271169030465",
+      "committed_at": "2026-08-13 13:23:33.736 UTC"
+    },
+    "shadow_before_snapshot": "9038683753069414721",
+    "shadow_after_snapshot": "6057432895789768040"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__rotated_gate_2_20260813T140000Z",
+  "artifact": "history_server",
+  "passed": true,
+  "observed_at": "2026-08-13T14:00:26.027875Z",
+  "source": {
+    "command": "GET /api/v1/applications and select lh-airflow-run-shad-f23a6e08ca6e-a1-0",
+    "result": {
+      "application_id": "lh-airflow-run-shad-f23a6e08ca6e-a1-0",
+      "completed": true,
+      "spark_version": "4.1.3",
+      "start_time": "2026-08-13T13:59:57.792Z",
+      "end_time": "2026-08-13T14:00:11.585Z"
+    }
+  },
+  "details": {
+    "application_id": "lh-airflow-run-shad-f23a6e08ca6e-a1-0",
+    "event_log_source": "seaweedfs",
+    "completed": true,
+    "spark_version": "4.1.3",
+    "start_time": "2026-08-13T13:59:57.792Z",
+    "end_time": "2026-08-13T14:00:11.585Z"
+  }
+}

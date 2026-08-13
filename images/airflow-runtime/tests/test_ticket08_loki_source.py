@@ -225,6 +225,60 @@ class Ticket08LokiSourceTests(unittest.TestCase):
                 target="authoritative",
             )
 
+    def test_run_config_selects_an_exact_source_window(self) -> None:
+        expected_end = datetime(2026, 8, 12, 12, 0, 0, 417061, tzinfo=timezone.utc)
+        window = LokiWindow.ending_at(expected_end, seconds=300)
+        snapshot = LokiSnapshot(
+            window,
+            "{job=\"test\"}",
+            "loki/key.jsonl",
+            "s3a://iceberg-raw/loki/key.jsonl",
+            1,
+            8,
+            "digest",
+        )
+        fake = FakeExtractor(snapshot)
+        operator = LokiSourceSparkOperator(
+            task_id="source",
+            application_spec=LOKI_APPLICATION_SPEC,
+            extractor_factory=lambda **kwargs: fake,
+            target="shadow",
+        )
+        context = {
+            "dag_id": "airflow_loki_source",
+            "run_id": "manual__ticket08_retry",
+            "task_id": "source",
+            "map_index": -1,
+            "try_number": 1,
+            "data_interval_end": None,
+            "logical_date": datetime(2026, 8, 12, 13, 0, tzinfo=timezone.utc),
+            "dag_run": SimpleNamespace(
+                conf={"source_window_end": expected_end.isoformat()},
+                run_after=datetime(2026, 8, 12, 14, 0, tzinfo=timezone.utc),
+            ),
+        }
+
+        with patch(
+            "anton_airflow.spark.operator.ApacheSparkApplicationOperator.execute",
+            return_value="submitted",
+        ):
+            self.assertEqual(operator.execute(context), "submitted")
+
+        self.assertEqual(fake.calls[0][1].end, expected_end)
+
+    def test_run_config_rejects_invalid_source_window(self) -> None:
+        operator = LokiSourceSparkOperator(
+            task_id="source",
+            application_spec=LOKI_APPLICATION_SPEC,
+            target="shadow",
+        )
+        context = {
+            "dag_run": SimpleNamespace(conf={"source_window_end": "not-a-timestamp"}),
+        }
+
+        with self.assertRaisesRegex(Exception, "ISO 8601"):
+            operator.execute(context)
+
     def test_source_dag_is_manual_and_bounded(self) -> None:
         dag_path = Path("/opt/airflow/dags/airflow_loki_source.py")
         spec = importlib.util.spec_from_file_location("airflow_loki_source", dag_path)

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__rotated_gate_4_20260813T140200Z",
+  "artifact": "spark_application",
+  "passed": true,
+  "observed_at": "2026-08-13T14:02:45.916717Z",
+  "source": {
+    "command": "kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-2b2eff464973-a1 -o json",
+    "result": {
+      "uid": "5fb67188-c4a8-4e93-a2aa-2538fd46f13e",
+      "resourceVersion": "249348180",
+      "generation": 1,
+      "currentState": "ResourceReleased",
+      "history": [
+        "Submitted",
+        "DriverRequested",
+        "DriverStarted",
+        "DriverReady",
+        "RunningHealthy",
+        "Succeeded",
+        "ResourceReleased"
+      ],
+      "driverExitCode": 0
+    }
+  },
+  "details": {
+    "kind": "SparkApplication",
+    "api_version": "spark.apache.org/v1",
+    "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+    "attempt_name": "lh-airflow-run-shad-2b2eff464973-a1",
+    "state": "COMPLETED",
+    "uid": "5fb67188-c4a8-4e93-a2aa-2538fd46f13e",
+    "resource_version": "249348180",
+    "generation": 1,
+    "created_at": "2026-08-13T14:02:15Z",
+    "observed_current_state": "ResourceReleased",
+    "driver_exit_code": 0
+  }
+}

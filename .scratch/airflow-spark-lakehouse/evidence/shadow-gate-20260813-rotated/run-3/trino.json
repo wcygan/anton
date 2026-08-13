@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__rotated_gate_3_20260813T140100Z",
+  "artifact": "trino",
+  "passed": true,
+  "observed_at": "2026-08-13T14:07:48Z",
+  "source": {
+    "command": "trino --user rotated_gate_contract --execute <counts, metadata, snapshot 30524812128451274, time travel, write-denial probes>",
+    "result": {
+      "authoritative": {
+        "normalized": 5,
+        "hourly": 5,
+        "event_sum": 5,
+        "snapshot": "6645585271169030465"
+      },
+      "shadow": {
+        "normalized": 5,
+        "hourly": 5,
+        "event_sum": 5,
+        "snapshot": "30524812128451274",
+        "time_travel_rows": 5
+      },
+      "write_probes": {
+        "authoritative": "Access Denied",
+        "shadow": "Access Denied",
+        "tables_created": 0
+      }
+    }
+  },
+  "details": {
+    "normalized_count": 5,
+    "hourly_count": 5,
+    "hourly_event_count_sum": 5,
+    "schema": true,
+    "partitions": true,
+    "snapshots": true,
+    "locations": true,
+    "time_travel": true,
+    "write_denial_authoritative": true,
+    "write_denial_shadow": true,
+    "authoritative_snapshot_id": "6645585271169030465",
+    "shadow_snapshot_id": "30524812128451274",
+    "shadow_time_travel_count": 5,
+    "authoritative_location": "s3://iceberg-warehouse/logs/normalized",
+    "shadow_location": "s3://iceberg-shadow/logs/normalized",
+    "normalized_partition": "event_date",
+    "hourly_partition": "day(hour)"
+  }
+}

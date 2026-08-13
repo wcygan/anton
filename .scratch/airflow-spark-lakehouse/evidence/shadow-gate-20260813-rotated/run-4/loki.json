@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__rotated_gate_4_20260813T140200Z",
+  "artifact": "loki",
+  "passed": true,
+  "observed_at": "2026-08-13T14:05:00Z",
+  "source": {
+    "command": "query_range {k8s_namespace_name=~\"airflow|lakehouse\"} |= \"manual__rotated_gate_\" from 2026-08-13T13:58:00Z to 2026-08-13T14:05:00Z limit 500",
+    "result": {
+      "run_id": "manual__rotated_gate_4_20260813T140200Z",
+      "samples": 36,
+      "error_query_samples": 0,
+      "range_start": "2026-08-13T13:58:00Z",
+      "range_end": "2026-08-13T14:05:00Z"
+    }
+  },
+  "details": {
+    "unique_markers": [
+      "manual__rotated_gate_4_20260813T140200Z",
+      "lh-airflow-run-shad-2b2eff464973-a1"
+    ],
+    "containers_exited": true,
+    "sample_count": 36,
+    "error_sample_count": 0,
+    "query": "{k8s_namespace_name=~\"airflow|lakehouse\"} |= \"manual__rotated_gate_\""
+  }
+}

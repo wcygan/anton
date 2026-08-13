@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 from hashlib import sha256
 import json
 from typing import Any, Callable, Mapping
@@ -22,11 +23,20 @@ from .spark.operator import ApacheSparkApplicationOperator
 
 
 def _context_end(context: Mapping[str, Any]) -> Any:
+    dag_run = context.get("dag_run")
+    run_config = getattr(dag_run, "conf", None)
+    configured_end = run_config.get("source_window_end") if isinstance(run_config, Mapping) else None
+    if configured_end is not None:
+        if not isinstance(configured_end, str):
+            raise AirflowException("source_window_end must be an ISO 8601 timestamp")
+        try:
+            return datetime.fromisoformat(configured_end.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise AirflowException("source_window_end must be an ISO 8601 timestamp") from error
     for key in ("data_interval_end", "logical_date", "execution_date"):
         value = context.get(key)
         if value is not None:
             return value
-    dag_run = context.get("dag_run")
     run_after = getattr(dag_run, "run_after", None)
     if run_after is not None:
         return run_after

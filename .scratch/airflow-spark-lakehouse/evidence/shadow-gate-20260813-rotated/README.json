@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "status": "accepted",
+  "candidate_revision": "5c811f207d983b10f46630b3984ba76ee0012332",
+  "credential_version": 2,
+  "notes": [
+    "This set supersedes shadow-gate-20260813.",
+    "Each artifact retains a command, timestamp, and observed result.",
+    "The credential was rotated before run 1."
+  ]
+}

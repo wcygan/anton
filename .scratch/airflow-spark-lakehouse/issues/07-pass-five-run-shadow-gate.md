@@ -4,19 +4,19 @@
 
 **Blocked by:** 06 — Prove failure and recovery paths.
 
-**Status:** in-progress
+**Status:** resolved
 
-- [ ] Five consecutive scheduled or equivalent Workflow Runs pass against the shadow target.
-- [ ] Every run uses the expected Spark image digest and Apache `SparkApplication` control plane.
-- [ ] Every run passes Trino schema, count, partition, snapshot, location, and time-travel checks.
-- [ ] Trino write-denial tests pass for both authoritative and shadow catalogs.
-- [ ] Authoritative table metadata and data remain unchanged during all shadow runs.
-- [ ] Kubernetes 1.36 acceptance covers Airflow task pods, custom-resource observation, and Spark workloads.
-- [ ] Runtime identity, classpath, S3FileIO, S3A, Loki, and History Server evidence remains complete.
+- [x] Five consecutive scheduled or equivalent Workflow Runs pass against the shadow target.
+- [x] Every run uses the expected Spark image digest and Apache `SparkApplication` control plane.
+- [x] Every run passes Trino schema, count, partition, snapshot, location, and time-travel checks.
+- [x] Trino write-denial tests pass for both authoritative and shadow catalogs.
+- [x] Authoritative table metadata and data remain unchanged during all shadow runs.
+- [x] Kubernetes 1.36 acceptance covers Airflow task pods, custom-resource observation, and Spark workloads.
+- [x] Runtime identity, classpath, S3FileIO, S3A, Loki, and History Server evidence remains complete.
 - [x] Any unexplained failure resets the consecutive-run count.
 - [x] A Spark 4.1.3 blocker follows the documented repair and compatibility ladder before fallback.
 - [x] No fallback changes the Apache `SparkApplication` architecture.
-- [ ] Cutover remains blocked unless every mandatory criterion has retained evidence.
+- [x] Cutover remains blocked unless every mandatory criterion has retained evidence.
 
 ## Comments
 
@@ -41,3 +41,9 @@
 - A follow-up run proved clean Spark shutdown after adding `deletecollection` to the workload Role.
 - 2026-08-13 review: The first ledger mixed pre-catalog Spark runs with post-catalog Trino checks.
 - The retained summaries were insufficient as source evidence. The gate remains open until a fixed candidate passes five complete per-run checks.
+- The rejected ledger now contains a rejection notice and cannot support cutover.
+- The corrected Airflow watcher waits for the Apache operator's initial status without accepting other ambiguous states.
+- The exposed shadow credential was rotated before the accepted sequence.
+- Runs `manual__rotated_gate_1_20260813T140000Z` through `manual__rotated_gate_5_20260813T140300Z` passed consecutively.
+- Each retained artifact contains its command, observation time, and source result.
+- The accepted ledger is `.scratch/airflow-spark-lakehouse/evidence/shadow-gate-20260813-rotated/ledger.json`.

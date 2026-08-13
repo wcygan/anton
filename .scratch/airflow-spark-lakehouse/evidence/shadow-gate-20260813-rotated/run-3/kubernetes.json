@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__rotated_gate_3_20260813T140100Z",
+  "artifact": "kubernetes",
+  "passed": true,
+  "observed_at": "2026-08-13T14:01:39.447691Z",
+  "source": {
+    "command": "kubectl version -o json; kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-2b85a367ec96-a1 -o json",
+    "result": {
+      "serverVersion": "v1.36.0",
+      "sparkApplicationUid": "cd067e1d-baca-4875-8ee2-dc062d63ae2a",
+      "resourceVersion": "249347217",
+      "generation": 1,
+      "driverExitCode": 0
+    }
+  },
+  "details": {
+    "version": "1.36",
+    "task_pods": true,
+    "custom_resource_observation": true,
+    "spark_workloads": true,
+    "spark_application_uid": "cd067e1d-baca-4875-8ee2-dc062d63ae2a",
+    "resource_version": "249347217",
+    "generation": 1
+  }
+}

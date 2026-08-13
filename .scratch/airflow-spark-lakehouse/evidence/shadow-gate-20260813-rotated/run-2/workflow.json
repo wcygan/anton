@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__rotated_gate_2_20260813T140000Z",
+  "artifact": "workflow_run",
+  "passed": true,
+  "observed_at": "2026-08-13T14:00:26.027875Z",
+  "source": {
+    "command": "airflow dags list-runs airflow_spark_lakehouse -o json | select run_id=manual__rotated_gate_2_20260813T140000Z",
+    "result": {
+      "state": "success",
+      "start_date": "2026-08-13T13:59:33.790971Z",
+      "end_date": "2026-08-13T14:00:26.027875Z"
+    }
+  },
+  "details": {
+    "dag_id": "airflow_spark_lakehouse",
+    "status": "success",
+    "run_after": "2026-08-13T13:59:33.790971Z",
+    "start_date": "2026-08-13T13:59:33.790971Z",
+    "end_date": "2026-08-13T14:00:26.027875Z"
+  }
+}

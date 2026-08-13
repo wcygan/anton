@@ -112,6 +112,18 @@ def _artifact_payload(root: Path | None, value: Any, field: str, *, run_id: str,
         raise ShadowGateError(f"{field}.artifact must be {artifact}")
     if envelope.get("passed") is not True:
         raise ShadowGateError(f"{field}.passed must be true")
+    observed_at = _string(envelope.get("observed_at"), f"{field}.observed_at")
+    try:
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ShadowGateError(f"{field}.observed_at must be an ISO-8601 timestamp") from error
+    if observed.tzinfo is None:
+        raise ShadowGateError(f"{field}.observed_at must include a timezone")
+    source = _mapping(envelope.get("source"), f"{field}.source")
+    _string(source.get("command"), f"{field}.source.command")
+    result = source.get("result")
+    if result in (None, "", [], {}):
+        raise ShadowGateError(f"{field}.source.result must contain retained output")
     return _mapping(envelope.get("details"), f"{field}.details")
 
 

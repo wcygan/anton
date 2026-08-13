@@ -140,6 +140,11 @@ def write_artifacts(root: Path, value: dict) -> None:
                         "run_id": run_id,
                         "artifact": artifact,
                         "passed": True,
+                        "observed_at": run["observed_at"],
+                        "source": {
+                            "command": f"collect {artifact} for {run_id}",
+                            "result": {"retained": True},
+                        },
                         "details": details[artifact],
                     }
                 ),
@@ -163,6 +168,20 @@ class AirflowShadowGateTests(unittest.TestCase):
             result = evaluate_shadow_gate(value, expected_digest=value["candidate"]["spark_image_digest"], evidence_root=Path(directory))
         self.assertTrue(result["eligible"])
         self.assertEqual(result["consecutive_passes"], 5)
+
+    def test_assertions_without_source_output_are_rejected(self) -> None:
+        digest = expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py")
+        value = ledger([passed_run(index, digest) for index in range(1, 6)])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_artifacts(root, value)
+            path = root / value["runs"][-1]["evidence"]["trino"]
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload.pop("source")
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            result = evaluate_shadow_gate(value, expected_digest=digest, evidence_root=root)
+        self.assertFalse(result["eligible"])
+        self.assertIn("source must be an object", result["errors"][0])
 
     def test_one_run_cannot_bypass_the_five_run_requirement(self) -> None:
         value = ledger([passed_run(1, expected_spark_image_digest(REPO / "images/airflow-runtime/dags/airflow_spark_lakehouse.py"))])
