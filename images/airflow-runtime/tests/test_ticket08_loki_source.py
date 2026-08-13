@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 import unittest
 from unittest.mock import patch
@@ -196,8 +197,9 @@ class Ticket08LokiSourceTests(unittest.TestCase):
             "task_id": "source",
             "map_index": -1,
             "try_number": 1,
-            "data_interval_end": window.end,
-            "logical_date": window.end,
+            "data_interval_end": None,
+            "logical_date": None,
+            "dag_run": SimpleNamespace(run_after=window.end),
         }
 
         with patch("anton_airflow.spark.operator.ApacheSparkApplicationOperator.execute", return_value="submitted"):

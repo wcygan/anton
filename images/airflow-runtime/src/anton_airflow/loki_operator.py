@@ -26,6 +26,10 @@ def _context_end(context: Mapping[str, Any]) -> Any:
         value = context.get(key)
         if value is not None:
             return value
+    dag_run = context.get("dag_run")
+    run_after = getattr(dag_run, "run_after", None)
+    if run_after is not None:
+        return run_after
     raise AirflowException("Loki source Workflow Run requires an Airflow logical end time")
 
 
