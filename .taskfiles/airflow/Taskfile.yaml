@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  shadow-gate:
+    desc: Validate retained evidence for the five-run Airflow shadow gate
+    cmds:
+      - mise exec -- python3 scripts/validate-airflow-shadow-gate.py --ledger "{{.LEDGER}}"
+    requires:
+      vars: [LEDGER]
+    preconditions:
+      - test -f "{{.LEDGER}}"
+      - which mise python3

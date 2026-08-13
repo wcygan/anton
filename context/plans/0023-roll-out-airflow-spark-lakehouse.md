@@ -240,6 +240,7 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-11: The review date, learning ceilings, shadow cutover, and architecture-preserving fallback rules became explicit gates.
 - 2026-08-12: Ticket 03 added non-overlapping workflow log ingestion, Spark event logs, History Server, and bounded Spark retention. Live acceptance found driver and executor logs in Loki after exit. History Server showed one completed application, 19 jobs, 41 stages, two executors, and 10 SQL records.
 - 2026-08-12: SeaweedFS `BucketLifecyclePolicy` became the storage owner for 30-day event-log expiry. This removed the need for a separate delete identity in the History Server path.
+- 2026-08-12: Added a read-only five-run shadow-gate ledger validator. It binds each run to the DAG Spark digest and retained evidence. Live gate execution remains pending operator approval.
 
 ## References
 

@@ -4,7 +4,7 @@
 
 **Blocked by:** 06 — Prove failure and recovery paths.
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] Five consecutive scheduled or equivalent Workflow Runs pass against the shadow target.
 - [ ] Every run uses the expected Spark image digest and Apache `SparkApplication` control plane.
@@ -19,3 +19,11 @@
 - [ ] Cutover remains blocked unless every mandatory criterion has retained evidence.
 
 ## Comments
+
+- 2026-08-12: Added a read-only shadow-gate ledger validator.
+- The validator requires five consecutive passed runs.
+- Any failed or invalid run resets the suffix.
+- The validator checks Spark image identity and the `SparkApplication` API.
+- The validator checks Trino results, write denial, Kubernetes 1.36, runtime evidence, and retained artifacts.
+- Fallback evidence must include the compatibility ladder and preserve the `SparkApplication` boundary.
+- Live Workflow Runs and cluster evidence remain pending operator approval.
