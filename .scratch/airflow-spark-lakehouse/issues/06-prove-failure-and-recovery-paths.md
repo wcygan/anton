@@ -4,14 +4,14 @@
 
 **Blocked by:** 03 — Preserve Spark logs and Application History; 05 — Orchestrate Spark Attempts from Airflow.
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
-- [ ] A normal success run completes through Trino validation.
-- [ ] A deliberately short-lived executor leaves complete Runtime Logs in Loki.
+- [x] A normal success run completes through Trino validation.
+- [x] A deliberately short-lived executor leaves complete Runtime Logs in Loki.
 - [ ] A failure before Iceberg commit retains driver and executor diagnostics.
 - [ ] Airflow task logs record submission, identity, state changes, terminal state, and bounded failure diagnostics.
 - [ ] Loki contains unique Airflow, driver, and executor markers after all containers exit.
-- [ ] History Server shows valid event history without relying on standard-output markers.
+- [x] History Server shows valid event history without relying on standard-output markers.
 - [ ] Scheduler restart reattaches to the same Spark Attempt.
 - [ ] Triggerer restart resumes observation and Lease renewal.
 - [ ] Duplicate delivery does not create a second attempt for the same Airflow try.
@@ -27,3 +27,11 @@
 - Added local adapter tests for success, failures, recovery, duplicate delivery, retry, cancellation, and expired Lease takeover.
 - Prior-output reuse requires an independent `anton.io/prior-output-valid=true` marker.
 - Local tests do not replace live Trino, Loki, History Server, or retention evidence.
+- 2026-08-13: The read-only audit accepted normal success, short-life logs, and History Server evidence.
+- The accepted Ticket 07 ledger supplies Trino and normal success evidence.
+- A current 14.833-second application retained 736 driver and 399 executor Loki samples after exit.
+- History Server retained the completed application and its 3.413-second executor.
+- The 04:23 UTC failure did not prove Ticket 06 failure handling.
+- That run had no executor evidence and recorded empty Airflow failure diagnostics.
+- Live restart, duplicate, retry, cancellation, Lease, failure, and retention tests remain open.
+- The partial ledger is `evidence/ticket06-readonly-audit-20260813/ledger.json`.

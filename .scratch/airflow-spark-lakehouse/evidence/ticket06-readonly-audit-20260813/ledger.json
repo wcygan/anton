@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "status": "partial",
+  "observed_at": "2026-08-13T17:10:46Z",
+  "scope": {
+    "cluster": "anton",
+    "context": "tailscale-operator.<tailnet-name>.ts.net",
+    "namespaces": [
+      "airflow",
+      "lakehouse",
+      "observability"
+    ],
+    "target": "shadow",
+    "source_revision": "67f7be0fe1f12ad8b9336723a3dd1bcd64ffe879",
+    "airflow_image_digest": "sha256:dd4188bc7fdc8e34a8c975ecbb1cab070350e5902ae30023c582e1e71bee607b",
+    "spark_image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7"
+  },
+  "accepted_evidence": {
+    "normal_success": {
+      "source": ".scratch/airflow-spark-lakehouse/evidence/shadow-gate-20260813-rotated/ledger.json",
+      "run_ids": [
+        "manual__rotated_gate_1_20260813T140000Z",
+        "manual__rotated_gate_2_20260813T140000Z",
+        "manual__rotated_gate_3_20260813T140100Z",
+        "manual__rotated_gate_4_20260813T140200Z",
+        "manual__rotated_gate_5_20260813T140300Z"
+      ],
+      "consecutive_passes": 5,
+      "eligible": true,
+      "errors": []
+    },
+    "short_lived_executor": {
+      "run_id": "scheduled__2026-08-13T16:23:00+00:00",
+      "spark_attempt": "lh-airflow-run-shad-8da7630c6df5-a1",
+      "spark_application": {
+        "source_command": "mise exec -- kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-8da7630c6df5-a1 -o json",
+        "uid": "e72b3a18-ab3c-4129-b361-74feec651e12",
+        "generation": 1,
+        "created_at": "2026-08-13T16:23:18Z",
+        "state_history": [
+          "Submitted",
+          "DriverRequested",
+          "DriverStarted",
+          "DriverReady",
+          "RunningHealthy",
+          "Succeeded",
+          "ResourceReleased"
+        ],
+        "driver_exit_code": 0
+      },
+      "loki": {
+        "source_command": "mise exec -- kubectl get --raw /api/v1/namespaces/observability/services/http:loki:3100/proxy/loki/api/v1/query_range",
+        "range_start": "2026-08-13T16:22:00Z",
+        "range_end": "2026-08-13T16:30:00Z",
+        "driver_samples": 736,
+        "driver_first_ns": "1786638200260080016",
+        "driver_last_ns": "1786638217149599285",
+        "executor_samples": 399,
+        "executor_first_ns": "1786638205477342024",
+        "executor_last_ns": "1786638216910137027",
+        "containers_exited_before_query": true
+      },
+      "history_server": {
+        "source_command": "mise exec -- kubectl get --raw /api/v1/namespaces/lakehouse/services/http:spark-history-server:18080/proxy/api/v1/applications",
+        "application_id": "lh-airflow-run-shad-8da7630c6df5-a1-0",
+        "completed": true,
+        "duration_ms": 14833,
+        "executor_id": "1",
+        "executor_duration_ms": 3413
+      },
+      "airflow_receipts": {
+        "source_command": "mise exec -- kubectl get --raw /api/v1/namespaces/observability/services/http:loki:3100/proxy/loki/api/v1/query_range",
+        "events": {
+          "lease_acquired": 1,
+          "lease_renewed": 2,
+          "state_change": 4,
+          "state_transition": 2,
+          "submission": 1,
+          "task_completion": 1,
+          "terminal_state": 1
+        }
+      }
+    }
+  },
+  "rejected_evidence": {
+    "historical_precommit_failure": {
+      "run_id": "scheduled__2026-08-13T04:23:00+00:00",
+      "spark_attempt": "lh-airflow-run-shad-6a66402ec9d4-a1",
+      "reason": "The run has no executor evidence and its Airflow failure diagnostics are empty.",
+      "spark_application": {
+        "source_command": "mise exec -- kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-6a66402ec9d4-a1 -o json",
+        "uid": "dd020ba6-e00e-43e2-bf88-a5e195841cf7",
+        "generation": 1,
+        "state": "TerminatedWithoutReleaseResources",
+        "driver_exit_code": 1
+      },
+      "loki": {
+        "driver_samples": 23,
+        "executor_samples": 0
+      },
+      "airflow": {
+        "task_completion_state": "ambiguous",
+        "failure_diagnostics": []
+      }
+    }
+  },
+  "open_live_proof": [
+    "pre-commit failure with driver and executor diagnostics",
+    "scheduler restart and same-attempt reattachment",
+    "triggerer restart and Lease renewal",
+    "duplicate delivery without a second attempt",
+    "prior-output validation before a new Airflow try",
+    "cancellation stop before Lease release",
+    "expired Lease refusal while prior work is active",
+    "failed-resource visibility for 24 hours",
+    "retained-resource cleanup at configured limits"
+  ]
+}

@@ -178,19 +178,19 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 
 ### Phase 6: Pass compatibility and shadow gates
 
-- [ ] Configure Trino 480 catalog `iceberg` with `iceberg.security=READ_ONLY`.
-- [ ] Give Trino read-only authoritative warehouse credentials.
-- [ ] Add `iceberg_shadow` with read-only shadow warehouse credentials.
-- [ ] Prove Trino rejects table creation, insert, update, and delete operations.
+- [x] Configure Trino 480 catalog `iceberg` with `iceberg.security=READ_ONLY`.
+- [x] Give Trino read-only authoritative warehouse credentials.
+- [x] Add `iceberg_shadow` with read-only shadow warehouse credentials.
+- [x] Prove Trino rejects table creation, insert, update, and delete operations.
 - [ ] Read existing authoritative tables with Spark 4.1.3 without writing them.
-- [ ] Create shadow tables with Iceberg format version 2.
-- [ ] Prove schema, `5 / 5 / 5` row counts, partitions, snapshots, metadata locations, and time travel through Trino.
-- [ ] Prove normalized `MERGE`, hourly delete-and-insert, idempotency, and expected snapshot changes.
-- [ ] Run the full fixture workflow five consecutive times against the shadow target.
-- [ ] Add the bounded Loki-source workflow only after all fixture gates pass.
+- [x] Create shadow tables with Iceberg format version 2.
+- [x] Prove schema, `5 / 5 / 5` row counts, partitions, snapshots, metadata locations, and time travel through Trino.
+- [x] Prove normalized `MERGE`, hourly delete-and-insert, idempotency, and expected snapshot changes.
+- [x] Run the full fixture workflow five consecutive times against the shadow target.
+- [x] Add the bounded Loki-source workflow only after all fixture gates pass.
 - [ ] Run failure, retry, cancellation, Lease, triggerer-recovery, and scheduler-recovery tests.
-- [ ] Save image digests, dependency evidence, Kubernetes objects, queries, logs, and history results.
-- [ ] Reject cutover if any mandatory check lacks retained evidence.
+- [x] Save image digests, dependency evidence, Kubernetes objects, queries, logs, and history results.
+- [x] Reject cutover if any mandatory check lacks retained evidence.
 
 ### Phase 6a: Apply the compatibility fallback rule
 
@@ -246,7 +246,10 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-13: Recovered the Apache operator rollout by removing its failed stateless Deployment and forcing one Helm reconcile. Helm then created the committed ClusterRole and the operator became ready without RBAC errors.
 - 2026-08-13: Live acceptance found and fixed two runtime defects. Spark now stages `transform.py` from `/opt/spark/application`, and the Airflow trigger watches an exact-name filtered custom-resource list.
 - 2026-08-13: Five consecutive manual shadow Workflow Runs succeeded with Spark digest `sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7` and Airflow digest `sha256:91c0ed0a723902782a77d602faedaa1b6f612359df1de9191bab0557e83fe4bd`.
-- 2026-08-13: Ticket 07 remains incomplete. Trino needs separate read-only authoritative and shadow storage identities before the retained ledger can pass. Credential creation requires separate approval, so Ticket 08 remains blocked.
+- 2026-08-13: The first Ticket 07 candidate lacked separate Trino reader identities. The accepted rotated ledger superseded that incomplete state.
+- 2026-08-13: Ticket 07 is resolved. Its rotated ledger reports five passes, `eligible=true`, and no errors.
+- 2026-08-13: Ticket 05 passed its focused contract and current shadow runtime checks.
+- 2026-08-13: Ticket 06 accepted normal success, short-life logs, and History Server evidence. Controlled recovery tests remain open.
 
 ## References
 
