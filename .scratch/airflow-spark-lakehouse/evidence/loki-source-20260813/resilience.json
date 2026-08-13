@@ -1,0 +1,27 @@
+{
+  "observed_at": "2026-08-13T15:23:30Z",
+  "source": {
+    "command": "docker run --rm --workdir /tmp/airflow-runtime-tests airflow-runtime:3.2.2-apache.7-test python -m unittest -v <five focused retry, cancellation, Lease, and fail-closed tests>",
+    "result": {
+      "tests_run": 5,
+      "failures": 0,
+      "errors": 0,
+      "tests": [
+        "test_cancellation_releases_lease_only_after_the_exact_resource_stops",
+        "test_retry_reuses_valid_prior_output_or_creates_a_new_attempt",
+        "test_cancellation_stops_exact_attempt_before_releasing_lease",
+        "test_expired_lease_refuses_takeover_when_prior_application_is_active",
+        "test_shadow_dag_supplies_a_fail_closed_prior_output_validator"
+      ]
+    }
+  },
+  "details": {
+    "runtime_image_tag": "3.2.2-apache.7-test",
+    "runtime_platform": "linux/amd64",
+    "shared_operator_contract": "LokiSourceSparkOperator inherits ApacheSparkApplicationOperator and uses prior_shadow_output_is_valid",
+    "retry_live_proof": "manual__ticket08_exact_retry_2_20260813T151500Z",
+    "cancellation_contract": "The exact Spark resource stops before Lease release",
+    "takeover_contract": "An active prior SparkApplication blocks expired Lease takeover",
+    "fail_closed_contract": "Shadow retries require the prior-output validator"
+  }
+}

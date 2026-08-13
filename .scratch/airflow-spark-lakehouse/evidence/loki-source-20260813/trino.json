@@ -1,8 +1,17 @@
 {
-  "observed_at": "2026-08-13T14:12:30Z",
+  "observed_at": "2026-08-13T15:22:30Z",
   "source": {
-    "command": "Trino CLI schema, count, partition, snapshot, location, and time-travel queries against iceberg_shadow",
-    "result": "normalized=303 hourly_rows=4 hourly_event_sum=298 before_count=5 after_count=303"
+    "command": "mise exec -- kubectl -n iceberg-demo exec deployment/trino-coordinator -- trino with DESCRIBE, SHOW CREATE TABLE, count, snapshot, and FOR VERSION AS OF queries",
+    "result": {
+      "schema": ["event_id varchar", "ts timestamp(6) with time zone", "service varchar", "level varchar", "message varchar", "event_date date"],
+      "show_create_properties": {"format": "PARQUET", "format_version": 2, "location": "s3://iceberg-shadow/logs/normalized", "partitioning": ["event_date"]},
+      "normalized_count": 303,
+      "hourly_rows": 4,
+      "hourly_event_sum": 298,
+      "before_snapshot_count": 5,
+      "primary_snapshot_count": 303,
+      "retry_snapshot_count": 303
+    }
   },
   "details": {
     "catalog": "iceberg_shadow",

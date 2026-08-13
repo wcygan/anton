@@ -1,8 +1,17 @@
 {
-  "observed_at": "2026-08-13T14:12:30Z",
+  "observed_at": "2026-08-13T15:22:00Z",
   "source": {
-    "command": "Compare Airflow run identity, SparkApplication annotations, Loki logs, and Spark History API",
-    "result": "All four sources identify manual__ticket08_acceptance_20260813T141000Z and lh-airflow-run-loki-15a1f0610a33-a1"
+    "command": "Bounded Loki query_range from 2026-08-13T14:10:00Z through 2026-08-13T14:12:00Z; curl Spark History API /api/v1/applications; compare with Airflow and SparkApplication identities",
+    "result": {
+      "loki_streams": 68,
+      "loki_samples": 68,
+      "loki_task_pods": ["airflow-loki-source-run-loki-source-spark-attempt-r8s0lpc9", "airflow-loki-source-run-loki-source-spark-attempt-udkqoscr"],
+      "history_application_id": "lh-airflow-run-loki-15a1f0610a33-a1-0",
+      "history_application_name": "iceberg-log-loki-lh-airflow-run-loki-15a1f0610a33-a1",
+      "history_completed": true,
+      "history_start": "2026-08-13T14:11:04.578GMT",
+      "history_end": "2026-08-13T14:11:18.769GMT"
+    }
   },
   "details": {
     "airflow_run_id": "manual__ticket08_acceptance_20260813T141000Z",

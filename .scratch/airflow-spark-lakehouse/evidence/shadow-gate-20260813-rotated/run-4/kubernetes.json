@@ -3,15 +3,16 @@
   "run_id": "manual__rotated_gate_4_20260813T140200Z",
   "artifact": "kubernetes",
   "passed": true,
-  "observed_at": "2026-08-13T14:02:45.916717Z",
+  "observed_at": "2026-08-13T15:24:00Z",
   "source": {
-    "command": "kubectl version -o json; kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-2b2eff464973-a1 -o json",
+    "command": "mise exec -- kubectl version -o json; mise exec -- kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-2b2eff464973-a1 -o json; bounded Loki API query for the run's retained Airflow task-pod identities",
     "result": {
       "serverVersion": "v1.36.0",
       "sparkApplicationUid": "5fb67188-c4a8-4e93-a2aa-2538fd46f13e",
       "resourceVersion": "249348180",
       "generation": 1,
-      "driverExitCode": 0
+      "driverExitCode": 0,
+      "taskPodNames": ["airflow-spark-lakehouse-run-shadow-spark-attempt-65rbaz8k", "airflow-spark-lakehouse-run-shadow-spark-attempt-zryqcjxs"]
     }
   },
   "details": {

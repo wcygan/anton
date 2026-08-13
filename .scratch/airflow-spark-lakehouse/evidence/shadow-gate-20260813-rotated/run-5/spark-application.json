@@ -5,7 +5,7 @@
   "passed": true,
   "observed_at": "2026-08-13T14:04:08.183472Z",
   "source": {
-    "command": "kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-fd197315a726-a1 -o json",
+    "command": "mise exec -- kubectl -n lakehouse get sparkapplication lh-airflow-run-shad-fd197315a726-a1 -o json",
     "result": {
       "uid": "d7896685-6dc3-4978-b3c4-b55a90cf4a45",
       "resourceVersion": "249349205",
