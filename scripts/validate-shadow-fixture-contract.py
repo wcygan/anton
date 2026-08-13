@@ -10,7 +10,7 @@ REQUIRED = (
     "apiVersion: spark.apache.org/v1", "kind: SparkApplication",
     "spark.kubernetes.container.image: 192.168.1.106/library/spark-runtime@sha256:",
     "runtimeVersions", "sparkVersion: \"4.1.3\"",
-    "pyFiles: \"local:///opt/spark/work-dir/transform.py\"", "deploymentMode: ClusterMode",
+    "pyFiles: \"local:///opt/spark/application/transform.py\"", "deploymentMode: ClusterMode",
     "applicationTolerations", "restartPolicy: Never", "resourceRetainPolicy: OnFailure",
     "spark.executor.instances", "spark.driver.memory: 768m", "spark.driver.memoryOverhead: 256m",
     "spark-kubernetes-driver", "spark-kubernetes-executor",

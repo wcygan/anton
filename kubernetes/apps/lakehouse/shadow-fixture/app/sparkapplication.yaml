@@ -7,12 +7,12 @@ metadata:
     app.kubernetes.io/name: lakehouse-shadow-fixture
     anton.io/retain-failed-pod: "true"
 spec:
-  pyFiles: "local:///opt/spark/work-dir/transform.py"
+  pyFiles: "local:///opt/spark/application/transform.py"
   deploymentMode: ClusterMode
   runtimeVersions:
     sparkVersion: "4.1.3"
   sparkConf:
-    spark.kubernetes.container.image: 192.168.1.106/library/spark-runtime@sha256:77a9e545a49b5eb6ea23fe8e92d78f1ef751ea5aae5a209afd02e0caa46beaf3
+    spark.kubernetes.container.image: 192.168.1.106/library/spark-runtime@sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7
     spark.kubernetes.authenticate.driver.serviceAccountName: shadow-fixture
     spark.executor.instances: "1"
     spark.driver.cores: "1"

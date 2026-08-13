@@ -22,6 +22,18 @@ class SparkRuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Spark runtime contract: PASS", result.stdout)
 
+    def test_application_entrypoint_stays_outside_spark_work_directory(self) -> None:
+        sources = (
+            REPO / "images" / "spark-runtime" / "Dockerfile",
+            REPO / "images" / "airflow-runtime" / "src" / "anton_airflow" / "lakehouse.py",
+            REPO / "kubernetes" / "apps" / "lakehouse" / "shadow-fixture" / "app" / "sparkapplication.yaml",
+        )
+        for source in sources:
+            content = source.read_text(encoding="utf-8")
+            with self.subTest(source=source.relative_to(REPO)):
+                self.assertIn("/opt/spark/application/transform.py", content)
+                self.assertNotIn("/opt/spark/work-dir/transform.py", content)
+
 
 if __name__ == "__main__":
     unittest.main()

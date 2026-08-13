@@ -8,7 +8,7 @@ from typing import Any
 
 SPARK_RUNTIME_IMAGE = (
     "192.168.1.106/library/spark-runtime@"
-    "sha256:77a9e545a49b5eb6ea23fe8e92d78f1ef751ea5aae5a209afd02e0caa46beaf3"
+    "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7"
 )
 CATALOG_URI = "http://seaweedfs-iceberg.storage.svc.cluster.local:8181"
 S3_ENDPOINT = "http://seaweedfs-s3.storage.svc.cluster.local:8333"
@@ -69,7 +69,7 @@ def _application_spec(*, secret_name: str) -> dict[str, Any]:
     }
     return {
         "spec": {
-            "pyFiles": "local:///opt/spark/work-dir/transform.py",
+            "pyFiles": "local:///opt/spark/application/transform.py",
             "deploymentMode": "ClusterMode",
             "runtimeVersions": {"sparkVersion": "4.1.3"},
             "sparkConf": {
