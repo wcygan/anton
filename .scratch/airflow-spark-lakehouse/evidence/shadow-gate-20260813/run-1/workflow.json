@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__shadow_gate_pass_1_20260813T044600Z",
+  "artifact": "workflow_run",
+  "passed": true,
+  "details": {
+    "dag_id": "airflow_spark_lakehouse",
+    "status": "success",
+    "started_at": "2026-08-13T04:47:00Z",
+    "ended_at": "2026-08-13T04:47:11.625876Z"
+  }
+}

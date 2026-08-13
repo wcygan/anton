@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__shadow_gate_pass_1_20260813T044600Z",
+  "artifact": "history_server",
+  "passed": true,
+  "details": {
+    "application_id": "lh-airflow-run-shad-b56d2ca8a041-a1-0",
+    "event_log_source": "seaweedfs",
+    "completed": true
+  }
+}

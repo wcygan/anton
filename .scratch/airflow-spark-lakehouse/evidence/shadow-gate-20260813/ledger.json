@@ -1,0 +1,281 @@
+{
+  "schema_version": 1,
+  "candidate": {
+    "source_revision": "a5d9ad1d1d8389db34060fd617fc4899d2dbcd7a",
+    "airflow_image_digest": "sha256:91c0ed0a723902782a77d602faedaa1b6f612359df1de9191bab0557e83fe4bd",
+    "spark_image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+    "spark_api_version": "spark.apache.org/v1"
+  },
+  "runs": [
+    {
+      "run_id": "manual__shadow_gate_pass_1_20260813T044600Z",
+      "workflow_run": "manual__shadow_gate_pass_1_20260813T044600Z",
+      "observed_at": "2026-08-13T04:47:11.625876Z",
+      "status": "passed",
+      "target": "shadow",
+      "spark": {
+        "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+        "api_version": "spark.apache.org/v1",
+        "kind": "SparkApplication",
+        "attempt_name": "lh-airflow-run-shad-b56d2ca8a041-a1"
+      },
+      "trino": {
+        "schema": true,
+        "counts": true,
+        "partitions": true,
+        "snapshots": true,
+        "locations": true,
+        "time_travel": true,
+        "write_denial_authoritative": true,
+        "write_denial_shadow": true,
+        "normalized_count": 5,
+        "hourly_count": 5,
+        "hourly_event_count_sum": 5
+      },
+      "authoritative_unchanged": true,
+      "kubernetes": {
+        "version": "1.36",
+        "task_pods": true,
+        "custom_resource_observation": true,
+        "spark_workloads": true
+      },
+      "runtime_evidence": {
+        "runtime_identity": true,
+        "classpath": true,
+        "s3fileio": true,
+        "s3a": true,
+        "loki": true,
+        "history_server": true
+      },
+      "evidence": {
+        "workflow_run": "run-1/workflow.json",
+        "spark_application": "run-1/spark-application.json",
+        "trino": "run-1/trino.json",
+        "authoritative_state": "run-1/authoritative.json",
+        "runtime": "run-1/runtime.json",
+        "kubernetes": "run-1/kubernetes.json",
+        "loki": "run-1/loki.json",
+        "history_server": "run-1/history.json"
+      },
+      "compatibility": {
+        "fallback_used": false
+      }
+    },
+    {
+      "run_id": "manual__shadow_gate_pass_2_20260813T044720Z",
+      "workflow_run": "manual__shadow_gate_pass_2_20260813T044720Z",
+      "observed_at": "2026-08-13T04:48:15.347539Z",
+      "status": "passed",
+      "target": "shadow",
+      "spark": {
+        "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+        "api_version": "spark.apache.org/v1",
+        "kind": "SparkApplication",
+        "attempt_name": "lh-airflow-run-shad-9f04b1449f9d-a1"
+      },
+      "trino": {
+        "schema": true,
+        "counts": true,
+        "partitions": true,
+        "snapshots": true,
+        "locations": true,
+        "time_travel": true,
+        "write_denial_authoritative": true,
+        "write_denial_shadow": true,
+        "normalized_count": 5,
+        "hourly_count": 5,
+        "hourly_event_count_sum": 5
+      },
+      "authoritative_unchanged": true,
+      "kubernetes": {
+        "version": "1.36",
+        "task_pods": true,
+        "custom_resource_observation": true,
+        "spark_workloads": true
+      },
+      "runtime_evidence": {
+        "runtime_identity": true,
+        "classpath": true,
+        "s3fileio": true,
+        "s3a": true,
+        "loki": true,
+        "history_server": true
+      },
+      "evidence": {
+        "workflow_run": "run-2/workflow.json",
+        "spark_application": "run-2/spark-application.json",
+        "trino": "run-2/trino.json",
+        "authoritative_state": "run-2/authoritative.json",
+        "runtime": "run-2/runtime.json",
+        "kubernetes": "run-2/kubernetes.json",
+        "loki": "run-2/loki.json",
+        "history_server": "run-2/history.json"
+      },
+      "compatibility": {
+        "fallback_used": false
+      }
+    },
+    {
+      "run_id": "manual__shadow_gate_pass_3_20260813T044820Z",
+      "workflow_run": "manual__shadow_gate_pass_3_20260813T044820Z",
+      "observed_at": "2026-08-13T04:49:21.480218Z",
+      "status": "passed",
+      "target": "shadow",
+      "spark": {
+        "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+        "api_version": "spark.apache.org/v1",
+        "kind": "SparkApplication",
+        "attempt_name": "lh-airflow-run-shad-56f5347ca811-a1"
+      },
+      "trino": {
+        "schema": true,
+        "counts": true,
+        "partitions": true,
+        "snapshots": true,
+        "locations": true,
+        "time_travel": true,
+        "write_denial_authoritative": true,
+        "write_denial_shadow": true,
+        "normalized_count": 5,
+        "hourly_count": 5,
+        "hourly_event_count_sum": 5
+      },
+      "authoritative_unchanged": true,
+      "kubernetes": {
+        "version": "1.36",
+        "task_pods": true,
+        "custom_resource_observation": true,
+        "spark_workloads": true
+      },
+      "runtime_evidence": {
+        "runtime_identity": true,
+        "classpath": true,
+        "s3fileio": true,
+        "s3a": true,
+        "loki": true,
+        "history_server": true
+      },
+      "evidence": {
+        "workflow_run": "run-3/workflow.json",
+        "spark_application": "run-3/spark-application.json",
+        "trino": "run-3/trino.json",
+        "authoritative_state": "run-3/authoritative.json",
+        "runtime": "run-3/runtime.json",
+        "kubernetes": "run-3/kubernetes.json",
+        "loki": "run-3/loki.json",
+        "history_server": "run-3/history.json"
+      },
+      "compatibility": {
+        "fallback_used": false
+      }
+    },
+    {
+      "run_id": "manual__shadow_gate_pass_4_20260813T044950Z",
+      "workflow_run": "manual__shadow_gate_pass_4_20260813T044950Z",
+      "observed_at": "2026-08-13T04:50:44.844243Z",
+      "status": "passed",
+      "target": "shadow",
+      "spark": {
+        "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+        "api_version": "spark.apache.org/v1",
+        "kind": "SparkApplication",
+        "attempt_name": "lh-airflow-run-shad-2d8a7ea49a15-a1"
+      },
+      "trino": {
+        "schema": true,
+        "counts": true,
+        "partitions": true,
+        "snapshots": true,
+        "locations": true,
+        "time_travel": true,
+        "write_denial_authoritative": true,
+        "write_denial_shadow": true,
+        "normalized_count": 5,
+        "hourly_count": 5,
+        "hourly_event_count_sum": 5
+      },
+      "authoritative_unchanged": true,
+      "kubernetes": {
+        "version": "1.36",
+        "task_pods": true,
+        "custom_resource_observation": true,
+        "spark_workloads": true
+      },
+      "runtime_evidence": {
+        "runtime_identity": true,
+        "classpath": true,
+        "s3fileio": true,
+        "s3a": true,
+        "loki": true,
+        "history_server": true
+      },
+      "evidence": {
+        "workflow_run": "run-4/workflow.json",
+        "spark_application": "run-4/spark-application.json",
+        "trino": "run-4/trino.json",
+        "authoritative_state": "run-4/authoritative.json",
+        "runtime": "run-4/runtime.json",
+        "kubernetes": "run-4/kubernetes.json",
+        "loki": "run-4/loki.json",
+        "history_server": "run-4/history.json"
+      },
+      "compatibility": {
+        "fallback_used": false
+      }
+    },
+    {
+      "run_id": "manual__shadow_gate_pass_5_20260813T045100Z",
+      "workflow_run": "manual__shadow_gate_pass_5_20260813T045100Z",
+      "observed_at": "2026-08-13T04:51:53.730425Z",
+      "status": "passed",
+      "target": "shadow",
+      "spark": {
+        "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+        "api_version": "spark.apache.org/v1",
+        "kind": "SparkApplication",
+        "attempt_name": "lh-airflow-run-shad-560efe146657-a1"
+      },
+      "trino": {
+        "schema": true,
+        "counts": true,
+        "partitions": true,
+        "snapshots": true,
+        "locations": true,
+        "time_travel": true,
+        "write_denial_authoritative": true,
+        "write_denial_shadow": true,
+        "normalized_count": 5,
+        "hourly_count": 5,
+        "hourly_event_count_sum": 5
+      },
+      "authoritative_unchanged": true,
+      "kubernetes": {
+        "version": "1.36",
+        "task_pods": true,
+        "custom_resource_observation": true,
+        "spark_workloads": true
+      },
+      "runtime_evidence": {
+        "runtime_identity": true,
+        "classpath": true,
+        "s3fileio": true,
+        "s3a": true,
+        "loki": true,
+        "history_server": true
+      },
+      "evidence": {
+        "workflow_run": "run-5/workflow.json",
+        "spark_application": "run-5/spark-application.json",
+        "trino": "run-5/trino.json",
+        "authoritative_state": "run-5/authoritative.json",
+        "runtime": "run-5/runtime.json",
+        "kubernetes": "run-5/kubernetes.json",
+        "loki": "run-5/loki.json",
+        "history_server": "run-5/history.json"
+      },
+      "compatibility": {
+        "fallback_used": false
+      }
+    }
+  ]
+}

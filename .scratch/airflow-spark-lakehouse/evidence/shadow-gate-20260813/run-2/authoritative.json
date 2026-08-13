@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__shadow_gate_pass_2_20260813T044720Z",
+  "artifact": "authoritative_state",
+  "passed": true,
+  "details": {
+    "before": {
+      "normalized_snapshot_id": "3947842067374758440",
+      "normalized_count": 5,
+      "hourly_count": 5
+    },
+    "after": {
+      "normalized_snapshot_id": "3947842067374758440",
+      "normalized_count": 5,
+      "hourly_count": 5
+    }
+  }
+}

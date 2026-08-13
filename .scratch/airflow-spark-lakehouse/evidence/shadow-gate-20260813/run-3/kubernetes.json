@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__shadow_gate_pass_3_20260813T044820Z",
+  "artifact": "kubernetes",
+  "passed": true,
+  "details": {
+    "version": "1.36",
+    "task_pods": true,
+    "custom_resource_observation": true,
+    "spark_workloads": true,
+    "airflow_loki_samples": 64
+  }
+}

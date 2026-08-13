@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__shadow_gate_pass_4_20260813T044950Z",
+  "artifact": "loki",
+  "passed": true,
+  "details": {
+    "unique_markers": [
+      "eventlog_v2_lh-airflow-run-shad-2d8a7ea49a15-a1-0"
+    ],
+    "containers_exited": true,
+    "query_range": "2026-08-13T04:45:00Z/2026-08-13T04:53:00Z",
+    "samples": 13
+  }
+}

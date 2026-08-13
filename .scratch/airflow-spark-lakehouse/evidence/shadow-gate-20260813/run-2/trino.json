@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "run_id": "manual__shadow_gate_pass_2_20260813T044720Z",
+  "artifact": "trino",
+  "passed": true,
+  "details": {
+    "normalized_count": 5,
+    "hourly_count": 5,
+    "hourly_event_count_sum": 5,
+    "schema": true,
+    "partitions": true,
+    "snapshots": true,
+    "locations": true,
+    "time_travel": true,
+    "write_denial_authoritative": true,
+    "write_denial_shadow": true,
+    "validated_at": "2026-08-13T05:15:09Z",
+    "authoritative_catalog": "iceberg",
+    "shadow_catalog": "iceberg_shadow"
+  }
+}
