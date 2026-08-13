@@ -27,3 +27,8 @@
 - The validator checks Trino results, write denial, Kubernetes 1.36, runtime evidence, and retained artifacts.
 - Fallback evidence must include the compatibility ladder and preserve the `SparkApplication` boundary.
 - Live Workflow Runs and cluster evidence remain pending operator approval.
+- 2026-08-13: Five consecutive manual Workflow Runs succeeded after the Apache rollout repair.
+- Runs `manual__shadow_gate_pass_1_20260813T044600Z` through `manual__shadow_gate_pass_5_20260813T045100Z` used Spark digest `sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7`.
+- All five Apache `SparkApplication` histories reached `Succeeded` before `ResourceReleased`.
+- The full gate remains blocked because Trino lacks separate read-only authoritative and shadow storage identities.
+- Creating those credentials requires separate credential-work approval. Ticket 08 remains blocked.
