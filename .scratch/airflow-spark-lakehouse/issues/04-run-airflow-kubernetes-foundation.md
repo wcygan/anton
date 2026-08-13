@@ -14,8 +14,8 @@
 - [x] A dedicated one-instance CNPG cluster stores Airflow metadata in the Airflow namespace.
 - [x] The shared CNPG operator remains in the platform database namespace.
 - [x] Airflow database credentials arrive through External Secrets Operator.
-- [ ] The metadata database has a scheduled backup and a successful restore drill.
-- [ ] Airflow starts and retains metadata after the approved restore drill.
+- [x] Backup and restore are explicitly deferred for the experimental learning phase.
+- [x] Loss of the CNPG volume is accepted as complete Airflow metadata loss.
 - [x] Kubernetes 1.36 is recorded as a local acceptance target.
 - [x] Repository validation passes without applying unmanaged live state.
 
@@ -32,4 +32,5 @@
 - The task emitted `airflow-foundation-pass` with Airflow 3.2.2, Python 3.12.13, and Kubernetes provider 10.21.0.
 - Scheduler pod replacement preserved the successful DAG run in CNPG metadata.
 - All 197 repository tests passed. Scheduled ESO traffic is estimated at 24 operations daily.
-- Backup and restore remain open because Anton has no independent off-cluster target. The same-cluster SeaweedFS target was removed.
+- Scheduler replacement proved ordinary metadata persistence. It did not prove backup or disaster recovery.
+- ADR 0035 accepts complete Airflow metadata loss during the experimental phase. Backup and restore remain required before authoritative cutover.

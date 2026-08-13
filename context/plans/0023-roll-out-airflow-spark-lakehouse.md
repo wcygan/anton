@@ -4,7 +4,7 @@ opened: 2026-08-11
 closed: null
 affects: all
 intent: learning
-related-adrs: [0033]
+related-adrs: [0033, 0035]
 review-by: 2026-09-10
 ---
 
@@ -22,7 +22,8 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [ ] The selected Spark runtime passes the complete image, Iceberg, catalog, SeaweedFS, Trino, Kubernetes, and classpath matrix.
 - [ ] Airflow task logs, Loki runtime logs, and Spark History Server pass success, short-life, and pre-commit failure tests.
 - [ ] Five shadow runs and 24 authoritative scheduled runs pass without two active writers or an unexplained failure.
-- [ ] Backup, restore, rollback, retention, removal, and the 2026-09-10 learning review have retained evidence.
+- [ ] Rollback, retention, removal, and the 2026-09-10 learning review have retained evidence.
+- [ ] Backup and restore pass before authoritative cutover, as required by ADR 0033.
 
 ## Tasks
 
@@ -86,7 +87,8 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [ ] Keep the CNPG operator in `databases` and SeaweedFS in `storage`.
 - [ ] Keep the legacy `iceberg-demo` writer available only during shadow testing.
 - [ ] Create the Airflow CNPG `Cluster` in `airflow` with one initial instance.
-- [ ] Configure Longhorn storage, monitoring, scheduled backup, and a tested restore for Airflow metadata.
+- [x] Configure Longhorn storage and monitoring for Airflow metadata.
+- [ ] Configure an independent backup and test restore before authoritative cutover.
 - [ ] Deliver database and object-storage credentials through ESO and 1Password.
 - [x] Provision ordinary S3 bucket `spark-events` with prefix `events/`.
 - [ ] Provision shadow warehouse `s3://iceberg-shadow` and its separate storage identity.
