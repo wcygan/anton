@@ -7,6 +7,7 @@ metadata:
     app.kubernetes.io/name: iceberg-log-spark
     app.kubernetes.io/part-of: iceberg-demo
 spec:
+  suspend: true
   schedule: "23 * * * *"
   timeZone: Etc/UTC
   concurrencyPolicy: Forbid
