@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "artifact": "spark_authoritative_read",
+  "observed_at": "2026-08-14T21:05:10Z",
+  "spark_application": "spark-authoritative-read-20260814t210024z",
+  "namespace": "lakehouse",
+  "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+  "spark_version": "4.1.3",
+  "iceberg_version": "1.11.0",
+  "query_mode": "read_only",
+  "result": {
+    "raw_count": 5,
+    "normalized_count": 5,
+    "hourly_count": 5
+  },
+  "snapshots_before": {
+    "normalized": 5473850291254401643,
+    "hourly": 1419178450559592089
+  },
+  "snapshots_after": {
+    "normalized": 5473850291254401643,
+    "hourly": 1419178450559592089
+  },
+  "state_history": [
+    "Submitted",
+    "DriverRequested",
+    "Succeeded",
+    "TerminatedWithoutReleaseResources"
+  ],
+  "driver_exit_code": 0,
+  "driver_restarts": 0,
+  "executor_restarts": 0,
+  "resource_retain_policy": "Always",
+  "temporary_resources_removed": true,
+  "writer_lease_created": false
+}
