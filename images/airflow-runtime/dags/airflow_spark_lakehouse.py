@@ -1,4 +1,4 @@
-"""Manual authoritative lakehouse workflow owned by Airflow."""
+"""Scheduled authoritative lakehouse workflow owned by Airflow."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from anton_airflow.spark import ApacheSparkApplicationOperator
 
 @dag(
     dag_id="airflow_spark_lakehouse",
-    schedule=None,
+    schedule="23 * * * *",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     catchup=False,
     max_active_runs=1,

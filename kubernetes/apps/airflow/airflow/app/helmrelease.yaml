@@ -23,14 +23,14 @@ spec:
     images:
       airflow:
         repository: 192.168.1.106/library/airflow-runtime
-        tag: 3.2.2-apache.9
-        digest: sha256:48a452aac9ca9e9c3c900ba93b67d3cd89c32a6cc9ed46430f795bb0a56d821d
+        tag: 3.2.2-apache.10
+        digest: sha256:1eeac0adcd45897af589c356ff587f4e565365323b4b2617347cea99e0e41ea6
         pullPolicy: IfNotPresent
       # The chart does not expose a digest field for the pod template image.
       # Split the digest at its colon so the rendered reference stays pinned.
       pod_template:
         repository: 192.168.1.106/library/airflow-runtime@sha256
-        tag: 48a452aac9ca9e9c3c900ba93b67d3cd89c32a6cc9ed46430f795bb0a56d821d
+        tag: 1eeac0adcd45897af589c356ff587f4e565365323b4b2617347cea99e0e41ea6
         pullPolicy: IfNotPresent
 
     # ESO creates one consumer-shaped Secret from the 1Password item.
