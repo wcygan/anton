@@ -8,5 +8,4 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./spark-fixture/ks.yaml
   - ./trino/ks.yaml
