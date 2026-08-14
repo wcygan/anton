@@ -143,9 +143,9 @@ In-flight messages are lost (worst case 12 h of unread history). Subsequent mess
 
 ## References
 
-- [ADR 0026](../../../context/adrs/0026-adopt-self-hosted-ntfy-for-alerts.md) — adoption rationale, alternatives considered, follow-ups
-- [ADR 0007](../../../context/adrs/0007-adopt-kube-prometheus-stack.md) — kube-prometheus-stack adoption; Trigger 4 authorised this destination
-- [ADR 0012](../../../context/adrs/0012-tailscale-for-internal-remote-workload-access.md) — Tailscale operator pattern for internal HTTP exposure
+- [ADR 0026](https://github.com/wcygan/anton/blob/main/context/adrs/0026-adopt-self-hosted-ntfy-for-alerts.md) — adoption rationale, alternatives considered, follow-ups
+- [ADR 0007](https://github.com/wcygan/anton/blob/main/context/adrs/0007-adopt-kube-prometheus-stack.md) — kube-prometheus-stack adoption; Trigger 4 authorised this destination
+- [ADR 0012](https://github.com/wcygan/anton/blob/main/context/adrs/0012-tailscale-for-internal-remote-workload-access.md) — Tailscale operator pattern for internal HTTP exposure
 - [ntfy iOS push docs](https://docs.ntfy.sh/config/#ios-instant-notifications) — upstream explanation of why iOS needs the APNs relay
 - Cluster manifests: `kubernetes/apps/observability/ntfy/`
 - Postmortem that motivated this work: `context/postmortems/2026-05-04-flux-operator-networkpolicy-blocked-probes.md`

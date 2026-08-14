@@ -4,7 +4,7 @@
 (critical), `LonghornVolumeFaulted` (critical) — when a single root cause is
 the symptom across all three.
 
-**Driving incident:** [2026-05-06/07 harbor-postgres quorum incident](../../../context/plans/0016-harden-flux-cold-start-ordering.md). Rolling Talos reboot left
+**Driving incident:** [2026-05-06/07 harbor-postgres quorum incident](https://github.com/wcygan/anton/blob/main/context/plans/0016-harden-flux-cold-start-ordering.md). Rolling Talos reboot left
 Longhorn instance-manager pods on k8s-1 and k8s-3 `1/1 Running` with their
 `k8s.v1.cni.cncf.io/networks: longhorn-storage` annotation requested but
 Multus' CNI-add silently failed to attach `lhnet1@vxlan-storage`. Every
