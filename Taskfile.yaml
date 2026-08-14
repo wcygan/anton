@@ -22,6 +22,7 @@ includes:
   airflow: .taskfiles/airflow
   security: .taskfiles/security
   talos: .taskfiles/talos
+  trino: .taskfiles/trino
 
 tasks:
 

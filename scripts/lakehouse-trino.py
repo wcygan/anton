@@ -14,9 +14,8 @@ LIB = ROOT / "scripts" / "lib"
 if str(LIB) not in sys.path:
     sys.path.insert(0, str(LIB))
 
-from airflow_lakehouse_operations import OperationError  # noqa: E402
 from cluster_target_contract import TargetPreflightError  # noqa: E402
-from lakehouse_trino import QUERIES, run_check  # noqa: E402
+from lakehouse_trino import QUERIES, TrinoReadError, run_check  # noqa: E402
 
 
 def main() -> int:
@@ -25,7 +24,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         print(json.dumps(run_check(ROOT, args.check), indent=2, sort_keys=True))
-    except (OperationError, TargetPreflightError) as error:
+    except (TrinoReadError, TargetPreflightError) as error:
         print(json.dumps({"error": str(error)}, indent=2), file=sys.stderr)
         return 2
     return 0
