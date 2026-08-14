@@ -4,8 +4,8 @@ opened: 2026-08-11
 closed: null
 affects: all
 intent: learning
-related-adrs: [0037]
-review-by: 2026-09-10
+related-adrs: [0037, 0038]
+review-by: 2026-09-15
 ---
 
 # 0023 — Roll out Airflow Spark lakehouse
@@ -223,9 +223,11 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 
 ### Phase 8: Review or remove
 
-- [ ] Review the learning result on 2026-09-10.
-- [ ] Re-run component intake with a concrete need before making the platform permanent.
-- [ ] Permit only one explicit timebox extension for additional learning.
+- [x] Review the learning result and record one extension through 2026-09-15.
+- [ ] Prove Spark 4.1.3 reads authoritative tables without writes.
+- [ ] Verify 30-day event-log expiry through the storage owner.
+- [ ] Run component intake with a concrete need before making the platform permanent.
+- [x] Permit only one explicit timebox extension for additional learning.
 - [ ] For experiment removal, preserve the authoritative warehouse and Trino read path.
 - [ ] Remove Airflow, Spark Operator, History Server, CNPG state, and new namespaces through Git.
 - [ ] Delete new buckets only after storage approval and required evidence retention.
@@ -255,10 +257,12 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-14: Scheduled run `scheduled__2026-08-14T13:23:00+00:00` passed the complete evidence path. Evidence is under `.scratch/airflow-spark-lakehouse/evidence/ticket11-scheduled-20260814/`.
 - 2026-08-14: Flux applied `a90d8dec` and removed the shadow control plane. No shadow storage data was deleted.
 - 2026-08-14: Airflow retained its authoritative schedule on the cleanup image. Ticket 11 is resolved, and Ticket 12 review work is open.
+- 2026-08-14: Ticket 12 approved one extension through 2026-09-15. Current Trino checks passed counts, table contract, and snapshots. ADR 0038 sets the two remaining checks and removal trigger.
 
 ## References
 
 - Related ADR: `context/adrs/0037-remove-extended-airflow-observation-gate.md`
+- Related ADR: `context/adrs/0038-extend-airflow-spark-lakehouse-learning-review.md`
 - Superseded history: `context/adrs/0036-continue-airflow-lakehouse-without-metadata-recovery.md`
 - Superseded ADR: `context/adrs/0031-adopt-seaweedfs-iceberg-log-demo.md`
 - Existing lakehouse plan: `context/plans/0020-implement-seaweedfs-iceberg-log-lakehouse.md`
