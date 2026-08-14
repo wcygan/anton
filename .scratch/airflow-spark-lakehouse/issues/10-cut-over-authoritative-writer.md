@@ -1,4 +1,4 @@
-# 09 — Cut over authoritative writer ownership
+# 10 — Cut over authoritative writer ownership
 
 **What to build:** Transfer authoritative Iceberg writer ownership from the legacy CronJob to Airflow with one controlled manual Workflow Run and no overlap.
 
@@ -13,9 +13,11 @@
 - [ ] Airflow receives authoritative target configuration only after the legacy writer stops.
 - [ ] One manual authoritative Workflow Run acquires the authoritative Lease.
 - [ ] The manual run completes Spark writing and read-only Trino validation.
-- [ ] The Airflow schedule is enabled only after manual validation passes.
+- [ ] The legacy writer configuration is removed through a separate reviewed Git change.
+- [ ] Approved Flux reconciliation removes every legacy writer workload.
+- [ ] Obsolete legacy workload resources are removed without deleting authoritative Iceberg data.
+- [ ] The Airflow schedule is enabled only after legacy removal passes verification.
 - [ ] At no point are two authoritative writers active.
-- [ ] A rollback procedure can pause Airflow, stop Spark, restore the legacy writer through Git, and verify sole ownership.
 - [ ] The exact Git revision, Flux revision, resource identities, and table evidence are retained.
 
 ## Comments

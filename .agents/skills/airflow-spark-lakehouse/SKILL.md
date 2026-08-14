@@ -3,7 +3,7 @@ name: airflow-spark-lakehouse
 description: >-
   Operate Anton's Airflow-owned Spark lakehouse workflow. Use for Workflow Run
   or Spark Attempt diagnosis, exact-window retries, shadow-gate evidence,
-  writer cutover, rollback, retention, or learning-platform cleanup.
+  writer cutover, legacy removal, retention, or learning-platform cleanup.
 ---
 
 # Airflow Spark Lakehouse
@@ -22,8 +22,8 @@ authority boundary requires operator approval.
 
 ## Authority
 
-- ADR 0033 owns the Airflow and Apache Spark Operator design.
-- Plan 0023 owns the mutable rollout and rollback sequence.
+- ADR 0036 owns the Airflow and Apache Spark Operator decision.
+- Plan 0023 owns the mutable rollout and removal sequence.
 - `.scratch/airflow-spark-lakehouse/spec.md` owns implementation acceptance.
 - `images/airflow-runtime/src/anton_airflow/` owns workflow behavior.
 - `scripts/lib/airflow_shadow_gate.py` owns retained gate validation.
@@ -41,7 +41,7 @@ Use `query-kubernetes-logs` for detailed Loki queries.
 - Read [live-recovery-scenarios.md](references/live-recovery-scenarios.md) for
   scheduler, triggerer, retry, cancellation, Lease, or pre-commit tests.
 - Read [cutover-and-cleanup.md](references/cutover-and-cleanup.md) for writer
-  transfer, rollback, observation, legacy removal, or experiment cleanup.
+  transfer, observation, legacy removal, or experiment cleanup.
 
 ## Safety boundaries
 

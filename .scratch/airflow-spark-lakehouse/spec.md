@@ -66,9 +66,9 @@ The migration will use a shadow-first cutover. A Kubernetes Lease will enforce o
 42. As an Anton operator, I want the observation window reset after unexplained failure, so that intermittent defects cannot pass the gate.
 43. As an Anton operator, I want the legacy writer retained during shadow testing, so that the current authoritative workflow remains available.
 44. As an Anton operator, I want the legacy writer stopped before cutover, so that authoritative metadata never has two writers.
-45. As an Anton operator, I want rollback to restore the legacy writer through Git, so that recovery preserves GitOps ownership.
+45. As an Anton operator, I want legacy writer configuration removed after manual validation, so that Anton maintains one workflow path.
 46. As an Anton operator, I want Airflow metadata in dedicated PostgreSQL, so that the deployment uses an external production-like database pattern.
-47. As an Anton operator, I want Airflow metadata backup and restore proven before cutover, so that workflow state has a tested recovery path.
+47. As an Anton operator, I accept complete Airflow metadata loss, so that recovery work does not delay this learning cutover.
 48. As an Anton operator, I want KubernetesExecutor task pods, so that orchestration tasks have isolated Kubernetes runtimes.
 49. As an Anton operator, I want namespace-scoped Airflow and Spark permissions, so that neither control plane needs cluster administration.
 50. As an Anton operator, I want one initial replica per control-plane component, so that learning does not add premature high availability.
@@ -148,8 +148,9 @@ The migration will use a shadow-first cutover. A Kubernetes Lease will enforce o
 - The authoritative warehouse remains `s3://iceberg-warehouse` with Trino catalog `iceberg`.
 - Cutover pauses Airflow, stops the legacy writer, proves no active legacy workload, and records authoritative state.
 - One manual authoritative Workflow Run and Trino validation precede schedule enablement.
-- The legacy deployment is removed only after 24 successful scheduled runs across at least 24 hours.
-- The shadow environment remains for seven more days. Data deletion requires separate storage approval.
+- The legacy writer configuration is removed after manual validation and before schedule enablement.
+- The shadow control plane is removed after 24 successful runs. Data deletion requires separate storage approval.
+- Airflow metadata has no backup, restore, or legacy writer fallback requirement.
 - Resource values are initial learning ceilings, not production capacity guidance.
 - Spark heap, overhead, and native headroom must remain below each 1536Mi pod limit.
 - The learning deployment is reviewed on 2026-09-10.
@@ -194,12 +195,14 @@ The migration will use a shadow-first cutover. A Kubernetes Lease will enforce o
 - Kafka, Flink, Polaris, Nessie, and Hive Metastore are not added.
 - Public Airflow, Trino, or History Server routes are not required.
 - Production capacity recommendations are not produced from the initial resource ceilings.
+- Airflow metadata backup and restore are not part of this learning deployment.
+- A legacy writer fallback is not maintained after authoritative cutover.
 - Shadow data deletion is not authorized by this specification.
 - Authoritative Iceberg data deletion is never part of experiment removal.
 
 ## Further Notes
 
-ADR 0033 is the durable decision authority. Plan 0023 is the mutable execution record.
+ADR 0036 is the durable decision authority. Plan 0023 is the mutable execution record.
 
 Repository changes, live Flux actions, Kubernetes mutations, credential changes, and storage deletion remain separate authority boundaries.
 
