@@ -539,7 +539,6 @@ def validate_image_source(failures: list[str]) -> None:
     )
     retired_shadow_paths = (
         IMAGE_ROOT / "dags" / "airflow_loki_source.py",
-        IMAGE_ROOT / "src" / "anton_airflow" / "loki.py",
         IMAGE_ROOT / "src" / "anton_airflow" / "loki_operator.py",
         IMAGE_ROOT / "src" / "anton_airflow" / "shadow_validation.py",
     )
@@ -613,7 +612,7 @@ def validate_namespace_source(failures: list[str]) -> None:
         failures,
         "Airflow namespace resources",
         kustomization.get("resources"),
-        ["./namespace.yaml", "./airflow-database/ks.yaml", "./airflow/ks.yaml"],
+        ["./namespace.yaml", "./airflow-database/ks.yaml", "./airflow/ks.yaml", "./flight-recorder/ks.yaml"],
     )
     readme = (AIRFLOW_ROOT / "README.md").read_text(encoding="utf-8")
     if "Kubernetes 1.36" not in readme:
