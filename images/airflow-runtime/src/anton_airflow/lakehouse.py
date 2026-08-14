@@ -17,7 +17,7 @@ ADAPTER_DRIVER_CONTAINER = "spark-kubernetes-driver"
 ADAPTER_EXECUTOR_CONTAINER = "spark-kubernetes-executor"
 
 
-def _application_spec(*, secret_name: str) -> dict[str, Any]:
+def _application_spec(*, secret_name: str, warehouse: str) -> dict[str, Any]:
     """Return one Apache ``spark.apache.org/v1`` SparkApplication spec.
 
     The Apache operator drives the driver and executor as full Kubernetes pod
@@ -27,7 +27,7 @@ def _application_spec(*, secret_name: str) -> dict[str, Any]:
     shared_env = [
         {"name": "AWS_REGION", "value": "us-east-1"},
         {"name": "HADOOP_CONF_DIR", "value": "/etc/hadoop-event-log"},
-        {"name": "ICEBERG_WAREHOUSE", "value": "s3://iceberg-shadow"},
+        {"name": "ICEBERG_WAREHOUSE", "value": warehouse},
         {"name": "ICEBERG_CATALOG_URI", "value": CATALOG_URI},
         {"name": "S3_ENDPOINT", "value": S3_ENDPOINT},
     ]
@@ -116,8 +116,18 @@ def _application_spec(*, secret_name: str) -> dict[str, Any]:
     }
 
 
-SHADOW_APPLICATION_SPEC = _application_spec(secret_name="shadow-fixture-s3")
-LOKI_APPLICATION_SPEC = _application_spec(secret_name="loki-source-s3")
+SHADOW_APPLICATION_SPEC = _application_spec(
+    secret_name="shadow-fixture-s3",
+    warehouse="s3://iceberg-shadow",
+)
+LOKI_APPLICATION_SPEC = _application_spec(
+    secret_name="loki-source-s3",
+    warehouse="s3://iceberg-shadow",
+)
+AUTHORITATIVE_APPLICATION_SPEC = _application_spec(
+    secret_name="authoritative-fixture-s3",
+    warehouse="s3://iceberg-warehouse",
+)
 
 
 def clone_application_spec(spec: dict[str, Any]) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-"""Scheduled shadow lakehouse workflow owned by Airflow."""
+"""Manual authoritative lakehouse workflow owned by Airflow."""
 
 from __future__ import annotations
 
@@ -6,8 +6,7 @@ import pendulum
 
 from airflow.sdk import dag
 
-from anton_airflow.lakehouse import SHADOW_APPLICATION_SPEC
-from anton_airflow.shadow_validation import prior_shadow_output_is_valid
+from anton_airflow.lakehouse import AUTHORITATIVE_APPLICATION_SPEC
 from anton_airflow.spark import ApacheSparkApplicationOperator
 
 # The shared specification resolves to this immutable Spark runtime digest.
@@ -24,14 +23,13 @@ from anton_airflow.spark import ApacheSparkApplicationOperator
     tags=["anton", "lakehouse", "spark"],
 )
 def airflow_spark_lakehouse():
-    """Run one shadow Spark Attempt for each Airflow Workflow Run."""
+    """Run one authoritative Spark Attempt for each Airflow Workflow Run."""
 
     ApacheSparkApplicationOperator(
-        task_id="run_shadow_spark_attempt",
-        application_spec=SHADOW_APPLICATION_SPEC,
-        target="shadow",
+        task_id="run_authoritative_spark_attempt",
+        application_spec=AUTHORITATIVE_APPLICATION_SPEC,
+        target="authoritative",
         namespace="lakehouse",
-        prior_output_validator=prior_shadow_output_is_valid,
         poll_interval=10.0,
         deferrable=True,
     )

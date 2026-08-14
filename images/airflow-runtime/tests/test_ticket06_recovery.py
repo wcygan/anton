@@ -171,7 +171,7 @@ class Ticket06RecoveryTests(unittest.TestCase):
         self.assertIn('"event": "submission"', logger.messages[0])
         self.assertIn('"receipt_schema": 1', logger.messages[0])
 
-    def test_shadow_dag_supplies_a_fail_closed_prior_output_validator(self) -> None:
+    def test_authoritative_dag_uses_the_authoritative_target(self) -> None:
         dag_path = "/opt/airflow/dags/airflow_spark_lakehouse.py"
         spec = importlib.util.spec_from_file_location("airflow_spark_lakehouse", dag_path)
         self.assertIsNotNone(spec)
@@ -179,19 +179,13 @@ class Ticket06RecoveryTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        completed = {
-            "metadata": {"annotations": {"anton.io/prior-output-valid": "true"}},
-            "status": {
-                "currentState": {"currentStateSummary": "Succeeded"},
-                "stateTransitionHistory": {"1": {"currentStateSummary": "Succeeded"}},
-            },
-        }
-        rejected = {
-            **completed,
-            "metadata": {"annotations": {}},
-        }
-        self.assertTrue(module.prior_shadow_output_is_valid(completed))
-        self.assertFalse(module.prior_shadow_output_is_valid(rejected))
+        task = module.spark_lakehouse_dag.get_task("run_authoritative_spark_attempt")
+        self.assertEqual(task.target, "authoritative")
+        self.assertIsNone(task.prior_output_validator)
+        driver = task.application_spec["spec"]["driverSpec"]["podTemplateSpec"]["spec"]["containers"][0]
+        environment = {item["name"]: item["value"] for item in driver["env"]}
+        self.assertEqual(environment["ICEBERG_WAREHOUSE"], "s3://iceberg-warehouse")
+        self.assertEqual(driver["envFrom"][0]["secretRef"]["name"], "authoritative-fixture-s3")
 
     def test_normal_success_records_submission_transitions_and_terminal_state(self) -> None:
         applications = Applications()
