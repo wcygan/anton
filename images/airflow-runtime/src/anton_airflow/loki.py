@@ -6,9 +6,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
+import hmac
 import json
+import os
 from pathlib import PurePosixPath
 import re
+import time
 from types import MappingProxyType
 import urllib.error
 import urllib.parse
@@ -18,6 +21,8 @@ from typing import Any, Protocol
 
 DEFAULT_LOKI_ENDPOINT = "http://loki.observability.svc.cluster.local:3100"
 DEFAULT_LOKI_QUERY = '{k8s_namespace_name="airflow"}'
+DEFAULT_RAW_ENDPOINT = "http://seaweedfs-s3.storage.svc.cluster.local:8333"
+DEFAULT_RAW_BUCKET = "iceberg-raw"
 WINDOW_SECONDS = 300
 ENTRY_LIMIT = 1000
 TIMEOUT_SECONDS = 30
@@ -320,9 +325,10 @@ def _parse_manifest(payload: bytes, *, query: str, window: LokiWindow) -> LokiSo
 class LokiSnapshotExtractor:
     """Publish or reuse one immutable source window."""
 
-    def __init__(self, *, client: LokiClient, store: ObjectStore) -> None:
+    def __init__(self, *, client: LokiClient, store: ObjectStore, sleeper: Callable[[float], None] = time.sleep) -> None:
         self.client = client
         self.store = store
+        self.sleeper = sleeper
 
     def _get(self, key: str, *, maximum: int) -> bytes | None:
         if not _safe_key(key):
@@ -344,8 +350,13 @@ class LokiSnapshotExtractor:
             raise LokiSourceError("Source object publication failed") from error
         if type(created) is not bool:
             raise LokiSourceError("Source object store returned an invalid result")
-        if not created and self._get(key, maximum=maximum) != payload:
-            raise LokiSourceError("Immutable source object differed after a write race")
+        if not created:
+            retained = self._get(key, maximum=maximum)
+            if retained is None:
+                self.sleeper(0.05)
+                retained = self._get(key, maximum=maximum)
+            if retained != payload:
+                raise LokiSourceError("Immutable source object differed after a write race")
 
     def _replay(self, payload: bytes, *, query: str, window: LokiWindow) -> LokiSourceManifest:
         manifest = _parse_manifest(payload, query=query, window=window)
@@ -381,3 +392,91 @@ class LokiSnapshotExtractor:
         )
         self._publish(key, _manifest_bytes(manifest), maximum=MAX_MANIFEST_BYTES)
         return manifest
+
+
+class S3ObjectStore:
+    """Bounded path-style S3 storage with SigV4 requests."""
+
+    def __init__(
+        self, *, access_key: str, secret_key: str,
+        endpoint: str = DEFAULT_RAW_ENDPOINT, bucket: str = DEFAULT_RAW_BUCKET,
+        opener: Any = urllib.request.urlopen,
+    ) -> None:
+        parsed = urllib.parse.urlparse(endpoint)
+        location_parts = (parsed.params, parsed.query, parsed.fragment, parsed.username, parsed.password)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path not in {"", "/"} or any(location_parts):
+            raise ValueError("S3 endpoint must be an HTTP base URL")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", bucket):
+            raise ValueError("S3 bucket name was invalid")
+        if not access_key or not secret_key:
+            raise ValueError("S3 credentials are required")
+        self.endpoint, self.bucket = endpoint.rstrip("/"), bucket
+        self._access_key, self._secret_key, self._opener = access_key, secret_key, opener
+
+    def _request(self, method: str, key: str, payload: bytes = b"") -> urllib.request.Request:
+        if not _safe_key(key) or len(payload) > MAX_RAW_BYTES:
+            raise LokiSourceError("S3 request exceeded its object bounds")
+        now = datetime.now(timezone.utc)
+        date, short_date = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
+        path = "/" + urllib.parse.quote(self.bucket, safe="") + "/" + urllib.parse.quote(key, safe="/")
+        body_hash = hashlib.sha256(payload).hexdigest()
+        headers = {"host": urllib.parse.urlparse(self.endpoint).netloc, "x-amz-content-sha256": body_hash, "x-amz-date": date}
+        if method == "PUT":
+            headers["if-none-match"] = "*"
+        names = ";".join(sorted(headers))
+        canonical_headers = "".join(f"{name}:{headers[name]}\n" for name in sorted(headers))
+        canonical = "\n".join((method, path, "", canonical_headers, names, body_hash))
+        scope = f"{short_date}/us-east-1/s3/aws4_request"
+        to_sign = "\n".join(("AWS4-HMAC-SHA256", date, scope, hashlib.sha256(canonical.encode()).hexdigest()))
+        signing_key = ("AWS4" + self._secret_key).encode()
+        for value in (short_date, "us-east-1", "s3", "aws4_request"):
+            signing_key = hmac.new(signing_key, value.encode(), hashlib.sha256).digest()
+        signature = hmac.new(signing_key, to_sign.encode(), hashlib.sha256).hexdigest()
+        request_headers = {name.title(): value for name, value in headers.items()}
+        request_headers["Authorization"] = (
+            f"AWS4-HMAC-SHA256 Credential={self._access_key}/{scope}, "
+            f"SignedHeaders={names}, Signature={signature}")
+        return urllib.request.Request(f"{self.endpoint}{path}", data=payload if method == "PUT" else None, headers=request_headers, method=method)
+
+    def get(self, *, key: str) -> bytes | None:
+        try:
+            with self._opener(self._request("GET", key), timeout=TIMEOUT_SECONDS) as response:
+                if getattr(response, "status", 200) != 200:
+                    raise LokiSourceError("S3 GET returned an invalid status")
+                payload = response.read(MAX_RAW_BYTES + 1)
+        except urllib.error.HTTPError as error:
+            error.close()
+            if error.code == 404:
+                return None
+            raise LokiSourceError(f"S3 GET returned HTTP {error.code}") from error
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise LokiSourceError("S3 GET transport failed") from error
+        if len(payload) > MAX_RAW_BYTES:
+            raise LokiSourceError("S3 GET exceeded the response byte limit")
+        return payload
+
+    def put_if_absent(self, *, key: str, payload: bytes) -> bool:
+        try:
+            with self._opener(self._request("PUT", key, payload), timeout=TIMEOUT_SECONDS) as response:
+                if getattr(response, "status", 200) not in {200, 201, 204}:
+                    raise LokiSourceError("S3 PUT returned an invalid status")
+                return True
+        except urllib.error.HTTPError as error:
+            error.close()
+            if error.code in {409, 412}:
+                return False
+            raise LokiSourceError(f"S3 PUT returned HTTP {error.code}") from error
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise LokiSourceError("S3 PUT transport failed") from error
+
+
+def extractor_from_environment() -> tuple[LokiSnapshotExtractor, str]:
+    """Build the bounded Loki and raw object clients from runtime settings."""
+    access_key, secret_key = os.getenv("RAW_ACCESS_KEY_ID"), os.getenv("RAW_SECRET_ACCESS_KEY")
+    if not access_key or not secret_key:
+        raise LokiSourceError("Raw S3 credentials are required")
+    bucket = os.getenv("RAW_S3_BUCKET", DEFAULT_RAW_BUCKET)
+    store = S3ObjectStore(
+        access_key=access_key, secret_key=secret_key,
+        endpoint=os.getenv("RAW_S3_ENDPOINT", DEFAULT_RAW_ENDPOINT), bucket=bucket)
+    return LokiSnapshotExtractor(client=LokiClient(endpoint=os.getenv("LOKI_ENDPOINT", DEFAULT_LOKI_ENDPOINT)), store=store), bucket

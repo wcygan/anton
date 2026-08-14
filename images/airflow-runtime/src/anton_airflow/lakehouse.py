@@ -17,7 +17,13 @@ ADAPTER_DRIVER_CONTAINER = "spark-kubernetes-driver"
 ADAPTER_EXECUTOR_CONTAINER = "spark-kubernetes-executor"
 
 
-def _application_spec(*, secret_name: str, warehouse: str) -> dict[str, Any]:
+def _application_spec(
+    *,
+    secret_name: str,
+    warehouse: str,
+    entrypoint: str = "local:///opt/spark/application/transform.py",
+    iceberg_namespace: str | None = None,
+) -> dict[str, Any]:
     """Return one Apache ``spark.apache.org/v1`` SparkApplication spec.
 
     The Apache operator drives the driver and executor as full Kubernetes pod
@@ -31,6 +37,8 @@ def _application_spec(*, secret_name: str, warehouse: str) -> dict[str, Any]:
         {"name": "ICEBERG_CATALOG_URI", "value": CATALOG_URI},
         {"name": "S3_ENDPOINT", "value": S3_ENDPOINT},
     ]
+    if iceberg_namespace:
+        shared_env.append({"name": "FLIGHT_RECORDER_ICEBERG_NAMESPACE", "value": iceberg_namespace})
     event_log_secret_volume = {
         "name": "event-log-hadoop-config",
         "secret": {
@@ -69,7 +77,7 @@ def _application_spec(*, secret_name: str, warehouse: str) -> dict[str, Any]:
     }
     return {
         "spec": {
-            "pyFiles": "local:///opt/spark/application/transform.py",
+            "pyFiles": entrypoint,
             "deploymentMode": "ClusterMode",
             "runtimeVersions": {"sparkVersion": "4.1.3"},
             "sparkConf": {
@@ -119,6 +127,12 @@ def _application_spec(*, secret_name: str, warehouse: str) -> dict[str, Any]:
 AUTHORITATIVE_APPLICATION_SPEC = _application_spec(
     secret_name="authoritative-fixture-s3",
     warehouse="s3://iceberg-warehouse",
+)
+FLIGHT_RECORDER_APPLICATION_SPEC = _application_spec(
+    secret_name="flight-recorder-s3",
+    warehouse="s3://iceberg-warehouse",
+    entrypoint="local:///opt/spark/application/flight_recorder.py",
+    iceberg_namespace="flight_recorder",
 )
 
 
