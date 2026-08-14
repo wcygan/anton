@@ -545,7 +545,7 @@ def validate_image_source(failures: list[str]) -> None:
         "loki_source_receipt",
         "test_loki_window_rejects_unbounded_duration",
         "spark.apache.org",
-        "schedule=\"23 * * * *\"",
+        'dag_id="airflow_spark_lakehouse",\n    schedule=None,',
         "catchup=False",
         "max_active_runs=1",
     )

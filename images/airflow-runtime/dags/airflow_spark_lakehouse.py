@@ -17,7 +17,7 @@ from anton_airflow.spark import ApacheSparkApplicationOperator
 
 @dag(
     dag_id="airflow_spark_lakehouse",
-    schedule="23 * * * *",
+    schedule=None,
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     catchup=False,
     max_active_runs=1,

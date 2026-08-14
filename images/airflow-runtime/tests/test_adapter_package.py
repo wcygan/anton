@@ -313,14 +313,14 @@ class AdapterPackageTests(unittest.TestCase):
         self.assertEqual(foundation_dag.max_active_runs, 1)
         self.assertEqual(foundation_dag.task_ids, ["prove_kubernetes_task_pod"])
 
-    def test_spark_dag_is_scheduled_in_utc_and_single_run(self) -> None:
+    def test_spark_dag_is_paused_in_utc_and_single_run(self) -> None:
         dag_path = Path("/opt/airflow/dags/airflow_spark_lakehouse.py")
         spec = importlib.util.spec_from_file_location("airflow_spark_lakehouse", dag_path)
         self.assertIsNotNone(spec)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         spark_dag = module.spark_lakehouse_dag
-        self.assertEqual(spark_dag.schedule, "23 * * * *")
+        self.assertIsNone(spark_dag.schedule)
         self.assertFalse(spark_dag.catchup)
         self.assertEqual(spark_dag.max_active_runs, 1)
         self.assertEqual(str(spark_dag.timezone), "UTC")
