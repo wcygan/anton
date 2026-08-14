@@ -68,4 +68,4 @@ authority boundaries.
 
 - [x] Update Plan 0023, the specification, Ticket 11, and operator guidance.
 - [x] Retain one complete scheduled verification record.
-- [ ] Remove the shadow control plane without deleting shadow data.
+- [x] Remove the shadow control plane without deleting shadow data.

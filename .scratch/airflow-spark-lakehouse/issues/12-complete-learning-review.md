@@ -4,7 +4,7 @@
 
 **Blocked by:** 11 — Observe the authoritative workflow and clean the shadow path.
 
-**Status:** needs-triage
+**Status:** ready-for-agent
 
 - [ ] The review occurs by 2026-09-10 or records an explicit revised date.
 - [ ] The review summarizes compatibility, reliability, observability, resource use, maintenance cost, and learning outcomes.
@@ -17,3 +17,6 @@
 - [ ] ADR and plan status reflect the final learning decision.
 
 ## Comments
+
+- 2026-08-14: Ticket 11 passed. The learning review evidence collection is now open.
+- The decision remains due by 2026-09-10. No final platform decision has been made.

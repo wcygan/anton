@@ -253,6 +253,8 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-13: ADR 0036 removed metadata recovery and legacy fallback gates. Cutover now removes the legacy writer before scheduled Airflow operation.
 - 2026-08-14: ADR 0037 replaced the 24-hour observation gate with one scheduled end-to-end verification before shadow cleanup.
 - 2026-08-14: Scheduled run `scheduled__2026-08-14T13:23:00+00:00` passed the complete evidence path. Evidence is under `.scratch/airflow-spark-lakehouse/evidence/ticket11-scheduled-20260814/`.
+- 2026-08-14: Flux applied `a90d8dec` and removed the shadow control plane. No shadow storage data was deleted.
+- 2026-08-14: Airflow retained its authoritative schedule on the cleanup image. Ticket 11 is resolved, and Ticket 12 review work is open.
 
 ## References
 

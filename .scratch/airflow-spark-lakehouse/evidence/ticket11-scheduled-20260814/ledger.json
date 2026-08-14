@@ -25,5 +25,12 @@
         "resources": "resources.json"
       }
     }
-  ]
+  ],
+  "cleanup": {
+    "observed_at": "2026-08-14T15:07:15Z",
+    "status": "passed",
+    "source_revision": "a90d8dec00bca58937f9ac96b4597f3b49f89ef5",
+    "flux_revision": "refs/heads/main@sha1:a90d8dec",
+    "evidence": "cleanup.json"
+  }
 }

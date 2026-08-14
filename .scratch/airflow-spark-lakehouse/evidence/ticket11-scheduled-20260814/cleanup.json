@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "artifact": "shadow_control_plane_cleanup",
+  "observed_at": "2026-08-14T15:07:15Z",
+  "status": "passed",
+  "source_revision": "a90d8dec00bca58937f9ac96b4597f3b49f89ef5",
+  "flux_revision": "refs/heads/main@sha1:a90d8dec",
+  "airflow_image_digest": "sha256:afdbc98fa46cc28e403980bc3b13b364b2aaf2f67e5f8d1a4074d90f618eb919",
+  "dag": {
+    "dag_id": "airflow_spark_lakehouse",
+    "digest": "sha256:1578957c1ccafe1d79e2c702e580751d498b1bb27c8cda6da76297374911be78",
+    "paused": false,
+    "stale": false,
+    "schedule": "23 * * * *",
+    "import_errors": false,
+    "shadow_dag_file_absent": true,
+    "shadow_dag_metadata_removed": true
+  },
+  "flux": {
+    "airflow_ready": true,
+    "airflow_database_ready": true,
+    "authoritative_writer_ready": true,
+    "spark_history_server_ready": true,
+    "removed_kustomizations": [
+      "airflow/airflow-loki-source",
+      "lakehouse/lakehouse-loki-source",
+      "lakehouse/shadow-fixture"
+    ]
+  },
+  "absent_resources": [
+    "airflow/ExternalSecret/loki-source-raw",
+    "airflow/Secret/loki-source-raw",
+    "lakehouse/SparkApplication/lakehouse-shadow-fixture",
+    "lakehouse/ExternalSecret/loki-source-s3",
+    "lakehouse/ExternalSecret/shadow-fixture-s3",
+    "lakehouse/ServiceAccount/shadow-fixture",
+    "lakehouse/Role/shadow-fixture",
+    "lakehouse/RoleBinding/shadow-fixture",
+    "lakehouse/Lease/lakehouse-shadow-writer",
+    "lakehouse shadow pods"
+  ],
+  "data": {
+    "storage_deletion_performed": false,
+    "authoritative_normalized_count": 5,
+    "authoritative_hourly_count": 5,
+    "authoritative_hourly_event_count_sum": 5,
+    "contract_passed": true,
+    "snapshots_readable": true
+  }
+}
