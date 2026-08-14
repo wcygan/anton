@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "artifact": "spark_application",
+  "run_id": "scheduled__2026-08-14T13:23:00+00:00",
+  "attempt_name": "lh-airflow-run-auth-a2e1e078723c-a1",
+  "passed": true,
+  "observed_at": "2026-08-14T14:00:46.674994+00:00",
+  "details": {
+    "api_version": "spark.apache.org/v1",
+    "kind": "SparkApplication",
+    "uid": "5cb9b9bf-76e1-451d-8bcc-c4c25d8a0d77",
+    "created_at": "2026-08-14T13:23:26Z",
+    "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+    "state_history": [
+      "SUBMITTED",
+      "DRIVERREQUESTED",
+      "DRIVERSTARTED",
+      "DRIVERREADY",
+      "RUNNINGHEALTHY",
+      "SUCCEEDED",
+      "RESOURCERELEASED"
+    ]
+  }
+}

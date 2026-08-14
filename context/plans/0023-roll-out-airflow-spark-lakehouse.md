@@ -4,7 +4,7 @@ opened: 2026-08-11
 closed: null
 affects: all
 intent: learning
-related-adrs: [0036]
+related-adrs: [0037]
 review-by: 2026-09-10
 ---
 
@@ -21,9 +21,9 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [ ] Flux owns healthy Airflow, Spark Operator, History Server, and CNPG resources with bounded resources and namespace-scoped access.
 - [ ] The selected Spark runtime passes the complete image, Iceberg, catalog, SeaweedFS, Trino, Kubernetes, and classpath matrix.
 - [x] Airflow task logs, Loki runtime logs, and Spark History Server pass success, short-life, and pre-commit failure tests.
-- [ ] Five shadow runs and 24 authoritative scheduled runs pass without two active writers or an unexplained failure.
+- [x] Five shadow runs and one authoritative scheduled run pass without two active writers or an unexplained failure.
 - [ ] Legacy removal, retention, and the 2026-09-10 learning review have retained evidence.
-- [ ] Airflow metadata loss remains an accepted learning risk under ADR 0036.
+- [x] Airflow metadata loss remains an accepted learning risk under ADR 0037.
 
 ## Tasks
 
@@ -215,10 +215,10 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [ ] Require Trino validation before enabling the schedule.
 - [ ] Remove the legacy writer configuration through a separate reviewed Git change.
 - [ ] Verify Flux removed all legacy writer workloads before enabling the schedule.
-- [ ] Enable the Airflow schedule and observe 24 successful runs across at least 24 hours.
-- [ ] Reset the observation window after any unexplained failure.
+- [x] Enable the Airflow schedule and verify one scheduled Workflow Run end to end.
+- [x] Block cleanup until any failure has a supported cause.
 - [ ] Remove remaining `iceberg-demo` resources through a separate reviewed change.
-- [ ] Remove the shadow control-plane configuration after the observation window passes.
+- [x] Remove the shadow control-plane configuration after scheduled verification passes.
 - [ ] Require separate storage approval before deleting shadow data.
 
 ### Phase 8: Review or remove
@@ -251,10 +251,13 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-13: The accepted pre-commit failure retained driver and executor diagnostics without changing shadow snapshot `6584017577001615138`.
 - 2026-08-13: Added guarded preflight, trigger, evidence, and recovery commands after the Ticket 05 and 06 learning review.
 - 2026-08-13: ADR 0036 removed metadata recovery and legacy fallback gates. Cutover now removes the legacy writer before scheduled Airflow operation.
+- 2026-08-14: ADR 0037 replaced the 24-hour observation gate with one scheduled end-to-end verification before shadow cleanup.
+- 2026-08-14: Scheduled run `scheduled__2026-08-14T13:23:00+00:00` passed the complete evidence path. Evidence is under `.scratch/airflow-spark-lakehouse/evidence/ticket11-scheduled-20260814/`.
 
 ## References
 
-- Related ADR: `context/adrs/0036-continue-airflow-lakehouse-without-metadata-recovery.md`
+- Related ADR: `context/adrs/0037-remove-extended-airflow-observation-gate.md`
+- Superseded history: `context/adrs/0036-continue-airflow-lakehouse-without-metadata-recovery.md`
 - Superseded ADR: `context/adrs/0031-adopt-seaweedfs-iceberg-log-demo.md`
 - Existing lakehouse plan: `context/plans/0020-implement-seaweedfs-iceberg-log-lakehouse.md`
 - Existing Spark workload: `kubernetes/apps/iceberg-demo/spark-fixture/app/job.yaml`

@@ -16,9 +16,8 @@ from airflow_lakehouse_operations import (
     APPROVAL_TOKEN,
     DAG_ID,
     LAKEHOUSE_NAMESPACE,
-    LEASE_NAME,
     SPARK_RESOURCE,
-    TASK_ID,
+    SHADOW_TASK_ID,
     TRINO_NAMESPACE,
     KubectlClient,
     OperationError,
@@ -390,7 +389,7 @@ def _adapter_setup(run_id: str, try_number: int = 1) -> str:
         "from anton_airflow.lakehouse import SHADOW_APPLICATION_SPEC;"
         "from anton_airflow.spark import AttemptIdentity;"
         "from anton_airflow.spark.operator import _airflow_adapter;"
-        f"identity=AttemptIdentity({DAG_ID!r},{run_id!r},{TASK_ID!r},-1,{try_number});"
+        f"identity=AttemptIdentity({DAG_ID!r},{run_id!r},{SHADOW_TASK_ID!r},-1,{try_number});"
         "adapter=_airflow_adapter(conn_id='kubernetes_default',namespace='lakehouse',target='shadow');"
     )
 
@@ -404,7 +403,7 @@ def _duplicate_probe_code(run_id: str) -> str:
 
 def _retry_probe_code(run_id: str) -> str:
     return _adapter_setup(run_id, 1) + (
-        f"next_identity=AttemptIdentity({DAG_ID!r},{run_id!r},{TASK_ID!r},-1,2);"
+        f"next_identity=AttemptIdentity({DAG_ID!r},{run_id!r},{SHADOW_TASK_ID!r},-1,2);"
         "observation=adapter.retry(identity,next_identity,application_spec=SHADOW_APPLICATION_SPEC,target='shadow',prior_output_valid=lambda resource:False);"
         "print(json.dumps({'result':'retry','attempt':observation.name,'state':observation.state.value}))"
     )
@@ -431,7 +430,7 @@ def _expired_lease_probe_code(run_id: str, probe_run_id: str) -> str:
         "current=adapter.leases.current();"
         f"current['spec']['renewTime']={expired!r};"
         "adapter.leases.api.replace_namespaced_lease(adapter.leases.lease_name,adapter.leases.namespace,current);"
-        f"probe=AttemptIdentity({DAG_ID!r},{probe_run_id!r},{TASK_ID!r},-1,1);"
+        f"probe=AttemptIdentity({DAG_ID!r},{probe_run_id!r},{SHADOW_TASK_ID!r},-1,1);"
         "result='unexpected';"
         "\ntry:\n adapter.submit_or_reattach(probe,application_spec=SHADOW_APPLICATION_SPEC,target='shadow')\n"
         "except LeaseTakeoverBlocked:\n result='LeaseTakeoverBlocked'\n"

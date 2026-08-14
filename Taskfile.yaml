@@ -53,7 +53,6 @@ tasks:
       - python3 scripts/validate-log-contract.py
       - python3 scripts/validate-storage-contract.py
       - python3 scripts/validate-spark-runtime-contract.py
-      - python3 scripts/validate-shadow-fixture-contract.py
       - python3 scripts/validate-spark-history-contract.py
       - python3 scripts/validate-airflow-foundation-contract.py
       - python3 scripts/validate-external-secret-contract.py

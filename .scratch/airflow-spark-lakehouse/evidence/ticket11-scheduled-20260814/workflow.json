@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "artifact": "workflow_run",
+  "run_id": "scheduled__2026-08-14T13:23:00+00:00",
+  "passed": true,
+  "observed_at": "2026-08-14T14:08:37Z",
+  "source": {
+    "authority": "Airflow scheduler Workflow Run history",
+    "scheduler_pod": "airflow-scheduler-799fd76d5-d4mp5",
+    "commands": [
+      "airflow dags details airflow_spark_lakehouse -o json",
+      "airflow dags list-runs airflow_spark_lakehouse -o json",
+      "airflow tasks states-for-dag-run airflow_spark_lakehouse scheduled__2026-08-14T13:23:00+00:00 -o json",
+      "sha256sum /opt/airflow/dags/airflow_spark_lakehouse.py"
+    ]
+  },
+  "details": {
+    "dag_id": "airflow_spark_lakehouse",
+    "run_id": "scheduled__2026-08-14T13:23:00+00:00",
+    "task_id": "run_authoritative_spark_attempt",
+    "try_number": 1,
+    "attempt_name": "lh-airflow-run-auth-a2e1e078723c-a1",
+    "run_type": "scheduled",
+    "status": "success",
+    "task_status": "success",
+    "schedule_enabled": true,
+    "schedule": "23 * * * *",
+    "expected_start": "2026-08-14T13:23:00+00:00",
+    "start_date": "2026-08-14T13:23:01.071235+00:00",
+    "end_date": "2026-08-14T13:24:01.210704+00:00",
+    "dag_digest": "sha256:1578957c1ccafe1d79e2c702e580751d498b1bb27c8cda6da76297374911be78",
+    "airflow_image_digest": "sha256:1eeac0adcd45897af589c356ff587f4e565365323b4b2617347cea99e0e41ea6",
+    "spark_image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7"
+  }
+}

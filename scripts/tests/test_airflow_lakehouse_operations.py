@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 
@@ -24,8 +25,10 @@ from airflow_lakehouse_operations import (  # noqa: E402
     _retained_artifact_passed,
     airflow_loki_query,
     application_outcome,
+    attempt_pod_loki_query,
     attempt_name,
     build_trigger_command,
+    collect_attempt_evidence,
     evaluate_gate_preflight,
     pod_loki_query,
     require_live_approval,
@@ -101,6 +104,218 @@ def _ready_snapshot() -> dict:
 
 
 class AirflowLakehouseOperationsTests(unittest.TestCase):
+    def _authoritative_evidence(
+        self,
+        *,
+        receipt_events=("lease_acquired", "task_completion", "terminal_state"),
+        receipt_attempt="lh-airflow-run-auth-a2e1e078723c-a1",
+        prior_application_active=False,
+        lease_holder=None,
+        spark_state="Succeeded",
+        completion_state="succeeded",
+        lease_target="authoritative",
+        ledger_target="authoritative",
+        trino_run_id=None,
+        extra_conflicting_lease=False,
+        history_completed=True,
+        error_samples=0,
+        trino_artifact="trino",
+        snapshot_changed=True,
+        workflow_status="success",
+        schedule_enabled=True,
+        within_learning_ceilings=True,
+        include_prior_attempt=False,
+        run_id="scheduled__2026-08-14T13:23:00+00:00",
+    ):
+        attempt = "lh-airflow-run-auth-a2e1e078723c-a1"
+        airflow_digest = "sha256:" + "a" * 64
+        spark_digest = "sha256:" + "b" * 64
+
+        class FakeKubectl:
+            def spark_application(self, name):
+                return {
+                    "apiVersion": "spark.apache.org/v1",
+                    "kind": "SparkApplication",
+                    "metadata": {
+                        "name": name,
+                        "creationTimestamp": "2026-08-14T13:23:20+00:00",
+                    },
+                    "status": {
+                        "currentState": {"currentStateSummary": "ResourceReleased"},
+                        "stateTransitionHistory": {
+                            "1": {"currentStateSummary": spark_state},
+                            "2": {"currentStateSummary": "ResourceReleased"},
+                        },
+                        "driverInfo": {"podName": "driver-pod"},
+                    },
+                }
+
+            def attempt_pods(self, name):
+                return []
+
+            def get_raw(self, path):
+                if "spark-history-server" in path:
+                    return [{"id": attempt, "name": attempt, "attempts": [{"completed": history_completed}]}]
+                if "error%7Cexception%7Ctraceback" in path or "fatal%7Cerror" in path:
+                    result = []
+                    if error_samples:
+                        result = [{"stream": {}, "values": [["1", "error"]] * error_samples}]
+                    return {"data": {"result": result}}
+                streams = []
+                for event in receipt_events:
+                    receipt = {"event": event, "attempt": receipt_attempt}
+                    if event == "lease_acquired":
+                        receipt["prior_application_active"] = prior_application_active
+                        receipt["target"] = lease_target
+                    if event in {"task_completion", "terminal_state"}:
+                        receipt["state"] = completion_state
+                    streams.append(
+                        {
+                            "stream": {"event": f"spark_attempt_receipt {json.dumps(receipt)}"},
+                            "values": [["1", "line"]],
+                        }
+                    )
+                if include_prior_attempt:
+                    for event in receipt_events:
+                        receipt = {"event": event, "attempt": "lh-prior-attempt-a1"}
+                        if event == "lease_acquired":
+                            receipt["prior_application_active"] = False
+                            receipt["target"] = "authoritative"
+                        if event in {"task_completion", "terminal_state"}:
+                            receipt["state"] = "succeeded"
+                        streams.append(
+                            {
+                                "stream": {"event": f"spark_attempt_receipt {json.dumps(receipt)}"},
+                                "values": [["1", "line"]],
+                            }
+                        )
+                if extra_conflicting_lease:
+                    receipt = {
+                        "event": "lease_acquired",
+                        "attempt": receipt_attempt,
+                        "target": "shadow",
+                        "prior_application_active": True,
+                    }
+                    streams.append(
+                        {
+                            "stream": {"event": f"spark_attempt_receipt {json.dumps(receipt)}"},
+                            "values": [["1", "line"]],
+                        }
+                    )
+                return {"data": {"result": streams}}
+
+            def lease(self, name):
+                if lease_holder is None:
+                    return None
+                return {"spec": {"holderIdentity": lease_holder}}
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "trino.json").write_text(
+                json.dumps(
+                    {
+                        "artifact": trino_artifact,
+                        "run_id": trino_run_id or run_id,
+                        "passed": True,
+                        "details": {
+                            "normalized_count": 5,
+                            "hourly_count": 5,
+                            "hourly_event_count_sum": 5,
+                            "schema": True,
+                            "partitions": True,
+                            "snapshots": True,
+                            "locations": True,
+                            "snapshots_before": {"normalized": "100", "hourly": "200"},
+                            "snapshots_after": {
+                                "normalized": "101" if snapshot_changed else "100",
+                                "hourly": "201" if snapshot_changed else "200",
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "workflow.json").write_text(
+                json.dumps(
+                    {
+                        "artifact": "workflow_run",
+                        "run_id": run_id,
+                        "passed": True,
+                        "details": {
+                            "dag_id": "airflow_spark_lakehouse",
+                            "run_id": run_id,
+                            "task_id": "run_authoritative_spark_attempt",
+                            "try_number": 1,
+                            "attempt_name": attempt,
+                            "run_type": "scheduled",
+                            "status": workflow_status,
+                            "task_status": "success",
+                            "schedule_enabled": schedule_enabled,
+                            "schedule": "23 * * * *",
+                            "dag_digest": "dag-sha256",
+                            "expected_start": "2026-08-14T13:23:00+00:00",
+                            "end_date": "2026-08-14T13:30:00+00:00",
+                            "airflow_image_digest": airflow_digest,
+                            "spark_image_digest": spark_digest,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "resources.json").write_text(
+                json.dumps(
+                    {
+                        "artifact": "resources",
+                        "run_id": run_id,
+                        "attempt_name": attempt,
+                        "passed": True,
+                        "details": {
+                            "within_learning_ceilings": within_learning_ceilings,
+                            "measurements": {
+                                "peak_memory_bytes": 278357606,
+                                "memory_ceiling_bytes": 1073741824,
+                                "cpu_sample": None,
+                                "cpu_sample_limitation": "Pods ended before the next scrape.",
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            ledger = root / "ledger.json"
+            ledger.write_text(
+                json.dumps(
+                    {
+                        "candidate": {
+                            "airflow_image_digest": airflow_digest,
+                            "spark_image_digest": spark_digest,
+                            "dag_digest": "dag-sha256",
+                        },
+                        "runs": [
+                            {
+                                "run_id": run_id,
+                                "status": "passed",
+                                "target": ledger_target,
+                                "spark": {"attempt_name": attempt, "image_digest": spark_digest},
+                                "evidence": {
+                                    "trino": "trino.json",
+                                    "workflow_run": "workflow.json",
+                                    "resources": "resources.json",
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return collect_attempt_evidence(
+                FakeKubectl(),
+                run_id=run_id,
+                target="authoritative",
+                ledger_path=ledger,
+                now=datetime(2026, 8, 14, 13, 30, tzinfo=timezone.utc),
+            )
+
     def test_attempt_name_matches_deployed_identity(self) -> None:
         deployed = _load_identity_module()
         run_id = "manual__2026-08-13T12:00:00+00:00"
@@ -114,6 +329,150 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 try_number=2,
             ),
         )
+
+    def test_authoritative_attempt_name_matches_deployed_identity(self) -> None:
+        deployed = _load_identity_module()
+        run_id = "scheduled__2026-08-14T13:23:00+00:00"
+        task_id = "run_authoritative_spark_attempt"
+        self.assertEqual(
+            attempt_name(run_id=run_id, try_number=1, task_id=task_id),
+            deployed.attempt_name(
+                dag_id="airflow_spark_lakehouse",
+                run_id=run_id,
+                task_id=task_id,
+                map_index=-1,
+                try_number=1,
+            ),
+        )
+
+    def test_authoritative_evidence_dispatches_exact_identity_and_lease(self) -> None:
+        class FakeKubectl:
+            spark_name = None
+            lease_name = None
+
+            def spark_application(self, name):
+                self.spark_name = name
+                return None
+
+            def attempt_pods(self, name):
+                return []
+
+            def get_raw(self, path):
+                if "spark-history-server" in path:
+                    return []
+                return {"data": {"result": []}}
+
+            def lease(self, name):
+                self.lease_name = name
+                return None
+
+        client = FakeKubectl()
+        result = collect_attempt_evidence(
+            client,
+            run_id="scheduled__2026-08-14T13:23:00+00:00",
+            target="authoritative",
+            now=datetime(2026, 8, 14, 13, 30, tzinfo=timezone.utc),
+        )
+        self.assertEqual("lh-airflow-run-auth-a2e1e078723c-a1", client.spark_name)
+        self.assertEqual("lakehouse-authoritative-writer", client.lease_name)
+        self.assertEqual("run_authoritative_spark_attempt", result["identity"]["task_id"])
+        self.assertEqual("authoritative", result["identity"]["target"])
+
+    def test_evidence_rejects_unknown_target(self) -> None:
+        with self.assertRaisesRegex(OperationError, "unsupported evidence target"):
+            collect_attempt_evidence(
+                object(),
+                run_id="scheduled__2026-08-14T13:23:00+00:00",
+                target="unknown",
+            )
+
+    def test_authoritative_evidence_requires_complete_success_chain(self) -> None:
+        self.assertEqual("complete", self._authoritative_evidence()["status"])
+        cases = {
+            "missing receipt": {
+                "receipt_events": ("lease_acquired", "terminal_state"),
+                "missing": "airflow_receipts",
+            },
+            "wrong attempt": {
+                "receipt_attempt": "different-attempt",
+                "missing": "airflow_attempt_identity",
+            },
+            "active prior application": {
+                "prior_application_active": True,
+                "missing": "lease_acquisition",
+            },
+            "conflicting holder": {
+                "lease_holder": "different-attempt",
+                "missing": "conflicting_lease_holder",
+            },
+            "failed Spark outcome": {
+                "spark_state": "Failed",
+                "missing": "spark_succeeded",
+            },
+            "failed completion receipt": {
+                "completion_state": "failed",
+                "missing": "terminal_state_succeeded",
+            },
+            "wrong Lease target": {
+                "lease_target": "shadow",
+                "missing": "lease_acquisition",
+            },
+            "wrong retained target": {
+                "ledger_target": "shadow",
+                "missing": "trino",
+            },
+            "wrong Trino run": {
+                "trino_run_id": "scheduled__different",
+                "missing": "trino",
+            },
+            "conflicting Lease receipt": {
+                "extra_conflicting_lease": True,
+                "missing": "lease_acquisition",
+            },
+            "incomplete history": {
+                "history_completed": False,
+                "missing": "history_server",
+            },
+            "runtime log errors": {
+                "error_samples": 1,
+                "missing": "pod_loki_errors",
+            },
+            "wrong Trino artifact": {
+                "trino_artifact": "workflow_run",
+                "missing": "trino",
+            },
+            "unchanged snapshots": {
+                "snapshot_changed": False,
+                "missing": "trino",
+            },
+            "failed Workflow Run": {
+                "workflow_status": "failed",
+                "missing": "workflow_run",
+            },
+            "disabled schedule": {
+                "schedule_enabled": False,
+                "missing": "workflow_run",
+            },
+            "resource ceiling failure": {
+                "within_learning_ceilings": False,
+                "missing": "resources",
+            },
+        }
+        for label, values in cases.items():
+            missing = values.pop("missing")
+            with self.subTest(label=label):
+                result = self._authoritative_evidence(**values)
+                self.assertEqual("incomplete", result["status"])
+                self.assertIn(missing, result["missing"])
+
+    def test_authoritative_evidence_accepts_receipts_from_a_prior_retry(self) -> None:
+        result = self._authoritative_evidence(include_prior_attempt=True)
+        self.assertEqual("complete", result["status"])
+
+    def test_authoritative_evidence_rejects_manual_run(self) -> None:
+        result = self._authoritative_evidence(run_id="manual__2026-08-14T13:23:00+00:00")
+        self.assertEqual("incomplete", result["status"])
+        self.assertIn("scheduled_run_identity", result["missing"])
 
     def test_manual_run_rejects_future_logical_date(self) -> None:
         with self.assertRaisesRegex(OperationError, "cannot be in the future"):
@@ -184,6 +543,9 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         query = pod_loki_query("driver-pod")
         self.assertIn('| k8s_pod_name="driver-pod"', query)
         self.assertNotIn('{pod=', query)
+        attempt_query = attempt_pod_loki_query("exact-attempt")
+        self.assertIn('k8s_pod_name=~"exact-attempt.*"', attempt_query)
+        self.assertIn('severity=~"fatal|error"', attempt_pod_loki_query("exact-attempt", errors_only=True))
 
     def test_service_proxy_accepts_json_array(self) -> None:
         def runner(argv, timeout_seconds):
@@ -226,18 +588,19 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             with self.subTest(index=index):
                 compile(program, f"probe-{index}", "exec")
 
-    def test_task_wrappers_keep_dry_run_and_execute_separate(self) -> None:
+    def test_task_wrappers_remove_retired_shadow_mutations(self) -> None:
         source = (REPO / ".taskfiles" / "airflow" / "Taskfile.yaml").read_text(encoding="utf-8")
-        for target in (
+        self.assertIn("attempt-evidence:", source)
+        for retired_target in (
             "gate-preflight:",
             "trigger-shadow-run:",
             "trigger-shadow-run:execute:",
-            "attempt-evidence:",
             "recovery-case:",
             "recovery-case:execute:",
         ):
-            self.assertIn(target, source)
-        self.assertEqual(2, source.count("--approval-token shadow-live-mutation"))
+            self.assertNotIn(retired_target, source)
+        self.assertIn("--target \"$TARGET\"", source)
+        self.assertNotIn("--approval-token shadow-live-mutation", source)
 
     def test_application_outcome_uses_terminal_history(self) -> None:
         resource = {

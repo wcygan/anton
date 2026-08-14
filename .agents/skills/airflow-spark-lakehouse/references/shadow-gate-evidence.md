@@ -52,17 +52,8 @@ Retain authoritative state before and after every shadow run.
 
 ## Validation
 
-Run the read-only live preflight before creating a candidate run:
-
-```sh
-mise exec -- task airflow:gate-preflight
-```
-
-The preflight checks repository convergence, immutable images, Flux readiness,
-read-only Trino access, evidence services, active Spark work, and the shadow Lease.
-
-It reports queued Airflow-run visibility as a limitation. The command does not
-read credentials or use pod execution to bypass that boundary.
+Ticket 11 removed the live shadow preflight and trigger targets. Validate the
+accepted retained ledger without creating a new candidate run.
 
 ```sh
 mise exec -- task airflow:shadow-gate \

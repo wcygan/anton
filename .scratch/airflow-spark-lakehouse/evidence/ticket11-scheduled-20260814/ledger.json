@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "candidate": {
+    "source_revision": "1ab8db72120b8a5c554d4dd5418f1b31917a8500",
+    "flux_revision": "refs/heads/main@sha1:1ab8db72120b8a5c554d4dd5418f1b31917a8500",
+    "airflow_image_digest": "sha256:1eeac0adcd45897af589c356ff587f4e565365323b4b2617347cea99e0e41ea6",
+    "spark_image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7",
+    "dag_digest": "sha256:1578957c1ccafe1d79e2c702e580751d498b1bb27c8cda6da76297374911be78"
+  },
+  "runs": [
+    {
+      "run_id": "scheduled__2026-08-14T13:23:00+00:00",
+      "observed_at": "2026-08-14T14:00:46.674994+00:00",
+      "status": "passed",
+      "target": "authoritative",
+      "spark": {
+        "attempt_name": "lh-airflow-run-auth-a2e1e078723c-a1",
+        "image_digest": "sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7"
+      },
+      "evidence": {
+        "workflow_run": "workflow.json",
+        "spark_application": "spark-application.json",
+        "trino": "trino.json",
+        "runtime": "runtime.json",
+        "resources": "resources.json"
+      }
+    }
+  ]
+}

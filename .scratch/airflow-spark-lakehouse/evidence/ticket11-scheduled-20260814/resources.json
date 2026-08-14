@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "artifact": "resources",
+  "run_id": "scheduled__2026-08-14T13:23:00+00:00",
+  "attempt_name": "lh-airflow-run-auth-a2e1e078723c-a1",
+  "passed": true,
+  "observed_at": "2026-08-14T14:00:46.674994+00:00",
+  "details": {
+    "within_learning_ceilings": true,
+    "measurements": {
+      "peak_memory_bytes": 278357606,
+      "memory_ceiling_bytes": 1073741824,
+      "prometheus_driver_memory_bytes": 5144576,
+      "prometheus_memory_samples": 2,
+      "cpu_sample": null,
+      "cpu_sample_limitation": "The pods ended before Prometheus collected a CPU rate sample.",
+      "executor_completed_tasks": 19,
+      "executor_failed_tasks": 0
+    }
+  }
+}

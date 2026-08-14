@@ -1,31 +1,7 @@
 # Live Recovery Scenarios
 
-Use this reference for one approved shadow-only recovery test.
-
-## Guarded command
-
-Plan a test before any live mutation:
-
-```sh
-mise exec -- task airflow:recovery-case \
-  CASE=<scenario> \
-  RUN_ID=manual__<bounded-identity>
-```
-
-The plan states the exact attempt, action order, stop condition, rollback, and acceptance checks.
-
-Execute only the reviewed plan:
-
-```sh
-mise exec -- task airflow:recovery-case:execute \
-  CASE=<scenario> \
-  RUN_ID=manual__<bounded-identity>
-```
-
-The execute target requires a prompt and an internal approval token. It runs
-the read-only gate preflight again before it creates the Workflow Run.
-
-Retain standard output as one JSON artifact in a new evidence directory.
+Ticket 11 retired these shadow-only recovery tests. This reference explains
+the retained Ticket 06 evidence. Do not execute a new recovery scenario.
 
 ## Scenarios
 

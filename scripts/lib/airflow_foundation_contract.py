@@ -23,8 +23,8 @@ LONGHORN_KS = REPO / "kubernetes" / "apps" / "storage" / "longhorn" / "ks.yaml"
 STORAGE_ROOT = REPO / "kubernetes" / "apps" / "storage" / "kustomization.yaml"
 RETIRED_BACKUP_APP = REPO / "kubernetes" / "apps" / "storage" / "longhorn-backup-config"
 
-IMAGE_TAG = "3.2.2-apache.10"
-IMAGE_DIGEST = "sha256:1eeac0adcd45897af589c356ff587f4e565365323b4b2617347cea99e0e41ea6"
+IMAGE_TAG = "3.2.2-apache.11"
+IMAGE_DIGEST = "sha256:afdbc98fa46cc28e403980bc3b13b364b2aaf2f67e5f8d1a4074d90f618eb919"
 IMAGE_DIGEST_HEX = IMAGE_DIGEST.removeprefix("sha256:")
 AIRFLOW_SPARK_RBAC = REPO / "kubernetes" / "apps" / "lakehouse" / "airflow-spark-rbac.yaml"
 
@@ -506,14 +506,9 @@ def validate_image_source(failures: list[str]) -> None:
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "operator.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "trigger.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "lakehouse.py",
-            IMAGE_ROOT / "src" / "anton_airflow" / "loki.py",
-            IMAGE_ROOT / "src" / "anton_airflow" / "loki_operator.py",
-            IMAGE_ROOT / "src" / "anton_airflow" / "shadow_validation.py",
             IMAGE_ROOT / "tests" / "test_adapter_package.py",
             IMAGE_ROOT / "tests" / "test_ticket06_recovery.py",
-            IMAGE_ROOT / "tests" / "test_ticket08_loki_source.py",
             IMAGE_ROOT / "dags" / "airflow_spark_lakehouse.py",
-            IMAGE_ROOT / "dags" / "airflow_loki_source.py",
         )
     )
     required_source = (
@@ -532,18 +527,8 @@ def validate_image_source(failures: list[str]) -> None:
         "class LeaseCoordinator",
         "spark_attempt_receipt",
         "task_completion",
-        "prior_shadow_output_is_valid",
         "prior_output_validator",
         "test_triggerer_recovery_renews_lease_before_terminal_observation",
-        "class LokiWindow",
-        "class LokiSnapshotExtractor",
-        "query_range",
-        "class LokiSourceSparkOperator",
-        "Loki source validation is shadow-only",
-        'dag_id="airflow_loki_source"',
-        "LOKI_INPUT_URI",
-        "loki_source_receipt",
-        "test_loki_window_rejects_unbounded_duration",
         "spark.apache.org",
         'dag_id="airflow_spark_lakehouse",\n    schedule="23 * * * *",',
         "catchup=False",
@@ -552,6 +537,20 @@ def validate_image_source(failures: list[str]) -> None:
     failures.extend(
         f"Airflow image content missing {value!r}" for value in required_source if value not in source
     )
+    retired_shadow_paths = (
+        IMAGE_ROOT / "dags" / "airflow_loki_source.py",
+        IMAGE_ROOT / "src" / "anton_airflow" / "loki.py",
+        IMAGE_ROOT / "src" / "anton_airflow" / "loki_operator.py",
+        IMAGE_ROOT / "src" / "anton_airflow" / "shadow_validation.py",
+    )
+    failures.extend(
+        f"retired shadow image path remains: {path.relative_to(REPO)}"
+        for path in retired_shadow_paths
+        if path.exists()
+    )
+    for retired_name in ("SHADOW_APPLICATION_SPEC", "LOKI_APPLICATION_SPEC"):
+        if retired_name in source:
+            failures.append(f"Airflow image still defines {retired_name}")
 
 
 def validate_spark_rbac(failures: list[str]) -> None:
@@ -614,7 +613,7 @@ def validate_namespace_source(failures: list[str]) -> None:
         failures,
         "Airflow namespace resources",
         kustomization.get("resources"),
-        ["./namespace.yaml", "./airflow-database/ks.yaml", "./airflow/ks.yaml", "./loki-source/ks.yaml"],
+        ["./namespace.yaml", "./airflow-database/ks.yaml", "./airflow/ks.yaml"],
     )
     readme = (AIRFLOW_ROOT / "README.md").read_text(encoding="utf-8")
     if "Kubernetes 1.36" not in readme:

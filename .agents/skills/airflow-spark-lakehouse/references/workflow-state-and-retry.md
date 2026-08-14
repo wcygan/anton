@@ -19,31 +19,12 @@ custom resource. A new try must use a new custom resource.
 Logical date is optional metadata. It does not participate in identity.
 Manual runs can have no logical date.
 
-## Manual trigger contract
+## Retired manual trigger
 
-Plan the command before execution:
+Ticket 11 removed the shadow DAG and its live trigger targets. Use retained
+evidence for completed shadow runs. Do not recreate a shadow Workflow Run.
 
-```sh
-mise exec -- task airflow:trigger-shadow-run \
-  RUN_ID=manual__<bounded-identity>
-```
-
-The dry run resolves the exact scheduler pod. It does not create a Workflow Run.
-
-Use the execute target only after the structured gate preflight passes:
-
-```sh
-mise exec -- task airflow:trigger-shadow-run:execute \
-  RUN_ID=manual__<bounded-identity>
-```
-
-The command requires the task prompt and an internal approval token. It then
-confirms that Airflow created a task instance.
-
-Do not set a future logical date or source-window end. Omit the logical date
-unless the test requires exact historical metadata.
-
-## Source-window contract
+## Historical source-window contract
 
 The Loki-source operator selects its window end in this order:
 

@@ -62,8 +62,8 @@ The migration will use a shadow-first cutover. A Kubernetes Lease will enforce o
 38. As an Anton operator, I want a separate shadow warehouse and catalog, so that compatibility tests cannot change authoritative tables.
 39. As an Anton operator, I want five consecutive shadow runs, so that cutover requires repeated end-to-end success.
 40. As an Anton operator, I want one manual authoritative run before scheduling, so that writer transfer has a controlled gate.
-41. As an Anton operator, I want 24 successful scheduled runs across 24 hours, so that cutover proves recurring operation.
-42. As an Anton operator, I want the observation window reset after unexplained failure, so that intermittent defects cannot pass the gate.
+41. As an Anton operator, I want one successful scheduled run, so that schedule ownership is verified before shadow cleanup.
+42. As an Anton operator, I want unexplained failure to block cleanup, so that conflicting evidence cannot pass the gate.
 43. As an Anton operator, I want the legacy writer retained during shadow testing, so that the current authoritative workflow remains available.
 44. As an Anton operator, I want the legacy writer stopped before cutover, so that authoritative metadata never has two writers.
 45. As an Anton operator, I want legacy writer configuration removed after manual validation, so that Anton maintains one workflow path.
@@ -149,7 +149,7 @@ The migration will use a shadow-first cutover. A Kubernetes Lease will enforce o
 - Cutover pauses Airflow, stops the legacy writer, proves no active legacy workload, and records authoritative state.
 - One manual authoritative Workflow Run and Trino validation precede schedule enablement.
 - The legacy writer configuration is removed after manual validation and before schedule enablement.
-- The shadow control plane is removed after 24 successful runs. Data deletion requires separate storage approval.
+- The shadow control plane is removed after one scheduled run passes. Data deletion requires separate storage approval.
 - Airflow metadata has no backup, restore, or legacy writer fallback requirement.
 - Resource values are initial learning ceilings, not production capacity guidance.
 - Spark heap, overhead, and native headroom must remain below each 1536Mi pod limit.
@@ -179,7 +179,7 @@ The migration will use a shadow-first cutover. A Kubernetes Lease will enforce o
 - Cleanup tests prove prompt successful-resource removal and bounded retained-resource removal.
 - Kubernetes 1.36 acceptance runs against Anton because Airflow's upstream coverage stops at 1.35.
 - Five consecutive shadow runs are required before cutover.
-- Twenty-four consecutive authoritative scheduled runs across at least 24 hours are required after cutover.
+- One authoritative scheduled run is required before shadow control-plane removal.
 - Existing fixture output, Trino validation, logging contracts, and storage smoke checks provide prior art.
 - Live workload creation, Flux reconciliation, port forwarding, and cutover require explicit operator approval.
 

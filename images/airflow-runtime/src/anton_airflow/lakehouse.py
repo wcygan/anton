@@ -116,14 +116,6 @@ def _application_spec(*, secret_name: str, warehouse: str) -> dict[str, Any]:
     }
 
 
-SHADOW_APPLICATION_SPEC = _application_spec(
-    secret_name="shadow-fixture-s3",
-    warehouse="s3://iceberg-shadow",
-)
-LOKI_APPLICATION_SPEC = _application_spec(
-    secret_name="loki-source-s3",
-    warehouse="s3://iceberg-shadow",
-)
 AUTHORITATIVE_APPLICATION_SPEC = _application_spec(
     secret_name="authoritative-fixture-s3",
     warehouse="s3://iceberg-warehouse",

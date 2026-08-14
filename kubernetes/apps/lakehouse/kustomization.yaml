@@ -7,7 +7,5 @@ resources:
   - ./airflow-spark-rbac.yaml
   - ./spark-history-server/ks.yaml
   - ./authoritative-writer/ks.yaml
-  - ./shadow-fixture/ks.yaml
-  - ./loki-source/ks.yaml
 components:
   - ../../components/sops

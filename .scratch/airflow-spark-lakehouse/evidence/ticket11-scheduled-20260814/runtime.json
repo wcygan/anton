@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "artifact": "runtime",
+  "run_id": "scheduled__2026-08-14T13:23:00+00:00",
+  "attempt_name": "lh-airflow-run-auth-a2e1e078723c-a1",
+  "passed": true,
+  "observed_at": "2026-08-14T14:00:46.674994+00:00",
+  "details": {
+    "lease_holder_after_completion": null,
+    "lease_target": "authoritative",
+    "prior_application_active": false,
+    "task_completion": "succeeded",
+    "terminal_state": "succeeded",
+    "loki_sample_count": 736,
+    "loki_error_sample_count": 0,
+    "history_application_id": "lh-airflow-run-auth-a2e1e078723c-a1-0",
+    "history_completed": true
+  }
+}

@@ -26,7 +26,6 @@ class SparkRuntimeContractTests(unittest.TestCase):
         sources = (
             REPO / "images" / "spark-runtime" / "Dockerfile",
             REPO / "images" / "airflow-runtime" / "src" / "anton_airflow" / "lakehouse.py",
-            REPO / "kubernetes" / "apps" / "lakehouse" / "shadow-fixture" / "app" / "sparkapplication.yaml",
         )
         for source in sources:
             content = source.read_text(encoding="utf-8")

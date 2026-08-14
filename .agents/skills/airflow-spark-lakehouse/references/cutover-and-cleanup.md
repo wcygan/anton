@@ -29,17 +29,17 @@ separate repository, Flux, and live-operation authority boundary.
 
 At no point can both writers hold authoritative write access.
 
-## Observation gate
+## Scheduled verification
 
-Observe 24 consecutive scheduled runs across at least 24 hours. Every run must
-pass Spark, Iceberg, Trino, Loki, and History Server checks.
+Verify one scheduled authoritative run before shadow cleanup. The run must pass
+Spark, Iceberg, Trino, Loki, and History Server checks.
 
-Reset the observation window after an unexplained failure. Record peak resource
-use before changing a request, limit, or replica count.
+Block cleanup after an unexplained failure. Record peak resource use before
+changing a request, limit, or replica count.
 
 ## Cleanup boundaries
 
-- Remove the shadow control plane after the observation gate passes.
+- Remove the shadow control plane after scheduled verification passes.
 - Preserve retained acceptance evidence through the learning review.
 - Keep authoritative Iceberg data during platform removal.
 - Require separate storage approval before bucket deletion.

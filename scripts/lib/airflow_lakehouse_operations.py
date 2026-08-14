@@ -15,14 +15,20 @@ from urllib.parse import quote
 
 
 DAG_ID = "airflow_spark_lakehouse"
-TASK_ID = "run_shadow_spark_attempt"
+SHADOW_TASK_ID = "run_shadow_spark_attempt"
+AUTHORITATIVE_TASK_ID = "run_authoritative_spark_attempt"
 AIRFLOW_NAMESPACE = "airflow"
 LAKEHOUSE_NAMESPACE = "lakehouse"
 TRINO_NAMESPACE = "iceberg-demo"
 OBSERVABILITY_NAMESPACE = "observability"
 SPARK_RESOURCE = "sparkapplications.spark.apache.org"
 SPARK_API_VERSION = "spark.apache.org/v1"
-LEASE_NAME = "lakehouse-shadow-writer"
+SHADOW_LEASE_NAME = "lakehouse-shadow-writer"
+AUTHORITATIVE_LEASE_NAME = "lakehouse-authoritative-writer"
+EVIDENCE_TARGETS = {
+    "shadow": (SHADOW_TASK_ID, SHADOW_LEASE_NAME),
+    "authoritative": (AUTHORITATIVE_TASK_ID, AUTHORITATIVE_LEASE_NAME),
+}
 APPROVAL_TOKEN = "shadow-live-mutation"
 SAFE_RUN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:+-]{0,255}")
 MANUAL_RUN_ID_PATTERN = re.compile(r"manual__[A-Za-z0-9][A-Za-z0-9_.:+-]{0,248}")
@@ -201,14 +207,20 @@ def _bounded_identity(value: str, limit: int = 8) -> str:
     return normalized[:limit].strip("-") or "unknown"
 
 
-def attempt_name(*, run_id: str, try_number: int = 1, map_index: int = -1) -> str:
+def attempt_name(
+    *,
+    run_id: str,
+    try_number: int = 1,
+    map_index: int = -1,
+    task_id: str = SHADOW_TASK_ID,
+) -> str:
     """Return the deployed Spark Attempt identity."""
     if try_number < 1:
         raise OperationError("try number must be positive")
-    payload = "\0".join((DAG_ID, run_id, TASK_ID, str(map_index))).encode("utf-8")
+    payload = "\0".join((DAG_ID, run_id, task_id, str(map_index))).encode("utf-8")
     identity_hash = sha256(payload).hexdigest()[:12]
     return (
-        f"lh-{_bounded_identity(DAG_ID)}-{_bounded_identity(TASK_ID)}-"
+        f"lh-{_bounded_identity(DAG_ID)}-{_bounded_identity(task_id)}-"
         f"{identity_hash}-a{try_number}"
     )
 
@@ -298,13 +310,13 @@ class KubectlClient:
             allow_absent=True,
         )
 
-    def lease(self) -> Mapping[str, Any] | None:
+    def lease(self, name: str = SHADOW_LEASE_NAME) -> Mapping[str, Any] | None:
         return self.json(
             "-n",
             LAKEHOUSE_NAMESPACE,
             "get",
             "lease.coordination.k8s.io",
-            LEASE_NAME,
+            name,
             "-o",
             "json",
             timeout_seconds=15,
@@ -764,6 +776,9 @@ def _loki_summary(kubectl: KubectlClient, query: str, start: datetime, end: date
     result = data.get("result", []) if isinstance(data, Mapping) else []
     samples = sum(len(stream.get("values", [])) for stream in result if isinstance(stream, Mapping))
     receipt_events: set[str] = set()
+    receipt_attempts: set[str] = set()
+    prior_application_active: set[bool] = set()
+    receipts: list[dict[str, Any]] = []
     for stream in result:
         if not isinstance(stream, Mapping):
             continue
@@ -775,13 +790,29 @@ def _loki_summary(kubectl: KubectlClient, query: str, start: datetime, end: date
             receipt = json.loads(event.removeprefix("spark_attempt_receipt "))
         except json.JSONDecodeError:
             continue
-        if isinstance(receipt, Mapping) and receipt.get("event"):
+        if not isinstance(receipt, Mapping):
+            continue
+        if receipt.get("event"):
             receipt_events.add(str(receipt["event"]))
+        if receipt.get("attempt"):
+            receipt_attempts.add(str(receipt["attempt"]))
+        if isinstance(receipt.get("prior_application_active"), bool):
+            prior_application_active.add(bool(receipt["prior_application_active"]))
+        receipts.append(
+            {
+                key: receipt.get(key)
+                for key in ("event", "attempt", "state", "target", "prior_application_active")
+                if key in receipt
+            }
+        )
     return {
         "query": query,
         "streams": len(result),
         "samples": samples,
         "receipt_events": sorted(receipt_events),
+        "receipt_attempts": sorted(receipt_attempts),
+        "prior_application_active": sorted(prior_application_active),
+        "receipts": receipts,
     }
 
 
@@ -793,6 +824,14 @@ def airflow_loki_query(run_id: str) -> str:
 def pod_loki_query(pod_name: str) -> str:
     """Return a query that uses the promoted pod metadata field."""
     return f'{{k8s_namespace_name="lakehouse"}} | k8s_pod_name="{pod_name}"'
+
+
+def attempt_pod_loki_query(attempt_name: str, *, errors_only: bool = False) -> str:
+    """Return a query for all driver and executor pods in one attempt."""
+    selector = '{k8s_namespace_name="lakehouse"'
+    if errors_only:
+        selector += ', severity=~"fatal|error"'
+    return f'{selector}}} | k8s_pod_name=~"{attempt_name}.*"'
 
 
 def _resource_pod_names(resource: Mapping[str, Any] | None, pods: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -827,7 +866,7 @@ def _retained_evidence(ledger_path: Path | None, run_id: str) -> dict[str, Any] 
         raise OperationError(f"retained ledger does not contain {run_id}")
     evidence = selected.get("evidence")
     if not isinstance(evidence, Mapping):
-        return {"run": selected, "artifacts": {}}
+        return {"candidate": ledger.get("candidate"), "run": selected, "artifacts": {}}
     artifacts: dict[str, Any] = {}
     for name, relative in evidence.items():
         if not isinstance(relative, str):
@@ -837,7 +876,7 @@ def _retained_evidence(ledger_path: Path | None, run_id: str) -> dict[str, Any] 
             artifacts[str(name)] = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             artifacts[str(name)] = {"error": "artifact cannot be read", "path": relative}
-    return {"run": selected, "artifacts": artifacts}
+    return {"candidate": ledger.get("candidate"), "run": selected, "artifacts": artifacts}
 
 
 def _retained_artifact_passed(retained: Mapping[str, Any] | None, name: str) -> bool:
@@ -846,6 +885,183 @@ def _retained_artifact_passed(retained: Mapping[str, Any] | None, name: str) -> 
     artifacts = retained.get("artifacts")
     artifact = artifacts.get(name) if isinstance(artifacts, Mapping) else None
     return isinstance(artifact, Mapping) and artifact.get("passed") is True
+
+
+def _retained_runtime_artifact_passed(
+    retained: Mapping[str, Any] | None,
+    *,
+    name: str,
+    run_id: str,
+    attempt_name: str,
+) -> bool:
+    if not isinstance(retained, Mapping):
+        return False
+    artifacts = retained.get("artifacts")
+    artifact = artifacts.get(name) if isinstance(artifacts, Mapping) else None
+    details = artifact.get("details") if isinstance(artifact, Mapping) else None
+    if (
+        not isinstance(artifact, Mapping)
+        or artifact.get("passed") is not True
+        or artifact.get("run_id") != run_id
+        or not isinstance(details, Mapping)
+    ):
+        return False
+    if name == "loki":
+        markers = details.get("unique_markers")
+        return (
+            isinstance(markers, list)
+            and run_id in markers
+            and attempt_name in markers
+            and details.get("containers_exited") is True
+            and details.get("error_sample_count") == 0
+        )
+    if name == "history_server":
+        application_id = str(details.get("application_id", ""))
+        return details.get("completed") is True and (
+            application_id == attempt_name or application_id.startswith(f"{attempt_name}-")
+        )
+    return False
+
+
+def _retained_attempt_passed(
+    retained: Mapping[str, Any] | None,
+    *,
+    run_id: str,
+    target: str,
+    attempt_name: str,
+) -> bool:
+    if not isinstance(retained, Mapping):
+        return False
+    run = retained.get("run")
+    artifacts = retained.get("artifacts")
+    trino = artifacts.get("trino") if isinstance(artifacts, Mapping) else None
+    spark = run.get("spark") if isinstance(run, Mapping) else None
+    base_passed = (
+        isinstance(run, Mapping)
+        and run.get("run_id") == run_id
+        and run.get("status") == "passed"
+        and run.get("target") == target
+        and isinstance(spark, Mapping)
+        and spark.get("attempt_name") == attempt_name
+        and isinstance(trino, Mapping)
+        and trino.get("artifact") == "trino"
+        and trino.get("run_id") == run_id
+        and trino.get("passed") is True
+    )
+    if not base_passed:
+        return False
+    if target == "shadow":
+        return True
+    details = trino.get("details")
+    snapshots_before = details.get("snapshots_before") if isinstance(details, Mapping) else None
+    snapshots_after = details.get("snapshots_after") if isinstance(details, Mapping) else None
+    snapshots_changed = (
+        isinstance(snapshots_before, Mapping)
+        and isinstance(snapshots_after, Mapping)
+        and all(
+            snapshots_before.get(table)
+            and snapshots_after.get(table)
+            and snapshots_before.get(table) != snapshots_after.get(table)
+            for table in ("normalized", "hourly")
+        )
+    )
+    return (
+        isinstance(details, Mapping)
+        and details.get("normalized_count") == 5
+        and details.get("hourly_count") == 5
+        and details.get("hourly_event_count_sum") == 5
+        and all(details.get(check) is True for check in ("schema", "partitions", "snapshots", "locations"))
+        and snapshots_changed
+    )
+
+
+def _retained_workflow_passed(
+    retained: Mapping[str, Any] | None,
+    *,
+    run_id: str,
+    task_id: str,
+    try_number: int,
+    attempt_name: str,
+) -> bool:
+    if not isinstance(retained, Mapping):
+        return False
+    run = retained.get("run")
+    artifacts = retained.get("artifacts")
+    artifact = artifacts.get("workflow_run") if isinstance(artifacts, Mapping) else None
+    details = artifact.get("details") if isinstance(artifact, Mapping) else None
+    candidate = retained.get("candidate")
+    spark = run.get("spark") if isinstance(run, Mapping) else None
+    airflow_digest = details.get("airflow_image_digest") if isinstance(details, Mapping) else None
+    spark_digest = details.get("spark_image_digest") if isinstance(details, Mapping) else None
+    deadline_passed = False
+    if isinstance(details, Mapping):
+        try:
+            expected_start = parse_utc(str(details.get("expected_start")), "expected start")
+            end_date = parse_utc(str(details.get("end_date")), "Workflow Run end date")
+            deadline_passed = expected_start <= end_date <= expected_start + timedelta(minutes=20)
+        except OperationError:
+            deadline_passed = False
+    return (
+        isinstance(artifact, Mapping)
+        and artifact.get("artifact") == "workflow_run"
+        and artifact.get("run_id") == run_id
+        and artifact.get("passed") is True
+        and isinstance(details, Mapping)
+        and details.get("dag_id") == DAG_ID
+        and details.get("run_id") == run_id
+        and details.get("task_id") == task_id
+        and details.get("try_number") == try_number
+        and details.get("attempt_name") == attempt_name
+        and details.get("run_type") == "scheduled"
+        and details.get("status") == "success"
+        and details.get("task_status") == "success"
+        and details.get("schedule_enabled") is True
+        and isinstance(details.get("schedule"), str)
+        and deadline_passed
+        and isinstance(details.get("dag_digest"), str)
+        and isinstance(airflow_digest, str)
+        and IMAGE_DIGEST_PATTERN.fullmatch(airflow_digest) is not None
+        and isinstance(spark_digest, str)
+        and IMAGE_DIGEST_PATTERN.fullmatch(spark_digest) is not None
+        and isinstance(candidate, Mapping)
+        and candidate.get("airflow_image_digest") == airflow_digest
+        and candidate.get("spark_image_digest") == spark_digest
+        and candidate.get("dag_digest") == details.get("dag_digest")
+        and isinstance(spark, Mapping)
+        and spark.get("image_digest") == spark_digest
+    )
+
+
+def _retained_resources_passed(
+    retained: Mapping[str, Any] | None,
+    *,
+    run_id: str,
+    attempt_name: str,
+) -> bool:
+    if not isinstance(retained, Mapping):
+        return False
+    artifacts = retained.get("artifacts")
+    artifact = artifacts.get("resources") if isinstance(artifacts, Mapping) else None
+    details = artifact.get("details") if isinstance(artifact, Mapping) else None
+    measurements = details.get("measurements") if isinstance(details, Mapping) else None
+    peak_memory = measurements.get("peak_memory_bytes") if isinstance(measurements, Mapping) else None
+    memory_ceiling = measurements.get("memory_ceiling_bytes") if isinstance(measurements, Mapping) else None
+    return (
+        isinstance(artifact, Mapping)
+        and artifact.get("artifact") == "resources"
+        and artifact.get("run_id") == run_id
+        and artifact.get("attempt_name") == attempt_name
+        and artifact.get("passed") is True
+        and isinstance(details, Mapping)
+        and details.get("within_learning_ceilings") is True
+        and isinstance(measurements, Mapping)
+        and isinstance(peak_memory, int)
+        and not isinstance(peak_memory, bool)
+        and peak_memory > 0
+        and isinstance(memory_ceiling, int)
+        and not isinstance(memory_ceiling, bool)
+        and peak_memory <= memory_ceiling
+    )
 
 
 def _resource_summary(resource: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -899,13 +1115,17 @@ def collect_attempt_evidence(
     *,
     run_id: str,
     try_number: int = 1,
+    target: str = "shadow",
     ledger_path: Path | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Collect bounded live and retained evidence for one exact attempt."""
     validate_evidence_run_id(run_id)
+    if target not in EVIDENCE_TARGETS:
+        raise OperationError(f"unsupported evidence target: {target}")
+    task_id, lease_name = EVIDENCE_TARGETS[target]
     observed_at = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    name = attempt_name(run_id=run_id, try_number=try_number)
+    name = attempt_name(run_id=run_id, try_number=try_number, task_id=task_id)
     resource = kubectl.spark_application(name)
     pods = kubectl.attempt_pods(name)
     retained = _retained_evidence(ledger_path, run_id)
@@ -927,6 +1147,27 @@ def collect_attempt_evidence(
         )
         for pod_name in pod_names
     ]
+    pod_error_loki = [
+        _loki_summary(
+            kubectl,
+            f'{pod_loki_query(pod_name)} |~ "(?i)(error|exception|traceback)"',
+            start,
+            observed_at + timedelta(minutes=1),
+        )
+        for pod_name in pod_names
+    ]
+    attempt_loki = _loki_summary(
+        kubectl,
+        attempt_pod_loki_query(name),
+        start,
+        observed_at + timedelta(minutes=1),
+    )
+    attempt_error_loki = _loki_summary(
+        kubectl,
+        attempt_pod_loki_query(name, errors_only=True),
+        start,
+        observed_at + timedelta(minutes=1),
+    )
     history_path = (
         f"/api/v1/namespaces/{LAKEHOUSE_NAMESPACE}/services/http:spark-history-server:18080"
         "/proxy/api/v1/applications?limit=1000"
@@ -940,6 +1181,12 @@ def collect_attempt_evidence(
             "id": item.get("id"),
             "name": item.get("name"),
             "attempts": len(item.get("attempts", [])) if isinstance(item.get("attempts"), list) else None,
+            "completed": any(
+                isinstance(attempt, Mapping) and attempt.get("completed") is True
+                for attempt in item.get("attempts", [])
+            )
+            if isinstance(item.get("attempts"), list)
+            else False,
         }
         for item in history_items
         if isinstance(item, Mapping)
@@ -949,20 +1196,85 @@ def collect_attempt_evidence(
             or str(item.get("id", "")).startswith(f"{name}-")
         )
     ]
-    lease = kubectl.lease()
+    lease = kubectl.lease(lease_name)
+    spark_outcome = application_outcome(resource)
+    lease_holder = ((lease or {}).get("spec") or {}).get("holderIdentity")
     missing: list[str] = []
     if resource is None:
         missing.append("spark_application")
     if airflow_loki["samples"] == 0:
         missing.append("airflow_loki")
-    if not any(item["samples"] > 0 for item in pod_loki) and not _retained_artifact_passed(retained, "loki"):
+    receipts = airflow_loki["receipts"]
+    selected_receipts = [item for item in receipts if item.get("attempt") == name]
+    selected_events = {str(item.get("event")) for item in selected_receipts}
+    required_receipts = {"lease_acquired", "task_completion", "terminal_state"}
+    if not required_receipts.issubset(selected_events):
+        missing.append("airflow_receipts")
+    if not selected_receipts:
+        missing.append("airflow_attempt_identity")
+    lease_receipts = [item for item in selected_receipts if item.get("event") == "lease_acquired"]
+    if not lease_receipts or not all(
+        item.get("attempt") == name
+        and item.get("target") == target
+        and item.get("prior_application_active") is False
+        for item in lease_receipts
+    ):
+        missing.append("lease_acquisition")
+    for event in ("terminal_state", "task_completion"):
+        states = {
+            str(item.get("state", "")).lower()
+            for item in selected_receipts
+            if item.get("event") == event
+        }
+        if states != {"succeeded"}:
+            missing.append(f"{event}_succeeded")
+    if lease_holder not in (None, name):
+        missing.append("conflicting_lease_holder")
+    if spark_outcome != "succeeded":
+        missing.append("spark_succeeded")
+    if target == "authoritative" and not run_id.startswith("scheduled__"):
+        missing.append("scheduled_run_identity")
+    if not any(item["samples"] > 0 for item in pod_loki) and attempt_loki["samples"] == 0 and not _retained_runtime_artifact_passed(
+        retained,
+        name="loki",
+        run_id=run_id,
+        attempt_name=name,
+    ):
         missing.append("pod_loki")
-    if not history_matches and not _retained_artifact_passed(retained, "history_server"):
+    if any(item["samples"] > 0 for item in pod_error_loki) or attempt_error_loki["samples"] > 0:
+        missing.append("pod_loki_errors")
+    if not any(item["completed"] for item in history_matches) and not _retained_runtime_artifact_passed(
+        retained,
+        name="history_server",
+        run_id=run_id,
+        attempt_name=name,
+    ):
         missing.append("history_server")
     if retained is None:
         missing.append("retained_gate_evidence")
-    elif "trino" not in retained.get("artifacts", {}):
-        missing.append("trino")
+    else:
+        if not _retained_attempt_passed(
+            retained,
+            run_id=run_id,
+            target=target,
+            attempt_name=name,
+        ):
+            missing.append("trino")
+        if target == "authoritative":
+            if not _retained_workflow_passed(
+                retained,
+                run_id=run_id,
+                task_id=task_id,
+                try_number=try_number,
+                attempt_name=name,
+            ):
+                missing.append("workflow_run")
+            if not _retained_resources_passed(
+                retained,
+                run_id=run_id,
+                attempt_name=name,
+            ):
+                missing.append("resources")
     return {
         "schema_version": 1,
         "status": "complete" if not missing else "incomplete",
@@ -970,18 +1282,22 @@ def collect_attempt_evidence(
         "identity": {
             "dag_id": DAG_ID,
             "run_id": run_id,
-            "task_id": TASK_ID,
+            "task_id": task_id,
             "try_number": try_number,
             "attempt_name": name,
-            "target": "shadow",
+            "target": target,
+            "run_type": "scheduled" if run_id.startswith("scheduled__") else "manual_or_other",
         },
         "live": {
             "spark_application": _resource_summary(resource),
-            "spark_outcome": application_outcome(resource),
+            "spark_outcome": spark_outcome,
             "pods": [_pod_summary(pod) for pod in pods],
-            "lease_holder": ((lease or {}).get("spec") or {}).get("holderIdentity"),
+            "lease_holder": lease_holder,
             "airflow_loki": airflow_loki,
             "pod_loki": pod_loki,
+            "pod_error_loki": pod_error_loki,
+            "attempt_loki": attempt_loki,
+            "attempt_error_loki": attempt_error_loki,
             "history_server": history_matches,
         },
         "retained": retained,

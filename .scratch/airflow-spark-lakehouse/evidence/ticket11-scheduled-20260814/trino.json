@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "artifact": "trino",
+  "run_id": "scheduled__2026-08-14T13:23:00+00:00",
+  "passed": true,
+  "observed_at": "2026-08-14T14:08:37Z",
+  "source": {
+    "authority": "maintained read-only Trino coordinator checks",
+    "commands": [
+      "mise exec -- task airflow:trino-summary",
+      "mise exec -- task airflow:trino-contract",
+      "mise exec -- task airflow:trino-snapshots"
+    ]
+  },
+  "details": {
+    "normalized_count": 5,
+    "hourly_count": 5,
+    "hourly_event_count_sum": 5,
+    "schema": true,
+    "partitions": true,
+    "snapshots": true,
+    "locations": true,
+    "normalized_location": "s3://iceberg-warehouse/logs/normalized",
+    "hourly_location": "s3://iceberg-warehouse/logs/hourly",
+    "normalized_partition": "event_date",
+    "hourly_partition": "day(hour)",
+    "snapshots_before": {
+      "normalized": "7397500021112707950",
+      "hourly": "481507979060579303"
+    },
+    "snapshots_after": {
+      "normalized": "3979722244599909510",
+      "hourly": "166613521594063760"
+    },
+    "normalized_commit_time": "2026-08-14T13:23:43.368Z",
+    "hourly_commit_time": "2026-08-14T13:23:45.036Z"
+  }
+}

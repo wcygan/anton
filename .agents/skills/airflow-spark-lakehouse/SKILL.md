@@ -57,7 +57,7 @@ Use `query-kubernetes-logs` for detailed Loki queries.
 
 ```sh
 mise exec -- kubectl config current-context
-mise exec -- flux get ks -A | rg 'airflow|spark-operator|shadow-fixture|spark-history|trino'
+mise exec -- flux get ks -A | rg 'airflow|spark-operator|spark-history|trino'
 mise exec -- flux get hr -A | rg 'airflow|spark-operator|trino'
 mise exec -- kubectl -n airflow get pods
 mise exec -- kubectl -n lakehouse get sparkapplications,pods,leases
@@ -66,10 +66,11 @@ mise exec -- kubectl -n lakehouse get sparkapplications,pods,leases
 Expected state depends on the active rollout phase. Compare it with Plan 0023
 and the current ticket before interpreting a missing resource.
 
-Use the structured preflight before a manual run or recovery test:
+Use the exact-attempt collector for retained and live evidence:
 
 ```sh
-mise exec -- task airflow:gate-preflight
+mise exec -- task airflow:attempt-evidence \
+  RUN_ID=<exact-run-id> TARGET=authoritative
 ```
 
 ## Diagnose one workflow

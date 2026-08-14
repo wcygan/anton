@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "kubernetes/apps/lakehouse/spark-history-server/app"
 ROOT_KUSTOMIZATION = ROOT / "kubernetes/apps/lakehouse/kustomization.yaml"
 POD_GC = ROOT / "kubernetes/apps/kube-system/pod-gc/app/cronjob.yaml"
-FIXTURE = ROOT / "kubernetes/apps/lakehouse/shadow-fixture/app/sparkapplication.yaml"
+AIRFLOW_LAKEHOUSE = ROOT / "images/airflow-runtime/src/anton_airflow/lakehouse.py"
 
 
 def main() -> int:
@@ -42,13 +42,15 @@ def main() -> int:
     if text.count("automountServiceAccountToken: false") < 2:
         failures.append("History Server must disable token mounting on its ServiceAccount and pod")
 
-    fixture = FIXTURE.read_text(encoding="utf-8")
+    lakehouse = AIRFLOW_LAKEHOUSE.read_text(encoding="utf-8")
     fixture_image = re.search(
-        r"(?m)^    spark\.kubernetes\.container\.image: (.+@sha256:[0-9a-f]{64})$", fixture
+        r'"(192\.168\.1\.106/library/spark-runtime@)"\s*\n\s*"(sha256:[0-9a-f]{64})"',
+        lakehouse,
     )
     history_image = re.search(r"(?m)^          image: (.+@sha256:[0-9a-f]{64})$", text)
-    if fixture_image is None or history_image is None or fixture_image.group(1) != history_image.group(1):
-        failures.append("History Server must use the exact fixture Spark image digest")
+    airflow_image = "" if fixture_image is None else "".join(fixture_image.groups())
+    if history_image is None or airflow_image != history_image.group(1):
+        failures.append("History Server must use the exact Airflow Spark image digest")
 
     if "- --selector=anton.io/retain-failed-pod!=true" not in POD_GC.read_text(encoding="utf-8"):
         failures.append("global failed-pod collection must exclude retained Spark pods")
