@@ -36,6 +36,8 @@ Keep the catalog and S3 endpoint private. Keep one catalog service.
    current architectural contract.
 3. Read `context/plans/0023-roll-out-airflow-spark-lakehouse.md` for current
    writer ownership.
+   After schedule enablement, read
+   `.agents/skills/airflow-spark-lakehouse/references/scheduled-observation.md`.
 4. Read ADR 0031 and Plan 0020 for the underlying table history.
 5. Read `docs/docs/notes/seaweedfs-iceberg-log-lakehouse.md` for the table
    layout and known limitations.
@@ -151,6 +153,21 @@ mise exec -- trino --server http://127.0.0.1:18082 --user validation
 
 The Trino server retains its ESO-backed catalog credentials; the local CLI
 does not need the secret values.
+
+### Maintained read-only checks
+
+Use the repository command for the standard counts, table definitions, and
+snapshot checks. It verifies the Anton target before one fixed `SELECT` or
+`SHOW` query. It accepts no arbitrary SQL.
+
+```sh
+mise exec -- task airflow:trino-summary
+mise exec -- task airflow:trino-contract
+mise exec -- task airflow:trino-snapshots
+```
+
+Obtain approval before this coordinator `exec`. Keep its JSON output with the
+related Workflow Run or Spark Attempt evidence.
 
 ### Schema and location checks
 

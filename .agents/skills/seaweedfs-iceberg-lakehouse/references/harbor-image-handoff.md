@@ -47,6 +47,21 @@ client network namespace. Stop when either address resolves elsewhere.
 Use the host-native `crane` path for a localhost-only tunnel on macOS. The
 Docker engine path requires separate proof that its loopback reaches the host.
 
+## Verified local Harbor route
+
+Use `svc/harbor-core 18083:80` for a local tunnel. Use
+`harbor.localtest.me:18083` in curl and Crane commands. Resolve that alias to
+`127.0.0.1` for curl. Set `NO_PROXY` and `no_proxy` to the alias and loopback
+addresses for Crane.
+
+This preserves the Harbor token realm. A `127.0.0.1` image reference can
+receive a token realm that the client cannot use through the local tunnel.
+
+Use one pre-provisioned, scoped robot account for normal pushes. If an
+approved automation run creates a temporary robot, use a unique timestamped
+name, limit it to `library` repository push and pull, set a short expiry, and
+delete its exact Harbor robot ID during cleanup. Do not retain the token.
+
 ## Archive and platform gate
 
 Build for `linux/amd64`. Before transfer, record the archive byte count and

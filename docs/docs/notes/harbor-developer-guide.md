@@ -8,7 +8,7 @@ registry. Keep credentials outside command arguments, logs, and retained output.
 | Use | Endpoint | Client location | Transport |
 |---|---|---|---|
 | LAN push or pull | `192.168.1.106` | Laptop or cluster node | HTTP |
-| Local tunnel push | `127.0.0.1:18081` | Host-native client | HTTP |
+| Local tunnel push | `harbor.localtest.me:18083` | Host-native client | HTTP |
 | Cluster image pull | `192.168.1.106/library/<image>` | Kubernetes node | HTTP |
 | Web UI | `https://registry.<tailnet-name>.ts.net` | Browser | HTTPS |
 
@@ -79,18 +79,20 @@ the port-forward.
 Start the tunnel in a dedicated terminal. Keep it in the foreground:
 
 ```sh
-mise exec -- kubectl -n registries port-forward svc/harbor 18081:80
+mise exec -- kubectl -n registries port-forward svc/harbor-core 18083:80
 ```
 
 From another terminal, inspect the unauthenticated challenge:
 
 ```sh
-mise exec -- curl -sS -D - -o /dev/null http://127.0.0.1:18081/v2/ \
+mise exec -- curl --resolve harbor.localtest.me:18083:127.0.0.1 \
+  -sS -D - -o /dev/null http://harbor.localtest.me:18083/v2/ \
   | rg -i '^www-authenticate:'
 ```
 
 The upload endpoint and token realm must be reachable from the same client
-network namespace. Stop when the challenge points to an unreachable address.
+network namespace. The expected realm uses `harbor.localtest.me:18083`.
+Stop when the challenge points to another host or port.
 
 ### Build and verify the archive
 
@@ -124,8 +126,10 @@ Pass the robot token from the approved secret manager through standard input:
 
 ```sh
 mise exec -- op read 'op://anton/<harbor-robot-item>/<token-field>' \
-  | DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane auth login \
-      --insecure 127.0.0.1:18081 \
+  | NO_PROXY=harbor.localtest.me,localhost,127.0.0.1,::1 \
+    no_proxy=harbor.localtest.me,localhost,127.0.0.1,::1 \
+    DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane auth login \
+      --insecure harbor.localtest.me:18083 \
       --username <robot-account> \
       --password-stdin
 ```
@@ -133,10 +137,12 @@ mise exec -- op read 'op://anton/<harbor-robot-item>/<token-field>' \
 Push one archive to one repository tag:
 
 ```sh
+NO_PROXY=harbor.localtest.me,localhost,127.0.0.1,::1 \
+no_proxy=harbor.localtest.me,localhost,127.0.0.1,::1 \
 DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane push \
   --insecure \
   /tmp/myapp-v1-linux-amd64.tar \
-  127.0.0.1:18081/library/myapp:v1
+  harbor.localtest.me:18083/library/myapp:v1
 ```
 
 Do not substitute `docker push localhost:18081` on macOS without proving the
@@ -145,10 +151,14 @@ Docker engine shares the host loopback path.
 ### Verify the remote image
 
 ```sh
+NO_PROXY=harbor.localtest.me,localhost,127.0.0.1,::1 \
+no_proxy=harbor.localtest.me,localhost,127.0.0.1,::1 \
 DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane digest \
-  --insecure 127.0.0.1:18081/library/myapp:v1
+  --insecure harbor.localtest.me:18083/library/myapp:v1
+NO_PROXY=harbor.localtest.me,localhost,127.0.0.1,::1 \
+no_proxy=harbor.localtest.me,localhost,127.0.0.1,::1 \
 DOCKER_CONFIG="$harbor_auth_dir" mise exec -- crane config \
-  --insecure 127.0.0.1:18081/library/myapp:v1 \
+  --insecure harbor.localtest.me:18083/library/myapp:v1 \
   | mise exec -- jq -r '"\(.os)/\(.architecture)"'
 ```
 
@@ -212,6 +222,12 @@ virtual-machine engine can reach host loopback.
 
 Check the registry scheme, token realm, client namespace, and repository path.
 An HTTP tunnel must use an insecure-capable client.
+
+### Crane cannot authenticate through the local tunnel
+
+Use `svc/harbor-core`, not the aggregate Harbor service. Use the
+`harbor.localtest.me:18083` alias so the registry and token realm match. Set
+both `NO_PROXY` and `no_proxy` for that alias before each Crane command.
 
 ### Push stops during a large layer
 
