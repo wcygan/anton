@@ -1,30 +1,6 @@
 version: '3'
 
 tasks:
-  trino-summary:
-    desc: Collect read-only Iceberg row and event counts through Trino
-    silent: true
-    cmd: mise exec -- python3 scripts/lakehouse-trino.py summary
-    preconditions:
-      - test -f kubeconfig
-      - which mise python3
-
-  trino-contract:
-    desc: Collect read-only Iceberg table definitions through Trino
-    silent: true
-    cmd: mise exec -- python3 scripts/lakehouse-trino.py contract
-    preconditions:
-      - test -f kubeconfig
-      - which mise python3
-
-  trino-snapshots:
-    desc: Collect read-only Iceberg snapshot metadata through Trino
-    silent: true
-    cmd: mise exec -- python3 scripts/lakehouse-trino.py snapshots
-    preconditions:
-      - test -f kubeconfig
-      - which mise python3
-
   attempt-evidence:
     desc: Collect read-only evidence for one exact Spark Attempt
     silent: true

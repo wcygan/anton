@@ -13,8 +13,7 @@ REPO = Path(__file__).resolve().parents[2]
 LIB = REPO / "scripts" / "lib"
 sys.path.insert(0, str(LIB))
 
-from airflow_lakehouse_operations import OperationError  # noqa: E402
-from lakehouse_trino import QUERIES, commands_for, run_check  # noqa: E402
+from lakehouse_trino import QUERIES, TrinoReadError, commands_for, run_check  # noqa: E402
 
 
 class LakehouseTrinoTests(unittest.TestCase):
@@ -29,8 +28,22 @@ class LakehouseTrinoTests(unittest.TestCase):
                     self.assertNotRegex(query.upper(), r"\b(DELETE|DROP|INSERT|MERGE|ALTER)\b")
 
     def test_unknown_check_fails_closed(self) -> None:
-        with self.assertRaisesRegex(OperationError, "unsupported Trino check"):
+        with self.assertRaisesRegex(TrinoReadError, "unsupported Trino check"):
             commands_for(REPO, "arbitrary-sql")
+
+    def test_task_surface_owns_trino_checks(self) -> None:
+        result = subprocess.run(
+            ["mise", "exec", "--", "task", "--list"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("trino:summary:", result.stdout)
+        self.assertIn("trino:contract:", result.stdout)
+        self.assertIn("trino:snapshots:", result.stdout)
+        self.assertNotIn("airflow:trino-summary:", result.stdout)
 
     def test_single_row_object_normalizes_to_a_json_list(self) -> None:
         prefix = ("kubectl",)
@@ -43,7 +56,7 @@ class LakehouseTrinoTests(unittest.TestCase):
         prefix = ("kubectl",)
         completed = subprocess.CompletedProcess([], 0, '"not a result"', "")
         with patch("lakehouse_trino.anton_kubectl_prefix", return_value=prefix):
-            with self.assertRaisesRegex(OperationError, "non-tabular JSON"):
+            with self.assertRaisesRegex(TrinoReadError, "non-tabular JSON"):
                 run_check(REPO, "summary", runner=lambda _argv, _timeout: completed)
 
     def test_json_lines_normalize_to_rows(self) -> None:

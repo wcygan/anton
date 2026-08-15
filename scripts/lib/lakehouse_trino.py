@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+from typing import Protocol, Sequence
 
-from airflow_lakehouse_operations import OperationError, Runner, _run, subprocess_runner
 from cluster_target_contract import anton_kubectl_prefix
 
 
@@ -32,12 +33,56 @@ LIMIT 20""",
 }
 
 
+class TrinoReadError(RuntimeError):
+    """A fixed Trino read check failed."""
+
+
+class Runner(Protocol):
+    """Run one command and return its captured result."""
+
+    def __call__(
+        self,
+        argv: Sequence[str],
+        timeout_seconds: float,
+    ) -> subprocess.CompletedProcess[str]: ...
+
+
+def subprocess_runner(
+    argv: Sequence[str],
+    timeout_seconds: float,
+) -> subprocess.CompletedProcess[str]:
+    """Run one command without a shell."""
+    return subprocess.run(
+        tuple(argv),
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        check=False,
+    )
+
+
+def _run(
+    runner: Runner,
+    argv: Sequence[str],
+    *,
+    timeout_seconds: float,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        result = runner(tuple(argv), timeout_seconds)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise TrinoReadError(f"command failed to run: {argv[0]}") from error
+    if result.returncode != 0:
+        message = result.stderr.strip() or result.stdout.strip() or "command failed"
+        raise TrinoReadError(message[-1000:])
+    return result
+
+
 def commands_for(root: Path, check: str) -> tuple[tuple[str, ...], ...]:
     """Build one exact read-only Trino command for an approved coordinator exec."""
     try:
         queries = QUERIES[check]
     except KeyError as error:
-        raise OperationError(f"unsupported Trino check: {check}") from error
+        raise TrinoReadError(f"unsupported Trino check: {check}") from error
     prefix = anton_kubectl_prefix(root)
     return tuple(
         (*prefix, "-n", "iceberg-demo", "exec", "deploy/trino-coordinator", "--", "/usr/bin/trino", "--server", "http://localhost:8080", "--user", "validation", "--output-format", "JSON", "--execute", query)
@@ -63,10 +108,10 @@ def run_check(
                 rows = [json.loads(line) for line in lines]
             except json.JSONDecodeError as line_error:
                 detail = completed.stdout.strip()[-500:] or "no output"
-                raise OperationError(f"Trino returned invalid JSON: {detail}") from line_error
+                raise TrinoReadError(f"Trino returned invalid JSON: {detail}") from line_error
         if isinstance(rows, dict):
             rows = [rows]
         if not isinstance(rows, list):
-            raise OperationError("Trino returned a non-tabular JSON result")
+            raise TrinoReadError("Trino returned a non-tabular JSON result")
         results.append(rows)
     return {"check": check, "results": results}
