@@ -6,7 +6,7 @@
   <artifactId>spark-runtime-dependencies</artifactId>
   <version>1.0.0</version>
   <properties>
-    <hadoop.version>3.4.2</hadoop.version>
+    <hadoop.version>3.5.0</hadoop.version>
     <iceberg.version>1.11.0</iceberg.version>
   </properties>
   <dependencies>
