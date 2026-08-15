@@ -161,9 +161,9 @@ snapshot checks. It verifies the Anton target before one fixed `SELECT` or
 `SHOW` query. It accepts no arbitrary SQL.
 
 ```sh
-mise exec -- task airflow:trino-summary
-mise exec -- task airflow:trino-contract
-mise exec -- task airflow:trino-snapshots
+mise exec -- task trino:summary
+mise exec -- task trino:contract
+mise exec -- task trino:snapshots
 ```
 
 Obtain approval before this coordinator `exec`. Keep its JSON output with the

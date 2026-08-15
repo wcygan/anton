@@ -8,13 +8,12 @@
 
 - [x] The review occurs by 2026-09-10 or records an explicit revised date.
 - [x] The review summarizes compatibility, reliability, observability, resource use, maintenance cost, and learning outcomes.
-- [x] Permanent retention requires a new concrete-need intake decision.
-- [x] Additional learning receives at most one explicit time-box extension.
-- [ ] A keep decision records ongoing owners, upgrade duties, accepted metadata risk, and resource expectations.
-- [ ] A removal decision preserves the authoritative warehouse and required evidence.
-- [ ] Airflow, Spark Operator, History Server, metadata state, and new namespaces have explicit removal ownership.
-- [ ] Bucket deletion remains a separate storage authority boundary.
-- [ ] ADR and plan status reflect the final learning decision.
+- [x] The operator explicitly overrides the concrete-need intake and timebox requirements.
+- [x] The keep decision records ownership, upgrade duties, accepted metadata risk, and resource expectations.
+- [x] A future removal decision must preserve the authoritative warehouse and required evidence.
+- [x] A future removal decision must define explicit resource ownership.
+- [x] Bucket deletion remains a separate storage authority boundary.
+- [x] ADR and plan status reflect the final learning decision.
 
 ## Comments
 
@@ -24,3 +23,6 @@
 - Current Trino checks returned `5 / 5 / 5`, the expected table contract, and hourly snapshots through 16:23 UTC.
 - ADR 0038 requires one read-only Spark compatibility check and 30-day event-log expiry evidence.
 - The platform must be removed after 2026-09-15 unless a concrete need passes intake.
+- 2026-08-14: Spark 4.1.3 passed a read-only authoritative check with unchanged snapshots.
+- 2026-08-14: The operator selected open-ended learning retention without a production need or review date.
+- 2026-08-14: ADR 0039 supersedes ADR 0038. Plan 0023 is Done, with no new review or removal tickets.

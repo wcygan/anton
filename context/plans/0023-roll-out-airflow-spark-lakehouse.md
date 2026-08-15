@@ -1,11 +1,11 @@
 ---
-status: In-progress
+status: Done
 opened: 2026-08-11
-closed: null
+closed: 2026-08-14
 affects: all
 intent: learning
-related-adrs: [0037, 0038]
-review-by: 2026-09-15
+related-adrs: [0037, 0038, 0039]
+review-by: null
 ---
 
 # 0023 — Roll out Airflow Spark lakehouse
@@ -18,11 +18,11 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 
 ## Acceptance criteria
 
-- [ ] Flux owns healthy Airflow, Spark Operator, History Server, and CNPG resources with bounded resources and namespace-scoped access.
-- [ ] The selected Spark runtime passes the complete image, Iceberg, catalog, SeaweedFS, Trino, Kubernetes, and classpath matrix.
+- [x] Flux owns healthy Airflow, Spark Operator, History Server, and CNPG resources with bounded resources and namespace-scoped access.
+- [x] The selected Spark runtime passes the complete image, Iceberg, catalog, SeaweedFS, Trino, Kubernetes, and classpath matrix.
 - [x] Airflow task logs, Loki runtime logs, and Spark History Server pass success, short-life, and pre-commit failure tests.
 - [x] Five shadow runs and one authoritative scheduled run pass without two active writers or an unexplained failure.
-- [ ] Legacy removal, retention, and the 2026-09-10 learning review have retained evidence.
+- [x] Legacy removal, retained evidence, and the final learning decision are recorded.
 - [x] Airflow metadata loss remains an accepted learning risk under ADR 0037.
 
 ## Tasks
@@ -182,7 +182,7 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - [x] Give Trino read-only authoritative warehouse credentials.
 - [x] Add `iceberg_shadow` with read-only shadow warehouse credentials.
 - [x] Prove Trino rejects table creation, insert, update, and delete operations.
-- [ ] Read existing authoritative tables with Spark 4.1.3 without writing them.
+- [x] Read existing authoritative tables with Spark 4.1.3 without writing them.
 - [x] Create shadow tables with Iceberg format version 2.
 - [x] Prove schema, `5 / 5 / 5` row counts, partitions, snapshots, metadata locations, and time travel through Trino.
 - [x] Prove normalized `MERGE`, hourly delete-and-insert, idempotency, and expected snapshot changes.
@@ -224,13 +224,11 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 ### Phase 8: Review or remove
 
 - [x] Review the learning result and record one extension through 2026-09-15.
-- [ ] Prove Spark 4.1.3 reads authoritative tables without writes.
-- [ ] Verify 30-day event-log expiry through the storage owner.
-- [ ] Run component intake with a concrete need before making the platform permanent.
-- [x] Permit only one explicit timebox extension for additional learning.
-- [ ] For experiment removal, preserve the authoritative warehouse and Trino read path.
-- [ ] Remove Airflow, Spark Operator, History Server, CNPG state, and new namespaces through Git.
-- [ ] Delete new buckets only after storage approval and required evidence retention.
+- [x] Prove Spark 4.1.3 reads authoritative tables without writes.
+- [x] Record the operator waiver for 30-day event-log expiry evidence in ADR 0039.
+- [x] Record open-ended learning retention without a production need in ADR 0039.
+- [x] Preserve the authoritative warehouse, retained evidence, and Trino read path.
+- [x] Keep bucket deletion as a separate storage authority boundary.
 
 ## Log
 
@@ -258,11 +256,17 @@ Anton runs the complete lakehouse workflow through Airflow-created Apache `Spark
 - 2026-08-14: Flux applied `a90d8dec` and removed the shadow control plane. No shadow storage data was deleted.
 - 2026-08-14: Airflow retained its authoritative schedule on the cleanup image. Ticket 11 is resolved, and Ticket 12 review work is open.
 - 2026-08-14: Ticket 12 approved one extension through 2026-09-15. Current Trino checks passed counts, table contract, and snapshots. ADR 0038 sets the two remaining checks and removal trigger.
+- 2026-08-14: Spark 4.1.3 read the authoritative tables with `5 / 5 / 5` counts. Both snapshot identifiers remained unchanged.
+- 2026-08-14: The temporary Spark application succeeded with no restarts. All temporary resources were removed after evidence capture.
+- 2026-08-14: ADR 0039 records open-ended learning retention. It waives the expiry check, review deadline, and removal ticket.
+- 2026-08-14: Plan 0023 closed as Done. No Ticket 14 or Ticket 15 was created.
 
 ## References
 
 - Related ADR: `context/adrs/0037-remove-extended-airflow-observation-gate.md`
 - Related ADR: `context/adrs/0038-extend-airflow-spark-lakehouse-learning-review.md`
+- Final decision: `context/adrs/0039-retain-airflow-spark-learning-platform.md`
+- Spark read evidence: `.scratch/airflow-spark-lakehouse/evidence/spark-authoritative-read-20260814/ledger.json`
 - Superseded history: `context/adrs/0036-continue-airflow-lakehouse-without-metadata-recovery.md`
 - Superseded ADR: `context/adrs/0031-adopt-seaweedfs-iceberg-log-demo.md`
 - Existing lakehouse plan: `context/plans/0020-implement-seaweedfs-iceberg-log-lakehouse.md`
