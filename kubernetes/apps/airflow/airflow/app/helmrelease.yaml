@@ -179,6 +179,8 @@ spec:
         load_examples: "False"
         dags_are_paused_at_creation: "False"
       kubernetes_executor:
+        worker_container_repository: 192.168.1.106/library/airflow-runtime@sha256
+        worker_container_tag: 4aa99082c96e7ac7684959835ce5f3f34da16041699b6377c1ee74403aeeaf92
         delete_worker_pods: "False"
         delete_worker_pods_on_failure: "False"
 
