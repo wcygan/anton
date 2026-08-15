@@ -11,7 +11,7 @@ from anton_airflow.spark import ApacheSparkApplicationOperator
 
 # The shared specification resolves to this immutable Spark runtime digest.
 # Keep the digest in this DAG so the shadow-gate validator has one source pin.
-# image: 192.168.1.106/library/spark-runtime@sha256:f76b38d07d0c0b1784e962073c918176f116359f7e3c8e82e0e0efbb939563e7
+# image: 192.168.1.106/library/spark-runtime@sha256:ce8f1a178f5adb901d02a01242856dd3908ab00d0fce9ec5ce25ffdb9a188e67
 
 
 @dag(
