@@ -9,6 +9,23 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 RUNTIME = REPO / "images" / "spark-runtime"
+LAKEHOUSE_SOURCE = REPO / "images" / "iceberg-log-spark"
+AIRFLOW_SPEC = REPO / "images" / "airflow-runtime" / "src" / "anton_airflow" / "lakehouse.py"
+
+
+def entrypoint_failures(dockerfile: str, application_spec: str) -> list[str]:
+    """Return missing immutable Spark application mappings."""
+    mappings = (
+        "COPY --chown=185:185 images/iceberg-log-spark/transform.py /opt/spark/application/transform.py",
+        "COPY --chown=185:185 images/iceberg-log-spark/flight_recorder.py /opt/spark/application/flight_recorder.py",
+    )
+    pins = (
+        "local:///opt/spark/application/transform.py",
+        "local:///opt/spark/application/flight_recorder.py",
+    )
+    return [f"Dockerfile missing application mapping {value!r}" for value in mappings if value not in dockerfile] + [
+        f"Airflow application spec missing entrypoint {value!r}" for value in pins if value not in application_spec
+    ]
 
 
 def main() -> int:
@@ -16,6 +33,9 @@ def main() -> int:
         "Dockerfile": RUNTIME / "Dockerfile",
         "Maven dependency lock": RUNTIME / "pom.xml",
         "runtime verifier": RUNTIME / "verify-runtime.py",
+        "fixture application": LAKEHOUSE_SOURCE / "transform.py",
+        "Flight Recorder application": LAKEHOUSE_SOURCE / "flight_recorder.py",
+        "Airflow application spec": AIRFLOW_SPEC,
     }
     failures = [f"missing {name}: {path.relative_to(REPO)}" for name, path in files.items() if not path.is_file()]
     if failures:
@@ -24,6 +44,8 @@ def main() -> int:
     dockerfile = files["Dockerfile"].read_text(encoding="utf-8")
     pom = files["Maven dependency lock"].read_text(encoding="utf-8")
     verifier = files["runtime verifier"].read_text(encoding="utf-8")
+    application_spec = files["Airflow application spec"].read_text(encoding="utf-8")
+    failures.extend(entrypoint_failures(dockerfile, application_spec))
     required = {
         "Dockerfile": (
             "ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f",

@@ -30,6 +30,7 @@ COPY --from=dependencies /build/jars/ /opt/spark/jars/
 COPY --chown=185:185 --from=dependencies /build/dependency-tree.txt /opt/spark/runtime-contract/dependency-tree.txt
 COPY --chown=185:185 images/spark-runtime/verify-runtime.py /opt/spark/runtime-contract/verify-runtime.py
 COPY --chown=185:185 images/iceberg-log-spark/transform.py /opt/spark/application/transform.py
+COPY --chown=185:185 images/iceberg-log-spark/flight_recorder.py /opt/spark/application/flight_recorder.py
 COPY --chown=185:185 images/iceberg-log-spark/fixture.jsonl /opt/spark/work-dir/fixture.jsonl
 ENV PATH=/opt/python/bin:${PATH} \
     LD_LIBRARY_PATH=/opt/python/lib \

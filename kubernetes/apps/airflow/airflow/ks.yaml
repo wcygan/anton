@@ -16,6 +16,8 @@ spec:
   dependsOn:
     - name: airflow-database
       namespace: airflow
+    - name: airflow-flight-recorder
+      namespace: airflow
   wait: true
   timeout: 20m
   postBuild:
