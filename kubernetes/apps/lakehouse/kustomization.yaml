@@ -7,5 +7,6 @@ resources:
   - ./airflow-spark-rbac.yaml
   - ./spark-history-server/ks.yaml
   - ./authoritative-writer/ks.yaml
+  - ./flight-recorder/ks.yaml
 components:
   - ../../components/sops
