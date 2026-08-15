@@ -2,17 +2,46 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import asdict, dataclass
+from datetime import date, datetime, timezone
 import hashlib
 import json
+import os
 import re
 import unicodedata
 
 
 MAX_LINE_BYTES = 16 * 1024
 MAX_PREVIEW_CHARS = 256
+SPARK_REDACTION_REGEX = r"(?i)secret|password|token|access[._-]?key|credential|redaction"
+CATALOG = "lake"
+NAMESPACE = "flight_recorder"
+WAREHOUSE = "s3://iceberg-warehouse"
+EVENTS_TABLE = f"{CATALOG}.{NAMESPACE}.events"
+HOURLY_TABLE = f"{CATALOG}.{NAMESPACE}.hourly"
+RECEIPTS_TABLE = f"{CATALOG}.{NAMESPACE}.run_receipts"
+RAW_SCHEMA_DDL = "timestamp string, labels map<string,string>, line string"
+EVENT_SCHEMA_DDL = (
+    "fingerprint string, event_timestamp timestamp, event_date date, source_window_id string, "
+    "source_timestamp_ns string, namespace string, workload_kind string, workload_name string, "
+    "pod_name string, container_name string, severity string, redacted_preview string, "
+    "rejected boolean, rejection_reason string"
+)
+HOURLY_SCHEMA_DDL = (
+    "hour timestamp, namespace string, workload_kind string, workload_name string, severity string, "
+    "event_count bigint, rejection_count bigint"
+)
+RECEIPT_SCHEMA_DDL = (
+    "source_window_id string, raw_sha256 string, manifest_uri string, raw_uri string, source_count bigint, "
+    "accepted_count bigint, rejected_count bigint, final_event_count bigint, spark_attempt string, "
+    "window_start timestamp, window_end timestamp, completed_at timestamp, completion_date date"
+)
+_TABLES = (
+    (EVENTS_TABLE, EVENT_SCHEMA_DDL, "event_date", f"{WAREHOUSE}/flight_recorder/events"),
+    (HOURLY_TABLE, HOURLY_SCHEMA_DDL, "days(hour)", f"{WAREHOUSE}/flight_recorder/hourly"),
+    (RECEIPTS_TABLE, RECEIPT_SCHEMA_DDL, "completion_date", f"{WAREHOUSE}/flight_recorder/run_receipts"),
+)
 _WORKLOAD_LABELS = (
     ("deployment", "k8s_deployment_name"),
     ("statefulset", "k8s_statefulset_name"),
@@ -65,6 +94,42 @@ class FlightRecorderEvent:
     redacted_preview: str | None
     rejected: bool
     rejection_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeConfig:
+    raw_uri: str
+    manifest_uri: str
+    raw_sha256: str
+    source_window_id: str
+    spark_attempt: str
+    window_start: datetime
+    window_end: datetime
+
+    @classmethod
+    def from_environment(cls, environ: Mapping[str, str]) -> RuntimeConfig:
+        if environ.get("ANTON_LAKEHOUSE_TARGET") != "authoritative":
+            raise FlightRecorderTransformError("Flight Recorder requires the authoritative target")
+        if environ.get("FLIGHT_RECORDER_ICEBERG_NAMESPACE") != NAMESPACE:
+            raise FlightRecorderTransformError("Flight Recorder namespace was invalid")
+        if environ.get("ICEBERG_WAREHOUSE") != WAREHOUSE:
+            raise FlightRecorderTransformError("Flight Recorder warehouse was invalid")
+        raw_uri = _source_uri(environ.get("FLIGHT_RECORDER_RAW_URI"))
+        manifest_uri = _source_uri(environ.get("FLIGHT_RECORDER_MANIFEST_URI"))
+        checksum = environ.get("FLIGHT_RECORDER_RAW_SHA256", "")
+        if re.fullmatch(r"[0-9a-f]{64}", checksum) is None:
+            raise FlightRecorderTransformError("Flight Recorder checksum was invalid")
+        window_id = environ.get("FLIGHT_RECORDER_SOURCE_WINDOW_ID", "")
+        match = re.fullmatch(r"(\d{1,21})-(\d{1,21})", window_id)
+        if match is None:
+            raise FlightRecorderTransformError("Flight Recorder source window was invalid")
+        start, end = _datetime_ns(match.group(1)), _datetime_ns(match.group(2))
+        if end <= start:
+            raise FlightRecorderTransformError("Flight Recorder source window was not ordered")
+        attempt = environ.get("ANTON_SPARK_ATTEMPT", "")
+        if not attempt or len(attempt) > 253 or not attempt.isascii():
+            raise FlightRecorderTransformError("Flight Recorder Spark Attempt was invalid")
+        return cls(raw_uri, manifest_uri, checksum, window_id, attempt, start, end)
 
 
 def _identity(labels: Mapping[str, str]) -> dict[str, str]:
@@ -155,3 +220,174 @@ def transform_entry(entry: object, *, source_window_id: str) -> FlightRecorderEv
         rejected=reason is not None,
         rejection_reason=reason,
     )
+
+
+def _datetime_ns(value: str) -> datetime:
+    rendered, _ = _event_time(value)
+    return datetime.fromisoformat(rendered.replace("Z", "+00:00"))
+
+
+def _source_uri(value: str | None) -> str:
+    prefix = "s3a://iceberg-raw/flight-recorder/"
+    pattern = r"s3a://iceberg-raw/flight-recorder/[A-Za-z0-9._/-]+"
+    if not value or len(value) > 1024 or re.fullmatch(pattern, value) is None or ".." in value or "//" in value[len(prefix):]:
+        raise FlightRecorderTransformError("Flight Recorder source URI was invalid")
+    return value
+
+
+def commit_in_order(write_events: Callable[[], None], write_hourly: Callable[[], None],
+                    write_receipt: Callable[[], None]) -> None:
+    """Commit non-atomic writes with the completion receipt last."""
+    write_events()
+    write_hourly()
+    write_receipt()
+
+
+def replay_is_complete(
+    receipts: Sequence[Mapping[str, object]],
+    *,
+    source_window_id: str,
+    raw_sha256: str,
+    final_event_count: int,
+) -> bool:
+    """Validate one retained completion receipt before replay writes."""
+    if not receipts:
+        return False
+    if len(receipts) != 1:
+        raise FlightRecorderTransformError("Flight Recorder receipt identity was ambiguous")
+    receipt = receipts[0]
+    if receipt.get("source_window_id") != source_window_id or receipt.get("raw_sha256") != raw_sha256:
+        raise FlightRecorderTransformError("Flight Recorder receipt checksum conflicted")
+    if receipt.get("final_event_count") != final_event_count:
+        raise FlightRecorderTransformError("Flight Recorder final event count conflicted")
+    return True
+
+
+def _spark_session():
+    from pyspark.sql import SparkSession
+
+    access_key, secret_key = os.getenv("AWS_ACCESS_KEY_ID"), os.getenv("AWS_SECRET_ACCESS_KEY")
+    if not access_key or not secret_key:
+        raise FlightRecorderTransformError("Flight Recorder warehouse credentials are required")
+    credential = f"{access_key}:{secret_key}"
+    return (
+        SparkSession.builder.appName("flight-recorder")
+        .config("spark.sql.session.timeZone", "UTC")
+        .config("spark.redaction.regex", SPARK_REDACTION_REGEX)
+        .config("spark.redaction.string.regex", re.escape(credential))
+        .config(f"spark.sql.catalog.{CATALOG}.credential", credential)
+        .config(f"spark.sql.catalog.{CATALOG}", "org.apache.iceberg.spark.SparkCatalog")
+        .config(f"spark.sql.catalog.{CATALOG}.catalog-impl", "org.apache.iceberg.rest.RESTCatalog")
+        .config(f"spark.sql.catalog.{CATALOG}.uri", os.getenv("ICEBERG_CATALOG_URI"))
+        .config(f"spark.sql.catalog.{CATALOG}.warehouse", WAREHOUSE)
+        .config(f"spark.sql.catalog.{CATALOG}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+        .config(f"spark.sql.catalog.{CATALOG}.s3.endpoint", os.getenv("S3_ENDPOINT"))
+        .config(f"spark.sql.catalog.{CATALOG}.s3.path-style-access", "true")
+        .config(f"spark.sql.catalog.{CATALOG}.s3.region", "us-east-1")
+        .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+        .getOrCreate()
+    )
+
+
+def _create_tables(spark: object) -> None:
+    spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {CATALOG}.{NAMESPACE}")
+    for table, schema, partition, location in _TABLES:
+        spark.sql(
+            f"CREATE TABLE IF NOT EXISTS {table} ({schema}) USING iceberg "
+            f"PARTITIONED BY ({partition}) LOCATION '{location}' "
+            "TBLPROPERTIES ('format-version'='2')"
+        )
+
+
+def _event_dict(row: object, source_window_id: str) -> dict[str, object]:
+    event = transform_entry(row.asDict(recursive=True), source_window_id=source_window_id)
+    output = asdict(event)
+    output["event_timestamp"] = datetime.fromisoformat(event.event_timestamp.replace("Z", "+00:00"))
+    output["event_date"] = date.fromisoformat(event.event_date)
+    return output
+
+
+def _write_events(spark: object, events: object) -> None:
+    events.createOrReplaceTempView("flight_recorder_incoming_events")
+    spark.sql(f"""MERGE INTO {EVENTS_TABLE} target USING flight_recorder_incoming_events source
+      ON target.fingerprint = source.fingerprint WHEN MATCHED THEN UPDATE SET *
+      WHEN NOT MATCHED THEN INSERT *""")
+
+
+def _write_hourly(spark: object, events: object) -> None:
+    hours = events.selectExpr("date_trunc('hour', event_timestamp) AS hour").distinct().collect()
+    if not hours:
+        raise FlightRecorderTransformError("Flight Recorder had no affected hourly partition")
+    values = ", ".join(f"TIMESTAMP '{row['hour']:%Y-%m-%d %H:%M:%S}'" for row in hours)
+    spark.sql(f"DELETE FROM {HOURLY_TABLE} WHERE hour IN ({values})")
+    spark.sql(f"""INSERT INTO {HOURLY_TABLE}
+      SELECT date_trunc('hour', event.event_timestamp), event.namespace, event.workload_kind,
+        event.workload_name, event.severity, count(*),
+        sum(CASE WHEN event.rejected THEN 1 ELSE 0 END)
+      FROM {EVENTS_TABLE} event WHERE date_trunc('hour', event.event_timestamp) IN ({values})
+      GROUP BY date_trunc('hour', event.event_timestamp), event.namespace,
+        event.workload_kind, event.workload_name, event.severity""")
+
+
+def main() -> None:
+    from pyspark.sql import functions as F
+
+    config = RuntimeConfig.from_environment(os.environ)
+    spark = _spark_session()
+    _create_tables(spark)
+    retained = [row.asDict() for row in spark.table(RECEIPTS_TABLE).where(
+        F.col("source_window_id") == config.source_window_id
+    ).select("source_window_id", "raw_sha256", "final_event_count").collect()]
+    final_count = spark.table(EVENTS_TABLE).where(F.col("source_window_id") == config.source_window_id).count()
+    if replay_is_complete(
+        retained,
+        source_window_id=config.source_window_id,
+        raw_sha256=config.raw_sha256,
+        final_event_count=final_count,
+    ):
+        spark.stop()
+        return
+    raw = spark.read.option("mode", "FAILFAST").schema(RAW_SCHEMA_DDL).json(config.raw_uri)
+    source_count = raw.count()
+    if source_count < 1:
+        raise FlightRecorderTransformError("Flight Recorder source was empty")
+    events = spark.createDataFrame(
+        raw.rdd.map(lambda row: _event_dict(row, config.source_window_id)), EVENT_SCHEMA_DDL
+    ).cache()
+    event_count = events.count()
+    if event_count != source_count:
+        raise FlightRecorderTransformError("Flight Recorder source count changed during transformation")
+    rejected_count = events.where(F.col("rejected")).count()
+
+    def write_receipt() -> None:
+        completed_at = datetime.now(timezone.utc)
+        receipt = {
+            "source_window_id": config.source_window_id,
+            "raw_sha256": config.raw_sha256,
+            "manifest_uri": config.manifest_uri,
+            "raw_uri": config.raw_uri,
+            "source_count": source_count,
+            "accepted_count": event_count - rejected_count,
+            "rejected_count": rejected_count,
+            "final_event_count": spark.table(EVENTS_TABLE).where(
+                F.col("source_window_id") == config.source_window_id
+            ).count(),
+            "spark_attempt": config.spark_attempt,
+            "window_start": config.window_start,
+            "window_end": config.window_end,
+            "completed_at": completed_at,
+            "completion_date": completed_at.date(),
+        }
+        spark.createDataFrame([receipt], RECEIPT_SCHEMA_DDL).writeTo(RECEIPTS_TABLE).append()
+
+    commit_in_order(
+        lambda: _write_events(spark, events),
+        lambda: _write_hourly(spark, events),
+        write_receipt,
+    )
+    events.unpersist()
+    spark.stop()
+
+
+if __name__ == "__main__":
+    main()
