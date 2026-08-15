@@ -138,6 +138,64 @@ class FlightRecorderTransformTests(unittest.TestCase):
         with self.assertRaises(MODULE.FlightRecorderTransformError):
             MODULE.transform_entry(self.entry(), source_window_id="../unsafe")
 
+    def test_commit_order_keeps_receipt_last_and_stops_on_failure(self) -> None:
+        order = []
+        action = lambda name: lambda: order.append(name)
+        MODULE.commit_in_order(action("events"), action("hourly"), action("run_receipts"))
+        self.assertEqual(["events", "hourly", "run_receipts"], order)
+
+        def fail_hourly() -> None:
+            order.append("hourly-failed")
+            raise RuntimeError("expected")
+
+        order.clear()
+        with self.assertRaises(RuntimeError):
+            MODULE.commit_in_order(action("events"), fail_hourly, action("run_receipts"))
+        self.assertEqual(["events", "hourly-failed"], order)
+
+    def test_replay_requires_one_matching_receipt_and_final_count(self) -> None:
+        checksum = "a" * 64
+        receipt = {"source_window_id": self.window, "raw_sha256": checksum, "final_event_count": 7}
+        self.assertFalse(MODULE.replay_is_complete([], source_window_id=self.window, raw_sha256=checksum, final_event_count=0))
+        self.assertTrue(MODULE.replay_is_complete([receipt], source_window_id=self.window, raw_sha256=checksum, final_event_count=7))
+        for changed in ({**receipt, "raw_sha256": "b" * 64}, {**receipt, "final_event_count": 8}):
+            with self.subTest(changed=changed), self.assertRaises(MODULE.FlightRecorderTransformError):
+                MODULE.replay_is_complete([changed], source_window_id=self.window, raw_sha256=checksum, final_event_count=7)
+
+    def test_runtime_contract_has_exact_sources_tables_and_partitions(self) -> None:
+        source = SOURCE.read_text(encoding="utf-8")
+        self.assertIn('os.getenv("AWS_ACCESS_KEY_ID")', source)
+        self.assertIn('.config("spark.redaction.regex", SPARK_REDACTION_REGEX)', source)
+        self.assertIn('.config(f"spark.sql.catalog.{CATALOG}.credential", credential)', source)
+        self.assertIn('.config("spark.redaction.string.regex", re.escape(credential))', source)
+        for key in ("secret", "password", "token", "access_key", "credential", "spark.redaction.regex", "spark.redaction.string.regex"):
+            self.assertRegex(key, MODULE.SPARK_REDACTION_REGEX)
+        env = {
+            "ANTON_LAKEHOUSE_TARGET": "authoritative",
+            "FLIGHT_RECORDER_ICEBERG_NAMESPACE": "flight_recorder",
+            "ICEBERG_WAREHOUSE": "s3://iceberg-warehouse",
+            "FLIGHT_RECORDER_RAW_URI": "s3a://iceberg-raw/flight-recorder/raw/source.jsonl",
+            "FLIGHT_RECORDER_MANIFEST_URI": "s3a://iceberg-raw/flight-recorder/manifests/source.json",
+            "FLIGHT_RECORDER_RAW_SHA256": "a" * 64,
+            "FLIGHT_RECORDER_SOURCE_WINDOW_ID": self.window,
+            "ANTON_SPARK_ATTEMPT": "attempt-1",
+        }
+        config = MODULE.RuntimeConfig.from_environment(env)
+        self.assertEqual(("attempt-1", self.window), (config.spark_attempt, config.source_window_id))
+        self.assertIn("fingerprint string", MODULE.EVENT_SCHEMA_DDL)
+        self.assertNotIn(" line ", MODULE.EVENT_SCHEMA_DDL)
+        self.assertNotIn("labels", MODULE.EVENT_SCHEMA_DDL)
+        self.assertEqual(
+            (
+                ("lake.flight_recorder.events", "event_date", "s3://iceberg-warehouse/flight_recorder/events"),
+                ("lake.flight_recorder.hourly", "days(hour)", "s3://iceberg-warehouse/flight_recorder/hourly"),
+                ("lake.flight_recorder.run_receipts", "completion_date", "s3://iceberg-warehouse/flight_recorder/run_receipts"),
+            ),
+            tuple((table, partition, location) for table, _, partition, location in MODULE._TABLES),
+        )
+        with self.assertRaises(MODULE.FlightRecorderTransformError):
+            MODULE.RuntimeConfig.from_environment({**env, "ANTON_LAKEHOUSE_TARGET": "shadow"})
+
 
 if __name__ == "__main__":
     unittest.main()
