@@ -8,10 +8,16 @@ from urllib.parse import parse_qs, urlparse
 from anton_airflow.loki import (
     DEFAULT_LOKI_QUERY,
     ENTRY_LIMIT,
+    MANIFEST_SCHEMA_VERSION,
+    MAX_RAW_BYTES,
     MAX_RESPONSE_BYTES,
     LokiClient,
+    LokiEntry,
+    LokiSnapshotExtractor,
     LokiSourceError,
     LokiWindow,
+    manifest_key,
+    serialize_entries,
 )
 
 
@@ -23,6 +29,32 @@ class RecordingTransport:
     def __call__(self, request: object, *, timeout: int, max_bytes: int) -> bytes:
         self.calls.append((request, timeout, max_bytes))
         return json.dumps(self.payload).encode()
+
+
+class MemoryStore:
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+        self.writes = 0
+
+    def get(self, *, key: str) -> bytes | None:
+        return self.objects.get(key)
+
+    def put_if_absent(self, *, key: str, payload: bytes) -> bool:
+        self.writes += 1
+        if key in self.objects:
+            return False
+        self.objects[key] = payload
+        return True
+
+
+class StubClient:
+    def __init__(self, entries: tuple[LokiEntry, ...]) -> None:
+        self.entries = entries
+        self.calls = 0
+
+    def query_range(self, **_: object) -> tuple[LokiEntry, ...]:
+        self.calls += 1
+        return self.entries
 
 
 class FlightRecorderSourceTests(unittest.TestCase):
@@ -102,6 +134,73 @@ class FlightRecorderSourceTests(unittest.TestCase):
             with self.subTest(transport=transport):
                 with self.assertRaises(LokiSourceError):
                     LokiClient(transport=transport).query_range(window=self.window)
+
+    def test_capture_is_deterministic_and_exact_replay_skips_loki(self) -> None:
+        entries = (
+            LokiEntry(str(self.window.start_ns + 2), {"stream": "b"}, "second"),
+            LokiEntry(str(self.window.start_ns + 1), {"stream": "a"}, "first"),
+        )
+        self.assertEqual(serialize_entries(entries), serialize_entries(tuple(reversed(entries))))
+        store = MemoryStore()
+        client = StubClient(entries)
+        source = LokiSnapshotExtractor(client=client, store=store)  # type: ignore[arg-type]
+        manifest = source.capture(window=self.window)
+
+        key = manifest_key(query=DEFAULT_LOKI_QUERY, window=self.window)
+        retained_manifest = json.loads(store.objects[key])
+        self.assertEqual(MANIFEST_SCHEMA_VERSION, retained_manifest["schema_version"])
+        self.assertEqual(DEFAULT_LOKI_QUERY, retained_manifest["query"])
+        self.assertEqual(self.window.start.isoformat().replace("+00:00", "Z"), retained_manifest["window_start"])
+        self.assertEqual(self.window.end.isoformat().replace("+00:00", "Z"), retained_manifest["window_end"])
+        self.assertEqual(2, retained_manifest["entry_count"])
+        self.assertTrue(manifest.raw_key.startswith("flight-recorder/raw/"))
+        self.assertNotIn("warehouse", manifest.raw_key)
+        self.assertEqual(manifest.raw_bytes, len(store.objects[manifest.raw_key]))
+        raw_lines = store.objects[manifest.raw_key].splitlines()
+        self.assertEqual(["first", "second"], [json.loads(line)["line"] for line in raw_lines])
+        writes = store.writes
+        replay_client = StubClient(())
+        replay = LokiSnapshotExtractor(client=replay_client, store=store)  # type: ignore[arg-type]
+        self.assertEqual(manifest, replay.capture(window=self.window))
+        self.assertEqual((0, writes), (replay_client.calls, store.writes))
+
+    def test_replay_rejects_bad_manifest_key_and_checksum(self) -> None:
+        entry = LokiEntry(str(self.window.start_ns), {"job": "airflow"}, "line")
+        store = MemoryStore()
+        source = LokiSnapshotExtractor(client=StubClient((entry,)), store=store)  # type: ignore[arg-type]
+        manifest = source.capture(window=self.window)
+        key = manifest_key(query=DEFAULT_LOKI_QUERY, window=self.window)
+        valid_manifest = store.objects[key]
+
+        changed = json.loads(valid_manifest)
+        changed["raw_key"] = "flight-recorder/raw/../warehouse/object"
+        store.objects[key] = json.dumps(changed).encode()
+        with self.assertRaisesRegex(LokiSourceError, "unsafe"):
+            source.capture(window=self.window)
+
+        store.objects[key] = valid_manifest
+        retained = store.objects[manifest.raw_key]
+        store.objects[manifest.raw_key] = b"x" + retained[1:]
+        with self.assertRaisesRegex(LokiSourceError, "checksum"):
+            source.capture(window=self.window)
+
+    def test_empty_oversized_and_write_collision_fail_closed(self) -> None:
+        empty = LokiSnapshotExtractor(client=StubClient(()), store=MemoryStore())  # type: ignore[arg-type]
+        with self.assertRaisesRegex(LokiSourceError, "no entries"):
+            empty.capture(window=self.window)
+        huge = LokiEntry(str(self.window.start_ns), {}, "x" * MAX_RAW_BYTES)
+        with self.assertRaisesRegex(LokiSourceError, "byte limit"):
+            serialize_entries((huge,))
+
+        class CollisionStore(MemoryStore):
+            def put_if_absent(self, *, key: str, payload: bytes) -> bool:
+                self.objects[key] = b"different"
+                return False
+
+        entry = LokiEntry(str(self.window.start_ns), {}, "line")
+        colliding = LokiSnapshotExtractor(client=StubClient((entry,)), store=CollisionStore())  # type: ignore[arg-type]
+        with self.assertRaisesRegex(LokiSourceError, "differed"):
+            colliding.capture(window=self.window)
 
 
 if __name__ == "__main__":
