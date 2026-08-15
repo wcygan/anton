@@ -164,6 +164,9 @@ snapshot checks. It verifies the Anton target before one fixed `SELECT` or
 mise exec -- task trino:summary
 mise exec -- task trino:contract
 mise exec -- task trino:snapshots
+mise exec -- task trino:flight-recorder-summary
+mise exec -- task trino:flight-recorder-contract
+mise exec -- task trino:flight-recorder-snapshots
 ```
 
 Obtain approval before this coordinator `exec`. Keep its JSON output with the

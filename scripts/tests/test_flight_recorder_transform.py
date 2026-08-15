@@ -1,7 +1,9 @@
 """Tests for the pure Flight Recorder event-safety transform."""
 
 from dataclasses import FrozenInstanceError, asdict
+import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -37,6 +39,19 @@ class FlightRecorderTransformTests(unittest.TestCase):
 
     def transform(self, entry: object | None = None):
         return MODULE.transform_entry(entry or self.entry(), source_window_id=self.window)
+
+    def runtime_env(self, checksum: str = "a" * 64) -> dict[str, str]:
+        query_sha = hashlib.sha256(b'{k8s_namespace_name="airflow"}').hexdigest()
+        return {
+            "ANTON_LAKEHOUSE_TARGET": "authoritative",
+            "FLIGHT_RECORDER_ICEBERG_NAMESPACE": "flight_recorder",
+            "ICEBERG_WAREHOUSE": "s3://iceberg-warehouse",
+            "FLIGHT_RECORDER_RAW_URI": f"s3a://iceberg-raw/flight-recorder/raw/{self.window}/{checksum}.jsonl",
+            "FLIGHT_RECORDER_MANIFEST_URI": f"s3a://iceberg-raw/flight-recorder/manifests/{self.window}/{query_sha}.json",
+            "FLIGHT_RECORDER_RAW_SHA256": checksum,
+            "FLIGHT_RECORDER_SOURCE_WINDOW_ID": self.window,
+            "ANTON_SPARK_ATTEMPT": "attempt-1",
+        }
 
     def test_safe_event_has_exact_allowlisted_immutable_schema(self) -> None:
         event = self.transform(self.entry(line="password=hunter2 completed"))
@@ -170,16 +185,7 @@ class FlightRecorderTransformTests(unittest.TestCase):
         self.assertIn('.config("spark.redaction.string.regex", re.escape(credential))', source)
         for key in ("secret", "password", "token", "access_key", "credential", "spark.redaction.regex", "spark.redaction.string.regex"):
             self.assertRegex(key, MODULE.SPARK_REDACTION_REGEX)
-        env = {
-            "ANTON_LAKEHOUSE_TARGET": "authoritative",
-            "FLIGHT_RECORDER_ICEBERG_NAMESPACE": "flight_recorder",
-            "ICEBERG_WAREHOUSE": "s3://iceberg-warehouse",
-            "FLIGHT_RECORDER_RAW_URI": "s3a://iceberg-raw/flight-recorder/raw/source.jsonl",
-            "FLIGHT_RECORDER_MANIFEST_URI": "s3a://iceberg-raw/flight-recorder/manifests/source.json",
-            "FLIGHT_RECORDER_RAW_SHA256": "a" * 64,
-            "FLIGHT_RECORDER_SOURCE_WINDOW_ID": self.window,
-            "ANTON_SPARK_ATTEMPT": "attempt-1",
-        }
+        env = self.runtime_env()
         config = MODULE.RuntimeConfig.from_environment(env)
         self.assertEqual(("attempt-1", self.window), (config.spark_attempt, config.source_window_id))
         self.assertIn("fingerprint string", MODULE.EVENT_SCHEMA_DDL)
@@ -195,6 +201,50 @@ class FlightRecorderTransformTests(unittest.TestCase):
         )
         with self.assertRaises(MODULE.FlightRecorderTransformError):
             MODULE.RuntimeConfig.from_environment({**env, "ANTON_LAKEHOUSE_TARGET": "shadow"})
+
+    def test_source_manifest_and_checksum_mismatch_fail_closed(self) -> None:
+        raw = (json.dumps(self.entry(), sort_keys=True, separators=(",", ":")) + "\n").encode()
+        checksum = hashlib.sha256(raw).hexdigest()
+        config = MODULE.RuntimeConfig.from_environment(self.runtime_env(checksum))
+        manifest = {
+            "schema_version": 1,
+            "query": '{k8s_namespace_name="airflow"}',
+            "window_start": config.window_start.isoformat().replace("+00:00", "Z"),
+            "window_end": config.window_end.isoformat().replace("+00:00", "Z"),
+            "entry_count": 1,
+            "raw_bytes": len(raw),
+            "raw_key": config.raw_uri.removeprefix("s3a://iceberg-raw/"),
+            "raw_sha256": checksum,
+        }
+        encoded = lambda value: json.dumps(value, sort_keys=True).encode()
+        self.assertEqual(len(MODULE.validate_source(config, encoded(manifest), raw)), 1)
+        for changed in ({**manifest, "raw_sha256": "b" * 64}, {key: value for key, value in manifest.items() if key != "query"}):
+            with self.subTest(changed=changed), self.assertRaises(MODULE.FlightRecorderTransformError):
+                MODULE.validate_source(config, encoded(changed), raw)
+
+    def test_oversized_binary_metadata_never_selects_content(self) -> None:
+        class Reader:
+            selected = []
+            def format(self, _value): return self
+            def load(self, _uri): return self
+            def select(self, *names): self.selected.append(names); return self
+            def take(self, _limit): return [{"length": MODULE.MAX_RAW_BYTES + 1}]
+        reader = Reader()
+        spark = type("Spark", (), {"read": reader})()
+        with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "size"):
+            MODULE._read_binary(spark, "s3a://iceberg-raw/flight-recorder/raw/source", MODULE.MAX_RAW_BYTES)
+        self.assertEqual([("length",)], reader.selected)
+
+    def test_wrong_iceberg_table_contract_fails_closed(self) -> None:
+        table, schema, partition, location = MODULE._TABLES[0]
+        columns = tuple(tuple(field.rsplit(" ", 1)) for field in schema.split(", "))
+        ddl = (
+            f"CREATE TABLE {table} ({schema}) USING iceberg PARTITIONED BY ({partition}) "
+            f"LOCATION '{location}' TBLPROPERTIES ('format-version'='2')"
+        )
+        MODULE.validate_table_contract(table, columns, ddl)
+        with self.assertRaises(MODULE.FlightRecorderTransformError):
+            MODULE.validate_table_contract(table, columns, ddl.replace(location, location + "-wrong"))
 
 
 if __name__ == "__main__":

@@ -15,6 +15,12 @@ import unicodedata
 MAX_LINE_BYTES = 16 * 1024
 MAX_PREVIEW_CHARS = 256
 SPARK_REDACTION_REGEX = r"(?i)secret|password|token|access[._-]?key|credential|redaction"
+MAX_MANIFEST_BYTES = 64 * 1024
+MAX_RAW_BYTES = 8 * 1024 * 1024
+MANIFEST_FIELDS = frozenset({
+    "schema_version", "query", "window_start", "window_end", "entry_count",
+    "raw_bytes", "raw_key", "raw_sha256",
+})
 CATALOG = "lake"
 NAMESPACE = "flight_recorder"
 WAREHOUSE = "s3://iceberg-warehouse"
@@ -235,6 +241,100 @@ def _source_uri(value: str | None) -> str:
     return value
 
 
+def validate_source(
+    config: RuntimeConfig, manifest_payload: bytes, raw_payload: bytes,
+) -> tuple[Mapping[str, object], ...]:
+    """Validate one retained manifest and its exact raw bytes."""
+    if not 1 <= len(manifest_payload) <= MAX_MANIFEST_BYTES or not 1 <= len(raw_payload) <= MAX_RAW_BYTES:
+        raise FlightRecorderTransformError("Flight Recorder source object size was invalid")
+    try:
+        manifest = json.loads(manifest_payload)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise FlightRecorderTransformError("Flight Recorder manifest was invalid") from error
+    if not isinstance(manifest, Mapping) or set(manifest) != MANIFEST_FIELDS:
+        raise FlightRecorderTransformError("Flight Recorder manifest fields were invalid")
+    expected_window = (
+        config.window_start.isoformat().replace("+00:00", "Z"),
+        config.window_end.isoformat().replace("+00:00", "Z"),
+    )
+    expected_key = f"flight-recorder/raw/{config.source_window_id}/{config.raw_sha256}.jsonl"
+    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1:
+        raise FlightRecorderTransformError("Flight Recorder manifest schema was invalid")
+    if not isinstance(manifest["query"], str) or not manifest["query"] or len(manifest["query"]) > 1024:
+        raise FlightRecorderTransformError("Flight Recorder manifest query was invalid")
+    query_sha = hashlib.sha256(manifest["query"].encode()).hexdigest()
+    expected_manifest_uri = f"s3a://iceberg-raw/flight-recorder/manifests/{config.source_window_id}/{query_sha}.json"
+    if config.manifest_uri != expected_manifest_uri:
+        raise FlightRecorderTransformError("Flight Recorder manifest identity conflicted")
+    if (manifest["window_start"], manifest["window_end"]) != expected_window:
+        raise FlightRecorderTransformError("Flight Recorder manifest window conflicted")
+    if manifest["raw_key"] != expected_key or f's3a://iceberg-raw/{manifest["raw_key"]}' != config.raw_uri:
+        raise FlightRecorderTransformError("Flight Recorder manifest raw identity conflicted")
+    if type(manifest["raw_bytes"]) is not int or manifest["raw_bytes"] != len(raw_payload):
+        raise FlightRecorderTransformError("Flight Recorder manifest byte count conflicted")
+    checksum = hashlib.sha256(raw_payload).hexdigest()
+    if manifest["raw_sha256"] != config.raw_sha256 or checksum != config.raw_sha256:
+        raise FlightRecorderTransformError("Flight Recorder source checksum conflicted")
+    if type(manifest["entry_count"]) is not int or manifest["entry_count"] < 1:
+        raise FlightRecorderTransformError("Flight Recorder manifest entry count was invalid")
+    try:
+        entries = tuple(json.loads(line) for line in raw_payload.decode("utf-8").splitlines())
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise FlightRecorderTransformError("Flight Recorder raw source was invalid") from error
+    if not raw_payload.endswith(b"\n") or len(entries) != manifest["entry_count"]:
+        raise FlightRecorderTransformError("Flight Recorder raw entry count conflicted")
+    if any(not isinstance(entry, Mapping) for entry in entries):
+        raise FlightRecorderTransformError("Flight Recorder raw entry was invalid")
+    for entry in entries:
+        transform_entry(entry, source_window_id=config.source_window_id)
+    return entries
+
+
+def _read_binary(spark: object, uri: str, maximum: int) -> bytes:
+    source = spark.read.format("binaryFile").load(uri)
+    metadata = source.select("length").take(2)
+    if len(metadata) != 1:
+        raise FlightRecorderTransformError("Flight Recorder source object count was invalid")
+    length = metadata[0]["length"]
+    if type(length) is not int or not 1 <= length <= maximum:
+        raise FlightRecorderTransformError("Flight Recorder binary source size was invalid")
+    rows = source.select("length", "content").take(2)
+    if len(rows) != 1:
+        raise FlightRecorderTransformError("Flight Recorder source object count was invalid")
+    retained_length, content = rows[0]["length"], rows[0]["content"]
+    if type(retained_length) is not int or retained_length != length or not isinstance(content, (bytes, bytearray)):
+        raise FlightRecorderTransformError("Flight Recorder binary source was invalid")
+    payload = bytes(content)
+    if length != len(payload):
+        raise FlightRecorderTransformError("Flight Recorder binary source size was invalid")
+    return payload
+
+
+def validate_table_contract(table: str, columns: Sequence[tuple[str, str]], ddl: str) -> None:
+    """Validate one existing Iceberg table before data writes."""
+    try:
+        _, schema, partition, location = next(item for item in _TABLES if item[0] == table)
+    except StopIteration as error:
+        raise FlightRecorderTransformError("Flight Recorder table identity was invalid") from error
+    expected_columns = tuple(tuple(field.rsplit(" ", 1)) for field in schema.split(", "))
+    provider = re.search(r"\bUSING\s+(\w+)", ddl, re.IGNORECASE)
+    retained_location = re.search(r"\bLOCATION\s+['\"]([^'\"]+)['\"]", ddl, re.IGNORECASE)
+    retained_partition = re.search(
+        r"\bPARTITIONED\s+BY\s*\((.*?)\)\s*(?:LOCATION|TBLPROPERTIES|$)", ddl,
+        re.IGNORECASE | re.DOTALL,
+    )
+    normalized = lambda value: re.sub(r"[`\s]", "", value).lower()
+    valid = (
+        tuple(columns) == expected_columns
+        and provider is not None and provider.group(1).lower() == "iceberg"
+        and retained_location is not None and retained_location.group(1) == location
+        and retained_partition is not None and normalized(retained_partition.group(1)) == normalized(partition)
+        and re.search(r"['\"]format-version['\"]\s*=\s*['\"]2['\"]", ddl) is not None
+    )
+    if not valid:
+        raise FlightRecorderTransformError(f"Flight Recorder table contract differed: {table}")
+
+
 def commit_in_order(write_events: Callable[[], None], write_hourly: Callable[[], None],
                     write_receipt: Callable[[], None]) -> None:
     """Commit non-atomic writes with the completion receipt last."""
@@ -299,6 +399,14 @@ def _create_tables(spark: object) -> None:
         )
 
 
+def _validate_tables(spark: object) -> None:
+    for table, _, _, _ in _TABLES:
+        fields = spark.table(table).schema.fields
+        columns = tuple((field.name, field.dataType.simpleString()) for field in fields)
+        ddl = "\n".join(str(row[0]) for row in spark.sql(f"SHOW CREATE TABLE {table}").collect())
+        validate_table_contract(table, columns, ddl)
+
+
 def _event_dict(row: object, source_window_id: str) -> dict[str, object]:
     event = transform_entry(row.asDict(recursive=True), source_window_id=source_window_id)
     output = asdict(event)
@@ -334,7 +442,11 @@ def main() -> None:
 
     config = RuntimeConfig.from_environment(os.environ)
     spark = _spark_session()
+    manifest_payload = _read_binary(spark, config.manifest_uri, MAX_MANIFEST_BYTES)
+    raw_payload = _read_binary(spark, config.raw_uri, MAX_RAW_BYTES)
+    source_entries = validate_source(config, manifest_payload, raw_payload)
     _create_tables(spark)
+    _validate_tables(spark)
     retained = [row.asDict() for row in spark.table(RECEIPTS_TABLE).where(
         F.col("source_window_id") == config.source_window_id
     ).select("source_window_id", "raw_sha256", "final_event_count").collect()]
@@ -347,7 +459,7 @@ def main() -> None:
     ):
         spark.stop()
         return
-    raw = spark.read.option("mode", "FAILFAST").schema(RAW_SCHEMA_DDL).json(config.raw_uri)
+    raw = spark.createDataFrame(source_entries, RAW_SCHEMA_DDL)
     source_count = raw.count()
     if source_count < 1:
         raise FlightRecorderTransformError("Flight Recorder source was empty")
