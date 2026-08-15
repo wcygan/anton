@@ -30,6 +30,52 @@ FROM iceberg.logs."hourly$snapshots"
 ORDER BY committed_at DESC
 LIMIT 20""",
     ),
+    "flight-recorder-summary": (
+        """SELECT
+  (SELECT count(*) FROM iceberg.flight_recorder.events) AS event_count,
+  (SELECT count_if(rejected) FROM iceberg.flight_recorder.events) AS rejected_count,
+  (SELECT count(*) FROM iceberg.flight_recorder.hourly) AS hourly_row_count,
+  (SELECT coalesce(sum(event_count), 0) FROM iceberg.flight_recorder.hourly) AS hourly_event_count_sum,
+  (SELECT coalesce(sum(rejection_count), 0) FROM iceberg.flight_recorder.hourly) AS hourly_rejection_count_sum,
+  (SELECT count(*) FROM iceberg.flight_recorder.run_receipts) AS receipt_count,
+  latest.source_window_id AS latest_source_window_id,
+  latest.raw_sha256 AS latest_raw_sha256,
+  latest.spark_attempt AS latest_spark_attempt,
+  latest.source_count AS latest_source_count,
+  latest.accepted_count AS latest_accepted_count,
+  latest.rejected_count AS latest_rejected_count,
+  latest.final_event_count AS latest_final_event_count
+FROM (VALUES 1) AS guard(value)
+LEFT JOIN (
+  SELECT source_window_id, raw_sha256, spark_attempt, source_count,
+    accepted_count, rejected_count, final_event_count
+  FROM iceberg.flight_recorder.run_receipts
+  ORDER BY completed_at DESC
+  LIMIT 1
+) AS latest ON true""",
+    ),
+    "flight-recorder-contract": (
+        "SHOW COLUMNS FROM iceberg.flight_recorder.events",
+        "SHOW CREATE TABLE iceberg.flight_recorder.events",
+        "SHOW COLUMNS FROM iceberg.flight_recorder.hourly",
+        "SHOW CREATE TABLE iceberg.flight_recorder.hourly",
+        "SHOW COLUMNS FROM iceberg.flight_recorder.run_receipts",
+        "SHOW CREATE TABLE iceberg.flight_recorder.run_receipts",
+    ),
+    "flight-recorder-snapshots": (
+        """SELECT snapshot_id, committed_at
+FROM iceberg.flight_recorder."events$snapshots"
+ORDER BY committed_at DESC
+LIMIT 20""",
+        """SELECT snapshot_id, committed_at
+FROM iceberg.flight_recorder."hourly$snapshots"
+ORDER BY committed_at DESC
+LIMIT 20""",
+        """SELECT snapshot_id, committed_at
+FROM iceberg.flight_recorder."run_receipts$snapshots"
+ORDER BY committed_at DESC
+LIMIT 20""",
+    ),
 }
 
 
@@ -83,6 +129,10 @@ def commands_for(root: Path, check: str) -> tuple[tuple[str, ...], ...]:
         queries = QUERIES[check]
     except KeyError as error:
         raise TrinoReadError(f"unsupported Trino check: {check}") from error
+    for query in queries:
+        first_word = query.split(maxsplit=1)[0].upper()
+        if first_word not in {"SELECT", "SHOW", "DESCRIBE"} or ";" in query:
+            raise TrinoReadError(f"Trino check is not read-only: {check}")
     prefix = anton_kubectl_prefix(root)
     return tuple(
         (*prefix, "-n", "iceberg-demo", "exec", "deploy/trino-coordinator", "--", "/usr/bin/trino", "--server", "http://localhost:8080", "--user", "validation", "--output-format", "JSON", "--execute", query)

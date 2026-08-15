@@ -25,11 +25,17 @@ class LakehouseTrinoTests(unittest.TestCase):
                     self.assertEqual(command[: len(prefix)], prefix)
                     self.assertIn("deploy/trino-coordinator", command)
                     self.assertEqual(command[-1], query)
-                    self.assertNotRegex(query.upper(), r"\b(DELETE|DROP|INSERT|MERGE|ALTER)\b")
+                    self.assertRegex(query.lstrip().upper(), r"^(SELECT|SHOW|DESCRIBE)\b")
+                    self.assertNotIn(";", query)
 
     def test_unknown_check_fails_closed(self) -> None:
         with self.assertRaisesRegex(TrinoReadError, "unsupported Trino check"):
             commands_for(REPO, "arbitrary-sql")
+
+    def test_fixed_query_registry_rejects_write_statements(self) -> None:
+        with patch.dict(QUERIES, {"unsafe": ("DELETE FROM important_table",)}):
+            with self.assertRaisesRegex(TrinoReadError, "not read-only"):
+                commands_for(REPO, "unsafe")
 
     def test_task_surface_owns_trino_checks(self) -> None:
         result = subprocess.run(
@@ -43,7 +49,34 @@ class LakehouseTrinoTests(unittest.TestCase):
         self.assertIn("trino:summary:", result.stdout)
         self.assertIn("trino:contract:", result.stdout)
         self.assertIn("trino:snapshots:", result.stdout)
+        self.assertIn("trino:flight-recorder-summary:", result.stdout)
+        self.assertIn("trino:flight-recorder-contract:", result.stdout)
+        self.assertIn("trino:flight-recorder-snapshots:", result.stdout)
         self.assertNotIn("airflow:trino-summary:", result.stdout)
+
+    def test_flight_recorder_queries_cover_counts_contracts_and_snapshots(self) -> None:
+        summary = QUERIES["flight-recorder-summary"][0]
+        for field in (
+            "event_count", "rejected_count", "hourly_row_count",
+            "hourly_event_count_sum", "hourly_rejection_count_sum", "receipt_count",
+            "latest_source_window_id", "latest_raw_sha256", "latest_spark_attempt",
+            "latest_source_count", "latest_accepted_count", "latest_rejected_count",
+            "latest_final_event_count",
+        ):
+            self.assertIn(field, summary)
+        self.assertNotIn("redacted_preview", summary)
+
+        contract = "\n".join(QUERIES["flight-recorder-contract"])
+        snapshots = QUERIES["flight-recorder-snapshots"]
+        for table in ("events", "hourly", "run_receipts"):
+            name = f"iceberg.flight_recorder.{table}"
+            self.assertIn(f"SHOW COLUMNS FROM {name}", contract)
+            self.assertIn(f"SHOW CREATE TABLE {name}", contract)
+            self.assertTrue(any(f'"{table}$snapshots"' in query for query in snapshots))
+        self.assertTrue(all(
+            "ORDER BY committed_at DESC" in query and "LIMIT 20" in query
+            for query in snapshots
+        ))
 
     def test_single_row_object_normalizes_to_a_json_list(self) -> None:
         prefix = ("kubectl",)
