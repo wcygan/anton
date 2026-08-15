@@ -284,6 +284,18 @@ def validate_release(release: dict[str, Any]) -> list[str]:
     )
     expect_equal(
         failures,
+        "Airflow worker image repository",
+        nested(values, "config", "kubernetes_executor", "worker_container_repository"),
+        "192.168.1.106/library/airflow-runtime@sha256",
+    )
+    expect_equal(
+        failures,
+        "Airflow worker image tag",
+        nested(values, "config", "kubernetes_executor", "worker_container_tag"),
+        IMAGE_DIGEST_HEX,
+    )
+    expect_equal(
+        failures,
         "Airflow task pod deletion",
         nested(values, "config", "kubernetes_executor", "delete_worker_pods"),
         "False",
