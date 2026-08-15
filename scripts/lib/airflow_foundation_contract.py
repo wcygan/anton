@@ -505,10 +505,13 @@ def validate_image_source(failures: list[str]) -> None:
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "receipts.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "operator.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "spark" / "trigger.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "loki.py",
+            IMAGE_ROOT / "src" / "anton_airflow" / "flight_recorder.py",
             IMAGE_ROOT / "src" / "anton_airflow" / "lakehouse.py",
             IMAGE_ROOT / "tests" / "test_adapter_package.py",
             IMAGE_ROOT / "tests" / "test_ticket06_recovery.py",
             IMAGE_ROOT / "dags" / "airflow_spark_lakehouse.py",
+            IMAGE_ROOT / "dags" / "airflow_flight_recorder.py",
         )
     )
     required_source = (
@@ -531,6 +534,9 @@ def validate_image_source(failures: list[str]) -> None:
         "test_triggerer_recovery_renews_lease_before_terminal_observation",
         "spark.apache.org",
         'dag_id="airflow_spark_lakehouse",\n    schedule="23 * * * *",',
+        'dag_id="airflow_flight_recorder",\n    schedule=None,',
+        "class FlightRecorderSparkOperator",
+        "FLIGHT_RECORDER_APPLICATION_SPEC",
         "catchup=False",
         "max_active_runs=1",
     )

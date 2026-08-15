@@ -1,8 +1,10 @@
 """Tests for the Flight Recorder Loki source boundary."""
 
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 import json
 import unittest
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 from anton_airflow.loki import (
@@ -16,6 +18,7 @@ from anton_airflow.loki import (
     LokiSnapshotExtractor,
     LokiSourceError,
     LokiWindow,
+    S3ObjectStore,
     manifest_key,
     serialize_entries,
 )
@@ -201,6 +204,38 @@ class FlightRecorderSourceTests(unittest.TestCase):
         colliding = LokiSnapshotExtractor(client=StubClient((entry,)), store=CollisionStore())  # type: ignore[arg-type]
         with self.assertRaisesRegex(LokiSourceError, "differed"):
             colliding.capture(window=self.window)
+
+    def test_s3_store_bounds_requests_and_maps_immutable_statuses(self) -> None:
+        requests = []
+        key = "flight-recorder/raw/window/checksum.jsonl"
+        for conflict in (409, 412):
+            def absent(request, *, timeout):
+                requests.append((request, timeout))
+                raise HTTPError(request.full_url, conflict, "expected", {}, None)
+            store = S3ObjectStore(access_key="test-access", secret_key="test-secret", opener=absent)
+            self.assertFalse(store.put_if_absent(key=key, payload=b"raw\n"))
+        self.assertEqual("*", requests[0][0].get_header("If-none-match"))
+        self.assertIn("/iceberg-raw/flight-recorder/raw/", requests[0][0].full_url)
+        self.assertNotIn("test-secret", str(requests))
+
+        outcomes, events = iter((409, 404, b"raw\n")), []
+        def race(request, *, timeout):
+            outcome = next(outcomes)
+            events.append(outcome)
+            if isinstance(outcome, int): raise HTTPError(request.full_url, outcome, "expected", {}, None)
+            return BytesIO(outcome)
+        source = LokiSnapshotExtractor(client=StubClient(()), store=S3ObjectStore(access_key="a", secret_key="b", opener=race), sleeper=lambda delay: events.append(delay))  # type: ignore[arg-type]
+        source._publish(key, b"raw\n", maximum=MAX_RAW_BYTES)
+        self.assertEqual([409, 404, 0.05, b"raw\n"], events)
+        outcomes = iter((409, 404, 404))
+        with self.assertRaisesRegex(LokiSourceError, "differed"):
+            source._publish(key, b"raw\n", maximum=MAX_RAW_BYTES)
+
+        oversized = lambda *_args, **_kwargs: BytesIO(b"x" * (MAX_RAW_BYTES + 1))
+        with self.assertRaisesRegex(LokiSourceError, "byte limit"):
+            S3ObjectStore(access_key="a", secret_key="b", opener=oversized).get(key=key)
+        with self.assertRaisesRegex(LokiSourceError, "object bounds"):
+            store.get(key="../warehouse")
 
 
 if __name__ == "__main__":
