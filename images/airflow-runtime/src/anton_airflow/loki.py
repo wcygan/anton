@@ -26,6 +26,7 @@ DEFAULT_RAW_BUCKET = "iceberg-raw"
 WINDOW_SECONDS = 300
 HOUR_SECONDS = 3600
 ENTRY_LIMIT = 1000
+COMPLETE_HOUR_ENTRY_LIMIT = 5000
 TIMEOUT_SECONDS = 30
 MAX_QUERY_LENGTH = 1024
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -45,6 +46,40 @@ COMPONENT_QUERIES = (
 _QUERY_RANGE_PATH = "/loki/api/v1/query_range"
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+
+
+@dataclass(frozen=True, slots=True)
+class LokiQueryLimits:
+    """One immutable Loki query fence contract."""
+
+    entry_limit: int
+    max_response_bytes: int
+    timeout_seconds: int
+
+    def __post_init__(self) -> None:
+        values = (
+            (self.entry_limit, COMPLETE_HOUR_ENTRY_LIMIT, "entry"),
+            (self.max_response_bytes, MAX_RESPONSE_BYTES, "response byte"),
+            (self.timeout_seconds, TIMEOUT_SECONDS, "timeout"),
+        )
+        for value, maximum, name in values:
+            if type(value) is not int or not 1 <= value <= maximum:
+                raise ValueError(f"Loki {name} limit was invalid")
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "entry_limit": self.entry_limit,
+            "max_response_bytes": self.max_response_bytes,
+            "timeout_seconds": self.timeout_seconds,
+        }
+
+
+LEGACY_QUERY_LIMITS = LokiQueryLimits(ENTRY_LIMIT, MAX_RESPONSE_BYTES, TIMEOUT_SECONDS)
+COMPLETE_HOUR_QUERY_LIMITS = LokiQueryLimits(
+    COMPLETE_HOUR_ENTRY_LIMIT,
+    MAX_RESPONSE_BYTES,
+    TIMEOUT_SECONDS,
+)
 
 
 class LokiSourceError(RuntimeError):
@@ -256,7 +291,12 @@ def _default_transport(request: urllib.request.Request, *, timeout: int, max_byt
         raise LokiSourceError("Loki transport failed") from error
 
 
-def _raw_entries(payload: Mapping[str, Any], window: LokiWindow) -> tuple[LokiEntry, ...]:
+def _raw_entries(
+    payload: Mapping[str, Any],
+    window: LokiWindow,
+    *,
+    entry_limit: int = ENTRY_LIMIT,
+) -> tuple[LokiEntry, ...]:
     if payload.get("status") != "success":
         raise LokiSourceError("Loki response status was not success")
     data = payload.get("data")
@@ -293,7 +333,7 @@ def _raw_entries(payload: Mapping[str, Any], window: LokiWindow) -> tuple[LokiEn
             if not window.contains(timestamp_ns):
                 raise LokiSourceError("Loki entry timestamp was outside the source window")
             entries.append(LokiEntry(timestamp=timestamp, labels=frozen_labels, line=line))
-            if len(entries) >= ENTRY_LIMIT:
+            if len(entries) >= entry_limit:
                 raise LokiSourceError("Loki result reached the bounded entry limit")
     return tuple(entries)
 
@@ -316,15 +356,23 @@ class LokiClient:
         self._endpoint = endpoint.rstrip("/") + _QUERY_RANGE_PATH
         self._transport = transport or _default_transport
 
-    def query_range(self, *, window: LokiWindow, query: str = DEFAULT_LOKI_QUERY) -> tuple[LokiEntry, ...]:
+    def query_range(
+        self,
+        *,
+        window: LokiWindow,
+        query: str = DEFAULT_LOKI_QUERY,
+        limits: LokiQueryLimits = LEGACY_QUERY_LIMITS,
+    ) -> tuple[LokiEntry, ...]:
         """Return raw entries from one complete half-open window."""
         _validate_query(query)
+        if not isinstance(limits, LokiQueryLimits):
+            raise TypeError("Loki query limits were invalid")
         params = urllib.parse.urlencode(
             {
                 "query": query,
                 "start": str(window.start_ns),
                 "end": str(window.end_ns - 1),
-                "limit": str(ENTRY_LIMIT),
+                "limit": str(limits.entry_limit),
                 "direction": "forward",
             }
         )
@@ -334,14 +382,18 @@ class LokiClient:
             method="GET",
         )
         try:
-            raw = self._transport(request, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONSE_BYTES)
+            raw = self._transport(
+                request,
+                timeout=limits.timeout_seconds,
+                max_bytes=limits.max_response_bytes,
+            )
         except LokiSourceError:
             raise
         except Exception as error:
             raise LokiSourceError("Loki transport failed") from error
         if not isinstance(raw, bytes):
             raise LokiSourceError("Loki transport returned a malformed response")
-        if len(raw) > MAX_RESPONSE_BYTES:
+        if len(raw) > limits.max_response_bytes:
             raise LokiSourceError("Loki response exceeded the byte limit")
         try:
             payload = json.loads(raw)
@@ -349,7 +401,7 @@ class LokiClient:
             raise LokiSourceError("Loki returned invalid JSON") from error
         if not isinstance(payload, Mapping):
             raise LokiSourceError("Loki returned a non-object response")
-        return _raw_entries(payload, window)
+        return _raw_entries(payload, window, entry_limit=limits.entry_limit)
 
 
 def serialize_entries(entries: tuple[LokiEntry, ...]) -> bytes:
@@ -381,6 +433,34 @@ def manifest_key(*, query: str, window: LokiWindow) -> str:
     _validate_query(query)
     query_sha = hashlib.sha256(query.encode()).hexdigest()
     return f"{SOURCE_PREFIX}manifests/{window.start_ns}-{window.end_ns}/{query_sha}.json"
+
+
+def component_manifest_key(
+    *,
+    component: str,
+    query: str,
+    window: LokiWindow,
+    limits: LokiQueryLimits,
+) -> str:
+    """Return the contract-bound key for one complete-hour source."""
+    if not component or not component.isascii() or not component.replace("_", "").isalnum():
+        raise ValueError("component name was invalid")
+    _validate_query(query)
+    contract = {
+        "component": component,
+        **limits.as_dict(),
+        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+        "max_raw_bytes": MAX_RAW_BYTES,
+        "query": query,
+        "complete_hour_schema_version": COMPLETE_HOUR_SCHEMA_VERSION,
+    }
+    contract_sha = hashlib.sha256(
+        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return (
+        f"{SOURCE_PREFIX}component-manifests/"
+        f"{window.start_ns}-{window.end_ns}/{contract_sha}.json"
+    )
 
 
 def raw_key(*, window: LokiWindow, checksum: str) -> str:
@@ -517,13 +597,34 @@ class LokiSnapshotExtractor:
             raise LokiSourceError("Retained raw source count did not match its manifest")
         return manifest
 
-    def capture(self, *, window: LokiWindow, query: str = DEFAULT_LOKI_QUERY) -> LokiSourceManifest:
+    def capture(
+        self,
+        *,
+        window: LokiWindow,
+        query: str = DEFAULT_LOKI_QUERY,
+        component: str | None = None,
+        limits: LokiQueryLimits = LEGACY_QUERY_LIMITS,
+    ) -> LokiSourceManifest:
         """Reuse a retained source or publish one bounded Loki result."""
-        key = manifest_key(query=query, window=window)
+        if component is None:
+            if limits != LEGACY_QUERY_LIMITS:
+                raise ValueError("Custom Loki limits require a component identity")
+            key = manifest_key(query=query, window=window)
+        else:
+            key = component_manifest_key(
+                component=component,
+                query=query,
+                window=window,
+                limits=limits,
+            )
         existing = self._get(key, maximum=MAX_MANIFEST_BYTES)
         if existing is not None:
             return self._replay(existing, query=query, window=window)
-        entries = self.client.query_range(window=window, query=query)
+        entries = self.client.query_range(
+            window=window,
+            query=query,
+            limits=limits,
+        )
         payload = serialize_entries(entries)
         checksum = hashlib.sha256(payload).hexdigest()
         source_key = raw_key(window=window, checksum=checksum)
@@ -547,21 +648,31 @@ class LokiSnapshotExtractor:
         for component, query in COMPONENT_QUERIES:
             for chunk_index, window in enumerate(hour.chunks):
                 try:
-                    manifest = self.capture(window=window, query=query)
+                    manifest = self.capture(
+                        window=window,
+                        query=query,
+                        component=component,
+                        limits=COMPLETE_HOUR_QUERY_LIMITS,
+                    )
                 except LokiSourceError as error:
                     raise LokiHourCaptureError(
                         component=component,
                         chunk_index=chunk_index,
                         completed_queries=len(sources),
                     ) from error
-                retained_manifest_key = manifest_key(query=query, window=window)
                 retained_manifest = _manifest_bytes(manifest)
+                retained_manifest_key = component_manifest_key(
+                    component=component,
+                    query=query,
+                    window=window,
+                    limits=COMPLETE_HOUR_QUERY_LIMITS,
+                )
                 sources.append(CompleteHourSource(
                     component=component,
                     chunk_index=chunk_index,
-                    entry_limit=ENTRY_LIMIT,
-                    max_response_bytes=MAX_RESPONSE_BYTES,
-                    timeout_seconds=TIMEOUT_SECONDS,
+                    entry_limit=COMPLETE_HOUR_QUERY_LIMITS.entry_limit,
+                    max_response_bytes=COMPLETE_HOUR_QUERY_LIMITS.max_response_bytes,
+                    timeout_seconds=COMPLETE_HOUR_QUERY_LIMITS.timeout_seconds,
                     manifest_key=retained_manifest_key,
                     manifest_sha256=hashlib.sha256(retained_manifest).hexdigest(),
                     query=manifest.query,
@@ -576,9 +687,7 @@ class LokiSnapshotExtractor:
             {
                 "component": component,
                 "query": query,
-                "entry_limit": ENTRY_LIMIT,
-                "max_response_bytes": MAX_RESPONSE_BYTES,
-                "timeout_seconds": TIMEOUT_SECONDS,
+                **COMPLETE_HOUR_QUERY_LIMITS.as_dict(),
             }
             for component, query in COMPONENT_QUERIES
         ]

@@ -24,7 +24,7 @@ STORAGE_ROOT = REPO / "kubernetes" / "apps" / "storage" / "kustomization.yaml"
 RETIRED_BACKUP_APP = REPO / "kubernetes" / "apps" / "storage" / "longhorn-backup-config"
 
 IMAGE_TAG = "3.2.2-apache.11"
-IMAGE_DIGEST = "sha256:dbbfdfdf958c0cc7fc0ebbdeac802cd7619de231d304c4af94cd532ba4636881"
+IMAGE_DIGEST = "sha256:dc46d82b8d7d84c405e8d9e2b0ec2b4a0dbc6585a10c8dc26a0cdf8b58d89485"
 IMAGE_DIGEST_HEX = IMAGE_DIGEST.removeprefix("sha256:")
 AIRFLOW_SPARK_RBAC = REPO / "kubernetes" / "apps" / "lakehouse" / "airflow-spark-rbac.yaml"
 
