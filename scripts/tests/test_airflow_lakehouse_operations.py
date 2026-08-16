@@ -40,7 +40,12 @@ from airflow_lakehouse_operations import (  # noqa: E402
     validate_evidence_run_id,
     validate_run_request,
 )
-from flight_recorder_evidence import add_flight_recorder_checks  # noqa: E402
+from flight_recorder_evidence import (  # noqa: E402
+    _valid_component_counts,
+    _valid_summary,
+    _valid_source_receipt,
+    add_flight_recorder_checks,
+)
 from airflow_lakehouse_recovery import (  # noqa: E402
     SCENARIOS,
     _arm_action,
@@ -671,6 +676,125 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         )
         self.assertEqual([receipt], summary["source_receipts"])
 
+    def test_complete_hour_receipt_and_component_counts_reconcile(self) -> None:
+        hour_id, checksum = "1786705200000000000-1786708800000000000", "a" * 64
+        receipt = {
+            "schema_version": 2, "kind": "flight_recorder_complete_hour", "status": "complete",
+            "hour_start": "2026-08-14T11:00:00Z", "hour_end": "2026-08-14T12:00:00Z",
+            "source_hour_id": hour_id, "catalog_sha256": "b" * 64,
+            "component_count": 4, "chunk_count": 48, "source_count": 48,
+            "raw_bytes": 480, "attempt": "attempt-hour",
+            "manifest_key": f"flight-recorder/hours/{hour_id}/{checksum}.complete.json",
+            "manifest_sha256": checksum,
+        }
+        summary = {
+            "latest_source_window_id": hour_id, "latest_complete_manifest_sha256": checksum,
+            "latest_source_kind": "complete_hour", "latest_source_count": 48,
+            "latest_accepted_count": 44, "latest_rejected_count": 4,
+            "latest_final_event_count": 40,
+        }
+        self.assertTrue(_valid_source_receipt(receipt, attempt="attempt-hour", summary=summary))
+        rows = [{
+            "source_window_id": hour_id, "source_component": component,
+            "source_count": 12, "accepted_count": 11, "rejected_count": 1,
+            "deduplicated_count": 10, "written_count": 10,
+        } for component in ("workflow", "spark_operator", "trino", "seaweedfs")]
+        self.assertTrue(_valid_component_counts({"results": [rows]}, summary, receipt))
+        rows[0]["written_count"] = 9
+        self.assertFalse(_valid_component_counts({"results": [rows]}, summary, receipt))
+
+    def test_loki_summary_retains_complete_hour_and_rejection_evidence(self) -> None:
+        attempt = "attempt-hour"
+        hour_receipt = {
+            "schema_version": 2, "kind": "flight_recorder_complete_hour", "status": "complete",
+            "hour_start": "2026-08-14T11:00:00Z", "hour_end": "2026-08-14T12:00:00Z",
+            "source_hour_id": "1-2", "catalog_sha256": "a" * 64,
+            "component_count": 4, "chunk_count": 48, "source_count": 48, "raw_bytes": 480,
+            "attempt": attempt, "manifest_key": "flight-recorder/hours/1-2/a.complete.json",
+            "manifest_sha256": "a" * 64,
+        }
+        rejection = {
+            "source_hour_id": "1-2", "attempt": attempt, "component": "trino",
+            "chunk_index": 4, "completed_queries": 28,
+            "complete_manifest_published": False,
+        }
+
+        class FakeKubectl:
+            def get_raw(self, _path):
+                return {"data": {"result": [
+                    {"stream": {"event": f"flight_recorder_hour_receipt {json.dumps(hour_receipt)}"},
+                     "values": [["1", "line"]]},
+                    {"stream": {"event": f"flight_recorder_hour_rejection {json.dumps(rejection)}"},
+                     "values": [["2", "line"]]},
+                ]}}
+
+        summary = _loki_summary(
+            FakeKubectl(), flight_recorder_source_loki_query(attempt),
+            datetime(2026, 8, 14, 12, tzinfo=timezone.utc),
+            datetime(2026, 8, 14, 13, tzinfo=timezone.utc),
+        )
+        self.assertEqual(([hour_receipt], [rejection]), (
+            summary["hour_receipts"], summary["hour_rejections"],
+        ))
+
+    def test_complete_hour_summary_allows_deduplicated_events(self) -> None:
+        summary = {
+            "latest_source_kind": "complete_hour",
+            "latest_source_count": 48,
+            "latest_accepted_count": 44,
+            "latest_rejected_count": 4,
+            "latest_final_event_count": 40,
+            "event_count": 40,
+            "hourly_event_count_sum": 40,
+            "rejected_count": 4,
+            "hourly_rejection_count_sum": 4,
+            "receipt_count": 1,
+        }
+        self.assertTrue(_valid_summary(summary))
+        summary["latest_source_kind"] = None
+        self.assertFalse(_valid_summary(summary))
+
+    def test_rejected_hour_skips_new_schema_checks(self) -> None:
+        attempt = "lh-airflow-run-flig-1e20acc910bd-a1"
+        digest = "sha256:" + "a" * 64
+        result = {
+            "status": "incomplete",
+            "identity": {"attempt_name": attempt},
+            "live": {
+                "spark_application": None,
+                "pods": [],
+                "airflow_task_pods": [{
+                    "phase": "Failed",
+                    "requested_images": [f"registry/airflow@{digest}"],
+                    "containers": [{"image_id": f"registry/airflow@{digest}"}],
+                }],
+                "expected_airflow_digest": digest,
+                "lease_holder": None,
+                "flight_recorder_source_loki": {
+                    "samples": 1,
+                    "source_receipts": [],
+                    "hour_receipts": [],
+                    "hour_rejections": [{
+                        "source_hour_id": "1786705200000000000-1786708800000000000",
+                        "attempt": attempt,
+                        "component": "trino",
+                        "chunk_index": 4,
+                        "completed_queries": 28,
+                        "complete_manifest_published": False,
+                    }],
+                },
+            },
+            "missing": ["spark_application", "spark_succeeded", "history_server"],
+        }
+
+        def unexpected_check(_root, _name):
+            self.fail("A rejected hour must not query the Ticket 02 Trino schema")
+
+        add_flight_recorder_checks(result, None, root=REPO, run_check_fn=unexpected_check)
+        self.assertEqual("rejected", result["status"])
+        self.assertEqual([], result["missing"])
+        self.assertEqual({}, result["trino"])
+
     def test_resource_summary_excludes_full_pod_status(self) -> None:
         resource = {
             "apiVersion": "spark.apache.org/v1",
@@ -730,12 +854,13 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 ("pod_name", "varchar"), ("container_name", "varchar"),
                 ("severity", "varchar"), ("redacted_preview", "varchar"),
                 ("rejected", "boolean"), ("rejection_reason", "varchar"),
+                ("source_component", "varchar"), ("source_chunk_id", "integer"),
             ),
             "hourly": (
                 ("hour", "timestamp(6)"), ("namespace", "varchar"),
                 ("workload_kind", "varchar"), ("workload_name", "varchar"),
                 ("severity", "varchar"), ("event_count", "bigint"),
-                ("rejection_count", "bigint"),
+                ("rejection_count", "bigint"), ("source_component", "varchar"),
             ),
             "run_receipts": (
                 ("source_window_id", "varchar"), ("raw_sha256", "varchar"),
@@ -744,12 +869,23 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 ("rejected_count", "bigint"), ("final_event_count", "bigint"),
                 ("spark_attempt", "varchar"), ("window_start", "timestamp(6)"),
                 ("window_end", "timestamp(6)"), ("completed_at", "timestamp(6)"),
+                ("completion_date", "date"), ("source_kind", "varchar"),
+                ("complete_manifest_sha256", "varchar"),
+            ),
+            "component_counts": (
+                ("source_window_id", "varchar"), ("source_component", "varchar"),
+                ("source_count", "bigint"), ("accepted_count", "bigint"),
+                ("rejected_count", "bigint"), ("deduplicated_count", "bigint"),
+                ("written_count", "bigint"), ("completed_at", "timestamp(6)"),
                 ("completion_date", "date"),
             ),
         }
-        partitions = {"events": "event_date", "hourly": "day(hour)", "run_receipts": "completion_date"}
+        partitions = {
+            "events": "event_date", "hourly": "day(hour)",
+            "run_receipts": "completion_date", "component_counts": "completion_date",
+        }
         contracts = []
-        for table in ("events", "hourly", "run_receipts"):
+        for table in ("events", "hourly", "run_receipts", "component_counts"):
             contracts.extend((
                 [{"Column": name, "Type": kind} for name, kind in columns[table]],
                 [{"Create Table": (
@@ -761,7 +897,8 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         outputs = {
             "flight-recorder-summary": {"results": [[row]]},
             "flight-recorder-contract": {"results": contracts},
-            "flight-recorder-snapshots": {"results": [[{"snapshot_id": 1, "committed_at": "2026-08-14T12:06:00Z"}]] * 3},
+            "flight-recorder-snapshots": {"results": [[{"snapshot_id": 1, "committed_at": "2026-08-14T12:06:00Z"}]] * 4},
+            "flight-recorder-components": {"results": [[]]},
             "flight-recorder-namespace-isolation": {"results": [[
                 {"table_name": "normalized", "snapshot_id": 1, "committed_at": "2026-08-14T11:59:00Z"},
                 {"table_name": "hourly", "snapshot_id": 2, "committed_at": "2026-08-14T11:59:00Z"},

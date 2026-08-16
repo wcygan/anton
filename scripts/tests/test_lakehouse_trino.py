@@ -53,6 +53,7 @@ class LakehouseTrinoTests(unittest.TestCase):
         self.assertIn("trino:flight-recorder-contract:", result.stdout)
         self.assertIn("trino:flight-recorder-snapshots:", result.stdout)
         self.assertIn("trino:flight-recorder-namespace-isolation:", result.stdout)
+        self.assertIn("trino:flight-recorder-components:", result.stdout)
         self.assertNotIn("airflow:trino-summary:", result.stdout)
 
     def test_flight_recorder_queries_cover_counts_contracts_and_snapshots(self) -> None:
@@ -63,13 +64,14 @@ class LakehouseTrinoTests(unittest.TestCase):
             "latest_source_window_id", "latest_raw_sha256", "latest_spark_attempt",
             "latest_source_count", "latest_accepted_count", "latest_rejected_count",
             "latest_final_event_count",
+            "component_receipt_count", "latest_source_kind", "latest_complete_manifest_sha256",
         ):
             self.assertIn(field, summary)
         self.assertNotIn("redacted_preview", summary)
 
         contract = "\n".join(QUERIES["flight-recorder-contract"])
         snapshots = QUERIES["flight-recorder-snapshots"]
-        for table in ("events", "hourly", "run_receipts"):
+        for table in ("events", "hourly", "run_receipts", "component_counts"):
             name = f"iceberg.flight_recorder.{table}"
             self.assertIn(f"SHOW COLUMNS FROM {name}", contract)
             self.assertIn(f"SHOW CREATE TABLE {name}", contract)
@@ -81,6 +83,12 @@ class LakehouseTrinoTests(unittest.TestCase):
         isolation = QUERIES["flight-recorder-namespace-isolation"][0]
         self.assertIn('iceberg.logs."normalized$snapshots"', isolation)
         self.assertIn('iceberg.logs."hourly$snapshots"', isolation)
+        components = QUERIES["flight-recorder-components"][0]
+        for field in (
+            "source_component", "source_count", "accepted_count", "rejected_count",
+            "deduplicated_count", "written_count",
+        ):
+            self.assertIn(field, components)
 
     def test_single_row_object_normalizes_to_a_json_list(self) -> None:
         prefix = ("kubectl",)

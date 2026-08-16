@@ -63,3 +63,12 @@ tasks:
       - test -f kubeconfig
       - test -f {{.SCRIPTS_DIR}}/lakehouse-trino.py
       - which mise python3
+
+  flight-recorder-components:
+    desc: Collect per-component Flight Recorder counts through Trino
+    silent: true
+    cmd: mise exec -- python3 scripts/lakehouse-trino.py flight-recorder-components
+    preconditions:
+      - test -f kubeconfig
+      - test -f {{.SCRIPTS_DIR}}/lakehouse-trino.py
+      - which mise python3

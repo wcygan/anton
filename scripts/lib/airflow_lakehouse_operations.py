@@ -809,6 +809,8 @@ def _loki_summary(kubectl: KubectlClient, query: str, start: datetime, end: date
     prior_application_active: set[bool] = set()
     receipts: list[dict[str, Any]] = []
     source_receipts: list[dict[str, Any]] = []
+    hour_receipts: list[dict[str, Any]] = []
+    hour_rejections: list[dict[str, Any]] = []
     for stream in result:
         if not isinstance(stream, Mapping):
             continue
@@ -828,6 +830,36 @@ def _loki_summary(kubectl: KubectlClient, query: str, start: datetime, end: date
                 )
                 source_receipts.append({
                     key: source_receipt.get(key) for key in retained_fields if key in source_receipt
+                })
+            continue
+        if event.startswith("flight_recorder_hour_receipt "):
+            try:
+                hour_receipt = json.loads(event.removeprefix("flight_recorder_hour_receipt "))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(hour_receipt, Mapping):
+                retained_fields = (
+                    "schema_version", "kind", "status", "hour_start", "hour_end",
+                    "source_hour_id", "catalog_sha256", "component_count", "chunk_count",
+                    "source_count", "raw_bytes", "attempt", "manifest_key", "manifest_sha256",
+                )
+                hour_receipts.append({
+                    key: hour_receipt.get(key) for key in retained_fields if key in hour_receipt
+                })
+            continue
+        if event.startswith("flight_recorder_hour_rejection "):
+            try:
+                rejection = json.loads(event.removeprefix("flight_recorder_hour_rejection "))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(rejection, Mapping):
+                hour_rejections.append({
+                    key: rejection.get(key)
+                    for key in (
+                        "source_hour_id", "attempt", "component", "chunk_index",
+                        "completed_queries", "complete_manifest_published",
+                    )
+                    if key in rejection
                 })
             continue
         if not event.startswith("spark_attempt_receipt "):
@@ -860,6 +892,8 @@ def _loki_summary(kubectl: KubectlClient, query: str, start: datetime, end: date
         "prior_application_active": sorted(prior_application_active),
         "receipts": receipts,
         "source_receipts": source_receipts,
+        "hour_receipts": hour_receipts,
+        "hour_rejections": hour_rejections,
     }
 
 
@@ -872,7 +906,7 @@ def flight_recorder_source_loki_query(attempt_name: str) -> str:
     """Return the source receipt query for one exact Flight Recorder Attempt."""
     return (
         f'{{k8s_namespace_name="airflow"}} |= "{attempt_name}" '
-        '|= "flight_recorder_source_receipt"'
+        '|~ "flight_recorder_(source_receipt|hour_receipt|hour_rejection)"'
     )
 
 
