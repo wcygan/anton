@@ -29,7 +29,7 @@ HOUR_REJECTION_FIELDS = frozenset({
 COMPONENTS = {"workflow", "spark_operator", "trino", "seaweedfs"}
 TABLE_CONTRACTS = {
     "events": (
-        (("fingerprint", "varchar"), ("event_timestamp", "timestamp(6)"),
+        (("fingerprint", "varchar"), ("event_timestamp", "timestamp(6) with time zone"),
          ("event_date", "date"), ("source_window_id", "varchar"),
          ("source_timestamp_ns", "varchar"), ("namespace", "varchar"),
          ("workload_kind", "varchar"), ("workload_name", "varchar"),
@@ -40,7 +40,7 @@ TABLE_CONTRACTS = {
         "event_date",
     ),
     "hourly": (
-        (("hour", "timestamp(6)"), ("namespace", "varchar"),
+        (("hour", "timestamp(6) with time zone"), ("namespace", "varchar"),
          ("workload_kind", "varchar"), ("workload_name", "varchar"),
          ("severity", "varchar"), ("event_count", "bigint"),
          ("rejection_count", "bigint"), ("source_component", "varchar")),
@@ -51,8 +51,9 @@ TABLE_CONTRACTS = {
          ("manifest_uri", "varchar"), ("raw_uri", "varchar"),
          ("source_count", "bigint"), ("accepted_count", "bigint"),
          ("rejected_count", "bigint"), ("final_event_count", "bigint"),
-         ("spark_attempt", "varchar"), ("window_start", "timestamp(6)"),
-         ("window_end", "timestamp(6)"), ("completed_at", "timestamp(6)"),
+         ("spark_attempt", "varchar"), ("window_start", "timestamp(6) with time zone"),
+         ("window_end", "timestamp(6) with time zone"),
+         ("completed_at", "timestamp(6) with time zone"),
          ("completion_date", "date"), ("source_kind", "varchar"),
          ("complete_manifest_sha256", "varchar")),
         "completion_date",
@@ -61,7 +62,7 @@ TABLE_CONTRACTS = {
         (("source_window_id", "varchar"), ("source_component", "varchar"),
          ("source_count", "bigint"), ("accepted_count", "bigint"),
          ("rejected_count", "bigint"), ("deduplicated_count", "bigint"),
-         ("written_count", "bigint"), ("completed_at", "timestamp(6)"),
+         ("written_count", "bigint"), ("completed_at", "timestamp(6) with time zone"),
          ("completion_date", "date")),
         "completion_date",
     ),
