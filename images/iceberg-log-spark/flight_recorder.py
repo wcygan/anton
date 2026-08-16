@@ -502,6 +502,24 @@ def validate_source(
 def _read_binary(spark: object, uri: str, maximum: int, *, minimum: int = 1) -> bytes:
     source = spark.read.format("binaryFile").load(uri)
     metadata = source.select("length").take(2)
+    if not metadata and minimum == 0:
+        try:
+            spark_context = spark.sparkContext
+            path = spark_context._jvm.org.apache.hadoop.fs.Path(uri)
+            status = path.getFileSystem(
+                spark_context._jsc.hadoopConfiguration()
+            ).getFileStatus(path)
+            is_file = status.isFile()
+            length = status.getLen()
+        except Exception as error:
+            raise FlightRecorderTransformError(
+                "Flight Recorder empty source object did not exist"
+            ) from error
+        if not is_file or type(length) is not int or length != 0:
+            raise FlightRecorderTransformError(
+                "Flight Recorder empty source object was invalid"
+            )
+        return b""
     if len(metadata) != 1:
         raise FlightRecorderTransformError("Flight Recorder source object count was invalid")
     length = metadata[0]["length"]
