@@ -10,6 +10,8 @@ from urllib.parse import parse_qs, urlparse
 
 from anton_airflow.loki import (
     COMPLETE_HOUR_SCHEMA_VERSION,
+    COMPLETE_HOUR_ENTRY_LIMIT,
+    COMPLETE_HOUR_QUERY_LIMITS,
     COMPONENT_QUERIES,
     DEFAULT_LOKI_QUERY,
     ENTRY_LIMIT,
@@ -20,10 +22,12 @@ from anton_airflow.loki import (
     LokiEntry,
     LokiHour,
     LokiPublicationAmbiguousError,
+    LokiQueryLimits,
     LokiSnapshotExtractor,
     LokiSourceError,
     LokiWindow,
     S3ObjectStore,
+    component_manifest_key,
     hour_manifest_key,
     manifest_key,
     serialize_entries,
@@ -113,10 +117,12 @@ class FlightRecorderSourceTests(unittest.TestCase):
         class HourClient:
             def __init__(self, fail_at: int | None = None) -> None:
                 self.requests = []
+                self.limits = []
                 self.fail_at = fail_at
 
-            def query_range(self, *, window, query):
+            def query_range(self, *, window, query, **limits):
                 self.requests.append((window, query))
+                self.limits.append(limits["limits"])
                 if self.fail_at == len(self.requests):
                     raise LokiSourceError("expected query failure")
                 return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
@@ -131,6 +137,10 @@ class FlightRecorderSourceTests(unittest.TestCase):
             for chunk in hour.chunks
         ]
         self.assertEqual(expected_requests, client.requests)
+        self.assertEqual(
+            [COMPLETE_HOUR_QUERY_LIMITS] * 48,
+            client.limits,
+        )
         self.assertEqual((COMPLETE_HOUR_SCHEMA_VERSION, "complete", 48), (
             manifest.schema_version, manifest.status, len(manifest.sources),
         ))
@@ -138,6 +148,21 @@ class FlightRecorderSourceTests(unittest.TestCase):
         self.assertEqual(
             tuple(component for component, _ in COMPONENT_QUERIES for _ in range(12)),
             tuple(item.component for item in manifest.sources),
+        )
+        first = manifest.sources[0]
+        self.assertEqual(COMPLETE_HOUR_ENTRY_LIMIT, first.entry_limit)
+        self.assertEqual(
+            component_manifest_key(
+                component=first.component,
+                query=first.query,
+                window=hour.chunks[0],
+                limits=COMPLETE_HOUR_QUERY_LIMITS,
+            ),
+            first.manifest_key,
+        )
+        self.assertNotEqual(
+            manifest_key(query=first.query, window=hour.chunks[0]),
+            first.manifest_key,
         )
         key = hour_manifest_key(hour=hour, checksum=manifest.manifest_sha256)
         self.assertEqual(key, store.write_keys[-1])
@@ -156,7 +181,7 @@ class FlightRecorderSourceTests(unittest.TestCase):
             def __init__(self) -> None:
                 self.calls = 0
 
-            def query_range(self, *, window, query):
+            def query_range(self, *, window, query, **_limits):
                 self.calls += 1
                 return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
 
@@ -168,11 +193,43 @@ class FlightRecorderSourceTests(unittest.TestCase):
         self.assertEqual(manifest, replay.capture_hour(hour=hour))
         self.assertEqual(0, replay_client.calls)
 
+    def test_complete_hour_does_not_reuse_a_weaker_source_contract(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class HourClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def query_range(self, *, window, query, **_limits):
+                self.calls += 1
+                return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
+
+        component, query = COMPONENT_QUERIES[0]
+        store, client = MemoryStore(), HourClient()
+        extractor = LokiSnapshotExtractor(client=client, store=store)  # type: ignore[arg-type]
+        extractor.capture(
+            window=hour.chunks[0],
+            query=query,
+            component=component,
+            limits=LokiQueryLimits(2, MAX_RESPONSE_BYTES, 30),
+        )
+        manifest = extractor.capture_hour(hour=hour)
+        self.assertEqual(49, client.calls)
+        self.assertNotEqual(
+            component_manifest_key(
+                component=component,
+                query=query,
+                window=hour.chunks[0],
+                limits=LokiQueryLimits(2, MAX_RESPONSE_BYTES, 30),
+            ),
+            manifest.sources[0].manifest_key,
+        )
+
     def test_complete_hour_total_byte_limit_prevents_publication(self) -> None:
         hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
 
         class HourClient:
-            def query_range(self, *, window, query):
+            def query_range(self, *, window, query, **_limits):
                 return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
 
         store = MemoryStore()
@@ -186,7 +243,7 @@ class FlightRecorderSourceTests(unittest.TestCase):
         hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
 
         class HourClient:
-            def query_range(self, *, window, query):
+            def query_range(self, *, window, query, **_limits):
                 return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
 
         class Store(MemoryStore):
@@ -203,7 +260,7 @@ class FlightRecorderSourceTests(unittest.TestCase):
         hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
 
         class HourClient:
-            def query_range(self, *, window, query):
+            def query_range(self, *, window, query, **_limits):
                 return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
 
         class Store(MemoryStore):
@@ -227,7 +284,7 @@ class FlightRecorderSourceTests(unittest.TestCase):
         hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
 
         class HourClient:
-            def query_range(self, *, window, query):
+            def query_range(self, *, window, query, **_limits):
                 return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
 
         for retained in (None, b"conflicting content"):
@@ -263,6 +320,40 @@ class FlightRecorderSourceTests(unittest.TestCase):
         self.assertEqual([str(self.window.end_ns - 1)], params["end"])
         self.assertEqual([str(ENTRY_LIMIT)], params["limit"])
         self.assertEqual(["forward"], params["direction"])
+
+    def test_complete_hour_query_limit_is_enforced_by_the_real_client(self) -> None:
+        accepted_values = [
+            [str(self.window.start_ns + index), "line"]
+            for index in range(ENTRY_LIMIT + 1)
+        ]
+        accepted_transport = RecordingTransport(self.success(accepted_values))
+        entries = LokiClient(transport=accepted_transport).query_range(
+            window=self.window,
+            limits=COMPLETE_HOUR_QUERY_LIMITS,
+        )
+        self.assertEqual(ENTRY_LIMIT + 1, len(entries))
+        request, timeout, max_bytes = accepted_transport.calls[0]
+        params = parse_qs(urlparse(request.full_url).query)  # type: ignore[attr-defined]
+        self.assertEqual([str(COMPLETE_HOUR_ENTRY_LIMIT)], params["limit"])
+        self.assertEqual(COMPLETE_HOUR_QUERY_LIMITS.timeout_seconds, timeout)
+        self.assertEqual(COMPLETE_HOUR_QUERY_LIMITS.max_response_bytes, max_bytes)
+
+        saturated_values = [
+            [str(self.window.start_ns + index), "line"]
+            for index in range(COMPLETE_HOUR_ENTRY_LIMIT)
+        ]
+        saturated = LokiClient(transport=RecordingTransport(self.success(saturated_values)))
+        with self.assertRaisesRegex(LokiSourceError, "entry limit"):
+            saturated.query_range(window=self.window, limits=COMPLETE_HOUR_QUERY_LIMITS)
+
+        invalid_values = (
+            (COMPLETE_HOUR_ENTRY_LIMIT + 1, MAX_RESPONSE_BYTES, 30),
+            (1, MAX_RESPONSE_BYTES + 1, 30),
+            (1, 1, 31),
+        )
+        for values in invalid_values:
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                LokiQueryLimits(*values)
         self.assertEqual((30, MAX_RESPONSE_BYTES), (timeout, max_bytes))
 
     def test_limit_reach_fails_closed(self) -> None:
