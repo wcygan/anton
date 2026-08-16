@@ -72,6 +72,20 @@ tasks:
       - test -f kubeconfig
       - which mise python3
 
+  flight-recorder-rejection-evidence:
+    desc: Require one accepted Flight Recorder hour rejection
+    silent: true
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
+      --workflow flight-recorder --target authoritative
+      --run-id "{{.RUN_ID}}" --try-number "{{.TRY_NUMBER | default "1"}}"
+      --require-rejected
+    requires:
+      vars: [RUN_ID]
+    preconditions:
+      - test -f kubeconfig
+      - which mise python3
+
   shadow-gate:
     desc: Validate retained evidence for the five-run Airflow shadow gate
     cmds:

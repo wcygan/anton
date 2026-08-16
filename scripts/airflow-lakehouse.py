@@ -41,7 +41,9 @@ def _parser() -> argparse.ArgumentParser:
     evidence.add_argument("--ledger", type=Path)
     evidence.add_argument("--baseline", type=Path)
     evidence.add_argument("--namespace-baseline", type=Path)
-    evidence.add_argument("--require-complete", action="store_true")
+    required_state = evidence.add_mutually_exclusive_group()
+    required_state.add_argument("--require-complete", action="store_true")
+    required_state.add_argument("--require-rejected", action="store_true")
 
     return parser
 
@@ -89,6 +91,8 @@ def _main() -> int:
                 namespace_baseline_path=args.namespace_baseline,
             )
         if args.require_complete and result["status"] != "complete":
+            exit_code = 2
+        if args.require_rejected and result["status"] != "rejected":
             exit_code = 2
     print(json.dumps(_redact_command(result), indent=2, sort_keys=True))
     return exit_code

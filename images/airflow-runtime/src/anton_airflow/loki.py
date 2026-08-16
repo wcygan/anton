@@ -24,6 +24,7 @@ DEFAULT_LOKI_QUERY = '{k8s_namespace_name="airflow"}'
 DEFAULT_RAW_ENDPOINT = "http://seaweedfs-s3.storage.svc.cluster.local:8333"
 DEFAULT_RAW_BUCKET = "iceberg-raw"
 WINDOW_SECONDS = 300
+HOUR_SECONDS = 3600
 ENTRY_LIMIT = 1000
 TIMEOUT_SECONDS = 30
 MAX_QUERY_LENGTH = 1024
@@ -31,7 +32,16 @@ MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_RAW_BYTES = 8 * 1024 * 1024
 MAX_MANIFEST_BYTES = 64 * 1024
 MANIFEST_SCHEMA_VERSION = 1
+COMPLETE_HOUR_SCHEMA_VERSION = 2
+MAX_HOUR_MANIFEST_BYTES = 128 * 1024
+MAX_COMPLETE_RAW_BYTES = 32 * 1024 * 1024
 SOURCE_PREFIX = "flight-recorder/"
+COMPONENT_QUERIES = (
+    ("workflow", '{k8s_namespace_name="airflow"}'),
+    ("spark_operator", '{k8s_namespace_name="spark-system"}'),
+    ("trino", '{k8s_namespace_name="iceberg-demo"} | k8s_pod_name=~"trino.*"'),
+    ("seaweedfs", '{k8s_namespace_name="storage"} | k8s_pod_name=~"seaweedfs.*"'),
+)
 _QUERY_RANGE_PATH = "/loki/api/v1/query_range"
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -39,6 +49,22 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 class LokiSourceError(RuntimeError):
     """A bounded Loki read failed its source contract."""
+
+
+class LokiHourCaptureError(LokiSourceError):
+    """One component chunk prevented complete-hour publication."""
+
+    def __init__(self, *, component: str, chunk_index: int, completed_queries: int) -> None:
+        self.component = component
+        self.chunk_index = chunk_index
+        self.completed_queries = completed_queries
+        super().__init__(f"complete hour capture failed at {component} chunk {chunk_index}")
+
+
+class LokiPublicationAmbiguousError(LokiSourceError):
+    """A source write could not be confirmed as present or absent."""
+
+    complete_manifest_published = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +100,47 @@ class LokiWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class LokiHour:
+    """One closed UTC hour with twelve five-minute chunks."""
+
+    start: datetime
+    end: datetime
+
+    def __post_init__(self) -> None:
+        _require_utc(self.start)
+        _require_utc(self.end)
+        if self.end - self.start != timedelta(seconds=HOUR_SECONDS):
+            raise ValueError("Loki hour must be exactly 3600 seconds")
+        if any((self.start.minute, self.start.second, self.start.microsecond,
+                self.end.minute, self.end.second, self.end.microsecond)):
+            raise ValueError("Loki hour must use UTC hour boundaries")
+
+    @classmethod
+    def ending_at(cls, end: datetime) -> LokiHour:
+        """Create the closed hour before one UTC hour boundary."""
+        _require_utc(end)
+        return cls(start=end - timedelta(seconds=HOUR_SECONDS), end=end)
+
+    @property
+    def start_ns(self) -> int:
+        return _nanoseconds(self.start)
+
+    @property
+    def end_ns(self) -> int:
+        return _nanoseconds(self.end)
+
+    @property
+    def chunks(self) -> tuple[LokiWindow, ...]:
+        return tuple(
+            LokiWindow(
+                start=self.start + timedelta(seconds=WINDOW_SECONDS * index),
+                end=self.start + timedelta(seconds=WINDOW_SECONDS * (index + 1)),
+            )
+            for index in range(HOUR_SECONDS // WINDOW_SECONDS)
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class LokiEntry:
     """One immutable raw Loki entry."""
 
@@ -97,6 +164,56 @@ class LokiSourceManifest:
 
     def as_dict(self) -> dict[str, object]:
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
+@dataclass(frozen=True, slots=True)
+class CompleteHourSource:
+    """One validated component chunk in a complete hour."""
+
+    component: str
+    chunk_index: int
+    entry_limit: int
+    max_response_bytes: int
+    timeout_seconds: int
+    manifest_key: str
+    manifest_sha256: str
+    query: str
+    window_start: str
+    window_end: str
+    entry_count: int
+    raw_bytes: int
+    raw_key: str
+    raw_sha256: str
+
+    def as_dict(self) -> dict[str, object]:
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
+@dataclass(frozen=True, slots=True)
+class CompleteHourManifest:
+    """One immutable complete-hour source envelope."""
+
+    schema_version: int
+    kind: str
+    status: str
+    hour_start: str
+    hour_end: str
+    source_hour_id: str
+    catalog_sha256: str
+    component_count: int
+    chunk_count: int
+    source_count: int
+    raw_bytes: int
+    sources: tuple[CompleteHourSource, ...]
+
+    def as_dict(self) -> dict[str, object]:
+        value = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "sources"}
+        value["sources"] = [source.as_dict() for source in self.sources]
+        return value
+
+    @property
+    def manifest_sha256(self) -> str:
+        return hashlib.sha256(_hour_manifest_bytes(self)).hexdigest()
 
 
 class ObjectStore(Protocol):
@@ -273,6 +390,13 @@ def raw_key(*, window: LokiWindow, checksum: str) -> str:
     return f"{SOURCE_PREFIX}raw/{window.start_ns}-{window.end_ns}/{checksum}.jsonl"
 
 
+def hour_manifest_key(*, hour: LokiHour, checksum: str) -> str:
+    """Return the content-addressed key for one complete hour."""
+    if _SHA256.fullmatch(checksum) is None:
+        raise ValueError("hour checksum must be a lowercase SHA-256 value")
+    return f"{SOURCE_PREFIX}hours/{hour.start_ns}-{hour.end_ns}/{checksum}.complete.json"
+
+
 def _safe_key(key: str) -> bool:
     parts = PurePosixPath(key).parts
     return (
@@ -288,6 +412,13 @@ def _safe_key(key: str) -> bool:
 
 def _manifest_bytes(manifest: LokiSourceManifest) -> bytes:
     return (json.dumps(manifest.as_dict(), sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def _hour_manifest_bytes(manifest: CompleteHourManifest) -> bytes:
+    payload = (json.dumps(manifest.as_dict(), sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if len(payload) > MAX_HOUR_MANIFEST_BYTES:
+        raise LokiSourceError("Complete hour manifest exceeded the byte limit")
+    return payload
 
 
 def _parse_manifest(payload: bytes, *, query: str, window: LokiWindow) -> LokiSourceManifest:
@@ -347,7 +478,22 @@ class LokiSnapshotExtractor:
         try:
             created = self.store.put_if_absent(key=key, payload=payload)
         except Exception as error:
-            raise LokiSourceError("Source object publication failed") from error
+            try:
+                retained = self._get(key, maximum=maximum)
+                if retained is None:
+                    self.sleeper(0.05)
+                    retained = self._get(key, maximum=maximum)
+            except LokiSourceError as read_error:
+                raise LokiPublicationAmbiguousError(
+                    "Source object publication state was ambiguous"
+                ) from read_error
+            if retained == payload:
+                return
+            if retained is not None:
+                raise LokiPublicationAmbiguousError(
+                    "Source object publication returned conflicting content"
+                ) from error
+            raise LokiSourceError("Source object publication failed and remained absent") from error
         if type(created) is not bool:
             raise LokiSourceError("Source object store returned an invalid result")
         if not created:
@@ -356,7 +502,9 @@ class LokiSnapshotExtractor:
                 self.sleeper(0.05)
                 retained = self._get(key, maximum=maximum)
             if retained != payload:
-                raise LokiSourceError("Immutable source object differed after a write race")
+                raise LokiPublicationAmbiguousError(
+                    "Immutable source object was unresolved after a write race"
+                )
 
     def _replay(self, payload: bytes, *, query: str, window: LokiWindow) -> LokiSourceManifest:
         manifest = _parse_manifest(payload, query=query, window=window)
@@ -391,6 +539,70 @@ class LokiSnapshotExtractor:
             raw_sha256=checksum,
         )
         self._publish(key, _manifest_bytes(manifest), maximum=MAX_MANIFEST_BYTES)
+        return manifest
+
+    def capture_hour(self, *, hour: LokiHour) -> CompleteHourManifest:
+        """Publish a complete hour only after all component chunks succeed."""
+        sources: list[CompleteHourSource] = []
+        for component, query in COMPONENT_QUERIES:
+            for chunk_index, window in enumerate(hour.chunks):
+                try:
+                    manifest = self.capture(window=window, query=query)
+                except LokiSourceError as error:
+                    raise LokiHourCaptureError(
+                        component=component,
+                        chunk_index=chunk_index,
+                        completed_queries=len(sources),
+                    ) from error
+                retained_manifest_key = manifest_key(query=query, window=window)
+                retained_manifest = _manifest_bytes(manifest)
+                sources.append(CompleteHourSource(
+                    component=component,
+                    chunk_index=chunk_index,
+                    entry_limit=ENTRY_LIMIT,
+                    max_response_bytes=MAX_RESPONSE_BYTES,
+                    timeout_seconds=TIMEOUT_SECONDS,
+                    manifest_key=retained_manifest_key,
+                    manifest_sha256=hashlib.sha256(retained_manifest).hexdigest(),
+                    query=manifest.query,
+                    window_start=manifest.window_start,
+                    window_end=manifest.window_end,
+                    entry_count=manifest.entry_count,
+                    raw_bytes=manifest.raw_bytes,
+                    raw_key=manifest.raw_key,
+                    raw_sha256=manifest.raw_sha256,
+                ))
+        catalog = [
+            {
+                "component": component,
+                "query": query,
+                "entry_limit": ENTRY_LIMIT,
+                "max_response_bytes": MAX_RESPONSE_BYTES,
+                "timeout_seconds": TIMEOUT_SECONDS,
+            }
+            for component, query in COMPONENT_QUERIES
+        ]
+        manifest = CompleteHourManifest(
+            schema_version=COMPLETE_HOUR_SCHEMA_VERSION,
+            kind="flight_recorder_complete_hour",
+            status="complete",
+            hour_start=_iso_utc(hour.start),
+            hour_end=_iso_utc(hour.end),
+            source_hour_id=f"{hour.start_ns}-{hour.end_ns}",
+            catalog_sha256=hashlib.sha256(
+                json.dumps(catalog, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+            component_count=len(COMPONENT_QUERIES),
+            chunk_count=len(sources),
+            source_count=sum(source.entry_count for source in sources),
+            raw_bytes=sum(source.raw_bytes for source in sources),
+            sources=tuple(sources),
+        )
+        if manifest.raw_bytes > MAX_COMPLETE_RAW_BYTES:
+            raise LokiSourceError("Complete hour raw source exceeded the byte limit")
+        payload = _hour_manifest_bytes(manifest)
+        key = hour_manifest_key(hour=hour, checksum=manifest.manifest_sha256)
+        self._publish(key, payload, maximum=MAX_HOUR_MANIFEST_BYTES)
         return manifest
 
 

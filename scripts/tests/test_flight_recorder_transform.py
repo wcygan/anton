@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -19,7 +20,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 class FlightRecorderTransformTests(unittest.TestCase):
-    window = "1786708500123456000-1786708800123456000"
+    window = "1786708500123456000-1786708800123457000"
 
     def entry(self, *, line: str = "service started", **labels: str) -> dict[str, object]:
         return {
@@ -52,6 +53,60 @@ class FlightRecorderTransformTests(unittest.TestCase):
             "FLIGHT_RECORDER_SOURCE_WINDOW_ID": self.window,
             "ANTON_SPARK_ATTEMPT": "attempt-1",
         }
+
+    def complete_hour(self):
+        start_ns, end_ns = 1786705200000000000, 1786708800000000000
+        sources = []
+        for component, query in MODULE.COMPONENT_QUERIES:
+            query_sha = hashlib.sha256(query.encode()).hexdigest()
+            for index in range(12):
+                chunk_start = start_ns + index * 300_000_000_000
+                chunk_end = chunk_start + 300_000_000_000
+                checksum = hashlib.sha256(f"{component}-{index}".encode()).hexdigest()
+                sources.append({
+                    "component": component,
+                    "chunk_index": index,
+                    "entry_limit": MODULE.ENTRY_LIMIT,
+                    "max_response_bytes": MODULE.MAX_RESPONSE_BYTES,
+                    "timeout_seconds": MODULE.TIMEOUT_SECONDS,
+                    "manifest_key": f"flight-recorder/manifests/{chunk_start}-{chunk_end}/{query_sha}.json",
+                    "manifest_sha256": "b" * 64,
+                    "query": query,
+                    "window_start": MODULE._datetime_ns(str(chunk_start)).isoformat().replace("+00:00", "Z"),
+                    "window_end": MODULE._datetime_ns(str(chunk_end)).isoformat().replace("+00:00", "Z"),
+                    "entry_count": 1,
+                    "raw_bytes": 10,
+                    "raw_key": f"flight-recorder/raw/{chunk_start}-{chunk_end}/{checksum}.jsonl",
+                    "raw_sha256": checksum,
+                })
+        manifest = {
+            "schema_version": MODULE.COMPLETE_HOUR_SCHEMA_VERSION,
+            "kind": "flight_recorder_complete_hour",
+            "status": "complete",
+            "hour_start": MODULE._datetime_ns(str(start_ns)).isoformat().replace("+00:00", "Z"),
+            "hour_end": MODULE._datetime_ns(str(end_ns)).isoformat().replace("+00:00", "Z"),
+            "source_hour_id": f"{start_ns}-{end_ns}",
+            "catalog_sha256": MODULE.component_catalog_sha256(),
+            "component_count": 4,
+            "chunk_count": 48,
+            "source_count": 48,
+            "raw_bytes": 480,
+            "sources": sources,
+        }
+        payload = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        checksum = hashlib.sha256(payload).hexdigest()
+        env = {
+            "ANTON_LAKEHOUSE_TARGET": "authoritative",
+            "FLIGHT_RECORDER_ICEBERG_NAMESPACE": "flight_recorder",
+            "ICEBERG_WAREHOUSE": "s3://iceberg-warehouse",
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_URI": (
+                f"s3a://iceberg-raw/flight-recorder/hours/{start_ns}-{end_ns}/{checksum}.complete.json"
+            ),
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256": checksum,
+            "FLIGHT_RECORDER_SOURCE_HOUR_ID": f"{start_ns}-{end_ns}",
+            "ANTON_SPARK_ATTEMPT": "attempt-hour-1",
+        }
+        return manifest, payload, env
 
     def test_safe_event_has_exact_allowlisted_immutable_schema(self) -> None:
         event = self.transform(self.entry(line="password=hunter2 completed"))
@@ -168,6 +223,12 @@ class FlightRecorderTransformTests(unittest.TestCase):
             MODULE.commit_in_order(action("events"), fail_hourly, action("run_receipts"))
         self.assertEqual(["events", "hourly-failed"], order)
 
+        order.clear()
+        MODULE.commit_hour_in_order(
+            action("events"), action("hourly"), action("component_counts"), action("run_receipts")
+        )
+        self.assertEqual(["events", "hourly", "component_counts", "run_receipts"], order)
+
     def test_replay_requires_one_matching_receipt_and_final_count(self) -> None:
         checksum = "a" * 64
         receipt = {"source_window_id": self.window, "raw_sha256": checksum, "final_event_count": 7}
@@ -196,11 +257,149 @@ class FlightRecorderTransformTests(unittest.TestCase):
                 ("lake.flight_recorder.events", "event_date", "s3://iceberg-warehouse/flight_recorder/events"),
                 ("lake.flight_recorder.hourly", "days(hour)", "s3://iceberg-warehouse/flight_recorder/hourly"),
                 ("lake.flight_recorder.run_receipts", "completion_date", "s3://iceberg-warehouse/flight_recorder/run_receipts"),
+                ("lake.flight_recorder.component_counts", "completion_date", "s3://iceberg-warehouse/flight_recorder/component_counts"),
             ),
             tuple((table, partition, location) for table, _, partition, location in MODULE._TABLES),
         )
         with self.assertRaises(MODULE.FlightRecorderTransformError):
             MODULE.RuntimeConfig.from_environment({**env, "ANTON_LAKEHOUSE_TARGET": "shadow"})
+
+        manifest, _, hour_env = self.complete_hour()
+        hour_config = MODULE.HourlyRuntimeConfig.from_environment(hour_env)
+        self.assertEqual(manifest["source_hour_id"], hour_config.source_hour_id)
+        with self.assertRaises(MODULE.FlightRecorderTransformError):
+            MODULE.HourlyRuntimeConfig.from_environment({**hour_env, **env})
+
+    def test_complete_hour_manifest_requires_exact_ordered_48_source_matrix(self) -> None:
+        manifest, payload, env = self.complete_hour()
+        config = MODULE.HourlyRuntimeConfig.from_environment(env)
+        sources = MODULE.validate_complete_hour_manifest(config, payload)
+        self.assertEqual(48, len(sources))
+        self.assertEqual(
+            tuple(component for component, _ in MODULE.COMPONENT_QUERIES for _ in range(12)),
+            tuple(item["component"] for item in sources),
+        )
+        cases = (
+            {**manifest, "sources": manifest["sources"][:-1], "chunk_count": 47},
+            {**manifest, "sources": [*manifest["sources"], manifest["sources"][0]], "chunk_count": 49},
+            {**manifest, "sources": [
+                {**manifest["sources"][0], "query": "{unknown=\"query\"}"},
+                *manifest["sources"][1:],
+            ]},
+            {**manifest, "sources": [manifest["sources"][1], manifest["sources"][0], *manifest["sources"][2:]]},
+        )
+        for changed in cases:
+            changed_payload = (json.dumps(changed, sort_keys=True, separators=(",", ":")) + "\n").encode()
+            changed_checksum = hashlib.sha256(changed_payload).hexdigest()
+            changed_env = {
+                **env,
+                "FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256": changed_checksum,
+                "FLIGHT_RECORDER_COMPLETE_MANIFEST_URI": env["FLIGHT_RECORDER_COMPLETE_MANIFEST_URI"].replace(
+                    env["FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256"], changed_checksum,
+                ),
+            }
+            with self.subTest(changed=changed), self.assertRaises(MODULE.FlightRecorderTransformError):
+                MODULE.validate_complete_hour_manifest(
+                    MODULE.HourlyRuntimeConfig.from_environment(changed_env), changed_payload,
+                )
+
+    def test_complete_hour_manifest_has_an_aggregate_raw_byte_limit(self) -> None:
+        _, payload, env = self.complete_hour()
+        config = MODULE.HourlyRuntimeConfig.from_environment(env)
+        with patch.object(MODULE, "MAX_COMPLETE_RAW_BYTES", 1):
+            with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "total raw bytes"):
+                MODULE.validate_complete_hour_manifest(config, payload)
+
+    def test_child_manifest_checksum_fails_before_source_read(self) -> None:
+        _, payload, env = self.complete_hour()
+        config = MODULE.HourlyRuntimeConfig.from_environment(env)
+        sources = MODULE.validate_complete_hour_manifest(config, payload)
+        spark = object()
+        with patch.object(MODULE, "_read_binary", return_value=b"wrong\n") as reader:
+            with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "child manifest checksum"):
+                MODULE._read_complete_hour_sources(spark, config, sources)
+        reader.assert_called_once_with(spark, f's3a://iceberg-raw/{sources[0]["manifest_key"]}', MODULE.MAX_MANIFEST_BYTES)
+
+    def test_schema_migration_adds_only_missing_complete_hour_columns(self) -> None:
+        class Field:
+            def __init__(self, name): self.name = name
+
+        class Spark:
+            commands = []
+            def table(self, table):
+                retained = {
+                    MODULE.EVENTS_TABLE: ("fingerprint", "source_component"),
+                    MODULE.HOURLY_TABLE: ("hour",),
+                    MODULE.RECEIPTS_TABLE: ("source_window_id",),
+                }[table]
+                return type("Table", (), {"schema": type("Schema", (), {
+                    "fields": [Field(name) for name in retained],
+                })()})()
+            def sql(self, command): self.commands.append(command)
+
+        spark = Spark()
+        MODULE._migrate_tables(spark)
+        self.assertEqual([
+            f"ALTER TABLE {MODULE.EVENTS_TABLE} ADD COLUMNS (source_chunk_id int)",
+            f"ALTER TABLE {MODULE.HOURLY_TABLE} ADD COLUMNS (source_component string)",
+            (f"ALTER TABLE {MODULE.RECEIPTS_TABLE} ADD COLUMNS "
+             "(source_kind string, complete_manifest_sha256 string)"),
+        ], spark.commands)
+
+    def test_component_counts_deduplicate_and_reconcile_per_component(self) -> None:
+        events = (
+            {"source_component": "workflow", "fingerprint": "a", "rejected": False},
+            {"source_component": "workflow", "fingerprint": "a", "rejected": False},
+            {"source_component": "workflow", "fingerprint": "b", "rejected": True},
+            {"source_component": "trino", "fingerprint": "c", "rejected": False},
+            {"source_component": "spark_operator", "fingerprint": "d", "rejected": False},
+            {"source_component": "seaweedfs", "fingerprint": "e", "rejected": False},
+        )
+        deduplicated, counts = MODULE.reconcile_component_events(events)
+        self.assertEqual(5, len(deduplicated))
+        self.assertEqual({
+            "source_count": 3, "accepted_count": 2, "rejected_count": 1,
+            "deduplicated_count": 2,
+        }, counts["workflow"])
+        written = {"workflow": 2, "trino": 1, "spark_operator": 1, "seaweedfs": 1}
+        reconciled = MODULE.validate_written_counts(counts, written)
+        self.assertEqual(2, reconciled["workflow"]["written_count"])
+        with self.assertRaises(MODULE.FlightRecorderTransformError):
+            MODULE.validate_written_counts(counts, {**written, "workflow": 1})
+        with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "multiple components"):
+            MODULE.reconcile_component_events((*events, {
+                "source_component": "seaweedfs", "fingerprint": "a", "rejected": False,
+            }))
+
+    def test_hourly_replay_requires_receipt_component_rows_and_final_counts(self) -> None:
+        source_hour_id, checksum = "1-2", "a" * 64
+        receipts = [{
+            "source_window_id": source_hour_id,
+            "complete_manifest_sha256": checksum,
+            "source_count": 4,
+            "accepted_count": 4,
+            "rejected_count": 0,
+            "final_event_count": 4,
+        }]
+        rows = [
+            {"source_component": name, "source_count": 1, "accepted_count": 1,
+             "rejected_count": 0, "deduplicated_count": 1, "written_count": 1}
+            for name, _ in MODULE.COMPONENT_QUERIES
+        ]
+        final = {name: 1 for name, _ in MODULE.COMPONENT_QUERIES}
+        self.assertTrue(MODULE.hourly_replay_is_complete(
+            receipts, rows, final,
+            source_hour_id=source_hour_id,
+            manifest_sha256=checksum,
+            final_event_count=4,
+        ))
+        with self.assertRaises(MODULE.FlightRecorderTransformError):
+            MODULE.hourly_replay_is_complete(
+                receipts, rows[:-1], final,
+                source_hour_id=source_hour_id,
+                manifest_sha256=checksum,
+                final_event_count=4,
+            )
 
     def test_source_manifest_and_checksum_mismatch_fail_closed(self) -> None:
         raw = (json.dumps(self.entry(), sort_keys=True, separators=(",", ":")) + "\n").encode()

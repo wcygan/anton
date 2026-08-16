@@ -86,29 +86,32 @@ LAKEHOUSE = load_module(f"{PACKAGE}.lakehouse", SOURCE / "anton_airflow" / "lake
 
 
 class FlightRecorderWorkflowTests(unittest.TestCase):
-    end = datetime(2026, 8, 14, 12, 5, tzinfo=timezone.utc)
+    end = datetime(2026, 8, 14, 12, 0, tzinfo=timezone.utc)
     secret = "test-secret-must-not-appear"
 
     def operator(self):
-        window = LOKI.LokiWindow.ending_at(self.end)
-        checksum = "a" * 64
-        manifest = LOKI.LokiSourceManifest(
-            schema_version=1,
-            query=LOKI.DEFAULT_LOKI_QUERY,
-            window_start=window.start.isoformat().replace("+00:00", "Z"),
-            window_end=window.end.isoformat().replace("+00:00", "Z"),
-            entry_count=2,
-            raw_bytes=120,
-            raw_key=LOKI.raw_key(window=window, checksum=checksum),
-            raw_sha256=checksum,
+        hour = LOKI.LokiHour.ending_at(self.end)
+        manifest = LOKI.CompleteHourManifest(
+            schema_version=LOKI.COMPLETE_HOUR_SCHEMA_VERSION,
+            kind="flight_recorder_complete_hour",
+            status="complete",
+            hour_start=hour.start.isoformat().replace("+00:00", "Z"),
+            hour_end=hour.end.isoformat().replace("+00:00", "Z"),
+            source_hour_id=f"{hour.start_ns}-{hour.end_ns}",
+            catalog_sha256="b" * 64,
+            component_count=4,
+            chunk_count=48,
+            source_count=312,
+            raw_bytes=42000,
+            sources=(),
         )
 
         class Extractor:
             def __init__(self) -> None:
                 self.calls = []
 
-            def capture(self, *, window, query):
-                self.calls.append((window, query))
+            def capture_hour(self, *, hour):
+                self.calls.append(hour)
                 return manifest
 
         extractor = Extractor()
@@ -120,9 +123,9 @@ class FlightRecorderWorkflowTests(unittest.TestCase):
             target="authoritative",
             namespace="lakehouse",
         )
-        return operator, extractor, manifest, window
+        return operator, extractor, manifest, hour
 
-    def context(self, source_end: str | None = "2026-08-14T12:05:00Z"):
+    def context(self, source_end: str | None = "2026-08-14T12:00:00Z"):
         conf = {} if source_end is None else {"source_window_end": source_end}
         return {
             "dag_run": SimpleNamespace(conf=conf, run_id="manual__flight-recorder"),
@@ -133,44 +136,85 @@ class FlightRecorderWorkflowTests(unittest.TestCase):
             "try_number": 1,
         }
 
-    def test_exact_replay_manifest_is_injected_and_receipted_without_secrets(self) -> None:
-        operator, extractor, manifest, window = self.operator()
+    def test_complete_hour_manifest_is_the_only_injected_source(self) -> None:
+        operator, extractor, manifest, hour = self.operator()
         result = operator.execute(self.context())
-        self.assertEqual(extractor.calls, [(window, LOKI.DEFAULT_LOKI_QUERY)])
+        self.assertEqual(extractor.calls, [hour])
+        manifest_key = LOKI.hour_manifest_key(hour=hour, checksum=manifest.manifest_sha256)
         values = {
-            "FLIGHT_RECORDER_RAW_URI": f"s3a://iceberg-raw/{manifest.raw_key}",
-            "FLIGHT_RECORDER_MANIFEST_URI": (
-                "s3a://iceberg-raw/" + LOKI.manifest_key(query=manifest.query, window=window)
-            ),
-            "FLIGHT_RECORDER_RAW_SHA256": manifest.raw_sha256,
-            "FLIGHT_RECORDER_SOURCE_WINDOW_ID": f"{window.start_ns}-{window.end_ns}",
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_URI": f"s3a://iceberg-raw/{manifest_key}",
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256": manifest.manifest_sha256,
+            "FLIGHT_RECORDER_SOURCE_HOUR_ID": manifest.source_hour_id,
         }
         application = result["application_spec"]
         for role in ("driver", "executor"):
             container = application["spec"][f"{role}Spec"]["podTemplateSpec"]["spec"]["containers"][0]
             environment = {item["name"]: item["value"] for item in container["env"]}
             self.assertTrue(values.items() <= environment.items())
+            for retired in ("FLIGHT_RECORDER_RAW_URI", "FLIGHT_RECORDER_RAW_SHA256"):
+                self.assertNotIn(retired, environment)
         annotations = application["metadata"]["annotations"]
         for name, value in values.items():
             self.assertEqual(annotations[f"anton.io/{name.lower().replace('_', '-')}"] , value)
         prefix, payload = operator.log.messages[0].split(" ", 1)
         receipt = json.loads(payload)
-        self.assertEqual(prefix, "flight_recorder_source_receipt")
-        self.assertEqual((receipt["query"], receipt["entry_count"], receipt["raw_bytes"]), (LOKI.DEFAULT_LOKI_QUERY, 2, 120))
-        self.assertEqual((receipt["raw_key"], receipt["raw_sha256"]), (manifest.raw_key, manifest.raw_sha256))
-        self.assertEqual(receipt["manifest_key"], values["FLIGHT_RECORDER_MANIFEST_URI"].removeprefix("s3a://iceberg-raw/"))
+        self.assertEqual(prefix, "flight_recorder_hour_receipt")
+        self.assertEqual((receipt["component_count"], receipt["chunk_count"], receipt["source_count"]), (4, 48, 312))
+        self.assertEqual(receipt["manifest_key"], manifest_key)
+        self.assertEqual(receipt["manifest_sha256"], manifest.manifest_sha256)
+        self.assertNotIn("sources", receipt)
         serialized = json.dumps({"receipt": receipt, "application": application}, sort_keys=True)
         for secret in (self.secret, "RAW_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY"):
             self.assertNotIn(secret, serialized)
         self.assertEqual((operator.target, operator.namespace), ("authoritative", "lakehouse"))
 
     def test_invalid_source_end_fails_before_capture_or_submission(self) -> None:
-        for value in (None, "2026-08-14T12:05:00-05:00"):
+        for value in (
+            None,
+            "2026-08-14T12:05:00Z",
+            "2026-08-14T12:00:00-05:00",
+            "2999-08-14T12:00:00Z",
+        ):
             operator, extractor, _, _ = self.operator()
             with self.subTest(value=value), self.assertRaises(AirflowException):
                 operator.execute(self.context(value))
             self.assertEqual(extractor.calls, [])
             self.assertIsNone(operator.submitted_spec)
+
+    def test_failed_hour_is_receipted_and_never_submitted(self) -> None:
+        operator, extractor, _, _ = self.operator()
+
+        def fail(*, hour):
+            raise LOKI.LokiHourCaptureError(
+                component="trino", chunk_index=4, completed_queries=28,
+            )
+
+        extractor.capture_hour = fail
+        with self.assertRaises(AirflowException):
+            operator.execute(self.context())
+        self.assertIsNone(operator.submitted_spec)
+        prefix, payload = operator.log.messages[0].split(" ", 1)
+        self.assertEqual("flight_recorder_hour_rejection", prefix)
+        self.assertEqual(
+            {"attempt": "lh-airflow-run-flig-1e20acc910bd-a1",
+             "component": "trino", "chunk_index": 4, "completed_queries": 28,
+             "complete_manifest_published": False,
+             "source_hour_id": "1786705200000000000-1786708800000000000"},
+            json.loads(payload),
+        )
+
+    def test_ambiguous_manifest_publication_is_not_accepted_as_absent(self) -> None:
+        operator, extractor, _, _ = self.operator()
+
+        def fail(*, hour):
+            raise LOKI.LokiPublicationAmbiguousError("write state is unknown")
+
+        extractor.capture_hour = fail
+        with self.assertRaises(AirflowException):
+            operator.execute(self.context())
+        payload = json.loads(operator.log.messages[0].split(" ", 1)[1])
+        self.assertIsNone(payload["complete_manifest_published"])
+        self.assertIsNone(operator.submitted_spec)
 
     def test_manual_dag_uses_exact_targets_and_secret_wiring(self) -> None:
         class Model:

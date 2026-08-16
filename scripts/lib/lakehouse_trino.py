@@ -38,17 +38,21 @@ LIMIT 20""",
   (SELECT coalesce(sum(event_count), 0) FROM iceberg.flight_recorder.hourly) AS hourly_event_count_sum,
   (SELECT coalesce(sum(rejection_count), 0) FROM iceberg.flight_recorder.hourly) AS hourly_rejection_count_sum,
   (SELECT count(*) FROM iceberg.flight_recorder.run_receipts) AS receipt_count,
+  (SELECT count(*) FROM iceberg.flight_recorder.component_counts) AS component_receipt_count,
   latest.source_window_id AS latest_source_window_id,
   latest.raw_sha256 AS latest_raw_sha256,
   latest.spark_attempt AS latest_spark_attempt,
   latest.source_count AS latest_source_count,
   latest.accepted_count AS latest_accepted_count,
   latest.rejected_count AS latest_rejected_count,
-  latest.final_event_count AS latest_final_event_count
+  latest.final_event_count AS latest_final_event_count,
+  latest.source_kind AS latest_source_kind,
+  latest.complete_manifest_sha256 AS latest_complete_manifest_sha256
 FROM (VALUES 1) AS guard(value)
 LEFT JOIN (
   SELECT source_window_id, raw_sha256, spark_attempt, source_count,
-    accepted_count, rejected_count, final_event_count
+    accepted_count, rejected_count, final_event_count,
+    source_kind, complete_manifest_sha256
   FROM iceberg.flight_recorder.run_receipts
   ORDER BY completed_at DESC
   LIMIT 1
@@ -61,6 +65,8 @@ LEFT JOIN (
         "SHOW CREATE TABLE iceberg.flight_recorder.hourly",
         "SHOW COLUMNS FROM iceberg.flight_recorder.run_receipts",
         "SHOW CREATE TABLE iceberg.flight_recorder.run_receipts",
+        "SHOW COLUMNS FROM iceberg.flight_recorder.component_counts",
+        "SHOW CREATE TABLE iceberg.flight_recorder.component_counts",
     ),
     "flight-recorder-snapshots": (
         """SELECT snapshot_id, committed_at
@@ -75,6 +81,20 @@ LIMIT 20""",
 FROM iceberg.flight_recorder."run_receipts$snapshots"
 ORDER BY committed_at DESC
 LIMIT 20""",
+        """SELECT snapshot_id, committed_at
+FROM iceberg.flight_recorder."component_counts$snapshots"
+ORDER BY committed_at DESC
+LIMIT 20""",
+    ),
+    "flight-recorder-components": (
+        """SELECT source_window_id, source_component, source_count, accepted_count,
+  rejected_count, deduplicated_count, written_count
+FROM iceberg.flight_recorder.component_counts
+WHERE source_window_id = (
+  SELECT source_window_id FROM iceberg.flight_recorder.run_receipts
+  ORDER BY completed_at DESC LIMIT 1
+)
+ORDER BY source_component""",
     ),
     "flight-recorder-namespace-isolation": (
         """SELECT * FROM (

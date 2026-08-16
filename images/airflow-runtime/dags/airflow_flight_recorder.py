@@ -29,7 +29,7 @@ FLIGHT_RECORDER_EXECUTOR_CONFIG = {
     tags=["anton", "lakehouse", "flight-recorder"],
 )
 def airflow_flight_recorder():
-    """Capture one explicit five-minute window and submit one Spark Attempt."""
+    """Capture one complete closed hour and submit one Spark Attempt."""
     FlightRecorderSparkOperator(
         task_id="run_flight_recorder_spark_attempt",
         application_spec=FLIGHT_RECORDER_APPLICATION_SPEC,

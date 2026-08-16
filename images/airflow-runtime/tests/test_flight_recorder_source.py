@@ -4,10 +4,13 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import json
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 from anton_airflow.loki import (
+    COMPLETE_HOUR_SCHEMA_VERSION,
+    COMPONENT_QUERIES,
     DEFAULT_LOKI_QUERY,
     ENTRY_LIMIT,
     MANIFEST_SCHEMA_VERSION,
@@ -15,10 +18,13 @@ from anton_airflow.loki import (
     MAX_RESPONSE_BYTES,
     LokiClient,
     LokiEntry,
+    LokiHour,
+    LokiPublicationAmbiguousError,
     LokiSnapshotExtractor,
     LokiSourceError,
     LokiWindow,
     S3ObjectStore,
+    hour_manifest_key,
     manifest_key,
     serialize_entries,
 )
@@ -38,12 +44,14 @@ class MemoryStore:
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
         self.writes = 0
+        self.write_keys: list[str] = []
 
     def get(self, *, key: str) -> bytes | None:
         return self.objects.get(key)
 
     def put_if_absent(self, *, key: str, payload: bytes) -> bool:
         self.writes += 1
+        self.write_keys.append(key)
         if key in self.objects:
             return False
         self.objects[key] = payload
@@ -83,6 +91,159 @@ class FlightRecorderSourceTests(unittest.TestCase):
             LokiWindow.ending_at(datetime(2026, 8, 14, 12, 0))
         with self.assertRaises(ValueError):
             LokiWindow.ending_at(self.end.astimezone(timezone(timedelta(hours=-5))))
+
+    def test_hour_is_closed_utc_and_contains_twelve_exact_chunks(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+        self.assertEqual(timedelta(hours=1), hour.end - hour.start)
+        self.assertEqual(12, len(hour.chunks))
+        self.assertEqual((hour.start, hour.end), (hour.chunks[0].start, hour.chunks[-1].end))
+        self.assertTrue(all(
+            left.end == right.start for left, right in zip(hour.chunks, hour.chunks[1:])
+        ))
+        for invalid in (
+            datetime(2026, 8, 14, 12, 5, tzinfo=timezone.utc),
+            datetime(2026, 8, 14, 12),
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                LokiHour.ending_at(invalid)
+
+    def test_complete_hour_publishes_only_after_all_48_sources_succeed(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class HourClient:
+            def __init__(self, fail_at: int | None = None) -> None:
+                self.requests = []
+                self.fail_at = fail_at
+
+            def query_range(self, *, window, query):
+                self.requests.append((window, query))
+                if self.fail_at == len(self.requests):
+                    raise LokiSourceError("expected query failure")
+                return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
+
+        store = MemoryStore()
+        client = HourClient()
+        extractor = LokiSnapshotExtractor(client=client, store=store)  # type: ignore[arg-type]
+        manifest = extractor.capture_hour(hour=hour)
+        expected_requests = [
+            (chunk, query)
+            for component, query in COMPONENT_QUERIES
+            for chunk in hour.chunks
+        ]
+        self.assertEqual(expected_requests, client.requests)
+        self.assertEqual((COMPLETE_HOUR_SCHEMA_VERSION, "complete", 48), (
+            manifest.schema_version, manifest.status, len(manifest.sources),
+        ))
+        self.assertEqual(tuple(range(12)) * 4, tuple(item.chunk_index for item in manifest.sources))
+        self.assertEqual(
+            tuple(component for component, _ in COMPONENT_QUERIES for _ in range(12)),
+            tuple(item.component for item in manifest.sources),
+        )
+        key = hour_manifest_key(hour=hour, checksum=manifest.manifest_sha256)
+        self.assertEqual(key, store.write_keys[-1])
+        self.assertEqual(manifest.manifest_sha256, __import__("hashlib").sha256(store.objects[key]).hexdigest())
+
+        failed_store = MemoryStore()
+        failed = LokiSnapshotExtractor(client=HourClient(fail_at=20), store=failed_store)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(LokiSourceError, "spark_operator chunk 7"):
+            failed.capture_hour(hour=hour)
+        self.assertFalse(any(key.startswith("flight-recorder/hours/") for key in failed_store.objects))
+
+    def test_complete_hour_replay_uses_retained_children_without_loki(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class HourClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def query_range(self, *, window, query):
+                self.calls += 1
+                return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
+
+        store, initial_client = MemoryStore(), HourClient()
+        initial = LokiSnapshotExtractor(client=initial_client, store=store)  # type: ignore[arg-type]
+        manifest = initial.capture_hour(hour=hour)
+        replay_client = HourClient()
+        replay = LokiSnapshotExtractor(client=replay_client, store=store)  # type: ignore[arg-type]
+        self.assertEqual(manifest, replay.capture_hour(hour=hour))
+        self.assertEqual(0, replay_client.calls)
+
+    def test_complete_hour_total_byte_limit_prevents_publication(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class HourClient:
+            def query_range(self, *, window, query):
+                return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
+
+        store = MemoryStore()
+        extractor = LokiSnapshotExtractor(client=HourClient(), store=store)  # type: ignore[arg-type]
+        with patch("anton_airflow.loki.MAX_COMPLETE_RAW_BYTES", 1):
+            with self.assertRaisesRegex(LokiSourceError, "Complete hour raw source"):
+                extractor.capture_hour(hour=hour)
+        self.assertFalse(any(key.startswith("flight-recorder/hours/") for key in store.objects))
+
+    def test_ambiguous_complete_manifest_write_is_read_back(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class HourClient:
+            def query_range(self, *, window, query):
+                return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
+
+        class Store(MemoryStore):
+            def put_if_absent(self, *, key, payload):
+                created = super().put_if_absent(key=key, payload=payload)
+                if key.startswith("flight-recorder/hours/"):
+                    raise TimeoutError("response was lost")
+                return created
+
+        manifest = LokiSnapshotExtractor(client=HourClient(), store=Store()).capture_hour(hour=hour)
+        self.assertEqual("complete", manifest.status)
+
+    def test_unresolved_complete_manifest_write_is_ambiguous(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class HourClient:
+            def query_range(self, *, window, query):
+                return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
+
+        class Store(MemoryStore):
+            failed_key = None
+
+            def get(self, *, key):
+                if key == self.failed_key:
+                    raise TimeoutError("read failed")
+                return super().get(key=key)
+
+            def put_if_absent(self, *, key, payload):
+                if key.startswith("flight-recorder/hours/"):
+                    self.failed_key = key
+                    raise TimeoutError("write failed")
+                return super().put_if_absent(key=key, payload=payload)
+
+        with self.assertRaises(LokiPublicationAmbiguousError):
+            LokiSnapshotExtractor(client=HourClient(), store=Store()).capture_hour(hour=hour)
+
+    def test_complete_manifest_write_race_requires_exact_read_back(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class HourClient:
+            def query_range(self, *, window, query):
+                return (LokiEntry(str(window.start_ns), {"component": query}, "line"),)
+
+        for retained in (None, b"conflicting content"):
+            class Store(MemoryStore):
+                def get(self, *, key):
+                    if key.startswith("flight-recorder/hours/"):
+                        return retained
+                    return super().get(key=key)
+
+                def put_if_absent(self, *, key, payload):
+                    if key.startswith("flight-recorder/hours/"):
+                        return False
+                    return super().put_if_absent(key=key, payload=payload)
+
+            with self.subTest(retained=retained), self.assertRaises(LokiPublicationAmbiguousError):
+                LokiSnapshotExtractor(client=HourClient(), store=Store()).capture_hour(hour=hour)
 
     def test_query_uses_fixed_bounds_and_returns_raw_immutable_entries(self) -> None:
         timestamp = str(self.window.start_ns)
@@ -202,7 +363,7 @@ class FlightRecorderSourceTests(unittest.TestCase):
 
         entry = LokiEntry(str(self.window.start_ns), {}, "line")
         colliding = LokiSnapshotExtractor(client=StubClient((entry,)), store=CollisionStore())  # type: ignore[arg-type]
-        with self.assertRaisesRegex(LokiSourceError, "differed"):
+        with self.assertRaisesRegex(LokiPublicationAmbiguousError, "unresolved"):
             colliding.capture(window=self.window)
 
     def test_s3_store_bounds_requests_and_maps_immutable_statuses(self) -> None:
@@ -228,7 +389,7 @@ class FlightRecorderSourceTests(unittest.TestCase):
         source._publish(key, b"raw\n", maximum=MAX_RAW_BYTES)
         self.assertEqual([409, 404, 0.05, b"raw\n"], events)
         outcomes = iter((409, 404, 404))
-        with self.assertRaisesRegex(LokiSourceError, "differed"):
+        with self.assertRaisesRegex(LokiPublicationAmbiguousError, "unresolved"):
             source._publish(key, b"raw\n", maximum=MAX_RAW_BYTES)
 
         oversized = lambda *_args, **_kwargs: BytesIO(b"x" * (MAX_RAW_BYTES + 1))

@@ -33,7 +33,8 @@ mise exec -- task trino:flight-recorder-namespace-isolation \
   > .scratch/flight-recorder/evidence/<identity>-namespace-before.json
 ```
 
-Create one new manual run after approval. Use one explicit UTC window end.
+Create one new manual run after approval. Use one closed UTC hour boundary.
+The source hour is the hour before this boundary.
 
 ```sh
 mise exec -- kubectl -n airflow exec deploy/airflow-scheduler -c scheduler -- \
@@ -63,15 +64,18 @@ Acceptance requires:
 - Spark and Airflow receipts use one attempt identity.
 - The authoritative Lease has no holder after completion.
 - Spark reached `Succeeded` before `ResourceReleased`.
-- The source receipt matches the retained query, window, key, count, bytes, and checksum.
+- The complete manifest matches one closed hour and its checksum.
+- The manifest contains four components and 48 ordered source chunks.
+- Each component has 12 independent query fences.
 - Loki contains Airflow and Spark evidence without error samples.
 - History Server returns the completed application within 20 results.
 - Trino counts, contracts, snapshots, and the run receipt agree.
+- Each component reconciles source, accepted, rejected, deduplicated, and written counts.
 - The `logs` namespace has no snapshot commit during the Spark Attempt.
 
 ## Exact replay
 
-Create a new run ID with the same source-window end. Do not change the query.
+Create a new run ID with the same source-window end. Do not change the component catalog.
 Collect replay evidence against the first result:
 
 ```sh
@@ -82,8 +86,24 @@ mise exec -- task airflow:flight-recorder-replay-evidence \
 ```
 
 The baseline result must report `status: complete`. Replay acceptance requires
-the same source receipt, except for the Attempt name. Trino rows and snapshot
+the same complete manifest, except for the Attempt name. Trino rows and snapshot
 metadata must not change. The receipt count and final event count must not increase.
+
+## Rejected hour
+
+A failed component query must emit `flight_recorder_hour_rejection`. The record
+must name the hour, component, chunk, Attempt, and completed query count.
+
+Collect incomplete evidence with this command:
+
+```sh
+mise exec -- task airflow:flight-recorder-rejection-evidence \
+  RUN_ID='manual__flight_recorder_<identity>' \
+  > .scratch/flight-recorder/evidence/<identity>-rejected.json
+```
+
+Acceptance requires one exact rejection record and no complete manifest receipt.
+It also requires no SparkApplication, Spark pod, or active writer Lease.
 
 ## Cleanup and report
 

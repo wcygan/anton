@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Prove one manual Flight Recorder slice.
 
-**Status:** ready-for-agent
+**Status:** agent-active
 
 - [ ] The Workflow Run selects the previous closed UTC hour from an explicit source-window end.
 - [ ] The hour contains twelve five-minute chunks for workflow, Spark Operator, Trino, and SeaweedFS queries.
@@ -15,4 +15,14 @@
 - [ ] One Spark Attempt reads only the completed source manifest.
 - [ ] Source, accepted, rejected, deduplicated, and written counts reconcile for every component.
 - [ ] Manual exact-hour replay remains available while Loki retains the source records.
-- [ ] Focused tests and repository contracts pass.
+- [x] Focused tests and repository contracts pass.
+
+## Comments
+
+- 2026-08-15: Local implementation captures four components across 12 chunks and publishes the complete manifest last.
+- 2026-08-15: Spark validates all 48 retained child sources before table creation or writes.
+- 2026-08-15: Component receipts reconcile source, accepted, rejected, deduplicated, and written counts.
+- 2026-08-15: Focused suites passed 81 tests. Repository contracts passed 276 tests.
+- 2026-08-15: Rejection evidence bypasses the Ticket 02 schema and proves no Spark resource or active Lease.
+- 2026-08-15: Complete-hour source data has a 32 MiB aggregate limit and ambiguity-safe immutable publication.
+- 2026-08-15: Image publication, Flux rollout, one manual hour, and exact replay remain approval-gated.
