@@ -69,6 +69,46 @@ cases:
 A successful empty query produces a canonical zero-byte source object. It does
 not produce a query failure.
 
+The focused tests use controlled Spark adapters. They do not prove the packaged
+Spark and Hadoop behavior.
+
+After the Spark image build, run one image-level zero-byte source check:
+
+```sh
+mise exec -- docker run --rm --platform linux/amd64 \
+  --entrypoint /opt/python/bin/python3.12 <local-spark-image> \
+  -c 'import importlib.util, sys; from pathlib import Path; from pyspark.sql import SparkSession; source=Path("/tmp/flight-recorder-empty.jsonl"); source.touch(); spec=importlib.util.spec_from_file_location("flight_recorder", "/opt/spark/application/flight_recorder.py"); module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module; spec.loader.exec_module(module); spark=SparkSession.builder.master("local[1]").appName("flight-recorder-empty-source-contract").getOrCreate(); payload=module._read_binary(spark, source.as_uri(), module.MAX_RAW_BYTES, minimum=0); spark.stop(); assert payload == b""; print("Flight Recorder real zero-byte Hadoop source: PASS")'
+```
+
+Require the final `PASS` line before image publication.
+
+## Evidence mode preflight
+
+Run the table contract and summary checks before the Workflow Run:
+
+```sh
+mise exec -- task trino:flight-recorder-contract
+mise exec -- task trino:flight-recorder-summary
+```
+
+Require the Ticket 02 columns and `component_counts` table before full evidence.
+Use approved Trino access to check the exact `source_hour_id` receipt.
+
+Select one evidence mode:
+
+- Use initial evidence only when the source hour has no receipt.
+- Use replay evidence only with a complete initial result for that source hour.
+- Use rejection evidence after a terminal source-query rejection.
+
+If a receipt exists, stop the initial path. The retained receipt owns the
+original Spark Attempt identity.
+
+For manual acceptance only, inspect at most three unwritten closed hours. Check
+all twelve Trino chunks with the production selector and entry fence.
+
+Reject a candidate when any chunk reaches the entry fence. Scheduled operation
+must retain the rejected hour instead of selecting another hour.
+
 ## Initial run
 
 Retain the exact non-Flight Recorder snapshots before the Workflow Run:
@@ -102,6 +142,12 @@ mise exec -- task airflow:flight-recorder-evidence \
   NAMESPACE_BASELINE=.scratch/flight-recorder/evidence/<identity>-namespace-before.json \
   > .scratch/flight-recorder/evidence/<identity>.json
 ```
+
+Start this collector immediately after terminal success. Write its first output
+directly to the final run-owned path.
+
+Preserve the original JSON bytes. Do not reserialize Iceberg snapshot identifiers
+through JavaScript numbers.
 
 Acceptance requires:
 
@@ -156,11 +202,8 @@ strict validator requires the completed task pod before pod retention removes it
 If the task pod is absent, retain Loki and cluster absence evidence. Report the
 strict result as incomplete. Do not accept the ticket.
 
-The full evidence command queries Ticket 02 table columns. It can fail before
-the first successful Spark run adds those columns.
-
-Treat an unresolved `source_kind` or missing `component_counts` table as schema
-drift. Retain the failure evidence and stop the acceptance run.
+The rejection collector bypasses Trino when one valid rejection record exists.
+A valid rejection result does not require the Flight Recorder table schema.
 
 ## Cleanup and report
 

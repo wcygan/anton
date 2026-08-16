@@ -73,6 +73,33 @@ does not define success or failure.
 
 Spark restart policy remains `Never`. Airflow owns bounded retries.
 
+## Execution API ambiguity
+
+Airflow worker requests can time out after the API server commits their effect.
+A client timeout does not prove that the server stopped.
+
+Airflow 3.2.2 rendered-field writes are not idempotent. A retry can conflict
+with the first request after a late commit.
+
+Anton uses these worker controls:
+
+```text
+execution_api_retries = 1
+execution_api_timeout = 30.0
+```
+
+Before a manual Flight Recorder run, verify the effective scheduler values:
+
+```sh
+mise exec -- kubectl -n airflow exec <exact-scheduler-pod> -c scheduler -- \
+  airflow config get-value workers execution_api_retries
+mise exec -- kubectl -n airflow exec <exact-scheduler-pod> -c scheduler -- \
+  airflow config get-value workers execution_api_timeout
+```
+
+Require `1` and `30.0`. Review both controls after an Airflow upgrade changes
+the rendered-field endpoint or its idempotency contract.
+
 ## Cancellation order
 
 1. Record the exact Spark Attempt and current Lease holder.

@@ -34,8 +34,18 @@ The OCI repository path is `library/<image>`. Harbor management API paths use
 
 ## Credential readiness gate
 
-Complete the local image and archive gates first. Then authorize secret manager
-access before the port-forward starts.
+Complete the local image gate first. Verify the selected 1Password account
+before archive creation:
+
+```sh
+mise exec -- op whoami --account <account>
+```
+
+Stop before archive creation when this check fails. A user readiness message
+does not replace the CLI result.
+
+Create and validate the archive. Then authorize secret manager access before
+the port-forward starts.
 
 Write the required credential only to a run-owned, mode `600` authentication
 file. Do not print the credential or retain it after cleanup.
