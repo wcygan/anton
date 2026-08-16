@@ -41,6 +41,37 @@ tasks:
       - test -f kubeconfig
       - which mise python3
 
+  flight-recorder-evidence:
+    desc: Require complete live Flight Recorder run evidence
+    silent: true
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
+      --workflow flight-recorder --target authoritative
+      --run-id "{{.RUN_ID}}" --try-number "{{.TRY_NUMBER | default "1"}}"
+      --namespace-baseline "{{.NAMESPACE_BASELINE}}"
+      --require-complete
+    requires:
+      vars: [RUN_ID, NAMESPACE_BASELINE]
+    preconditions:
+      - test -f "{{.NAMESPACE_BASELINE}}"
+      - test -f kubeconfig
+      - which mise python3
+
+  flight-recorder-replay-evidence:
+    desc: Require replay evidence with unchanged Flight Recorder state
+    silent: true
+    cmd: >-
+      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
+      --workflow flight-recorder --target authoritative
+      --run-id "{{.RUN_ID}}" --try-number "{{.TRY_NUMBER | default "1"}}"
+      --baseline "{{.BASELINE}}" --require-complete
+    requires:
+      vars: [RUN_ID, BASELINE]
+    preconditions:
+      - test -f "{{.BASELINE}}"
+      - test -f kubeconfig
+      - which mise python3
+
   shadow-gate:
     desc: Validate retained evidence for the five-run Airflow shadow gate
     cmds:

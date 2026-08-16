@@ -52,6 +52,7 @@ class LakehouseTrinoTests(unittest.TestCase):
         self.assertIn("trino:flight-recorder-summary:", result.stdout)
         self.assertIn("trino:flight-recorder-contract:", result.stdout)
         self.assertIn("trino:flight-recorder-snapshots:", result.stdout)
+        self.assertIn("trino:flight-recorder-namespace-isolation:", result.stdout)
         self.assertNotIn("airflow:trino-summary:", result.stdout)
 
     def test_flight_recorder_queries_cover_counts_contracts_and_snapshots(self) -> None:
@@ -77,6 +78,9 @@ class LakehouseTrinoTests(unittest.TestCase):
             "ORDER BY committed_at DESC" in query and "LIMIT 20" in query
             for query in snapshots
         ))
+        isolation = QUERIES["flight-recorder-namespace-isolation"][0]
+        self.assertIn('iceberg.logs."normalized$snapshots"', isolation)
+        self.assertIn('iceberg.logs."hourly$snapshots"', isolation)
 
     def test_single_row_object_normalizes_to_a_json_list(self) -> None:
         prefix = ("kubectl",)

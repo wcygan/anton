@@ -17,6 +17,8 @@ from urllib.parse import quote
 DAG_ID = "airflow_spark_lakehouse"
 SHADOW_TASK_ID = "run_shadow_spark_attempt"
 AUTHORITATIVE_TASK_ID = "run_authoritative_spark_attempt"
+FLIGHT_RECORDER_DAG_ID = "airflow_flight_recorder"
+FLIGHT_RECORDER_TASK_ID = "run_flight_recorder_spark_attempt"
 AIRFLOW_NAMESPACE = "airflow"
 LAKEHOUSE_NAMESPACE = "lakehouse"
 TRINO_NAMESPACE = "iceberg-demo"
@@ -155,6 +157,18 @@ def application_outcome(resource: Mapping[str, Any] | None) -> str:
     return "ambiguous"
 
 
+def resource_released_after_success(resource: Mapping[str, Any] | None) -> bool:
+    """Return true when Spark released resources after a success state."""
+    if resource is None:
+        return False
+    states = _history_states(resource)
+    try:
+        succeeded = states.index("SUCCEEDED")
+    except ValueError:
+        return False
+    return "RESOURCERELEASED" in states[succeeded + 1:]
+
+
 def parse_utc(value: str, field: str) -> datetime:
     """Parse one timezone-aware timestamp."""
     normalized = value.replace("Z", "+00:00")
@@ -213,14 +227,15 @@ def attempt_name(
     try_number: int = 1,
     map_index: int = -1,
     task_id: str = SHADOW_TASK_ID,
+    dag_id: str = DAG_ID,
 ) -> str:
     """Return the deployed Spark Attempt identity."""
     if try_number < 1:
         raise OperationError("try number must be positive")
-    payload = "\0".join((DAG_ID, run_id, task_id, str(map_index))).encode("utf-8")
+    payload = "\0".join((dag_id, run_id, task_id, str(map_index))).encode("utf-8")
     identity_hash = sha256(payload).hexdigest()[:12]
     return (
-        f"lh-{_bounded_identity(DAG_ID)}-{_bounded_identity(task_id)}-"
+        f"lh-{_bounded_identity(dag_id)}-{_bounded_identity(task_id)}-"
         f"{identity_hash}-a{try_number}"
     )
 
@@ -335,6 +350,20 @@ class KubectlClient:
             "json",
         )
         return list(value.get("items", [])) if isinstance(value, Mapping) else []
+
+    def airflow_task_pods(
+        self, *, dag_id: str, run_id: str, task_id: str, try_number: int,
+    ) -> list[Mapping[str, Any]]:
+        selector = ",".join((
+            f"dag_id={dag_id}", f"task_id={task_id}", "kubernetes_executor=True",
+        ))
+        value = self.json(
+            "-n", AIRFLOW_NAMESPACE, "get", "pods", "-l", selector, "-o", "json",
+        )
+        items = value.get("items", []) if isinstance(value, Mapping) else []
+        return [item for item in items if isinstance(item, Mapping) and
+                str(((item.get("metadata") or {}).get("annotations") or {}).get("run_id")) == run_id and
+                str(((item.get("metadata") or {}).get("annotations") or {}).get("try_number")) == str(try_number)]
 
 
 def _pod_ready(value: Mapping[str, Any]) -> bool:
@@ -779,12 +808,29 @@ def _loki_summary(kubectl: KubectlClient, query: str, start: datetime, end: date
     receipt_attempts: set[str] = set()
     prior_application_active: set[bool] = set()
     receipts: list[dict[str, Any]] = []
+    source_receipts: list[dict[str, Any]] = []
     for stream in result:
         if not isinstance(stream, Mapping):
             continue
         labels = stream.get("stream")
         event = labels.get("event") if isinstance(labels, Mapping) else None
-        if not isinstance(event, str) or not event.startswith("spark_attempt_receipt "):
+        if not isinstance(event, str):
+            continue
+        if event.startswith("flight_recorder_source_receipt "):
+            try:
+                source_receipt = json.loads(event.removeprefix("flight_recorder_source_receipt "))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(source_receipt, Mapping):
+                retained_fields = (
+                    "schema_version", "query", "window_start", "window_end", "entry_count",
+                    "raw_bytes", "raw_key", "raw_sha256", "attempt", "manifest_key",
+                )
+                source_receipts.append({
+                    key: source_receipt.get(key) for key in retained_fields if key in source_receipt
+                })
+            continue
+        if not event.startswith("spark_attempt_receipt "):
             continue
         try:
             receipt = json.loads(event.removeprefix("spark_attempt_receipt "))
@@ -813,12 +859,21 @@ def _loki_summary(kubectl: KubectlClient, query: str, start: datetime, end: date
         "receipt_attempts": sorted(receipt_attempts),
         "prior_application_active": sorted(prior_application_active),
         "receipts": receipts,
+        "source_receipts": source_receipts,
     }
 
 
 def airflow_loki_query(run_id: str) -> str:
     """Return the bounded Airflow receipt query for one Workflow Run."""
     return f'{{k8s_namespace_name="airflow"}} |= "{run_id}" |= "spark_attempt_receipt"'
+
+
+def flight_recorder_source_loki_query(attempt_name: str) -> str:
+    """Return the source receipt query for one exact Flight Recorder Attempt."""
+    return (
+        f'{{k8s_namespace_name="airflow"}} |= "{attempt_name}" '
+        '|= "flight_recorder_source_receipt"'
+    )
 
 
 def pod_loki_query(pod_name: str) -> str:
@@ -1090,9 +1145,11 @@ def _resource_summary(resource: Mapping[str, Any] | None) -> dict[str, Any] | No
 
 def _pod_summary(pod: Mapping[str, Any]) -> dict[str, Any]:
     metadata = pod.get("metadata") if isinstance(pod.get("metadata"), Mapping) else {}
+    spec = pod.get("spec") if isinstance(pod.get("spec"), Mapping) else {}
     status = pod.get("status") if isinstance(pod.get("status"), Mapping) else {}
     labels = metadata.get("labels") if isinstance(metadata.get("labels"), Mapping) else {}
     containers = status.get("containerStatuses") if isinstance(status.get("containerStatuses"), list) else []
+    requested = spec.get("containers") if isinstance(spec.get("containers"), list) else []
     return {
         "name": metadata.get("name"),
         "role": labels.get("spark-role"),
@@ -1103,11 +1160,38 @@ def _pod_summary(pod: Mapping[str, Any]) -> dict[str, Any]:
                 "name": item.get("name"),
                 "ready": item.get("ready"),
                 "restart_count": item.get("restartCount"),
+                "image": item.get("image"),
+                "image_id": item.get("imageID"),
             }
             for item in containers
             if isinstance(item, Mapping)
         ],
+        "requested_images": [item.get("image") for item in requested if isinstance(item, Mapping)],
     }
+
+
+def _evidence_identity(workflow: str, target: str) -> tuple[str, str, str, bool]:
+    if workflow == "flight-recorder":
+        if target != "authoritative":
+            raise OperationError("Flight Recorder evidence requires the authoritative target")
+        return FLIGHT_RECORDER_DAG_ID, FLIGHT_RECORDER_TASK_ID, AUTHORITATIVE_LEASE_NAME, False
+    if workflow != "lakehouse":
+        raise OperationError(f"unsupported evidence workflow: {workflow}")
+    if target not in EVIDENCE_TARGETS:
+        raise OperationError(f"unsupported evidence target: {target}")
+    task_id, lease_name = EVIDENCE_TARGETS[target]
+    return DAG_ID, task_id, lease_name, target == "authoritative"
+
+
+def _task_pod_image_matches(pods: Sequence[Mapping[str, Any]], digest: str | None) -> bool:
+    if not pods or IMAGE_DIGEST_PATTERN.fullmatch(str(digest or "")) is None:
+        return False
+    summaries = [_pod_summary(pod) for pod in pods]
+    return all(
+        any(digest in str(image) for image in summary["requested_images"])
+        and any(digest in str(item.get("image_id")) for item in summary["containers"])
+        for summary in summaries
+    )
 
 
 def collect_attempt_evidence(
@@ -1116,18 +1200,24 @@ def collect_attempt_evidence(
     run_id: str,
     try_number: int = 1,
     target: str = "shadow",
+    workflow: str = "lakehouse",
+    expected_airflow_digest: str | None = None,
     ledger_path: Path | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Collect bounded live and retained evidence for one exact attempt."""
     validate_evidence_run_id(run_id)
-    if target not in EVIDENCE_TARGETS:
-        raise OperationError(f"unsupported evidence target: {target}")
-    task_id, lease_name = EVIDENCE_TARGETS[target]
+    dag_id, task_id, lease_name, require_scheduled = _evidence_identity(workflow, target)
     observed_at = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    name = attempt_name(run_id=run_id, try_number=try_number, task_id=task_id)
+    name = attempt_name(run_id=run_id, try_number=try_number, task_id=task_id, dag_id=dag_id)
     resource = kubectl.spark_application(name)
     pods = kubectl.attempt_pods(name)
+    task_pods = (
+        kubectl.airflow_task_pods(
+            dag_id=dag_id, run_id=run_id, task_id=task_id, try_number=try_number,
+        )
+        if workflow == "flight-recorder" else []
+    )
     retained = _retained_evidence(ledger_path, run_id)
     created_text = ((resource or {}).get("metadata") or {}).get("creationTimestamp")
     start = parse_utc(str(created_text), "SparkApplication creation time") - timedelta(minutes=5) if created_text else observed_at - timedelta(hours=1)
@@ -1137,6 +1227,15 @@ def collect_attempt_evidence(
         airflow_loki_query(run_id),
         start,
         observed_at + timedelta(minutes=1),
+    )
+    flight_recorder_source_loki = (
+        _loki_summary(
+            kubectl,
+            flight_recorder_source_loki_query(name),
+            start,
+            observed_at + timedelta(minutes=1),
+        )
+        if workflow == "flight-recorder" else None
     )
     pod_loki = [
         _loki_summary(
@@ -1170,7 +1269,7 @@ def collect_attempt_evidence(
     )
     history_path = (
         f"/api/v1/namespaces/{LAKEHOUSE_NAMESPACE}/services/http:spark-history-server:18080"
-        "/proxy/api/v1/applications?limit=1000"
+        "/proxy/api/v1/applications?limit=20&status=completed"
     )
     history_response = kubectl.get_raw(history_path)
     history_items = history_response if isinstance(history_response, list) else history_response.get("applications", [])
@@ -1232,8 +1331,18 @@ def collect_attempt_evidence(
         missing.append("conflicting_lease_holder")
     if spark_outcome != "succeeded":
         missing.append("spark_succeeded")
-    if target == "authoritative" and not run_id.startswith("scheduled__"):
+    if require_scheduled and not run_id.startswith("scheduled__"):
         missing.append("scheduled_run_identity")
+    if workflow == "flight-recorder" and not _task_pod_image_matches(task_pods, expected_airflow_digest):
+        missing.append("airflow_worker_image")
+    if workflow == "flight-recorder" and any((pod.get("status") or {}).get("phase") != "Succeeded" for pod in task_pods):
+        missing.append("airflow_task_pod_incomplete")
+    if workflow == "flight-recorder" and lease_holder is not None:
+        missing.append("active_writer_lease")
+    if workflow == "flight-recorder" and not resource_released_after_success(resource):
+        missing.append("spark_resource_release")
+    if workflow == "flight-recorder" and any((pod.get("status") or {}).get("phase") in {"Pending", "Running"} for pod in pods):
+        missing.append("active_spark_pods")
     if not any(item["samples"] > 0 for item in pod_loki) and attempt_loki["samples"] == 0 and not _retained_runtime_artifact_passed(
         retained,
         name="loki",
@@ -1250,9 +1359,9 @@ def collect_attempt_evidence(
         attempt_name=name,
     ):
         missing.append("history_server")
-    if retained is None:
+    if workflow == "lakehouse" and retained is None:
         missing.append("retained_gate_evidence")
-    else:
+    elif workflow == "lakehouse":
         if not _retained_attempt_passed(
             retained,
             run_id=run_id,
@@ -1280,7 +1389,7 @@ def collect_attempt_evidence(
         "status": "complete" if not missing else "incomplete",
         "observed_at": observed_at.isoformat(),
         "identity": {
-            "dag_id": DAG_ID,
+            "dag_id": dag_id,
             "run_id": run_id,
             "task_id": task_id,
             "try_number": try_number,
@@ -1292,8 +1401,11 @@ def collect_attempt_evidence(
             "spark_application": _resource_summary(resource),
             "spark_outcome": spark_outcome,
             "pods": [_pod_summary(pod) for pod in pods],
+            "airflow_task_pods": [_pod_summary(pod) for pod in task_pods],
+            "expected_airflow_digest": expected_airflow_digest,
             "lease_holder": lease_holder,
             "airflow_loki": airflow_loki,
+            "flight_recorder_source_loki": flight_recorder_source_loki,
             "pod_loki": pod_loki,
             "pod_error_loki": pod_error_loki,
             "attempt_loki": attempt_loki,

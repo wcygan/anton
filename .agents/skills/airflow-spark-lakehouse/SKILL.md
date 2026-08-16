@@ -2,8 +2,8 @@
 name: airflow-spark-lakehouse
 description: >-
   Operate Anton's Airflow-owned Spark lakehouse workflow. Use for Workflow Run
-  or Spark Attempt diagnosis, exact-window retries, shadow-gate evidence,
-  writer cutover, legacy removal, retention, or learning-platform cleanup.
+  or Spark Attempt diagnosis, Flight Recorder runs, exact-window retries,
+  shadow-gate evidence, writer cutover, retention, or cleanup.
 ---
 
 # Airflow Spark Lakehouse
@@ -27,6 +27,8 @@ authority boundary requires operator approval.
 - `.scratch/airflow-spark-lakehouse/spec.md` owns implementation acceptance.
 - `images/airflow-runtime/src/anton_airflow/` owns workflow behavior.
 - `scripts/lib/airflow_shadow_gate.py` owns retained gate validation.
+- `scripts/lib/flight_recorder_evidence.py` owns live Flight Recorder evidence policy.
+- `scripts/airflow-lakehouse.py` owns the evidence command boundary.
 
 Use `seaweedfs-iceberg-data-access` for table-level Spark and Trino work.
 Use `seaweedfs-iceberg-lakehouse` for storage, catalog, and Harbor work.
@@ -38,6 +40,8 @@ Use `query-kubernetes-logs` for detailed Loki queries.
   for identity, watch, Lease, retry, cancellation, or source-window work.
 - Read [shadow-gate-evidence.md](references/shadow-gate-evidence.md) for
   evidence collection, validation, candidate changes, or gate failures.
+- Read [flight-recorder-acceptance.md](references/flight-recorder-acceptance.md)
+  for a manual Flight Recorder run, replay, or acceptance check.
 - Read [live-recovery-scenarios.md](references/live-recovery-scenarios.md) for
   scheduler, triggerer, retry, cancellation, Lease, or pre-commit tests.
 - Read [cutover-and-cleanup.md](references/cutover-and-cleanup.md) for writer
