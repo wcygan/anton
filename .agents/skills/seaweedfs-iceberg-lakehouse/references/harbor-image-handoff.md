@@ -32,6 +32,17 @@ Record these values before a push:
 The OCI repository path is `library/<image>`. Harbor management API paths use
 `/api/v2.0/projects/library/repositories/...`. Keep these path types separate.
 
+## Credential readiness gate
+
+Complete the local image and archive gates first. Then authorize secret manager
+access before the port-forward starts.
+
+Write the required credential only to a run-owned, mode `600` authentication
+file. Do not print the credential or retain it after cleanup.
+
+On an authorization timeout, remove the exact run-owned files and stop. Require
+user readiness before one replacement authorization request. Do not loop prompts.
+
 ## Client locality
 
 | Client location | Host loopback result |
@@ -77,6 +88,21 @@ checksum at both ends before import. A successful transfer exit is insufficient.
 After the push, verify the remote digest and remote image configuration. The
 configuration must report `linux/amd64` before a manifest edit.
 
+## Dependent image order
+
+Use this order when one image embeds another image digest:
+
+1. Publish the dependency image.
+2. Record its verified remote digest.
+3. Update the consumer source with that digest.
+4. Rebuild the consumer image.
+5. Inspect the consumer image and verify the embedded digest.
+6. Publish the consumer image.
+7. Update the deployment digests.
+
+Never build the consumer before the dependency remote digest exists. Stop when
+the embedded digest and dependency digest differ.
+
 ## Cleanup gate
 
 - Stop the port-forward.
@@ -86,5 +112,6 @@ configuration must report `linux/amd64` before a manifest edit.
 - Verify that no temporary listener or credential file remains.
 - Review only the intended manifest digest change.
 
-Report the source revision, repository tag, remote digest, platform, archive
-checksum, tunnel cleanup, and any unverified transfer behavior.
+Report both image digests and their embedded-digest comparison when images have
+a dependency. Also report the source revision, tags, platform, archive checksum,
+tunnel cleanup, and any unverified transfer behavior.
