@@ -41,7 +41,8 @@ Use `query-kubernetes-logs` for detailed Loki queries.
 - Read [shadow-gate-evidence.md](references/shadow-gate-evidence.md) for
   evidence collection, validation, candidate changes, or gate failures.
 - Read [flight-recorder-acceptance.md](references/flight-recorder-acceptance.md)
-  for a manual Flight Recorder run, replay, or acceptance check.
+  for a manual Flight Recorder run, replay, dependent image release, or
+  acceptance check.
 - Read [live-recovery-scenarios.md](references/live-recovery-scenarios.md) for
   scheduler, triggerer, retry, cancellation, Lease, or pre-commit tests.
 - Read [cutover-and-cleanup.md](references/cutover-and-cleanup.md) for writer
