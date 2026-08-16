@@ -42,6 +42,7 @@ from airflow_lakehouse_operations import (  # noqa: E402
 )
 from flight_recorder_evidence import (  # noqa: E402
     _valid_component_counts,
+    _valid_contracts,
     _valid_summary,
     _valid_source_receipt,
     add_flight_recorder_checks,
@@ -847,7 +848,8 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         }
         columns = {
             "events": (
-                ("fingerprint", "varchar"), ("event_timestamp", "timestamp(6)"),
+                ("fingerprint", "varchar"),
+                ("event_timestamp", "timestamp(6) with time zone"),
                 ("event_date", "date"), ("source_window_id", "varchar"),
                 ("source_timestamp_ns", "varchar"), ("namespace", "varchar"),
                 ("workload_kind", "varchar"), ("workload_name", "varchar"),
@@ -857,7 +859,7 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 ("source_component", "varchar"), ("source_chunk_id", "integer"),
             ),
             "hourly": (
-                ("hour", "timestamp(6)"), ("namespace", "varchar"),
+                ("hour", "timestamp(6) with time zone"), ("namespace", "varchar"),
                 ("workload_kind", "varchar"), ("workload_name", "varchar"),
                 ("severity", "varchar"), ("event_count", "bigint"),
                 ("rejection_count", "bigint"), ("source_component", "varchar"),
@@ -867,8 +869,10 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 ("manifest_uri", "varchar"), ("raw_uri", "varchar"),
                 ("source_count", "bigint"), ("accepted_count", "bigint"),
                 ("rejected_count", "bigint"), ("final_event_count", "bigint"),
-                ("spark_attempt", "varchar"), ("window_start", "timestamp(6)"),
-                ("window_end", "timestamp(6)"), ("completed_at", "timestamp(6)"),
+                ("spark_attempt", "varchar"),
+                ("window_start", "timestamp(6) with time zone"),
+                ("window_end", "timestamp(6) with time zone"),
+                ("completed_at", "timestamp(6) with time zone"),
                 ("completion_date", "date"), ("source_kind", "varchar"),
                 ("complete_manifest_sha256", "varchar"),
             ),
@@ -876,7 +880,8 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 ("source_window_id", "varchar"), ("source_component", "varchar"),
                 ("source_count", "bigint"), ("accepted_count", "bigint"),
                 ("rejected_count", "bigint"), ("deduplicated_count", "bigint"),
-                ("written_count", "bigint"), ("completed_at", "timestamp(6)"),
+                ("written_count", "bigint"),
+                ("completed_at", "timestamp(6) with time zone"),
                 ("completion_date", "date"),
             ),
         }
@@ -894,6 +899,23 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                     f"'s3://iceberg-warehouse/flight_recorder/{table}', partitioning = ARRAY['{partitions[table]}'])"
                 )}],
             ))
+        self.assertTrue(_valid_contracts({"results": contracts}))
+        timestamp_columns = (
+            (0, "event_timestamp"),
+            (2, "hour"),
+            (4, "window_start"),
+            (4, "window_end"),
+            (4, "completed_at"),
+            (6, "completed_at"),
+        )
+        for result_index, column in timestamp_columns:
+            changed_contracts = json.loads(json.dumps(contracts))
+            changed_row = next(
+                row for row in changed_contracts[result_index] if row["Column"] == column
+            )
+            changed_row["Type"] = "timestamp(6)"
+            with self.subTest(column=column, result_index=result_index):
+                self.assertFalse(_valid_contracts({"results": changed_contracts}))
         outputs = {
             "flight-recorder-summary": {"results": [[row]]},
             "flight-recorder-contract": {"results": contracts},
