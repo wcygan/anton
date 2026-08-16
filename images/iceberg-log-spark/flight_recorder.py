@@ -20,8 +20,9 @@ MAX_COMPLETE_MANIFEST_BYTES = 128 * 1024
 MAX_COMPLETE_RAW_BYTES = 32 * 1024 * 1024
 MAX_RAW_BYTES = 8 * 1024 * 1024
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-ENTRY_LIMIT = 1000
+ENTRY_LIMIT = 5000
 TIMEOUT_SECONDS = 30
+MANIFEST_SCHEMA_VERSION = 1
 COMPLETE_HOUR_SCHEMA_VERSION = 2
 COMPONENT_QUERIES = (
     ("workflow", '{k8s_namespace_name="airflow"}'),
@@ -218,6 +219,29 @@ def component_catalog_sha256() -> str:
     return hashlib.sha256(json.dumps(catalog, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def component_manifest_key(
+    component: str,
+    query: str,
+    start_ns: int,
+    end_ns: int,
+) -> str:
+    """Return the contract-bound child manifest key."""
+    contract = {
+        "component": component,
+        "entry_limit": ENTRY_LIMIT,
+        "max_response_bytes": MAX_RESPONSE_BYTES,
+        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+        "max_raw_bytes": MAX_RAW_BYTES,
+        "query": query,
+        "complete_hour_schema_version": COMPLETE_HOUR_SCHEMA_VERSION,
+        "timeout_seconds": TIMEOUT_SECONDS,
+    }
+    contract_sha = hashlib.sha256(
+        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return f"flight-recorder/component-manifests/{start_ns}-{end_ns}/{contract_sha}.json"
+
+
 def validate_complete_hour_manifest(
     config: HourlyRuntimeConfig, payload: bytes,
 ) -> tuple[Mapping[str, object], ...]:
@@ -271,8 +295,7 @@ def validate_complete_hour_manifest(
         start_ns = int(config.source_hour_id.split("-", 1)[0]) + index * 300_000_000_000
         end_ns = start_ns + 300_000_000_000
         checksum = source.get("raw_sha256")
-        query_sha = hashlib.sha256(query.encode()).hexdigest()
-        expected_manifest = f"flight-recorder/manifests/{start_ns}-{end_ns}/{query_sha}.json"
+        expected_manifest = component_manifest_key(component, query, start_ns, end_ns)
         expected_raw = f"flight-recorder/raw/{start_ns}-{end_ns}/{checksum}.jsonl"
         valid = (
             (source.get("component"), source.get("query"), source.get("chunk_index"))
@@ -287,8 +310,9 @@ def validate_complete_hour_manifest(
             and source.get("raw_key") == expected_raw
             and source.get("window_start") == _datetime_ns(str(start_ns)).isoformat().replace("+00:00", "Z")
             and source.get("window_end") == _datetime_ns(str(end_ns)).isoformat().replace("+00:00", "Z")
-            and type(source.get("entry_count")) is int and 0 < int(source["entry_count"]) < ENTRY_LIMIT
-            and type(source.get("raw_bytes")) is int and 1 <= int(source["raw_bytes"]) <= MAX_RAW_BYTES
+            and type(source.get("entry_count")) is int and 0 <= int(source["entry_count"]) < ENTRY_LIMIT
+            and type(source.get("raw_bytes")) is int and 0 <= int(source["raw_bytes"]) <= MAX_RAW_BYTES
+            and (int(source["entry_count"]) == 0) == (int(source["raw_bytes"]) == 0)
         )
         if not valid:
             raise FlightRecorderTransformError("Flight Recorder complete source identity was invalid")
@@ -405,10 +429,17 @@ def _source_uri(value: str | None) -> str:
 
 
 def validate_source(
-    config: RuntimeConfig, manifest_payload: bytes, raw_payload: bytes,
+    config: RuntimeConfig,
+    manifest_payload: bytes,
+    raw_payload: bytes,
+    *,
+    allow_empty: bool = False,
+    expected_manifest_uri: str | None = None,
+    expected_query: str | None = None,
 ) -> tuple[Mapping[str, object], ...]:
     """Validate one retained manifest and its exact raw bytes."""
-    if not 1 <= len(manifest_payload) <= MAX_MANIFEST_BYTES or not 1 <= len(raw_payload) <= MAX_RAW_BYTES:
+    minimum = 0 if allow_empty else 1
+    if not 1 <= len(manifest_payload) <= MAX_MANIFEST_BYTES or not minimum <= len(raw_payload) <= MAX_RAW_BYTES:
         raise FlightRecorderTransformError("Flight Recorder source object size was invalid")
     try:
         manifest = json.loads(manifest_payload)
@@ -425,9 +456,14 @@ def validate_source(
         raise FlightRecorderTransformError("Flight Recorder manifest schema was invalid")
     if not isinstance(manifest["query"], str) or not manifest["query"] or len(manifest["query"]) > 1024:
         raise FlightRecorderTransformError("Flight Recorder manifest query was invalid")
+    if expected_query is not None and manifest["query"] != expected_query:
+        raise FlightRecorderTransformError("Flight Recorder manifest query conflicted")
     query_sha = hashlib.sha256(manifest["query"].encode()).hexdigest()
-    expected_manifest_uri = f"s3a://iceberg-raw/flight-recorder/manifests/{config.source_window_id}/{query_sha}.json"
-    if config.manifest_uri != expected_manifest_uri:
+    retained_manifest_uri = (
+        expected_manifest_uri
+        or f"s3a://iceberg-raw/flight-recorder/manifests/{config.source_window_id}/{query_sha}.json"
+    )
+    if config.manifest_uri != retained_manifest_uri:
         raise FlightRecorderTransformError("Flight Recorder manifest identity conflicted")
     if (manifest["window_start"], manifest["window_end"]) != expected_window:
         raise FlightRecorderTransformError("Flight Recorder manifest window conflicted")
@@ -438,13 +474,19 @@ def validate_source(
     checksum = hashlib.sha256(raw_payload).hexdigest()
     if manifest["raw_sha256"] != config.raw_sha256 or checksum != config.raw_sha256:
         raise FlightRecorderTransformError("Flight Recorder source checksum conflicted")
-    if type(manifest["entry_count"]) is not int or manifest["entry_count"] < 1:
+    if type(manifest["entry_count"]) is not int or manifest["entry_count"] < minimum:
         raise FlightRecorderTransformError("Flight Recorder manifest entry count was invalid")
+    if (manifest["entry_count"] == 0) != (manifest["raw_bytes"] == 0):
+        raise FlightRecorderTransformError("Flight Recorder manifest empty state was invalid")
     try:
         entries = tuple(json.loads(line) for line in raw_payload.decode("utf-8").splitlines())
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise FlightRecorderTransformError("Flight Recorder raw source was invalid") from error
-    if not raw_payload.endswith(b"\n") or len(entries) != manifest["entry_count"]:
+    valid_count = (
+        raw_payload == b"" if manifest["entry_count"] == 0
+        else raw_payload.endswith(b"\n") and len(entries) == manifest["entry_count"]
+    )
+    if not valid_count:
         raise FlightRecorderTransformError("Flight Recorder raw entry count conflicted")
     if any(not isinstance(entry, Mapping) for entry in entries):
         raise FlightRecorderTransformError("Flight Recorder raw entry was invalid")
@@ -457,13 +499,13 @@ def validate_source(
     return entries
 
 
-def _read_binary(spark: object, uri: str, maximum: int) -> bytes:
+def _read_binary(spark: object, uri: str, maximum: int, *, minimum: int = 1) -> bytes:
     source = spark.read.format("binaryFile").load(uri)
     metadata = source.select("length").take(2)
     if len(metadata) != 1:
         raise FlightRecorderTransformError("Flight Recorder source object count was invalid")
     length = metadata[0]["length"]
-    if type(length) is not int or not 1 <= length <= maximum:
+    if type(length) is not int or not minimum <= length <= maximum:
         raise FlightRecorderTransformError("Flight Recorder binary source size was invalid")
     rows = source.select("length", "content").take(2)
     if len(rows) != 1:
@@ -530,7 +572,15 @@ def reconcile_component_events(
     components = {name for name, _ in COMPONENT_QUERIES}
     fingerprint_components: dict[str, str] = {}
     unique: dict[tuple[str, str], Mapping[str, object]] = {}
-    counts: dict[str, dict[str, int]] = {}
+    counts = {
+        component: {
+            "source_count": 0,
+            "accepted_count": 0,
+            "rejected_count": 0,
+            "deduplicated_count": 0,
+        }
+        for component in components
+    }
     for event in events:
         component = event.get("source_component")
         fingerprint = event.get("fingerprint")
@@ -544,12 +594,7 @@ def reconcile_component_events(
         prior = unique.setdefault(key, event)
         if prior.get("rejected") != rejected:
             raise FlightRecorderTransformError("Flight Recorder duplicate classification conflicted")
-        values = counts.setdefault(str(component), {
-            "source_count": 0,
-            "accepted_count": 0,
-            "rejected_count": 0,
-            "deduplicated_count": 0,
-        })
+        values = counts[str(component)]
         values["source_count"] += 1
         values["rejected_count" if rejected else "accepted_count"] += 1
     for component, fingerprint in unique:
@@ -563,7 +608,7 @@ def validate_written_counts(
 ) -> dict[str, dict[str, int]]:
     """Require every component count equation after event writes."""
     expected = {name for name, _ in COMPONENT_QUERIES}
-    if set(counts) != expected or set(written) != expected:
+    if set(counts) != expected or not set(written) <= expected:
         raise FlightRecorderTransformError("Flight Recorder component count identities conflicted")
     result: dict[str, dict[str, int]] = {}
     for component, values in counts.items():
@@ -571,7 +616,7 @@ def validate_written_counts(
         accepted = values.get("accepted_count")
         rejected = values.get("rejected_count")
         deduplicated = values.get("deduplicated_count")
-        final = written[component]
+        final = written.get(component, 0)
         if (
             type(source) is not int or type(accepted) is not int or type(rejected) is not int
             or type(deduplicated) is not int or type(final) is not int
@@ -631,7 +676,7 @@ def hourly_replay_is_complete(
         for row in component_rows
         if isinstance(row, Mapping)
     }
-    if set(rows) != expected or set(final_counts) != expected:
+    if set(rows) != expected or not set(final_counts) <= expected:
         raise FlightRecorderTransformError("Flight Recorder component receipt identities conflicted")
     totals = {
         "source_count": 0,
@@ -646,7 +691,7 @@ def hourly_replay_is_complete(
         if any(type(value) is not int or value < 0 for value in values):
             raise FlightRecorderTransformError("Flight Recorder component receipt counts were invalid")
         source, accepted, rejected, deduplicated, written = values
-        if source != accepted + rejected or deduplicated != written or written != final_counts[component]:
+        if source != accepted + rejected or deduplicated != written or written != final_counts.get(component, 0):
             raise FlightRecorderTransformError("Flight Recorder component receipt counts conflicted")
         for name, value in (("source_count", source), ("accepted_count", accepted),
                             ("rejected_count", rejected), ("written_count", written)):
@@ -743,7 +788,7 @@ def _write_events(spark: object, events: object) -> None:
 def _write_hourly(spark: object, events: object) -> None:
     hours = events.selectExpr("date_trunc('hour', event_timestamp) AS hour").distinct().collect()
     if not hours:
-        raise FlightRecorderTransformError("Flight Recorder had no affected hourly partition")
+        return
     values = ", ".join(f"TIMESTAMP '{row['hour']:%Y-%m-%d %H:%M:%S}'" for row in hours)
     spark.sql(f"DELETE FROM {HOURLY_TABLE} WHERE hour IN ({values})")
     spark.sql(f"""INSERT INTO {HOURLY_TABLE}
@@ -778,8 +823,15 @@ def _read_complete_hour_sources(
             window_start=_datetime_ns(child_window_id.split("-", 1)[0]),
             window_end=_datetime_ns(child_window_id.split("-", 1)[1]),
         )
-        raw_payload = _read_binary(spark, raw_uri, MAX_RAW_BYTES)
-        child_entries = validate_source(child, manifest_payload, raw_payload)
+        raw_payload = _read_binary(spark, raw_uri, MAX_RAW_BYTES, minimum=0)
+        child_entries = validate_source(
+            child,
+            manifest_payload,
+            raw_payload,
+            allow_empty=True,
+            expected_manifest_uri=manifest_uri,
+            expected_query=str(source["query"]),
+        )
         for entry in child_entries:
             entries.append({
                 **entry,
@@ -864,19 +916,29 @@ def main() -> None:
         F.countDistinct("fingerprint").alias("deduplicated_count"),
     ).collect()
     input_counts = {
+        component: {
+            "source_count": 0,
+            "accepted_count": 0,
+            "rejected_count": 0,
+            "deduplicated_count": 0,
+        }
+        for component, _ in COMPONENT_QUERIES
+    }
+    input_counts.update({
         str(row["source_component"]): {
             name: int(row[name])
             for name in ("source_count", "accepted_count", "rejected_count", "deduplicated_count")
         }
         for row in count_rows
-    }
+    })
     expected_components = {name for name, _ in COMPONENT_QUERIES}
     if set(input_counts) != expected_components:
         raise FlightRecorderTransformError("Flight Recorder component source was incomplete")
     reconciled: dict[str, dict[str, int]] = {}
 
     def write_events() -> None:
-        _write_events(spark, deduplicated)
+        if event_count:
+            _write_events(spark, deduplicated)
         rows = spark.table(EVENTS_TABLE).where(
             F.col("source_window_id") == config.source_hour_id
         ).groupBy("source_component").count().collect()

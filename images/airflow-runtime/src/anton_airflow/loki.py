@@ -404,9 +404,13 @@ class LokiClient:
         return _raw_entries(payload, window, entry_limit=limits.entry_limit)
 
 
-def serialize_entries(entries: tuple[LokiEntry, ...]) -> bytes:
+def serialize_entries(
+    entries: tuple[LokiEntry, ...],
+    *,
+    allow_empty: bool = False,
+) -> bytes:
     """Serialize raw entries with deterministic cross-stream ordering."""
-    if not entries:
+    if not entries and not allow_empty:
         raise LokiSourceError("Loki source window returned no entries")
     ordered = sorted(
         entries,
@@ -501,7 +505,13 @@ def _hour_manifest_bytes(manifest: CompleteHourManifest) -> bytes:
     return payload
 
 
-def _parse_manifest(payload: bytes, *, query: str, window: LokiWindow) -> LokiSourceManifest:
+def _parse_manifest(
+    payload: bytes,
+    *,
+    query: str,
+    window: LokiWindow,
+    allow_empty: bool = False,
+) -> LokiSourceManifest:
     if not payload or len(payload) > MAX_MANIFEST_BYTES:
         raise LokiSourceError("Source manifest size was invalid")
     try:
@@ -513,10 +523,13 @@ def _parse_manifest(payload: bytes, *, query: str, window: LokiWindow) -> LokiSo
         raise LokiSourceError("Source manifest fields were invalid")
     if type(value["schema_version"]) is not int or value["schema_version"] != MANIFEST_SCHEMA_VERSION:
         raise LokiSourceError("Source manifest schema was invalid")
-    if type(value["entry_count"]) is not int or value["entry_count"] < 1:
+    minimum = 0 if allow_empty else 1
+    if type(value["entry_count"]) is not int or value["entry_count"] < minimum:
         raise LokiSourceError("Source manifest entry count was invalid")
-    if type(value["raw_bytes"]) is not int or not 1 <= value["raw_bytes"] <= MAX_RAW_BYTES:
+    if type(value["raw_bytes"]) is not int or not minimum <= value["raw_bytes"] <= MAX_RAW_BYTES:
         raise LokiSourceError("Source manifest raw byte size was invalid")
+    if (value["entry_count"] == 0) != (value["raw_bytes"] == 0):
+        raise LokiSourceError("Source manifest empty state was invalid")
     text_fields = ("query", "window_start", "window_end", "raw_key", "raw_sha256")
     if any(not isinstance(value[name], str) for name in text_fields):
         raise LokiSourceError("Source manifest text fields were invalid")
@@ -552,8 +565,15 @@ class LokiSnapshotExtractor:
             raise LokiSourceError("Source object read returned invalid bytes")
         return payload
 
-    def _publish(self, key: str, payload: bytes, *, maximum: int) -> None:
-        if not _safe_key(key) or not payload or len(payload) > maximum:
+    def _publish(
+        self,
+        key: str,
+        payload: bytes,
+        *,
+        maximum: int,
+        allow_empty: bool = False,
+    ) -> None:
+        if not _safe_key(key) or (not payload and not allow_empty) or len(payload) > maximum:
             raise LokiSourceError("Source object publication was unsafe")
         try:
             created = self.store.put_if_absent(key=key, payload=payload)
@@ -586,14 +606,30 @@ class LokiSnapshotExtractor:
                     "Immutable source object was unresolved after a write race"
                 )
 
-    def _replay(self, payload: bytes, *, query: str, window: LokiWindow) -> LokiSourceManifest:
-        manifest = _parse_manifest(payload, query=query, window=window)
+    def _replay(
+        self,
+        payload: bytes,
+        *,
+        query: str,
+        window: LokiWindow,
+        allow_empty: bool = False,
+    ) -> LokiSourceManifest:
+        manifest = _parse_manifest(
+            payload,
+            query=query,
+            window=window,
+            allow_empty=allow_empty,
+        )
         retained = self._get(manifest.raw_key, maximum=MAX_RAW_BYTES)
         if retained is None or len(retained) != manifest.raw_bytes:
             raise LokiSourceError("Retained raw source size did not match its manifest")
         if hashlib.sha256(retained).hexdigest() != manifest.raw_sha256:
             raise LokiSourceError("Retained raw source checksum did not match its manifest")
-        if not retained.endswith(b"\n") or retained.count(b"\n") != manifest.entry_count:
+        valid_count = (
+            retained == b"" if manifest.entry_count == 0
+            else retained.endswith(b"\n") and retained.count(b"\n") == manifest.entry_count
+        )
+        if not valid_count:
             raise LokiSourceError("Retained raw source count did not match its manifest")
         return manifest
 
@@ -619,16 +655,26 @@ class LokiSnapshotExtractor:
             )
         existing = self._get(key, maximum=MAX_MANIFEST_BYTES)
         if existing is not None:
-            return self._replay(existing, query=query, window=window)
+            return self._replay(
+                existing,
+                query=query,
+                window=window,
+                allow_empty=component is not None,
+            )
         entries = self.client.query_range(
             window=window,
             query=query,
             limits=limits,
         )
-        payload = serialize_entries(entries)
+        payload = serialize_entries(entries, allow_empty=component is not None)
         checksum = hashlib.sha256(payload).hexdigest()
         source_key = raw_key(window=window, checksum=checksum)
-        self._publish(source_key, payload, maximum=MAX_RAW_BYTES)
+        self._publish(
+            source_key,
+            payload,
+            maximum=MAX_RAW_BYTES,
+            allow_empty=component is not None,
+        )
         manifest = LokiSourceManifest(
             schema_version=MANIFEST_SCHEMA_VERSION,
             query=query,

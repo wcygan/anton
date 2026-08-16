@@ -225,6 +225,29 @@ class FlightRecorderSourceTests(unittest.TestCase):
             manifest.sources[0].manifest_key,
         )
 
+    def test_complete_hour_retains_successful_empty_chunks(self) -> None:
+        hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
+
+        class EmptyClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def query_range(self, **_request):
+                self.calls += 1
+                return ()
+
+        store, client = MemoryStore(), EmptyClient()
+        extractor = LokiSnapshotExtractor(client=client, store=store)  # type: ignore[arg-type]
+        manifest = extractor.capture_hour(hour=hour)
+        self.assertEqual((48, 0, 0), (client.calls, manifest.source_count, manifest.raw_bytes))
+        self.assertTrue(all(source.entry_count == source.raw_bytes == 0 for source in manifest.sources))
+        self.assertTrue(all(store.objects[source.raw_key] == b"" for source in manifest.sources))
+
+        replay_client = EmptyClient()
+        replay = LokiSnapshotExtractor(client=replay_client, store=store)  # type: ignore[arg-type]
+        self.assertEqual(manifest, replay.capture_hour(hour=hour))
+        self.assertEqual(0, replay_client.calls)
+
     def test_complete_hour_total_byte_limit_prevents_publication(self) -> None:
         hour = LokiHour.ending_at(datetime(2026, 8, 14, 12, tzinfo=timezone.utc))
 
