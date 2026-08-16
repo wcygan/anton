@@ -284,6 +284,18 @@ def validate_release(release: dict[str, Any]) -> list[str]:
     )
     expect_equal(
         failures,
+        "Airflow execution API attempts",
+        nested(values, "config", "workers", "execution_api_retries"),
+        "1",
+    )
+    expect_equal(
+        failures,
+        "Airflow execution API timeout",
+        nested(values, "config", "workers", "execution_api_timeout"),
+        "30.0",
+    )
+    expect_equal(
+        failures,
         "Airflow worker image repository",
         nested(values, "config", "kubernetes_executor", "worker_container_repository"),
         "192.168.1.106/library/airflow-runtime@sha256",
