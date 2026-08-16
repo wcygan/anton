@@ -178,6 +178,11 @@ spec:
       core:
         load_examples: "False"
         dags_are_paused_at_creation: "False"
+      workers:
+        # Airflow 3.2.2 retries non-idempotent RTIF writes after client timeouts.
+        # Use one SDK attempt and cover the observed 13-second cold response.
+        execution_api_retries: "1"
+        execution_api_timeout: "30.0"
       kubernetes_executor:
         worker_container_repository: 192.168.1.106/library/airflow-runtime@sha256
         worker_container_tag: 9cccf552313abcf37898493274e715f3dddc3bb8fb7c55fff3884dfd641a7bf2
