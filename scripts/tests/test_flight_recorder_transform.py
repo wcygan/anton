@@ -6,6 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -564,6 +565,78 @@ class FlightRecorderTransformTests(unittest.TestCase):
         with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "size"):
             MODULE._read_binary(spark, "s3a://iceberg-raw/flight-recorder/raw/source", MODULE.MAX_RAW_BYTES)
         self.assertEqual([("length",)], reader.selected)
+
+    def _empty_source_spark(self, source: Path):
+        class Reader:
+            def format(self, _value): return self
+            def load(self, _uri): return self
+            def select(self, *_names): return self
+            def take(self, _limit): return []
+
+        class Status:
+            def isFile(self): return source.is_file()
+            def getLen(self): return source.stat().st_size
+
+        class FileSystem:
+            def getFileStatus(self, _path): return Status()
+
+        class HadoopPath:
+            def getFileSystem(self, _configuration): return FileSystem()
+
+        class PathFactory:
+            def __call__(self, uri):
+                self.uri = uri
+                return HadoopPath()
+
+        path_factory = PathFactory()
+        hadoop = type("Hadoop", (), {"fs": type("Fs", (), {"Path": path_factory})()})()
+        org = type("Org", (), {"apache": type("Apache", (), {"hadoop": hadoop})()})()
+        context = type("Context", (), {
+            "_jvm": type("Jvm", (), {"org": org})(),
+            "_jsc": type("Jsc", (), {"hadoopConfiguration": lambda self: object()})(),
+        })()
+        spark = type("Spark", (), {"read": Reader(), "sparkContext": context})()
+        return spark, path_factory
+
+    def test_zero_byte_binary_uses_exact_hadoop_file_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "empty.jsonl"
+            source.touch()
+            spark, path_factory = self._empty_source_spark(source)
+            uri = source.as_uri()
+            self.assertEqual(b"", MODULE._read_binary(spark, uri, MODULE.MAX_RAW_BYTES, minimum=0))
+            self.assertEqual(uri, path_factory.uri)
+
+    def test_missing_zero_byte_binary_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "missing.jsonl"
+            spark, _ = self._empty_source_spark(source)
+            with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "did not exist"):
+                MODULE._read_binary(spark, source.as_uri(), MODULE.MAX_RAW_BYTES, minimum=0)
+
+    def test_zero_byte_fallback_rejects_nonzero_length(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "nonempty.jsonl"
+            source.write_bytes(b"x")
+            spark, _ = self._empty_source_spark(source)
+            with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "was invalid"):
+                MODULE._read_binary(spark, source.as_uri(), MODULE.MAX_RAW_BYTES, minimum=0)
+
+    def test_nonempty_binary_retains_content_validation(self) -> None:
+        class Reader:
+            selected = []
+            def format(self, _value): return self
+            def load(self, _uri): return self
+            def select(self, *names): self.selected.append(names); return self
+            def take(self, _limit):
+                return [{"length": 2}] if self.selected[-1] == ("length",) else [
+                    {"length": 2, "content": bytearray(b"ok")}
+                ]
+
+        reader = Reader()
+        spark = type("Spark", (), {"read": reader})()
+        self.assertEqual(b"ok", MODULE._read_binary(spark, "s3a://bucket/nonempty", 2))
+        self.assertEqual([("length",), ("length", "content")], reader.selected)
 
     def test_wrong_iceberg_table_contract_fails_closed(self) -> None:
         table, schema, partition, location = MODULE._TABLES[0]
