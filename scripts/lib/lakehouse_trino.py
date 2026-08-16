@@ -76,6 +76,17 @@ FROM iceberg.flight_recorder."run_receipts$snapshots"
 ORDER BY committed_at DESC
 LIMIT 20""",
     ),
+    "flight-recorder-namespace-isolation": (
+        """SELECT * FROM (
+SELECT 'normalized' AS table_name, snapshot_id, committed_at
+FROM iceberg.logs."normalized$snapshots" ORDER BY committed_at DESC LIMIT 1
+)
+UNION ALL
+SELECT * FROM (
+SELECT 'hourly' AS table_name, snapshot_id, committed_at
+FROM iceberg.logs."hourly$snapshots" ORDER BY committed_at DESC LIMIT 1
+)""",
+    ),
 }
 
 

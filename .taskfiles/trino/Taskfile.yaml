@@ -54,3 +54,12 @@ tasks:
       - test -f kubeconfig
       - test -f {{.SCRIPTS_DIR}}/lakehouse-trino.py
       - which mise python3
+
+  flight-recorder-namespace-isolation:
+    desc: Check non-Flight Recorder snapshot times through Trino
+    silent: true
+    cmd: mise exec -- python3 scripts/lakehouse-trino.py flight-recorder-namespace-isolation
+    preconditions:
+      - test -f kubeconfig
+      - test -f {{.SCRIPTS_DIR}}/lakehouse-trino.py
+      - which mise python3

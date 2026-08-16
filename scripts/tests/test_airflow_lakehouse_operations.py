@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -21,8 +22,10 @@ from airflow_lakehouse_operations import (  # noqa: E402
     APPROVAL_TOKEN,
     KubectlClient,
     OperationError,
+    _loki_summary,
     _resource_summary,
     _retained_artifact_passed,
+    _task_pod_image_matches,
     airflow_loki_query,
     application_outcome,
     attempt_pod_loki_query,
@@ -30,11 +33,14 @@ from airflow_lakehouse_operations import (  # noqa: E402
     build_trigger_command,
     collect_attempt_evidence,
     evaluate_gate_preflight,
+    flight_recorder_source_loki_query,
     pod_loki_query,
     require_live_approval,
+    resource_released_after_success,
     validate_evidence_run_id,
     validate_run_request,
 )
+from flight_recorder_evidence import add_flight_recorder_checks  # noqa: E402
 from airflow_lakehouse_recovery import (  # noqa: E402
     SCENARIOS,
     _arm_action,
@@ -615,6 +621,56 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         }
         self.assertEqual("succeeded", application_outcome(resource))
 
+    def test_flight_recorder_requires_success_before_resource_release(self) -> None:
+        self.assertTrue(resource_released_after_success({
+            "status": {"stateTransitionHistory": {
+                "1": {"currentStateSummary": "RunningHealthy"},
+                "2": {"currentStateSummary": "Succeeded"},
+                "3": {"currentStateSummary": "ResourceReleased"},
+            }},
+        }))
+        for history in (
+            {"1": {"currentStateSummary": "Succeeded"}},
+            {"1": {"currentStateSummary": "ResourceReleased"}},
+            {
+                "1": {"currentStateSummary": "ResourceReleased"},
+                "2": {"currentStateSummary": "Succeeded"},
+            },
+        ):
+            with self.subTest(history=history):
+                self.assertFalse(resource_released_after_success({
+                    "status": {"stateTransitionHistory": history},
+                }))
+
+    def test_loki_summary_retains_exact_flight_recorder_source_receipt(self) -> None:
+        receipt = {
+            "schema_version": 1,
+            "query": '{k8s_namespace_name="airflow"}',
+            "window_start": "2026-08-14T12:00:00Z",
+            "window_end": "2026-08-14T12:05:00Z",
+            "entry_count": 312,
+            "raw_bytes": 42000,
+            "raw_key": "flight-recorder/raw/window/checksum.jsonl",
+            "raw_sha256": "a" * 64,
+            "attempt": "attempt-1",
+            "manifest_key": "flight-recorder/manifests/window/query.json",
+        }
+
+        class FakeKubectl:
+            def get_raw(self, _path):
+                return {"data": {"result": [{
+                    "stream": {"event": f"flight_recorder_source_receipt {json.dumps(receipt)}"},
+                    "values": [["1", "line"]],
+                }]}}
+
+        summary = _loki_summary(
+            FakeKubectl(),
+            flight_recorder_source_loki_query("attempt-1"),
+            datetime(2026, 8, 14, 12, tzinfo=timezone.utc),
+            datetime(2026, 8, 14, 13, tzinfo=timezone.utc),
+        )
+        self.assertEqual([receipt], summary["source_receipts"])
+
     def test_resource_summary_excludes_full_pod_status(self) -> None:
         resource = {
             "apiVersion": "spark.apache.org/v1",
@@ -632,6 +688,128 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         self.assertEqual(["SUCCEEDED"], summary["state_history"])
         self.assertNotIn("lastObservedDriverStatus", summary)
         self.assertNotIn("private-value", json.dumps(summary))
+
+    def test_task_pod_image_requires_requested_and_runtime_digest(self) -> None:
+        digest = "sha256:" + "a" * 64
+        pod = {
+            "spec": {"containers": [{"name": "base", "image": f"registry/image@{digest}"}]},
+            "status": {"containerStatuses": [{
+                "name": "base", "image": f"registry/image@{digest}",
+                "imageID": f"registry/image@{digest}", "restartCount": 0,
+            }]},
+        }
+        self.assertTrue(_task_pod_image_matches([pod], digest))
+        pod["status"]["containerStatuses"][0]["imageID"] = "registry/image@sha256:" + "b" * 64
+        self.assertFalse(_task_pod_image_matches([pod], digest))
+
+    def test_flight_recorder_checks_require_exact_source_and_unchanged_replay(self) -> None:
+        attempt = "lh-airflow-run-flig-123-a1"
+        source_receipt = {
+            "schema_version": 1, "query": '{k8s_namespace_name="airflow"}',
+            "window_start": "2026-08-14T12:00:00Z", "window_end": "2026-08-14T12:05:00Z",
+            "entry_count": 2, "raw_bytes": 200,
+            "raw_key": "flight-recorder/raw/1786708800000000000-1786709100000000000/" + "a" * 64 + ".jsonl",
+            "raw_sha256": "a" * 64, "attempt": attempt,
+            "manifest_key": "flight-recorder/manifests/1786708800000000000-1786709100000000000/q.json",
+        }
+        row = {
+            "event_count": 2, "rejected_count": 0, "hourly_event_count_sum": 2,
+            "hourly_rejection_count_sum": 0, "receipt_count": 1,
+            "latest_source_window_id": "1786708800000000000-1786709100000000000",
+            "latest_raw_sha256": "a" * 64,
+            "latest_spark_attempt": attempt, "latest_source_count": 2,
+            "latest_accepted_count": 2, "latest_rejected_count": 0,
+            "latest_final_event_count": 2,
+        }
+        columns = {
+            "events": (
+                ("fingerprint", "varchar"), ("event_timestamp", "timestamp(6)"),
+                ("event_date", "date"), ("source_window_id", "varchar"),
+                ("source_timestamp_ns", "varchar"), ("namespace", "varchar"),
+                ("workload_kind", "varchar"), ("workload_name", "varchar"),
+                ("pod_name", "varchar"), ("container_name", "varchar"),
+                ("severity", "varchar"), ("redacted_preview", "varchar"),
+                ("rejected", "boolean"), ("rejection_reason", "varchar"),
+            ),
+            "hourly": (
+                ("hour", "timestamp(6)"), ("namespace", "varchar"),
+                ("workload_kind", "varchar"), ("workload_name", "varchar"),
+                ("severity", "varchar"), ("event_count", "bigint"),
+                ("rejection_count", "bigint"),
+            ),
+            "run_receipts": (
+                ("source_window_id", "varchar"), ("raw_sha256", "varchar"),
+                ("manifest_uri", "varchar"), ("raw_uri", "varchar"),
+                ("source_count", "bigint"), ("accepted_count", "bigint"),
+                ("rejected_count", "bigint"), ("final_event_count", "bigint"),
+                ("spark_attempt", "varchar"), ("window_start", "timestamp(6)"),
+                ("window_end", "timestamp(6)"), ("completed_at", "timestamp(6)"),
+                ("completion_date", "date"),
+            ),
+        }
+        partitions = {"events": "event_date", "hourly": "day(hour)", "run_receipts": "completion_date"}
+        contracts = []
+        for table in ("events", "hourly", "run_receipts"):
+            contracts.extend((
+                [{"Column": name, "Type": kind} for name, kind in columns[table]],
+                [{"Create Table": (
+                    f"CREATE TABLE iceberg.flight_recorder.{table} (x varchar) WITH ("
+                    f"format = 'PARQUET', format_version = 2, location = "
+                    f"'s3://iceberg-warehouse/flight_recorder/{table}', partitioning = ARRAY['{partitions[table]}'])"
+                )}],
+            ))
+        outputs = {
+            "flight-recorder-summary": {"results": [[row]]},
+            "flight-recorder-contract": {"results": contracts},
+            "flight-recorder-snapshots": {"results": [[{"snapshot_id": 1, "committed_at": "2026-08-14T12:06:00Z"}]] * 3},
+            "flight-recorder-namespace-isolation": {"results": [[
+                {"table_name": "normalized", "snapshot_id": 1, "committed_at": "2026-08-14T11:59:00Z"},
+                {"table_name": "hourly", "snapshot_id": 2, "committed_at": "2026-08-14T11:59:00Z"},
+            ]]},
+        }
+        result = {
+            "status": "complete",
+            "identity": {"dag_id": "airflow_flight_recorder", "run_id": "run-1", "attempt_name": attempt},
+            "observed_at": "2026-08-14T12:10:00+00:00",
+            "live": {
+                "spark_application": {"created_at": "2026-08-14T12:00:00+00:00"},
+                "flight_recorder_source_loki": {"source_receipts": [source_receipt]},
+            },
+            "missing": [],
+        }
+        runner = lambda _root, name: outputs[name]
+        with tempfile.TemporaryDirectory() as directory:
+            namespace_baseline = Path(directory) / "namespace-baseline.json"
+            namespace_baseline.write_text(
+                json.dumps(outputs["flight-recorder-namespace-isolation"]),
+                encoding="utf-8",
+            )
+            add_flight_recorder_checks(
+                result,
+                None,
+                root=REPO,
+                namespace_baseline_path=namespace_baseline,
+                run_check_fn=runner,
+            )
+            self.assertEqual([], result["missing"])
+            baseline = Path(directory) / "baseline.json"
+            baseline.write_text(json.dumps(result), encoding="utf-8")
+            replay_receipt = {**source_receipt, "attempt": "attempt-2"}
+            replay = {
+                **result,
+                "identity": {**result["identity"], "run_id": "run-2", "attempt_name": "attempt-2"},
+                "live": {
+                    **result["live"],
+                    "flight_recorder_source_loki": {"source_receipts": [replay_receipt]},
+                },
+            }
+            add_flight_recorder_checks(replay, baseline, root=REPO, run_check_fn=runner)
+            self.assertEqual((result["status"], replay["status"]), ("complete", "complete"))
+
+            changed = {**replay_receipt, "window_end": "2026-08-14T12:10:00Z"}
+            replay["live"]["flight_recorder_source_loki"]["source_receipts"] = [changed]
+            add_flight_recorder_checks(replay, baseline, root=REPO, run_check_fn=runner)
+            self.assertIn("flight_recorder_replay_source_changed", replay["missing"])
 
     def test_retained_artifact_can_satisfy_expired_live_lookup(self) -> None:
         retained = {"artifacts": {"loki": {"passed": True}}}
