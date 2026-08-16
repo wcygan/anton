@@ -18,6 +18,13 @@ MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
+AIRFLOW_SOURCE = REPO / "images" / "airflow-runtime" / "src" / "anton_airflow" / "loki.py"
+AIRFLOW_SPEC = importlib.util.spec_from_file_location("airflow_loki_contract", AIRFLOW_SOURCE)
+assert AIRFLOW_SPEC and AIRFLOW_SPEC.loader
+AIRFLOW_LOKI = importlib.util.module_from_spec(AIRFLOW_SPEC)
+sys.modules[AIRFLOW_SPEC.name] = AIRFLOW_LOKI
+AIRFLOW_SPEC.loader.exec_module(AIRFLOW_LOKI)
+
 
 class FlightRecorderTransformTests(unittest.TestCase):
     window = "1786708500123456000-1786708800123457000"
@@ -58,7 +65,6 @@ class FlightRecorderTransformTests(unittest.TestCase):
         start_ns, end_ns = 1786705200000000000, 1786708800000000000
         sources = []
         for component, query in MODULE.COMPONENT_QUERIES:
-            query_sha = hashlib.sha256(query.encode()).hexdigest()
             for index in range(12):
                 chunk_start = start_ns + index * 300_000_000_000
                 chunk_end = chunk_start + 300_000_000_000
@@ -69,7 +75,9 @@ class FlightRecorderTransformTests(unittest.TestCase):
                     "entry_limit": MODULE.ENTRY_LIMIT,
                     "max_response_bytes": MODULE.MAX_RESPONSE_BYTES,
                     "timeout_seconds": MODULE.TIMEOUT_SECONDS,
-                    "manifest_key": f"flight-recorder/manifests/{chunk_start}-{chunk_end}/{query_sha}.json",
+                    "manifest_key": MODULE.component_manifest_key(
+                        component, query, chunk_start, chunk_end,
+                    ),
                     "manifest_sha256": "b" * 64,
                     "query": query,
                     "window_start": MODULE._datetime_ns(str(chunk_start)).isoformat().replace("+00:00", "Z"),
@@ -310,6 +318,47 @@ class FlightRecorderTransformTests(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "total raw bytes"):
                 MODULE.validate_complete_hour_manifest(config, payload)
 
+    def test_complete_hour_manifest_accepts_a_successful_empty_chunk(self) -> None:
+        manifest, _, env = self.complete_hour()
+        empty = manifest["sources"][0]
+        empty_checksum = hashlib.sha256(b"").hexdigest()
+        empty["entry_count"] = 0
+        empty["raw_bytes"] = 0
+        empty["raw_sha256"] = empty_checksum
+        window_id = empty["raw_key"].split("/", 3)[2]
+        empty["raw_key"] = f"flight-recorder/raw/{window_id}/{empty_checksum}.jsonl"
+        manifest["source_count"] -= 1
+        manifest["raw_bytes"] -= 10
+        payload = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        checksum = hashlib.sha256(payload).hexdigest()
+        env["FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256"] = checksum
+        env["FLIGHT_RECORDER_COMPLETE_MANIFEST_URI"] = (
+            f"s3a://iceberg-raw/flight-recorder/hours/{env['FLIGHT_RECORDER_SOURCE_HOUR_ID']}/"
+            f"{checksum}.complete.json"
+        )
+        sources = MODULE.validate_complete_hour_manifest(
+            MODULE.HourlyRuntimeConfig.from_environment(env), payload,
+        )
+        self.assertEqual((0, 0), (sources[0]["entry_count"], sources[0]["raw_bytes"]))
+
+    def test_component_manifest_key_matches_airflow_contract(self) -> None:
+        start_ns, end_ns = 1786705200000000000, 1786705500000000000
+        window = AIRFLOW_LOKI.LokiWindow(
+            MODULE._datetime_ns(str(start_ns)),
+            MODULE._datetime_ns(str(end_ns)),
+        )
+        for component, query in MODULE.COMPONENT_QUERIES:
+            with self.subTest(component=component):
+                self.assertEqual(
+                    MODULE.component_manifest_key(component, query, start_ns, end_ns),
+                    AIRFLOW_LOKI.component_manifest_key(
+                        component=component,
+                        query=query,
+                        window=window,
+                        limits=AIRFLOW_LOKI.COMPLETE_HOUR_QUERY_LIMITS,
+                    ),
+                )
+
     def test_child_manifest_checksum_fails_before_source_read(self) -> None:
         _, payload, env = self.complete_hour()
         config = MODULE.HourlyRuntimeConfig.from_environment(env)
@@ -371,6 +420,39 @@ class FlightRecorderTransformTests(unittest.TestCase):
                 "source_component": "seaweedfs", "fingerprint": "a", "rejected": False,
             }))
 
+    def test_zero_event_components_reconcile_and_replay(self) -> None:
+        deduplicated, counts = MODULE.reconcile_component_events(())
+        self.assertEqual((), deduplicated)
+        self.assertEqual(
+            {name for name, _ in MODULE.COMPONENT_QUERIES},
+            set(counts),
+        )
+        self.assertTrue(all(not any(values.values()) for values in counts.values()))
+        reconciled = MODULE.validate_written_counts(counts, {})
+        self.assertTrue(all(values["written_count"] == 0 for values in reconciled.values()))
+
+        source_hour_id, checksum = "1-2", "a" * 64
+        receipt = [{
+            "source_window_id": source_hour_id,
+            "complete_manifest_sha256": checksum,
+            "source_count": 0,
+            "accepted_count": 0,
+            "rejected_count": 0,
+            "final_event_count": 0,
+        }]
+        rows = [
+            {"source_component": component, **values}
+            for component, values in reconciled.items()
+        ]
+        self.assertTrue(MODULE.hourly_replay_is_complete(
+            receipt,
+            rows,
+            {},
+            source_hour_id=source_hour_id,
+            manifest_sha256=checksum,
+            final_event_count=0,
+        ))
+
     def test_hourly_replay_requires_receipt_component_rows_and_final_counts(self) -> None:
         source_hour_id, checksum = "1-2", "a" * 64
         receipts = [{
@@ -420,6 +502,55 @@ class FlightRecorderTransformTests(unittest.TestCase):
         for changed in ({**manifest, "raw_sha256": "b" * 64}, {key: value for key, value in manifest.items() if key != "query"}):
             with self.subTest(changed=changed), self.assertRaises(MODULE.FlightRecorderTransformError):
                 MODULE.validate_source(config, encoded(changed), raw)
+
+    def test_component_source_accepts_canonical_empty_raw_bytes(self) -> None:
+        base = MODULE.RuntimeConfig.from_environment(self.runtime_env())
+        component, query = MODULE.COMPONENT_QUERIES[1]
+        start_ns, end_ns = (int(value) for value in base.source_window_id.split("-", 1))
+        manifest_key = MODULE.component_manifest_key(component, query, start_ns, end_ns)
+        checksum = hashlib.sha256(b"").hexdigest()
+        raw_key = f"flight-recorder/raw/{base.source_window_id}/{checksum}.jsonl"
+        config = MODULE.RuntimeConfig(
+            raw_uri=f"s3a://iceberg-raw/{raw_key}",
+            manifest_uri=f"s3a://iceberg-raw/{manifest_key}",
+            raw_sha256=checksum,
+            source_window_id=base.source_window_id,
+            spark_attempt=base.spark_attempt,
+            window_start=base.window_start,
+            window_end=base.window_end,
+        )
+        manifest = {
+            "schema_version": MODULE.MANIFEST_SCHEMA_VERSION,
+            "query": query,
+            "window_start": base.window_start.isoformat().replace("+00:00", "Z"),
+            "window_end": base.window_end.isoformat().replace("+00:00", "Z"),
+            "entry_count": 0,
+            "raw_bytes": 0,
+            "raw_key": raw_key,
+            "raw_sha256": checksum,
+        }
+        encoded = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        self.assertEqual((), MODULE.validate_source(
+            config,
+            encoded,
+            b"",
+            allow_empty=True,
+            expected_manifest_uri=config.manifest_uri,
+            expected_query=query,
+        ))
+        changed = {**manifest, "query": '{k8s_namespace_name="other"}'}
+        changed_encoded = (json.dumps(changed, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "query conflicted"):
+            MODULE.validate_source(
+                config,
+                changed_encoded,
+                b"",
+                allow_empty=True,
+                expected_manifest_uri=config.manifest_uri,
+                expected_query=query,
+            )
+        with self.assertRaises(MODULE.FlightRecorderTransformError):
+            MODULE.validate_source(config, encoded, b"")
 
     def test_oversized_binary_metadata_never_selects_content(self) -> None:
         class Reader:
