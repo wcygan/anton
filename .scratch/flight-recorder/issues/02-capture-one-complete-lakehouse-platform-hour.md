@@ -4,17 +4,17 @@
 
 **Blocked by:** 01 — Prove one manual Flight Recorder slice.
 
-**Status:** agent-active
+**Status:** resolved
 
-- [ ] The Workflow Run selects the previous closed UTC hour from an explicit source-window end.
-- [ ] The hour contains twelve five-minute chunks for workflow, Spark Operator, Trino, and SeaweedFS queries.
-- [ ] Each component query has an independent entry, response-size, and timeout fence.
-- [ ] All 48 source queries must succeed before the complete source manifest is published.
-- [ ] A missing, failed, or oversized query rejects the complete hour and prevents a Spark Attempt.
-- [ ] A rejected hour remains visible through Airflow evidence and never becomes a partial Iceberg result.
-- [ ] One Spark Attempt reads only the completed source manifest.
-- [ ] Source, accepted, rejected, deduplicated, and written counts reconcile for every component.
-- [ ] Manual exact-hour replay remains available while Loki retains the source records.
+- [x] The Workflow Run selects the previous closed UTC hour from an explicit source-window end.
+- [x] The hour contains twelve five-minute chunks for workflow, Spark Operator, Trino, and SeaweedFS queries.
+- [x] Each component query has an independent entry, response-size, and timeout fence.
+- [x] All 48 source queries must succeed before the complete source manifest is published.
+- [x] A missing, failed, or oversized query rejects the complete hour and prevents a Spark Attempt.
+- [x] A rejected hour remains visible through Airflow evidence and never becomes a partial Iceberg result.
+- [x] One Spark Attempt reads only the completed source manifest.
+- [x] Source, accepted, rejected, deduplicated, and written counts reconcile for every component.
+- [x] Manual exact-hour replay remains available while Loki retains the source records.
 - [x] Focused tests and repository contracts pass.
 
 ## Comments
@@ -31,3 +31,13 @@
 - 2026-08-16: A later attempt exposed an Airflow image that embedded the prior Spark digest. Acceptance stopped before an accepted Spark write.
 - 2026-08-16: The retained `logs` namespace snapshots were identical before and after the failed digest attempt.
 - 2026-08-16: Rebuild Airflow after the final Spark pin. Verify the embedded and live digests before the next manual hour.
+- 2026-08-16: The 17:00–18:00 UTC hour reached the 5,000-entry Trino fence at chunk 11 after 35 successful queries.
+- 2026-08-16: Rejection evidence proved no complete manifest, Spark Application, active Lease, or partial Iceberg result.
+- 2026-08-16: All 35 retained child manifests and raw objects passed exact size, checksum, count, and identity validation.
+- 2026-08-16: The R-15 idempotent validation remained incomplete because the strict initial validator requires the original writer receipt identity.
+- 2026-08-16: R-16 selected the unwritten 15:00–16:00 UTC hour after Trino receipt and entry-fence preflight passed.
+- 2026-08-16: The initial manifest retained 6,282 events, 321 rejections, four components, 48 chunks, and checksum `218348be3774e26978fece48513433fe1d7a771a8de5306a6e8e14bd38924095`.
+- 2026-08-16: Every component reconciled source, accepted, rejected, deduplicated, and written counts.
+- 2026-08-16: Initial and replay Spark Attempts reached `RunningHealthy`, `Succeeded`, then `ResourceReleased`.
+- 2026-08-16: Strict initial and replay evidence passed with exact Airflow and Spark image identities.
+- 2026-08-16: Replay changed no event, receipt, component-count, hourly-row, Flight Recorder snapshot, or `logs` snapshot state.
