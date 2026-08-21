@@ -30,6 +30,18 @@ Keep the chart 0.1.14 workarounds until upstream proves they are fixed:
 
 Use top-level `spec.s3`; `filer.s3.enabled` conflicts with the canonical shape.
 
+Check PVC byte capacity and logical volume slots as separate limits. A volume
+server can exhaust slots while its Longhorn PVC still has free bytes.
+
+Preserve bounded growth and slot headroom in the source `Seaweed` CR. Use the
+`seaweedfs-iceberg-lakehouse` skill for topology checks and maintenance order.
+
+After a volume pod address change, compare master topology with S3 errors.
+Restart only the S3 gateways when the master topology is correct.
+
+Stop active writers before the S3 restart. Run the S3 smoke test and one
+authoritative workflow after the restart.
+
 Bucket lifecycle is owned by `seaweedfs-config/app/buckets-cronjob.yaml`; its
 mounted `provision-buckets.sh` is the single implementation for ordinary S3 and
 S3 Tables buckets. Add workload bucket intent there and retain collision

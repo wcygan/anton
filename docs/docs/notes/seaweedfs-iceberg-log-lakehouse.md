@@ -5,21 +5,23 @@ title: SeaweedFS Iceberg log lakehouse demo
 # SeaweedFS Iceberg log lakehouse demo
 
 > This page preserves the ADR 0031 baseline. ADR 0033 superseded that design.
-> The current migration is in `context/plans/0023-roll-out-airflow-spark-lakehouse.md`.
-> Commands under `iceberg-demo` describe the legacy path.
+> ADR 0039 retains the current Airflow and Spark learning platform.
+> Commands under `iceberg-demo` describe the legacy writer, except Trino.
 
-This is a time-boxed internal learning demo for review on 2026-08-20. It
-keeps SeaweedFS as both the S3 warehouse and the built-in Iceberg REST catalog;
-it does not add Polaris, Nessie, Hive Metastore, Kafka, Flink, Spark Operator,
-Airflow, or Dagster.
+The original demo was a time-boxed internal learning task. It kept SeaweedFS
+as the S3 warehouse and the built-in Iceberg REST catalog. Airflow now owns the
+workflow, and Spark remains the only Iceberg writer.
 
 ## Source of truth
 
-- ADR: `context/adrs/0031-adopt-seaweedfs-iceberg-log-demo.md`
-- Plan: `context/plans/0020-implement-seaweedfs-iceberg-log-lakehouse.md`
+- Current decision: `context/adrs/0039-retain-airflow-spark-learning-platform.md`
+- Completed migration: `context/plans/0023-roll-out-airflow-spark-lakehouse.md`
+- Historical ADR: `context/adrs/0031-adopt-seaweedfs-iceberg-log-demo.md`
+- Historical plan: `context/plans/0020-implement-seaweedfs-iceberg-log-lakehouse.md`
 - Seaweed CR: `kubernetes/apps/storage/seaweedfs-config/app/seaweed.yaml`
 - Iceberg Service: `kubernetes/apps/storage/seaweedfs-config/app/iceberg-service.yaml`
-- Spark fixture: `kubernetes/apps/iceberg-demo/spark-fixture/`
+- Airflow DAG: `images/airflow-runtime/dags/airflow_spark_lakehouse.py`
+- Historical Spark fixture: `kubernetes/apps/iceberg-demo/spark-fixture/`
 - Trino catalog: `kubernetes/apps/iceberg-demo/trino/`
 
 ## Phase 0 evidence
@@ -54,7 +56,53 @@ At inspection time all Seaweed components were Ready (3 masters, 3 volumes,
 and the three 100 Gi PVCs had roughly 288 GiB free. Node usage was 10–11% CPU
 and 12–15% memory. These are point-in-time observations, not reservations.
 
-## Phase 1–3 layout
+## Current capacity policy
+
+On 2026-08-21, all 36 logical volume slots were allocated. The three 120 GiB
+PVCs still had byte capacity. The warning was slot exhaustion, not disk
+exhaustion.
+
+The maintenance change separated these two capacity limits:
+
+| Control | Before | Current policy | Purpose |
+| --- | --- | --- | --- |
+| Growth batch | Seven volumes | One volume | Avoid unused sparse slots. |
+| Slots per server | 12 | 20 | Provide 60 cluster slots. |
+| New volume size | 10 GB | 5 GB | Allow smaller future allocation units. |
+| PVC size | 120 GiB | 120 GiB | Preserve existing Longhorn storage. |
+
+The current topology has 36 used slots and 24 free slots. Each server has
+12 used slots and eight free slots. Existing volume files were not resized.
+
+This change was useful because byte metrics alone hid the limiting resource.
+The master topology showed `36/36` slots before any PVC was full.
+
+Future capacity reviews must record both limits. Check Longhorn bytes, logical
+slots, per-node balance, and read-only state before a maintenance change.
+
+## Volume-server maintenance
+
+A volume pod restart can change its address. The S3 gateways can retain the old
+address after the master topology is correct.
+
+The 2026-08-21 rollout reproduced this behavior. S3 requests retried old volume
+IPs until the gateways restarted. One Spark run overlapped the restart and
+failed before its first Iceberg commit.
+
+Use this order for future maintenance:
+
+1. Stop active writers and confirm that no writer Lease exists.
+2. Record master topology, PVC state, and Longhorn health.
+3. Reconcile the SeaweedFS policy and wait for stable volume pods.
+4. Compare master topology with S3 errors and old volume addresses.
+5. Restart only the S3 gateways when their cache is stale.
+6. Run a fresh S3 write, read, and delete smoke test.
+7. Run one authoritative Airflow workflow and compare Iceberg snapshots.
+
+If a writer fails, compare pre-run and post-run snapshots before retrying.
+An unchanged snapshot set proves that the failed run made no table commit.
+
+## Historical Phase 1–3 layout
 
 The storage config provisions dedicated `iceberg-raw` and
 `iceberg-warehouse` buckets and adds least-privilege Seaweed identities. The
@@ -88,13 +136,11 @@ The Trino HelmRelease uses the official chart (`1.42.2`, Trino image `480`),
 one bounded worker, an internal `ClusterIP`, and an Iceberg REST catalog aimed
 at `http://seaweedfs-iceberg.storage.svc.cluster.local:8181`.
 
-## Build and rebuild prerequisites
+## Historical build and rebuild prerequisites
 
-The external prerequisites are satisfied for the current time-boxed demo: the
-`seaweedfs-iceberg` 1Password item is synced by ESO, both pinned Harbor images
-are live, and Flux has reconciled the storage, Spark, and Trino apps. The
-following commands remain the reproducible rebuild handoff; credentials stay
-out of Git.
+At the legacy demo closeout, the `seaweedfs-iceberg` 1Password item was synced.
+Both pinned Harbor images were live. Flux had reconciled storage, Spark, and
+Trino. These commands preserve that historical rebuild handoff.
 
 1. Keep the 1Password item `seaweedfs-iceberg` in vault `anton` with
    `raw-access-key`, `raw-secret-key`, `warehouse-access-key`, and
@@ -136,19 +182,10 @@ kubectl -n storage delete job seaweedfs-lakehouse-s3-smoke --ignore-not-found
 flux reconcile kustomization seaweedfs-config -n storage
 ```
 
-After the storage Secret and both buckets are Ready, trigger the fixture
-without waiting for its hourly schedule:
+The legacy Spark CronJob no longer exists. Use the
+`airflow-spark-lakehouse` skill for an authorized Workflow Run.
 
-```sh
-kubectl -n iceberg-demo create job --from=cronjob/iceberg-log-spark iceberg-log-spark-manual
-kubectl -n iceberg-demo wait --for=condition=complete job/iceberg-log-spark-manual --timeout=15m
-kubectl -n iceberg-demo logs job/iceberg-log-spark-manual --all-containers
-```
-
-Delete that uniquely named Job before another manual run, or use a new name;
-the CronJob itself remains the Flux-owned schedule.
-
-## Validation contract
+## Historical validation contract
 
 Local, non-mutating checks:
 
@@ -181,18 +218,19 @@ Observed live evidence:
   `s3://iceberg-warehouse/logs/normalized`; `logs.hourly` is partitioned by
   `day(hour)` and located at `s3://iceberg-warehouse/logs/hourly`.
 
-The current `MERGE` plus bounded hourly rebuild intentionally records
-additional Iceberg snapshots on each successful rerun even though the final
-row set is deduplicated. The Loki snapshot CronJob remains optional and is
-deferred until a later review gate.
+The `MERGE` plus bounded hourly rebuild records more Iceberg snapshots after
+each successful run. The final row set remains deduplicated.
 
-## Cleanup and risks
+## Historical cleanup and current risks
 
-Cleanup is operator-only: suspend the demo Kustomizations, retain the
-acceptance evidence, then remove the `iceberg-demo` namespace, the two
-dedicated buckets, and the 1Password identities if the 2026-08-20 review
-rejects the experiment. SeaweedFS uses `defaultReplication: "000"`, so demo
-data is disposable and does not receive an independent Seaweed durability
-guarantee. The generated Seaweed S3 Deployment also needs an explicit restart
-after changes to its credential Secret; the operator does not automatically
-roll that generated Deployment.
+ADR 0039 retained the platform without a fixed review date. The old
+2026-08-20 cleanup gate no longer applies.
+
+SeaweedFS uses `defaultReplication: "000"`. Longhorn owns storage durability,
+and SeaweedFS does not keep an independent data copy.
+
+The generated S3 Deployment does not roll after credential changes. It can
+also keep stale volume addresses after volume pod changes.
+
+Restart the S3 gateways only with approval and after all active writers stop.
+Then run the storage smoke test and one authoritative workflow.

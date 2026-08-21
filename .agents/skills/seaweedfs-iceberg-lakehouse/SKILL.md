@@ -1,15 +1,15 @@
 ---
 name: seaweedfs-iceberg-lakehouse
 description: >-
-  Operate Anton's SeaweedFS and Iceberg lakehouse data path. Use for storage,
-  catalog service, legacy fixture deployment, Harbor image handoff, ESO
-  prerequisites, infrastructure validation, or storage cleanup.
+  Operate Anton's SeaweedFS and Iceberg lakehouse data path. Use for volume
+  capacity, topology maintenance, S3 cache faults, catalog service, Harbor
+  image handoff, ESO prerequisites, validation, or storage cleanup.
 ---
 
 # SeaweedFS Iceberg Lakehouse
 
 Use this skill for the SeaweedFS, Iceberg, Trino, and Harbor data path retained
-by ADR 0033. ADR 0031 and Plan 0020 remain historical storage evidence.
+by ADR 0039. ADR 0031 and Plan 0020 remain historical storage evidence.
 
 Use `seaweedfs-iceberg-data-access` for table schemas, locations, reads,
 writes, and cross-engine queries. Use `airflow-spark-lakehouse` for Workflow
@@ -23,24 +23,24 @@ SeaweedFS S3 :8333 <--------+--------> Iceberg REST :8181
        +-- iceberg-raw                    +-- iceberg-warehouse S3 Table bucket
                                               |
             Airflow -> SparkApplication ----> logs.normalized / logs.hourly
-                          legacy CronJob -----^ until approved cutover
                                               |
                                       Trino 480 reads the same tables
 ```
 
-This is a learning lakehouse, not a production service. Keep it internal and
-review the Airflow and Spark platform by 2026-09-10 under ADR 0033.
+This is an open-ended learning lakehouse, not a production service. Keep it
+internal. ADR 0039 defines no fixed review date or production service level.
 
 ## Read first
 
 1. Read the repository `AGENTS.md` and verify the Kubernetes context.
-2. Read `context/adrs/0033-adopt-airflow-spark-operator-lakehouse.md` as the
-   current architectural authority.
-3. Read `context/plans/0023-roll-out-airflow-spark-lakehouse.md` for current
-   writer ownership and migration state.
-4. Read ADR 0031 and Plan 0020 for the underlying storage history.
-5. Read `docs/docs/notes/seaweedfs-iceberg-log-lakehouse.md` for the current
-   validation evidence and cleanup procedure.
+2. Read `context/adrs/0039-retain-airflow-spark-learning-platform.md` for the
+   current platform decision.
+3. Read `context/plans/0023-roll-out-airflow-spark-lakehouse.md` for the
+   completed writer cutover.
+4. Read ADR 0033 for architecture. Read ADR 0031 and Plan 0020 for storage
+   history.
+5. Read `docs/docs/notes/seaweedfs-iceberg-log-lakehouse.md` for storage
+   evidence and the maintenance procedure.
 6. When changing manifests, read `kubernetes/apps/AGENTS.md` and
    `kubernetes/apps/storage/AGENTS.md`.
 
@@ -60,8 +60,8 @@ this checkout, `KUBECONFIG=./kubeconfig` is the equivalent explicit form.
 - Harbor may be reached from a laptop through a temporary Kubernetes
   port-forward. Never commit the tunnel or expose Harbor publicly.
 - Preserve unrelated dirty-worktree changes and stage only lakehouse files.
-- Do not delete old evidence until the operator has recorded the run and the
-  review decision is known.
+- Retain old evidence until the operator records the run and authorizes
+  removal.
 
 ## Source files and contracts
 
@@ -71,13 +71,13 @@ this checkout, `KUBECONFIG=./kubeconfig` is the equivalent explicit form.
 - Shared bucket provisioner: `kubernetes/apps/storage/seaweedfs-config/app/buckets-cronjob.yaml`
 - Provisioning implementation: `kubernetes/apps/storage/seaweedfs-config/app/provision-buckets.sh`
 - Raw S3 smoke test: `kubernetes/apps/storage/seaweedfs-config/app/lakehouse-s3-smoke-job.yaml`
-- Legacy Spark CronJob and RBAC: `kubernetes/apps/iceberg-demo/spark-fixture/app/`
 - Airflow DAG and adapter: `images/airflow-runtime/`
 - Spark runtime image: `images/spark-runtime/`
-- Shadow SparkApplication: `kubernetes/apps/lakehouse/shadow-fixture/app/`
+- Authoritative credentials: `kubernetes/apps/lakehouse/authoritative-writer/app/`
 - Spark control plane: `kubernetes/apps/spark-system/spark-operator/app/`
 - Trino HelmRelease and query: `kubernetes/apps/iceberg-demo/trino/`
-- Legacy Spark image: `images/iceberg-log-spark/`
+- Historical Spark fixture: `kubernetes/apps/iceberg-demo/spark-fixture/app/`
+- Historical Spark image: `images/iceberg-log-spark/`
 
 The warehouse identity needs both ordinary S3 bucket actions and the
 bucket-scoped SeaweedFS S3 Tables action `s3tables:*:iceberg-warehouse`.
@@ -91,16 +91,59 @@ Run this before interpreting a failed fixture or query:
 
 ```sh
 mise exec -- kubectl config current-context
-mise exec -- flux get ks -A | rg 'seaweedfs-config|iceberg-demo|spark-fixture|trino'
-mise exec -- flux get hr -A | rg 'trino'
+mise exec -- flux get ks -A | rg 'seaweedfs-config|airflow|authoritative-writer|spark-operator|spark-history|trino'
+mise exec -- flux get hr -A | rg 'airflow|spark-operator|trino'
 mise exec -- kubectl -n storage get seaweed,deploy,svc -l app.kubernetes.io/instance=seaweedfs -o wide
 mise exec -- kubectl -n storage get externalsecret seaweedfs-s3-config
-mise exec -- kubectl -n iceberg-demo get deploy,pods,cronjob
+mise exec -- kubectl -n airflow get pods
+mise exec -- kubectl -n lakehouse get sparkapplications,pods,leases
+mise exec -- kubectl -n iceberg-demo get deploy,pods
 ```
 
-The expected steady state is Flux Ready for `seaweedfs-config`, `spark-fixture`,
-and `trino`; an internal `seaweedfs-iceberg` Service on 8181; two Ready Trino
-pods; and an ESO `Ready=True` condition for the storage Secret.
+The expected steady state is Flux Ready for storage, Airflow, Spark Operator,
+History Server, authoritative credentials, and Trino. The Iceberg Service uses
+8181. The storage Secret has `Ready=True`.
+
+## Capacity and topology
+
+Check physical bytes and logical volume slots separately. Free Longhorn bytes
+do not prove that SeaweedFS can allocate another logical volume.
+
+With approval for the read-only `exec`, record the logical topology:
+
+```sh
+printf 'volume.list\n' | mise exec -- kubectl -n storage exec -i \
+  pod/seaweedfs-master-0 -c master -- weed shell \
+  -master=seaweedfs-master-0.seaweedfs-master-peer.storage:9333
+```
+
+Record total and per-node volume use, maximum slots, free slots, and read-only
+state. Read current policy values from the source `Seaweed` CR.
+
+The policy limits future allocation. It does not resize existing volume files.
+Run `kubectl -n storage get pvc` and inspect the matching Longhorn volumes.
+
+## Volume address cache
+
+A volume pod restart can change its address. S3 gateways can retain the old
+address after the master topology becomes correct.
+
+Symptoms include `volume N not found`, `unexpected EOF`, or repeated requests
+to an old volume IP. Compare the S3 logs with `volume.list` before repair.
+
+Stop active Spark Attempts and confirm that no writer Lease exists. With
+approval, restart only the S3 Deployment:
+
+```sh
+mise exec -- kubectl -n storage rollout restart deployment/seaweedfs-s3
+mise exec -- kubectl -n storage rollout status deployment/seaweedfs-s3 --timeout=10m
+```
+
+Do not overlap this restart with an Iceberg writer. The writer can lose its S3
+connection while it plans or commits a table change.
+
+After the restart, run a fresh S3 write, read, and delete smoke test. Then use
+`airflow-spark-lakehouse` for one authoritative workflow and snapshot check.
 
 ## Credential and Harbor prerequisites
 
@@ -140,37 +183,16 @@ Table bucket `iceberg-warehouse`. The smoke job must verify scoped raw
 identity write/read/delete. An ordinary bucket named `iceberg-warehouse` is a
 collision and must not be replaced automatically.
 
-### 2. Legacy Spark fixture
+### 2. Authoritative Spark workflow
 
-The legacy CronJob remains the authoritative writer until Ticket 09 completes.
-Use `airflow-spark-lakehouse` for shadow or Airflow-owned runs.
+Airflow owns the only current writer. Use `airflow-spark-lakehouse` before any
+Workflow Run, Spark Attempt, retry, cancellation, or Lease action.
 
-After approval for a legacy live run, create a unique Job from the Flux-owned CronJob:
+Do not treat submission as success. Require `Succeeded`, `ResourceReleased`,
+an empty writer Lease, complete runtime evidence, and Trino validation.
 
-```sh
-mise exec -- kubectl -n iceberg-demo create job \
-  --from=cronjob/iceberg-log-spark iceberg-log-spark-manual-<timestamp>
-```
-
-Do not treat the submission Job's `Complete` condition as sufficient. Inspect
-the Spark driver pod and require `Succeeded`:
-
-```sh
-mise exec -- kubectl -n iceberg-demo get pods -l spark-role=driver -o wide
-mise exec -- kubectl -n iceberg-demo logs pod/<driver-name> --all-containers=true \
-  | rg 'expected normalized|expected hourly|ERROR|Exception'
-```
-
-Acceptance output is:
-
-```text
-expected normalized rows=5 actual=5
-expected hourly rows=5 actual=5
-```
-
-The normalized table is deduplicated by `event_id`. The migration contract
-retains the hourly delete and insert through cutover. Test transformed-partition
-`MERGE` in a separate experiment. The two writes are not one atomic transaction.
+The normalized table uses `MERGE`. The hourly table uses bounded delete and
+insert. These two table writes are not one atomic transaction.
 
 ### 3. Trino cross-engine query
 
@@ -207,13 +229,13 @@ Expected locations are `s3://iceberg-warehouse/logs/normalized` and
 `s3://iceberg-warehouse/logs/hourly`; expected partitions are `event_date`
 and `day(hour)` respectively.
 
-### 4. Rerun and record
+### 4. Record the result
 
-Run the identical fixture a second time with a new Job name. Counts should
-remain five in both tables. The rerun adds Iceberg snapshots even when the
-final row set is unchanged. Record Flux revision, driver names and output,
-Trino output, and any non-fatal REST metrics warnings in the active ticket and
-Plan 0023. Keep Plan 0020 as historical evidence.
+After storage maintenance, run one exact authoritative Workflow Run. Counts
+must remain five in both tables, with an event total of five.
+
+Record Flux revision, Workflow Run, Spark Attempt, state history, Trino output,
+and Iceberg snapshots. Keep Plans 0020 and 0023 as historical evidence.
 
 ## Failure triage
 

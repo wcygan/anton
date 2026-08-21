@@ -22,8 +22,10 @@ authority boundary requires operator approval.
 
 ## Authority
 
-- ADR 0036 owns the Airflow and Apache Spark Operator decision.
-- Plan 0023 owns the mutable rollout and removal sequence.
+- ADR 0039 owns current platform retention and service-level boundaries.
+- ADR 0033 records the Airflow and Apache Spark Operator architecture.
+- ADR 0036 records single-writer ownership and accepted metadata loss.
+- Plan 0023 records the completed rollout and writer cutover.
 - `.scratch/airflow-spark-lakehouse/spec.md` owns implementation acceptance.
 - `images/airflow-runtime/src/anton_airflow/` owns workflow behavior.
 - `scripts/lib/airflow_shadow_gate.py` owns retained gate validation.
@@ -68,8 +70,8 @@ mise exec -- kubectl -n airflow get pods
 mise exec -- kubectl -n lakehouse get sparkapplications,pods,leases
 ```
 
-Expected state depends on the active rollout phase. Compare it with Plan 0023
-and the current ticket before interpreting a missing resource.
+Compare expected state with ADR 0039, deployed source, and the current task.
+Use Plan 0023 only for migration history.
 
 Use the exact-attempt collector for retained and live evidence:
 
