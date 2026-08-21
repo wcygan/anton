@@ -11,7 +11,12 @@ spec:
   master:
     replicas: 3
     defaultReplication: "000"      # Longhorn owns durability (ADR 0005)
-    # Keep logical volumes small enough that each 100Gi volume server has
+    # Allocate one logical volume per growth event. The default batch of seven
+    # exhausts sparse collection slots before the PVCs approach capacity.
+    env:
+      - name: WEED_MASTER_VOLUME_GROWTH_COPY_1
+        value: "1"
+    # Keep logical volumes small enough that each 120Gi volume server has
     # room for multiple collections. Existing volumes are unaffected; this
     # only increases the number of new volume slots available to S3 buckets.
     volumeSizeLimitMB: 10000        # 10 GB per volume file
@@ -26,6 +31,7 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   volume:
     replicas: 3                     # one per node
+    maxVolumeCounts: 20             # 8 free slots per server at current use
     # Bind to the injected pod IP. The headless Service DNS record can retain
     # the old pod IP during a restart, which prevents the volume gRPC listener.
     extraArgs:
