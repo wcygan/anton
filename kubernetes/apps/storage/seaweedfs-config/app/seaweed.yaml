@@ -19,7 +19,7 @@ spec:
     # Keep logical volumes small enough that each 120Gi volume server has
     # room for multiple collections. Existing volumes are unaffected; this
     # only increases the number of new volume slots available to S3 buckets.
-    volumeSizeLimitMB: 10000        # 10 GB per volume file
+    volumeSizeLimitMB: 5000         # 5 GB per volume file
     affinity:
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
