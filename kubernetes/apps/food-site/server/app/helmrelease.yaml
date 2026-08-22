@@ -29,8 +29,8 @@ spec:
           app:
             image:
               repository: ghcr.io/wcygan/food-site/server
-              tag: build-static-11-f32625b # {"$imagepolicy": "food-site:food-site-server:tag"}
-              digest: sha256:f89dc1afbe5d2594376c7a31490482393241dbb5035a2a43b5bc4f823dd1da1b # {"$imagepolicy": "food-site:food-site-server:digest"}
+              tag: build-static-12-2b5bc6c # {"$imagepolicy": "food-site:food-site-server:tag"}
+              digest: sha256:a6314fa4885e03836f0745a755a91dd9c94fc7d083fe3d641675cb2691029795 # {"$imagepolicy": "food-site:food-site-server:digest"}
             probes:
               liveness: &probes
                 enabled: true
