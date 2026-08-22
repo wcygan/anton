@@ -7,7 +7,7 @@ metadata:
   annotations:
     secret.reloader.stakater.com/reload: seaweedfs-s3-config
 spec:
-  image: chrislusf/seaweedfs:4.40
+  image: chrislusf/seaweedfs:4.44
   master:
     replicas: 3
     defaultReplication: "000"      # Longhorn owns durability (ADR 0005)
