@@ -16,7 +16,7 @@ RUN apt-get update \
  && make -j2 \
  && make install
 
-FROM maven:3.9.12-eclipse-temurin-21@sha256:c3c9d3ac4ce8431a3995c0318b8d390f448e693dd4fabc16e9b68d2e1f3d7b46 AS dependencies
+FROM maven:3.9.16-eclipse-temurin-21@sha256:613124833fa6718ded9d655a2ebfab6425818c178f899116b93560b6f1c9ffe9 AS dependencies
 WORKDIR /build
 COPY images/spark-runtime/pom.xml ./pom.xml
 RUN mvn --batch-mode --no-transfer-progress dependency:tree -DoutputFile=/build/dependency-tree.txt \
