@@ -23,14 +23,14 @@ spec:
     images:
       airflow:
         repository: 192.168.1.106/library/airflow-runtime
-        tag: 3.2.2-apache.11
-        digest: sha256:e1e23b2c1026b9a680d8d9247913508b13bd5da353f646e5d98f85ffeae90624
+        tag: 3.2.2-apache.12
+        digest: sha256:1c6d999366ab05597d3ecd008e4314ab493b601452955accdf969df2fa8a815c
         pullPolicy: IfNotPresent
       # The chart does not expose a digest field for the pod template image.
       # Split the digest at its colon so the rendered reference stays pinned.
       pod_template:
         repository: 192.168.1.106/library/airflow-runtime@sha256
-        tag: e1e23b2c1026b9a680d8d9247913508b13bd5da353f646e5d98f85ffeae90624
+        tag: 1c6d999366ab05597d3ecd008e4314ab493b601452955accdf969df2fa8a815c
         pullPolicy: IfNotPresent
 
     # ESO creates one consumer-shaped Secret from the 1Password item.
@@ -185,7 +185,7 @@ spec:
         execution_api_timeout: "30.0"
       kubernetes_executor:
         worker_container_repository: 192.168.1.106/library/airflow-runtime@sha256
-        worker_container_tag: e1e23b2c1026b9a680d8d9247913508b13bd5da353f646e5d98f85ffeae90624
+        worker_container_tag: 1c6d999366ab05597d3ecd008e4314ab493b601452955accdf969df2fa8a815c
         delete_worker_pods: "False"
         delete_worker_pods_on_failure: "False"
 
