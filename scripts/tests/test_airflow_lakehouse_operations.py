@@ -31,7 +31,6 @@ from airflow_lakehouse_operations import (  # noqa: E402
     attempt_pod_loki_query,
     attempt_name,
     build_trigger_command,
-    collect_attempt_evidence,
     evaluate_gate_preflight,
     flight_recorder_source_loki_query,
     pod_loki_query,
@@ -40,12 +39,17 @@ from airflow_lakehouse_operations import (  # noqa: E402
     validate_evidence_run_id,
     validate_run_request,
 )
-from flight_recorder_evidence import (  # noqa: E402
+from lakehouse_trino import flight_recorder_facts_from_checks  # noqa: E402
+from spark_attempt_evidence import (  # noqa: E402
+    LakehouseEvidenceRequest,
+    _evaluate_flight_recorder_rejection,
+    _evaluate_flight_recorder_report,
     _valid_component_counts,
     _valid_contracts,
     _valid_summary,
     _valid_source_receipt,
-    add_flight_recorder_checks,
+    component_catalog_sha256,
+    collect_spark_attempt_evidence,
 )
 from airflow_lakehouse_recovery import (  # noqa: E402
     SCENARIOS,
@@ -320,11 +324,14 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            return collect_attempt_evidence(
-                FakeKubectl(),
-                run_id=run_id,
-                target="authoritative",
-                ledger_path=ledger,
+            return collect_spark_attempt_evidence(
+                LakehouseEvidenceRequest(
+                    run_id=run_id,
+                    target="authoritative",
+                    ledger_path=ledger,
+                ),
+                kubectl=FakeKubectl(),
+                root=REPO,
                 now=datetime(2026, 8, 14, 13, 30, tzinfo=timezone.utc),
             )
 
@@ -379,10 +386,13 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                 return None
 
         client = FakeKubectl()
-        result = collect_attempt_evidence(
-            client,
-            run_id="scheduled__2026-08-14T13:23:00+00:00",
-            target="authoritative",
+        result = collect_spark_attempt_evidence(
+            LakehouseEvidenceRequest(
+                run_id="scheduled__2026-08-14T13:23:00+00:00",
+                target="authoritative",
+            ),
+            kubectl=client,
+            root=REPO,
             now=datetime(2026, 8, 14, 13, 30, tzinfo=timezone.utc),
         )
         self.assertEqual("lh-airflow-run-auth-a2e1e078723c-a1", client.spark_name)
@@ -392,8 +402,7 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
 
     def test_evidence_rejects_unknown_target(self) -> None:
         with self.assertRaisesRegex(OperationError, "unsupported evidence target"):
-            collect_attempt_evidence(
-                object(),
+            LakehouseEvidenceRequest(
                 run_id="scheduled__2026-08-14T13:23:00+00:00",
                 target="unknown",
             )
@@ -682,7 +691,7 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         receipt = {
             "schema_version": 2, "kind": "flight_recorder_complete_hour", "status": "complete",
             "hour_start": "2026-08-14T11:00:00Z", "hour_end": "2026-08-14T12:00:00Z",
-            "source_hour_id": hour_id, "catalog_sha256": "b" * 64,
+            "source_hour_id": hour_id, "catalog_sha256": component_catalog_sha256(),
             "component_count": 4, "chunk_count": 48, "source_count": 48,
             "raw_bytes": 480, "attempt": "attempt-hour",
             "manifest_key": f"flight-recorder/hours/{hour_id}/{checksum}.complete.json",
@@ -695,14 +704,33 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             "latest_final_event_count": 40,
         }
         self.assertTrue(_valid_source_receipt(receipt, attempt="attempt-hour", summary=summary))
+        changed_receipt = {**receipt, "catalog_sha256": "b" * 64}
+        self.assertFalse(
+            _valid_source_receipt(changed_receipt, attempt="attempt-hour", summary=summary),
+        )
+        changed_receipt = {**receipt, "source_count": 1_000_000}
+        changed_summary = {**summary, "latest_source_count": 1_000_000}
+        self.assertFalse(
+            _valid_source_receipt(
+                changed_receipt,
+                attempt="attempt-hour",
+                summary=changed_summary,
+            ),
+        )
+        changed_receipt = {**receipt, "raw_bytes": 1_000_000_000}
+        self.assertFalse(
+            _valid_source_receipt(changed_receipt, attempt="attempt-hour", summary=summary),
+        )
         rows = [{
             "source_window_id": hour_id, "source_component": component,
             "source_count": 12, "accepted_count": 11, "rejected_count": 1,
             "deduplicated_count": 10, "written_count": 10,
         } for component in ("workflow", "spark_operator", "trino", "seaweedfs")]
-        self.assertTrue(_valid_component_counts({"results": [rows]}, summary, receipt))
+        self.assertTrue(_valid_component_counts(rows, summary, receipt))
         rows[0]["written_count"] = 9
-        self.assertFalse(_valid_component_counts({"results": [rows]}, summary, receipt))
+        self.assertFalse(_valid_component_counts(rows, summary, receipt))
+        rows[0]["source_component"] = ["workflow"]
+        self.assertFalse(_valid_component_counts(rows, summary, receipt))
 
     def test_loki_summary_retains_complete_hour_and_rejection_evidence(self) -> None:
         attempt = "attempt-hour"
@@ -752,6 +780,9 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             "receipt_count": 1,
         }
         self.assertTrue(_valid_summary(summary))
+        summary["latest_source_count"] = "48"
+        self.assertFalse(_valid_summary(summary))
+        summary["latest_source_count"] = 48
         summary["latest_source_kind"] = None
         self.assertFalse(_valid_summary(summary))
 
@@ -788,13 +819,15 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             "missing": ["spark_application", "spark_succeeded", "history_server"],
         }
 
-        def unexpected_check(_root, _name):
-            self.fail("A rejected hour must not query the Ticket 02 Trino schema")
-
-        add_flight_recorder_checks(result, None, root=REPO, run_check_fn=unexpected_check)
-        self.assertEqual("rejected", result["status"])
-        self.assertEqual([], result["missing"])
-        self.assertEqual({}, result["trino"])
+        evaluated = _evaluate_flight_recorder_rejection(result)
+        self.assertEqual("rejected", evaluated["status"])
+        self.assertEqual([], evaluated["missing"])
+        self.assertEqual({}, evaluated["trino"])
+        result["live"]["flight_recorder_source_loki"]["hour_rejections"][0][
+            "component"
+        ] = ["trino"]
+        malformed = _evaluate_flight_recorder_rejection(result)
+        self.assertEqual("incomplete", malformed["status"])
 
     def test_resource_summary_excludes_full_pod_status(self) -> None:
         resource = {
@@ -899,7 +932,7 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                     f"'s3://iceberg-warehouse/flight_recorder/{table}', partitioning = ARRAY['{partitions[table]}'])"
                 )}],
             ))
-        self.assertTrue(_valid_contracts({"results": contracts}))
+        self.assertTrue(_valid_contracts(contracts))
         timestamp_columns = (
             (0, "event_timestamp"),
             (2, "hour"),
@@ -915,13 +948,25 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             )
             changed_row["Type"] = "timestamp(6)"
             with self.subTest(column=column, result_index=result_index):
-                self.assertFalse(_valid_contracts({"results": changed_contracts}))
+                self.assertFalse(_valid_contracts(changed_contracts))
         outputs = {
-            "flight-recorder-summary": {"results": [[row]]},
-            "flight-recorder-contract": {"results": contracts},
-            "flight-recorder-snapshots": {"results": [[{"snapshot_id": 1, "committed_at": "2026-08-14T12:06:00Z"}]] * 4},
-            "flight-recorder-components": {"results": [[]]},
-            "flight-recorder-namespace-isolation": {"results": [[
+            "flight-recorder-summary": {
+                "check": "flight-recorder-summary", "results": [[row]],
+            },
+            "flight-recorder-contract": {
+                "check": "flight-recorder-contract", "results": contracts,
+            },
+            "flight-recorder-snapshots": {
+                "check": "flight-recorder-snapshots",
+                "results": [[{
+                    "snapshot_id": 1, "committed_at": "2026-08-14T12:06:00Z",
+                }]] * 4,
+            },
+            "flight-recorder-components": {
+                "check": "flight-recorder-components", "results": [[]],
+            },
+            "flight-recorder-namespace-isolation": {
+                "check": "flight-recorder-namespace-isolation", "results": [[
                 {"table_name": "normalized", "snapshot_id": 1, "committed_at": "2026-08-14T11:59:00Z"},
                 {"table_name": "hourly", "snapshot_id": 2, "committed_at": "2026-08-14T11:59:00Z"},
             ]]},
@@ -936,19 +981,17 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             },
             "missing": [],
         }
-        runner = lambda _root, name: outputs[name]
         with tempfile.TemporaryDirectory() as directory:
             namespace_baseline = Path(directory) / "namespace-baseline.json"
             namespace_baseline.write_text(
                 json.dumps(outputs["flight-recorder-namespace-isolation"]),
                 encoding="utf-8",
             )
-            add_flight_recorder_checks(
+            result = _evaluate_flight_recorder_report(
                 result,
-                None,
-                root=REPO,
+                flight_recorder_facts_from_checks(outputs),
+                namespace_baseline=json.loads(namespace_baseline.read_text(encoding="utf-8")),
                 namespace_baseline_path=namespace_baseline,
-                run_check_fn=runner,
             )
             self.assertEqual([], result["missing"])
             baseline = Path(directory) / "baseline.json"
@@ -962,12 +1005,22 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
                     "flight_recorder_source_loki": {"source_receipts": [replay_receipt]},
                 },
             }
-            add_flight_recorder_checks(replay, baseline, root=REPO, run_check_fn=runner)
+            replay = _evaluate_flight_recorder_report(
+                replay,
+                flight_recorder_facts_from_checks(outputs),
+                replay_baseline=json.loads(baseline.read_text(encoding="utf-8")),
+                replay_baseline_path=baseline,
+            )
             self.assertEqual((result["status"], replay["status"]), ("complete", "complete"))
 
             changed = {**replay_receipt, "window_end": "2026-08-14T12:10:00Z"}
             replay["live"]["flight_recorder_source_loki"]["source_receipts"] = [changed]
-            add_flight_recorder_checks(replay, baseline, root=REPO, run_check_fn=runner)
+            replay = _evaluate_flight_recorder_report(
+                replay,
+                flight_recorder_facts_from_checks(outputs),
+                replay_baseline=json.loads(baseline.read_text(encoding="utf-8")),
+                replay_baseline_path=baseline,
+            )
             self.assertIn("flight_recorder_replay_source_changed", replay["missing"])
 
     def test_retained_artifact_can_satisfy_expired_live_lookup(self) -> None:

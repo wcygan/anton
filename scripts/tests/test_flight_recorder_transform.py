@@ -1,6 +1,7 @@
 """Tests for the pure Flight Recorder event-safety transform."""
 
 from dataclasses import FrozenInstanceError, asdict
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
@@ -12,6 +13,11 @@ from unittest.mock import patch
 
 
 REPO = Path(__file__).resolve().parents[2]
+CONTRACT_SOURCE = REPO / "images" / "flight-recorder-contract"
+sys.path.insert(0, str(CONTRACT_SOURCE))
+
+import anton_flight_recorder_contract as COMPLETE_HOUR_CONTRACT
+
 SOURCE = REPO / "images" / "iceberg-log-spark" / "flight_recorder.py"
 SPEC = importlib.util.spec_from_file_location("flight_recorder_transform", SOURCE)
 assert SPEC and SPEC.loader
@@ -29,6 +35,139 @@ AIRFLOW_SPEC.loader.exec_module(AIRFLOW_LOKI)
 
 class FlightRecorderTransformTests(unittest.TestCase):
     window = "1786708500123456000-1786708800123457000"
+
+    def test_complete_hour_contract_has_stable_golden_identity(self) -> None:
+        start_ns = 1786705200000000000
+        end_ns = 1786705500000000000
+        component, query = COMPLETE_HOUR_CONTRACT.COMPONENT_QUERIES[0]
+        self.assertEqual(
+            "49275e31505c9300829cb0ca6fd86a198f6ee31c4b628695ba7ab555f4e930fd",
+            COMPLETE_HOUR_CONTRACT.component_catalog_sha256(),
+        )
+        self.assertEqual(
+            ("flight_recorder_complete_hour", "complete", 64 * 1024),
+            (
+                COMPLETE_HOUR_CONTRACT.COMPLETE_HOUR_KIND,
+                COMPLETE_HOUR_CONTRACT.COMPLETE_HOUR_STATUS,
+                COMPLETE_HOUR_CONTRACT.MAX_SOURCE_MANIFEST_BYTES,
+            ),
+        )
+        self.assertEqual(
+            (
+                "flight-recorder/component-manifests/"
+                "1786705200000000000-1786705500000000000/"
+                "40ef1552da3bc8073da64184ae03426d3c0276b0ea23fc9dd5cf6f763d2ad637.json"
+            ),
+            COMPLETE_HOUR_CONTRACT.component_manifest_key(
+                component=component,
+                query=query,
+                start_ns=start_ns,
+                end_ns=end_ns,
+            ),
+        )
+
+    def test_complete_hour_contract_encodes_stable_golden_wire(self) -> None:
+        manifest, _, _ = self.complete_hour()
+        payload = COMPLETE_HOUR_CONTRACT.encode_complete_hour_manifest(manifest)
+        self.assertEqual(
+            "03150e1a099fec3d4092464ceffa10689d4bdfaad0bda8f085d47724f3d46107",
+            hashlib.sha256(payload).hexdigest(),
+        )
+
+    def test_complete_hour_contract_rejects_unknown_wire_fields(self) -> None:
+        manifest, _, _ = self.complete_hour()
+        cases = (
+            {**manifest, "unexpected": True},
+            {
+                **manifest,
+                "sources": [{**manifest["sources"][0], "unexpected": True}, *manifest["sources"][1:]],
+            },
+        )
+        for changed in cases:
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                COMPLETE_HOUR_CONTRACT.encode_complete_hour_manifest(changed)
+
+    def test_complete_hour_contract_rejects_invalid_wire_semantics(self) -> None:
+        manifest, _, _ = self.complete_hour()
+
+        def changed_source(**changes: object) -> dict[str, object]:
+            return {
+                **manifest,
+                "sources": [{**manifest["sources"][0], **changes}, *manifest["sources"][1:]],
+            }
+
+        cases = (
+            {**manifest, "schema_version": 99},
+            {**manifest, "hour_end": manifest["hour_start"]},
+            changed_source(component="trino"),
+            changed_source(chunk_index=False),
+            changed_source(window_end=manifest["sources"][0]["window_start"]),
+            changed_source(entry_limit=4999),
+            changed_source(manifest_key="flight-recorder/component-manifests/wrong.json"),
+            changed_source(raw_sha256="A" * 64),
+            changed_source(raw_key="flight-recorder/raw/wrong.jsonl"),
+            {**manifest, "source_count": 49},
+            {**manifest, "raw_bytes": 481},
+        )
+        for index, changed in enumerate(cases):
+            with self.subTest(case=index), self.assertRaises(ValueError):
+                COMPLETE_HOUR_CONTRACT.encode_complete_hour_manifest(changed)
+
+    def test_complete_hour_contract_rejects_invalid_component_identity(self) -> None:
+        base = {
+            "component": "workflow",
+            "query": '{k8s_namespace_name="airflow"}',
+            "start_ns": 1786705200000000000,
+            "end_ns": 1786705500000000000,
+        }
+        cases = (
+            {**base, "component": "../workflow"},
+            {**base, "query": ""},
+            {**base, "end_ns": base["start_ns"]},
+        )
+        for index, changed in enumerate(cases):
+            with self.subTest(case=index), self.assertRaises(ValueError):
+                COMPLETE_HOUR_CONTRACT.component_manifest_key(**changed)
+
+    def test_complete_hour_contract_derives_stable_object_keys(self) -> None:
+        checksum = "a" * 64
+        self.assertEqual(
+            (
+                "flight-recorder/raw/1786705200000000000-1786705500000000000/"
+                f"{checksum}.jsonl"
+            ),
+            COMPLETE_HOUR_CONTRACT.raw_key(
+                start_ns=1786705200000000000,
+                end_ns=1786705500000000000,
+                checksum=checksum,
+            ),
+        )
+        self.assertEqual(
+            (
+                "flight-recorder/hours/1786705200000000000-1786708800000000000/"
+                f"{checksum}.complete.json"
+            ),
+            COMPLETE_HOUR_CONTRACT.hour_manifest_key(
+                start_ns=1786705200000000000,
+                end_ns=1786708800000000000,
+                checksum=checksum,
+            ),
+        )
+
+    def test_complete_hour_contract_exports_exact_source_fields(self) -> None:
+        self.assertEqual(
+            frozenset({
+                "schema_version",
+                "query",
+                "window_start",
+                "window_end",
+                "entry_count",
+                "raw_bytes",
+                "raw_key",
+                "raw_sha256",
+            }),
+            COMPLETE_HOUR_CONTRACT.SOURCE_MANIFEST_FIELDS,
+        )
 
     def entry(self, *, line: str = "service started", **labels: str) -> dict[str, object]:
         return {
@@ -278,6 +417,62 @@ class FlightRecorderTransformTests(unittest.TestCase):
         self.assertEqual(manifest["source_hour_id"], hour_config.source_hour_id)
         with self.assertRaises(MODULE.FlightRecorderTransformError):
             MODULE.HourlyRuntimeConfig.from_environment({**hour_env, **env})
+
+    def test_airflow_capture_round_trips_through_spark_validation(self) -> None:
+        class MemoryStore:
+            def __init__(self) -> None:
+                self.objects: dict[str, bytes] = {}
+
+            def get(self, *, key: str) -> bytes | None:
+                return self.objects.get(key)
+
+            def put_if_absent(self, *, key: str, payload: bytes) -> bool:
+                if key in self.objects:
+                    return False
+                self.objects[key] = payload
+                return True
+
+        class HourClient:
+            def query_range(self, *, window, query, **_: object):
+                return (
+                    AIRFLOW_LOKI.LokiEntry(
+                        str(window.start_ns),
+                        {"component": query},
+                        "line",
+                    ),
+                )
+
+        hour = AIRFLOW_LOKI.LokiHour.ending_at(
+            datetime(2026, 8, 14, 12, tzinfo=timezone.utc),
+        )
+        store = MemoryStore()
+        manifest = AIRFLOW_LOKI.LokiSnapshotExtractor(
+            client=HourClient(),  # type: ignore[arg-type]
+            store=store,
+        ).capture_hour(hour=hour)
+        key = AIRFLOW_LOKI.hour_manifest_key(
+            hour=hour,
+            checksum=manifest.manifest_sha256,
+        )
+        payload = store.objects[key]
+        config = MODULE.HourlyRuntimeConfig.from_environment({
+            "ANTON_LAKEHOUSE_TARGET": "authoritative",
+            "FLIGHT_RECORDER_ICEBERG_NAMESPACE": "flight_recorder",
+            "ICEBERG_WAREHOUSE": "s3://iceberg-warehouse",
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_URI": f"s3a://iceberg-raw/{key}",
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256": manifest.manifest_sha256,
+            "FLIGHT_RECORDER_SOURCE_HOUR_ID": manifest.source_hour_id,
+            "ANTON_SPARK_ATTEMPT": "attempt-hour-round-trip",
+        })
+
+        sources = MODULE.validate_complete_hour_manifest(config, payload)
+
+        self.assertEqual(48, len(sources))
+        self.assertEqual(manifest.manifest_sha256, hashlib.sha256(payload).hexdigest())
+        self.assertEqual(
+            tuple(component for component, _ in MODULE.COMPONENT_QUERIES for _ in range(12)),
+            tuple(source["component"] for source in sources),
+        )
 
     def test_complete_hour_manifest_requires_exact_ordered_48_source_matrix(self) -> None:
         manifest, payload, env = self.complete_hour()

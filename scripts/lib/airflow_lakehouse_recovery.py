@@ -25,12 +25,15 @@ from airflow_lakehouse_operations import (
     application_outcome,
     attempt_name,
     build_trigger_command,
-    collect_attempt_evidence,
     collect_gate_snapshot,
     evaluate_gate_preflight,
     require_live_approval,
     subprocess_runner,
     validate_run_request,
+)
+from spark_attempt_evidence import (
+    LakehouseEvidenceRequest,
+    collect_spark_attempt_evidence,
 )
 
 
@@ -638,7 +641,11 @@ def execute_recovery_case(
         result["retained_roles"] = sorted(str(role) for role in roles if role)
 
     result["airflow_run_state"] = runtime.run_state(run_id)
-    result["evidence"] = collect_attempt_evidence(kubectl, run_id=run_id)
+    result["evidence"] = collect_spark_attempt_evidence(
+        LakehouseEvidenceRequest(run_id=run_id),
+        kubectl=kubectl,
+        root=Path(__file__).resolve().parents[2],
+    )
     result["completed_at"] = datetime.now(timezone.utc).isoformat()
     result["passed"] = True
     return result

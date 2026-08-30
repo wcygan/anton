@@ -13,10 +13,91 @@ REPO = Path(__file__).resolve().parents[2]
 LIB = REPO / "scripts" / "lib"
 sys.path.insert(0, str(LIB))
 
-from lakehouse_trino import QUERIES, TrinoReadError, commands_for, run_check  # noqa: E402
+from lakehouse_trino import (  # noqa: E402
+    QUERIES,
+    TrinoReadError,
+    commands_for,
+    flight_recorder_facts_from_checks,
+    run_check,
+)
+
+
+def _flight_recorder_checks() -> dict[str, dict[str, object]]:
+    return {
+        "flight-recorder-summary": {
+            "check": "flight-recorder-summary",
+            "results": [[{"latest_source_count": 4}]],
+        },
+        "flight-recorder-contract": {
+            "check": "flight-recorder-contract",
+            "results": [[{"Column": "first"}, {"Column": "second"}]],
+        },
+        "flight-recorder-snapshots": {
+            "check": "flight-recorder-snapshots",
+            "results": [[{"snapshot_id": 10}, {"snapshot_id": 20}]],
+        },
+        "flight-recorder-components": {
+            "check": "flight-recorder-components",
+            "results": [[
+                {"source_component": "workflow", "source_count": 1},
+                {"source_component": "trino", "source_count": 1},
+            ]],
+        },
+        "flight-recorder-namespace-isolation": {
+            "check": "flight-recorder-namespace-isolation",
+            "results": [[
+                {
+                    "table_name": "normalized",
+                    "snapshot_id": 30,
+                    "committed_at": "2026-08-14T10:59:00Z",
+                },
+                {
+                    "table_name": "hourly",
+                    "snapshot_id": 40,
+                    "committed_at": "2026-08-14T10:59:00Z",
+                },
+            ]],
+        },
+    }
 
 
 class LakehouseTrinoTests(unittest.TestCase):
+    def test_flight_recorder_facts_ignore_row_order(self) -> None:
+        first = _flight_recorder_checks()
+        second = _flight_recorder_checks()
+        second["flight-recorder-components"]["results"][0].reverse()  # type: ignore[index]
+
+        first_facts = flight_recorder_facts_from_checks(first)
+        second_facts = flight_recorder_facts_from_checks(second)
+
+        self.assertEqual(first_facts.comparison_key, second_facts.comparison_key)
+        self.assertEqual(
+            (
+                ("hourly", 40, "2026-08-14T10:59:00Z"),
+                ("normalized", 30, "2026-08-14T10:59:00Z"),
+            ),
+            first_facts.namespace_snapshots,
+        )
+        second["flight-recorder-components"]["results"][0][0]["source_count"] = 2  # type: ignore[index]
+        changed_facts = flight_recorder_facts_from_checks(second)
+        self.assertNotEqual(first_facts.comparison_key, changed_facts.comparison_key)
+
+    def test_flight_recorder_facts_require_every_fixed_check(self) -> None:
+        checks = _flight_recorder_checks()
+        del checks["flight-recorder-components"]
+
+        with self.assertRaisesRegex(TrinoReadError, "facts are missing"):
+            flight_recorder_facts_from_checks(checks)
+
+    def test_flight_recorder_facts_reject_duplicate_namespace_rows(self) -> None:
+        checks = _flight_recorder_checks()
+        rows = checks["flight-recorder-namespace-isolation"]["results"][0]  # type: ignore[index]
+        rows[1]["table_name"] = "normalized"  # type: ignore[index]
+        rows[1]["snapshot_id"] = {"invalid": True}  # type: ignore[index]
+
+        with self.assertRaisesRegex(TrinoReadError, "namespace facts are invalid"):
+            flight_recorder_facts_from_checks(checks)
+
     def test_commands_use_the_fixed_coordinator_and_read_only_queries(self) -> None:
         prefix = ("mise", "exec", "--", "kubectl", "--kubeconfig", "kubeconfig")
         with patch("lakehouse_trino.anton_kubectl_prefix", return_value=prefix):

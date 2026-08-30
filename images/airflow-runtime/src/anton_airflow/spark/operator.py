@@ -41,6 +41,7 @@ def _airflow_adapter(
                 "name": getattr(metadata, "name", None),
                 "namespace": getattr(metadata, "namespace", None),
                 "resourceVersion": getattr(metadata, "resource_version", None),
+                "uid": getattr(metadata, "uid", None),
             },
             "spec": {
                 "holderIdentity": getattr(spec, "holder_identity", None),
@@ -59,8 +60,18 @@ def _airflow_adapter(
         def replace_namespaced_lease(self, name: str, namespace: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
             return coordination.replace_namespaced_lease(name, namespace, body).to_dict()
 
-        def delete_namespaced_lease(self, name: str, namespace: str) -> Any:
-            return coordination.delete_namespaced_lease(name, namespace)
+        def delete_namespaced_lease(
+            self,
+            name: str,
+            namespace: str,
+            *,
+            body: Mapping[str, Any] | None = None,
+        ) -> Any:
+            return coordination.delete_namespaced_lease(
+                name,
+                namespace,
+                body=body,
+            )
 
     class Pods:
         def list_pods(self, *, namespace: str, label_selector: str) -> list[Mapping[str, Any]]:
@@ -137,7 +148,7 @@ class ApacheSparkApplicationOperator(BaseOperator):
                 self._identity,
                 application_spec=self.application_spec,
                 target=self.target,
-        )
+            )
         if observation.state.value in {"succeeded", "failed"}:
             return self._complete(observation.state.value, observation.diagnostics, observation.name)
         if observation.state.value == "ambiguous":

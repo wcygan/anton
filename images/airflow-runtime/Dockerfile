@@ -60,6 +60,7 @@ RUN pip install --no-cache-dir \
 
 ENV PYTHONPATH=/opt/airflow/lib
 
+COPY --chown=airflow:0 images/flight-recorder-contract/anton_flight_recorder_contract.py /opt/airflow/lib/anton_flight_recorder_contract.py
 COPY --chown=airflow:0 images/airflow-runtime/src/ /opt/airflow/lib/
 COPY --chown=airflow:0 images/airflow-runtime/dags/ /opt/airflow/dags/
 
@@ -68,11 +69,13 @@ import sys
 from importlib.metadata import version
 
 import airflow
+import anton_flight_recorder_contract
 import anton_airflow.spark
 
 assert airflow.__version__ == "3.2.2"
 assert sys.version_info[:2] == (3, 12)
 assert version("apache-airflow-providers-cncf-kubernetes") == "10.21.0"
+assert anton_flight_recorder_contract.COMPLETE_HOUR_SCHEMA_VERSION == 2
 assert anton_airflow.spark.PACKAGE_VERSION == "0.3.0"
 PY
 

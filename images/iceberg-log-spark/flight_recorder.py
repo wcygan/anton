@@ -11,29 +11,23 @@ import os
 import re
 import unicodedata
 
+import anton_flight_recorder_contract as complete_hour_contract
+
 
 MAX_LINE_BYTES = 16 * 1024
 MAX_PREVIEW_CHARS = 256
 SPARK_REDACTION_REGEX = r"(?i)secret|password|token|access[._-]?key|credential|redaction"
-MAX_MANIFEST_BYTES = 64 * 1024
-MAX_COMPLETE_MANIFEST_BYTES = 128 * 1024
-MAX_COMPLETE_RAW_BYTES = 32 * 1024 * 1024
-MAX_RAW_BYTES = 8 * 1024 * 1024
-MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-ENTRY_LIMIT = 5000
-TIMEOUT_SECONDS = 30
-MANIFEST_SCHEMA_VERSION = 1
-COMPLETE_HOUR_SCHEMA_VERSION = 2
-COMPONENT_QUERIES = (
-    ("workflow", '{k8s_namespace_name="airflow"}'),
-    ("spark_operator", '{k8s_namespace_name="spark-system"}'),
-    ("trino", '{k8s_namespace_name="iceberg-demo"} | k8s_pod_name=~"trino.*"'),
-    ("seaweedfs", '{k8s_namespace_name="storage"} | k8s_pod_name=~"seaweedfs.*"'),
-)
-MANIFEST_FIELDS = frozenset({
-    "schema_version", "query", "window_start", "window_end", "entry_count",
-    "raw_bytes", "raw_key", "raw_sha256",
-})
+MAX_MANIFEST_BYTES = complete_hour_contract.MAX_SOURCE_MANIFEST_BYTES
+MAX_COMPLETE_MANIFEST_BYTES = complete_hour_contract.MAX_COMPLETE_MANIFEST_BYTES
+MAX_COMPLETE_RAW_BYTES = complete_hour_contract.MAX_COMPLETE_RAW_BYTES
+MAX_RAW_BYTES = complete_hour_contract.MAX_RAW_BYTES
+MAX_RESPONSE_BYTES = complete_hour_contract.MAX_RESPONSE_BYTES
+ENTRY_LIMIT = complete_hour_contract.COMPLETE_HOUR_ENTRY_LIMIT
+TIMEOUT_SECONDS = complete_hour_contract.TIMEOUT_SECONDS
+MANIFEST_SCHEMA_VERSION = complete_hour_contract.SOURCE_MANIFEST_SCHEMA_VERSION
+COMPLETE_HOUR_SCHEMA_VERSION = complete_hour_contract.COMPLETE_HOUR_SCHEMA_VERSION
+COMPONENT_QUERIES = complete_hour_contract.COMPONENT_QUERIES
+MANIFEST_FIELDS = complete_hour_contract.SOURCE_MANIFEST_FIELDS
 CATALOG = "lake"
 NAMESPACE = "flight_recorder"
 WAREHOUSE = "s3://iceberg-warehouse"
@@ -192,10 +186,18 @@ class HourlyRuntimeConfig:
         if match is None:
             raise FlightRecorderTransformError("Flight Recorder source hour was invalid")
         start, end = _datetime_ns(match.group(1)), _datetime_ns(match.group(2))
-        if (end - start).total_seconds() != 3600 or any((start.minute, start.second, start.microsecond,
-                                                        end.minute, end.second, end.microsecond)):
+        if (
+            (end - start).total_seconds() != complete_hour_contract.HOUR_SECONDS
+            or any((start.minute, start.second, start.microsecond,
+                    end.minute, end.second, end.microsecond))
+        ):
             raise FlightRecorderTransformError("Flight Recorder source hour was not closed")
-        expected_uri = f"s3a://iceberg-raw/flight-recorder/hours/{hour_id}/{checksum}.complete.json"
+        manifest_key = complete_hour_contract.hour_manifest_key(
+            start_ns=int(match.group(1)),
+            end_ns=int(match.group(2)),
+            checksum=checksum,
+        )
+        expected_uri = f"s3a://iceberg-raw/{manifest_key}"
         if uri != expected_uri:
             raise FlightRecorderTransformError("Flight Recorder complete manifest identity conflicted")
         attempt = environ.get("ANTON_SPARK_ATTEMPT", "")
@@ -206,17 +208,7 @@ class HourlyRuntimeConfig:
 
 def component_catalog_sha256() -> str:
     """Return the fixed component query and fence identity."""
-    catalog = [
-        {
-            "component": component,
-            "query": query,
-            "entry_limit": ENTRY_LIMIT,
-            "max_response_bytes": MAX_RESPONSE_BYTES,
-            "timeout_seconds": TIMEOUT_SECONDS,
-        }
-        for component, query in COMPONENT_QUERIES
-    ]
-    return hashlib.sha256(json.dumps(catalog, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return complete_hour_contract.component_catalog_sha256()
 
 
 def component_manifest_key(
@@ -226,26 +218,18 @@ def component_manifest_key(
     end_ns: int,
 ) -> str:
     """Return the contract-bound child manifest key."""
-    contract = {
-        "component": component,
-        "entry_limit": ENTRY_LIMIT,
-        "max_response_bytes": MAX_RESPONSE_BYTES,
-        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
-        "max_raw_bytes": MAX_RAW_BYTES,
-        "query": query,
-        "complete_hour_schema_version": COMPLETE_HOUR_SCHEMA_VERSION,
-        "timeout_seconds": TIMEOUT_SECONDS,
-    }
-    contract_sha = hashlib.sha256(
-        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    return f"flight-recorder/component-manifests/{start_ns}-{end_ns}/{contract_sha}.json"
+    return complete_hour_contract.component_manifest_key(
+        component=component,
+        query=query,
+        start_ns=start_ns,
+        end_ns=end_ns,
+    )
 
 
 def validate_complete_hour_manifest(
     config: HourlyRuntimeConfig, payload: bytes,
 ) -> tuple[Mapping[str, object], ...]:
-    """Validate the exact ordered 4 by 12 complete-hour source matrix."""
+    """Validate the exact ordered Complete Hour source matrix."""
     if not 1 <= len(payload) <= MAX_COMPLETE_MANIFEST_BYTES:
         raise FlightRecorderTransformError("Flight Recorder complete manifest size was invalid")
     if hashlib.sha256(payload).hexdigest() != config.complete_manifest_sha256:
@@ -254,15 +238,8 @@ def validate_complete_hour_manifest(
         manifest = json.loads(payload)
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise FlightRecorderTransformError("Flight Recorder complete manifest was invalid") from error
-    fields = {
-        "schema_version", "kind", "status", "hour_start", "hour_end", "source_hour_id",
-        "catalog_sha256", "component_count", "chunk_count", "source_count", "raw_bytes", "sources",
-    }
-    source_fields = {
-        "component", "chunk_index", "entry_limit", "max_response_bytes", "timeout_seconds",
-        "manifest_key", "manifest_sha256", "query", "window_start", "window_end",
-        "entry_count", "raw_bytes", "raw_key", "raw_sha256",
-    }
+    fields = complete_hour_contract.COMPLETE_HOUR_MANIFEST_FIELDS
+    source_fields = complete_hour_contract.COMPLETE_HOUR_SOURCE_FIELDS
     expected_hours = (
         config.hour_start.isoformat().replace("+00:00", "Z"),
         config.hour_end.isoformat().replace("+00:00", "Z"),
@@ -272,31 +249,45 @@ def validate_complete_hour_manifest(
     sources = manifest.get("sources")
     valid_header = (
         manifest.get("schema_version") == COMPLETE_HOUR_SCHEMA_VERSION
-        and manifest.get("kind") == "flight_recorder_complete_hour"
-        and manifest.get("status") == "complete"
+        and manifest.get("kind") == complete_hour_contract.COMPLETE_HOUR_KIND
+        and manifest.get("status") == complete_hour_contract.COMPLETE_HOUR_STATUS
         and (manifest.get("hour_start"), manifest.get("hour_end")) == expected_hours
         and manifest.get("source_hour_id") == config.source_hour_id
         and manifest.get("catalog_sha256") == component_catalog_sha256()
         and manifest.get("component_count") == len(COMPONENT_QUERIES)
-        and manifest.get("chunk_count") == len(COMPONENT_QUERIES) * 12
-        and isinstance(sources, list) and len(sources) == len(COMPONENT_QUERIES) * 12
+        and manifest.get("chunk_count") == len(COMPONENT_QUERIES) * complete_hour_contract.CHUNKS_PER_HOUR
+        and isinstance(sources, list)
+        and len(sources) == len(COMPONENT_QUERIES) * complete_hour_contract.CHUNKS_PER_HOUR
     )
     if not valid_header:
         raise FlightRecorderTransformError("Flight Recorder complete manifest identity was invalid")
     expected_matrix = tuple(
         (component, query, index)
         for component, query in COMPONENT_QUERIES
-        for index in range(12)
+        for index in range(complete_hour_contract.CHUNKS_PER_HOUR)
     )
     source_count, raw_bytes = 0, 0
     for source, (component, query, index) in zip(sources, expected_matrix, strict=True):
         if not isinstance(source, Mapping) or set(source) != source_fields:
             raise FlightRecorderTransformError("Flight Recorder complete source fields were invalid")
-        start_ns = int(config.source_hour_id.split("-", 1)[0]) + index * 300_000_000_000
-        end_ns = start_ns + 300_000_000_000
+        chunk_ns = complete_hour_contract.WINDOW_SECONDS * 1_000_000_000
+        start_ns = int(config.source_hour_id.split("-", 1)[0]) + index * chunk_ns
+        end_ns = start_ns + chunk_ns
         checksum = source.get("raw_sha256")
         expected_manifest = component_manifest_key(component, query, start_ns, end_ns)
-        expected_raw = f"flight-recorder/raw/{start_ns}-{end_ns}/{checksum}.jsonl"
+        valid_checksum = (
+            isinstance(checksum, str)
+            and re.fullmatch(r"[0-9a-f]{64}", checksum) is not None
+        )
+        expected_raw = (
+            complete_hour_contract.raw_key(
+                start_ns=start_ns,
+                end_ns=end_ns,
+                checksum=checksum,
+            )
+            if valid_checksum
+            else ""
+        )
         valid = (
             (source.get("component"), source.get("query"), source.get("chunk_index"))
             == (component, query, index)
@@ -306,7 +297,7 @@ def validate_complete_hour_manifest(
             and source.get("manifest_key") == expected_manifest
             and isinstance(source.get("manifest_sha256"), str)
             and re.fullmatch(r"[0-9a-f]{64}", str(source.get("manifest_sha256"))) is not None
-            and isinstance(checksum, str) and re.fullmatch(r"[0-9a-f]{64}", checksum) is not None
+            and valid_checksum
             and source.get("raw_key") == expected_raw
             and source.get("window_start") == _datetime_ns(str(start_ns)).isoformat().replace("+00:00", "Z")
             and source.get("window_end") == _datetime_ns(str(end_ns)).isoformat().replace("+00:00", "Z")
@@ -451,10 +442,22 @@ def validate_source(
         config.window_start.isoformat().replace("+00:00", "Z"),
         config.window_end.isoformat().replace("+00:00", "Z"),
     )
-    expected_key = f"flight-recorder/raw/{config.source_window_id}/{config.raw_sha256}.jsonl"
-    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1:
+    start_ns, end_ns = (int(value) for value in config.source_window_id.split("-", 1))
+    expected_key = complete_hour_contract.raw_key(
+        start_ns=start_ns,
+        end_ns=end_ns,
+        checksum=config.raw_sha256,
+    )
+    if (
+        type(manifest["schema_version"]) is not int
+        or manifest["schema_version"] != complete_hour_contract.SOURCE_MANIFEST_SCHEMA_VERSION
+    ):
         raise FlightRecorderTransformError("Flight Recorder manifest schema was invalid")
-    if not isinstance(manifest["query"], str) or not manifest["query"] or len(manifest["query"]) > 1024:
+    if (
+        not isinstance(manifest["query"], str)
+        or not manifest["query"]
+        or len(manifest["query"]) > complete_hour_contract.MAX_QUERY_LENGTH
+    ):
         raise FlightRecorderTransformError("Flight Recorder manifest query was invalid")
     if expected_query is not None and manifest["query"] != expected_query:
         raise FlightRecorderTransformError("Flight Recorder manifest query conflicted")
@@ -490,7 +493,6 @@ def validate_source(
         raise FlightRecorderTransformError("Flight Recorder raw entry count conflicted")
     if any(not isinstance(entry, Mapping) for entry in entries):
         raise FlightRecorderTransformError("Flight Recorder raw entry was invalid")
-    start_ns, end_ns = (int(value) for value in config.source_window_id.split("-", 1))
     for entry in entries:
         timestamp = entry.get("timestamp")
         if not isinstance(timestamp, str) or not timestamp.isdigit() or not start_ns <= int(timestamp) < end_ns:

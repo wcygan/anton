@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from anton_airflow.spark import AttemptIdentity, AttemptState
-from anton_airflow.spark.adapter import SparkApplicationAdapter
+from anton_airflow.spark.adapter import AttemptObservation, SparkApplicationAdapter
 from anton_airflow.spark.lease import LeaseCoordinator, LeaseTakeoverBlocked
 from anton_airflow.spark.receipts import LoggingReceiptSink
 from anton_airflow.spark.trigger import SparkApplicationTrigger
@@ -97,13 +97,23 @@ class LeaseApi:
 
     def create_namespaced_lease(self, namespace: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
         self.resource = dict(body)
+        self.resource["metadata"] = {
+            **dict(self.resource.get("metadata") or {}),
+            "resourceVersion": "1",
+        }
         return self.resource
 
     def replace_namespaced_lease(self, name: str, namespace: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
         self.resource = dict(body)
         return self.resource
 
-    def delete_namespaced_lease(self, name: str, namespace: str) -> Any:
+    def delete_namespaced_lease(
+        self,
+        name: str,
+        namespace: str,
+        *,
+        body: Mapping[str, Any] | None = None,
+    ) -> Any:
         self.releases += 1
         self.resource = None
 
@@ -333,30 +343,34 @@ class Ticket06RecoveryTests(unittest.TestCase):
             adapter.submit_or_reattach(identity, application_spec={"spec": {}}, target="shadow")
 
     def test_triggerer_recovery_renews_lease_before_terminal_observation(self) -> None:
+        class Monitor:
+            def __init__(self) -> None:
+                self.observations = iter(
+                    (
+                        AttemptObservation("lh-attempt", AttemptState.ACTIVE),
+                        AttemptObservation("lh-attempt", AttemptState.SUCCEEDED),
+                    )
+                )
+                self.calls = 0
+
+            def advance(self) -> AttemptObservation:
+                self.calls += 1
+                return next(self.observations)
+
         class TriggerAdapter:
             def __init__(self) -> None:
-                self.states = iter((AttemptState.ACTIVE, AttemptState.SUCCEEDED))
-                self.renewals = 0
-                self.releases = 0
-                self.receipts: list[str] = []
-                self.leases = self
-                self.applications = self
+                self.monitor = Monitor()
+                self.monitor_request: tuple[str, float, float] | None = None
 
-            def observe(self, name: str):
-                return type("Observation", (), {"state": next(self.states)})()
-
-            def renew(self, holder: str):
-                self.renewals += 1
-
-            def release(self, holder: str):
-                self.releases += 1
-
-            def watch(self, **kwargs: Any):
-                self.receipts.append("watch")
-                return []
-
-            def record_receipt(self, event: str, name: str, **kwargs: Any):
-                self.receipts.append(event)
+            def monitor_attempt(
+                self,
+                name: str,
+                *,
+                interval: float,
+                startup_timeout: float,
+            ) -> Monitor:
+                self.monitor_request = (name, interval, startup_timeout)
+                return self.monitor
 
         fake = TriggerAdapter()
         trigger = SparkApplicationTrigger(
@@ -373,53 +387,27 @@ class Ticket06RecoveryTests(unittest.TestCase):
             events = asyncio.run(collect())
 
         self.assertEqual(events[0].payload["state"], "succeeded")
-        self.assertEqual(fake.renewals, 1)
-        self.assertEqual(fake.releases, 1)
-        self.assertIn("lease_renewed", fake.receipts)
+        self.assertEqual(fake.monitor.calls, 2)
+        self.assertEqual(fake.monitor_request, ("lh-attempt", 0.001, 60.0))
 
-    def test_triggerer_waits_for_the_first_operator_status(self) -> None:
+    def test_triggerer_returns_ambiguous_lifecycle_evidence(self) -> None:
+        class Monitor:
+            def __init__(self) -> None:
+                self.observation = AttemptObservation(
+                    "lh-attempt",
+                    AttemptState.AMBIGUOUS,
+                    diagnostics=("event DriverReadyTimedOut: no driver",),
+                )
+
+            def advance(self) -> AttemptObservation:
+                return self.observation
+
         class TriggerAdapter:
             def __init__(self) -> None:
-                self.observations = iter(
-                    (
-                        type(
-                            "Observation",
-                            (),
-                            {"state": AttemptState.AMBIGUOUS, "resource": {"metadata": {"name": "lh-attempt"}}},
-                        )(),
-                        type(
-                            "Observation",
-                            (),
-                            {
-                                "state": AttemptState.SUCCEEDED,
-                                "resource": {
-                                    "status": {
-                                        "currentState": {"currentStateSummary": "Succeeded"},
-                                        "stateTransitionHistory": {
-                                            "1": {"currentStateSummary": "Succeeded"}
-                                        },
-                                    }
-                                },
-                            },
-                        )(),
-                    )
-                )
-                self.renewals = 0
-                self.releases = 0
-                self.receipts: list[str] = []
-                self.leases = self
+                self.monitor = Monitor()
 
-            def observe(self, name: str):
-                return next(self.observations)
-
-            def renew(self, holder: str):
-                self.renewals += 1
-
-            def release(self, holder: str):
-                self.releases += 1
-
-            def record_receipt(self, event: str, name: str, **kwargs: Any):
-                self.receipts.append(event)
+            def monitor_attempt(self, name: str, **kwargs: Any) -> Monitor:
+                return self.monitor
 
         fake = TriggerAdapter()
         trigger = SparkApplicationTrigger(
@@ -436,10 +424,11 @@ class Ticket06RecoveryTests(unittest.TestCase):
         with patch("anton_airflow.spark.operator._airflow_adapter", return_value=fake):
             events = asyncio.run(collect())
 
-        self.assertEqual(events[0].payload["state"], "succeeded")
-        self.assertEqual(fake.renewals, 1)
-        self.assertEqual(fake.releases, 1)
-        self.assertIn("status_pending", fake.receipts)
+        self.assertEqual(events[0].payload["state"], "ambiguous")
+        self.assertEqual(
+            events[0].payload["diagnostics"],
+            ("event DriverReadyTimedOut: no driver",),
+        )
 
 
 if __name__ == "__main__":

@@ -18,31 +18,28 @@ import urllib.parse
 import urllib.request
 from typing import Any, Protocol
 
+import anton_flight_recorder_contract as complete_hour_contract
+
 
 DEFAULT_LOKI_ENDPOINT = "http://loki.observability.svc.cluster.local:3100"
 DEFAULT_LOKI_QUERY = '{k8s_namespace_name="airflow"}'
 DEFAULT_RAW_ENDPOINT = "http://seaweedfs-s3.storage.svc.cluster.local:8333"
 DEFAULT_RAW_BUCKET = "iceberg-raw"
-WINDOW_SECONDS = 300
-HOUR_SECONDS = 3600
+WINDOW_SECONDS = complete_hour_contract.WINDOW_SECONDS
+HOUR_SECONDS = complete_hour_contract.HOUR_SECONDS
 ENTRY_LIMIT = 1000
-COMPLETE_HOUR_ENTRY_LIMIT = 5000
-TIMEOUT_SECONDS = 30
-MAX_QUERY_LENGTH = 1024
-MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-MAX_RAW_BYTES = 8 * 1024 * 1024
-MAX_MANIFEST_BYTES = 64 * 1024
-MANIFEST_SCHEMA_VERSION = 1
-COMPLETE_HOUR_SCHEMA_VERSION = 2
-MAX_HOUR_MANIFEST_BYTES = 128 * 1024
-MAX_COMPLETE_RAW_BYTES = 32 * 1024 * 1024
-SOURCE_PREFIX = "flight-recorder/"
-COMPONENT_QUERIES = (
-    ("workflow", '{k8s_namespace_name="airflow"}'),
-    ("spark_operator", '{k8s_namespace_name="spark-system"}'),
-    ("trino", '{k8s_namespace_name="iceberg-demo"} | k8s_pod_name=~"trino.*"'),
-    ("seaweedfs", '{k8s_namespace_name="storage"} | k8s_pod_name=~"seaweedfs.*"'),
-)
+COMPLETE_HOUR_ENTRY_LIMIT = complete_hour_contract.COMPLETE_HOUR_ENTRY_LIMIT
+TIMEOUT_SECONDS = complete_hour_contract.TIMEOUT_SECONDS
+MAX_QUERY_LENGTH = complete_hour_contract.MAX_QUERY_LENGTH
+MAX_RESPONSE_BYTES = complete_hour_contract.MAX_RESPONSE_BYTES
+MAX_RAW_BYTES = complete_hour_contract.MAX_RAW_BYTES
+MAX_MANIFEST_BYTES = complete_hour_contract.MAX_SOURCE_MANIFEST_BYTES
+MANIFEST_SCHEMA_VERSION = complete_hour_contract.SOURCE_MANIFEST_SCHEMA_VERSION
+COMPLETE_HOUR_SCHEMA_VERSION = complete_hour_contract.COMPLETE_HOUR_SCHEMA_VERSION
+MAX_HOUR_MANIFEST_BYTES = complete_hour_contract.MAX_COMPLETE_MANIFEST_BYTES
+MAX_COMPLETE_RAW_BYTES = complete_hour_contract.MAX_COMPLETE_RAW_BYTES
+SOURCE_PREFIX = complete_hour_contract.SOURCE_PREFIX
+COMPONENT_QUERIES = complete_hour_contract.COMPONENT_QUERIES
 _QUERY_RANGE_PATH = "/loki/api/v1/query_range"
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -447,38 +444,33 @@ def component_manifest_key(
     limits: LokiQueryLimits,
 ) -> str:
     """Return the contract-bound key for one complete-hour source."""
-    if not component or not component.isascii() or not component.replace("_", "").isalnum():
-        raise ValueError("component name was invalid")
-    _validate_query(query)
-    contract = {
-        "component": component,
-        **limits.as_dict(),
-        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
-        "max_raw_bytes": MAX_RAW_BYTES,
-        "query": query,
-        "complete_hour_schema_version": COMPLETE_HOUR_SCHEMA_VERSION,
-    }
-    contract_sha = hashlib.sha256(
-        json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-    return (
-        f"{SOURCE_PREFIX}component-manifests/"
-        f"{window.start_ns}-{window.end_ns}/{contract_sha}.json"
+    return complete_hour_contract.component_manifest_key(
+        component=component,
+        query=query,
+        start_ns=window.start_ns,
+        end_ns=window.end_ns,
+        entry_limit=limits.entry_limit,
+        max_response_bytes=limits.max_response_bytes,
+        timeout_seconds=limits.timeout_seconds,
     )
 
 
 def raw_key(*, window: LokiWindow, checksum: str) -> str:
     """Return the immutable key for one source payload."""
-    if _SHA256.fullmatch(checksum) is None:
-        raise ValueError("raw checksum must be a lowercase SHA-256 value")
-    return f"{SOURCE_PREFIX}raw/{window.start_ns}-{window.end_ns}/{checksum}.jsonl"
+    return complete_hour_contract.raw_key(
+        start_ns=window.start_ns,
+        end_ns=window.end_ns,
+        checksum=checksum,
+    )
 
 
 def hour_manifest_key(*, hour: LokiHour, checksum: str) -> str:
     """Return the content-addressed key for one complete hour."""
-    if _SHA256.fullmatch(checksum) is None:
-        raise ValueError("hour checksum must be a lowercase SHA-256 value")
-    return f"{SOURCE_PREFIX}hours/{hour.start_ns}-{hour.end_ns}/{checksum}.complete.json"
+    return complete_hour_contract.hour_manifest_key(
+        start_ns=hour.start_ns,
+        end_ns=hour.end_ns,
+        checksum=checksum,
+    )
 
 
 def _safe_key(key: str) -> bool:
@@ -499,10 +491,10 @@ def _manifest_bytes(manifest: LokiSourceManifest) -> bytes:
 
 
 def _hour_manifest_bytes(manifest: CompleteHourManifest) -> bytes:
-    payload = (json.dumps(manifest.as_dict(), sort_keys=True, separators=(",", ":")) + "\n").encode()
-    if len(payload) > MAX_HOUR_MANIFEST_BYTES:
-        raise LokiSourceError("Complete hour manifest exceeded the byte limit")
-    return payload
+    try:
+        return complete_hour_contract.encode_complete_hour_manifest(manifest.as_dict())
+    except ValueError as error:
+        raise LokiSourceError("Complete hour manifest was invalid") from error
 
 
 def _parse_manifest(
@@ -729,24 +721,14 @@ class LokiSnapshotExtractor:
                     raw_key=manifest.raw_key,
                     raw_sha256=manifest.raw_sha256,
                 ))
-        catalog = [
-            {
-                "component": component,
-                "query": query,
-                **COMPLETE_HOUR_QUERY_LIMITS.as_dict(),
-            }
-            for component, query in COMPONENT_QUERIES
-        ]
         manifest = CompleteHourManifest(
             schema_version=COMPLETE_HOUR_SCHEMA_VERSION,
-            kind="flight_recorder_complete_hour",
-            status="complete",
+            kind=complete_hour_contract.COMPLETE_HOUR_KIND,
+            status=complete_hour_contract.COMPLETE_HOUR_STATUS,
             hour_start=_iso_utc(hour.start),
             hour_end=_iso_utc(hour.end),
             source_hour_id=f"{hour.start_ns}-{hour.end_ns}",
-            catalog_sha256=hashlib.sha256(
-                json.dumps(catalog, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest(),
+            catalog_sha256=complete_hour_contract.component_catalog_sha256(),
             component_count=len(COMPONENT_QUERIES),
             chunk_count=len(sources),
             source_count=sum(source.entry_count for source in sources),

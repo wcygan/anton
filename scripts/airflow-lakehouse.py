@@ -19,33 +19,59 @@ from airflow_lakehouse_operations import (  # noqa: E402
     KubectlClient,
     OperationError,
     _image_digest,
-    collect_attempt_evidence,
 )
 from cluster_target_contract import TargetPreflightError, anton_kubectl_prefix  # noqa: E402
-from flight_recorder_evidence import add_flight_recorder_checks  # noqa: E402
 from lakehouse_trino import TrinoReadError  # noqa: E402
+from spark_attempt_evidence import (  # noqa: E402
+    FlightRecorderInitialEvidenceRequest,
+    FlightRecorderRejectionEvidenceRequest,
+    FlightRecorderReplayEvidenceRequest,
+    LakehouseEvidenceRequest,
+    collect_spark_attempt_evidence,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subcommands = parser.add_subparsers(dest="command", required=True)
 
-    evidence = subcommands.add_parser(
-        "attempt-evidence",
-        help="Collect bounded evidence for one exact Spark Attempt.",
+    lakehouse = subcommands.add_parser(
+        "lakehouse-evidence",
+        help="Collect lakehouse evidence for one exact Spark Attempt.",
     )
-    evidence.add_argument("--run-id", required=True)
-    evidence.add_argument("--try-number", type=int, default=1)
-    evidence.add_argument("--target", choices=("shadow", "authoritative"), default="shadow")
-    evidence.add_argument("--workflow", choices=("lakehouse", "flight-recorder"), default="lakehouse")
-    evidence.add_argument("--ledger", type=Path)
-    evidence.add_argument("--baseline", type=Path)
-    evidence.add_argument("--namespace-baseline", type=Path)
-    required_state = evidence.add_mutually_exclusive_group()
-    required_state.add_argument("--require-complete", action="store_true")
-    required_state.add_argument("--require-rejected", action="store_true")
+    _add_attempt_identity(lakehouse)
+    lakehouse.add_argument(
+        "--target", choices=("shadow", "authoritative"), default="shadow",
+    )
+    lakehouse.add_argument("--ledger", type=Path)
+    lakehouse.add_argument("--require-complete", action="store_true")
+
+    initial = subcommands.add_parser(
+        "flight-recorder-initial-evidence",
+        help="Collect initial Flight Recorder evidence.",
+    )
+    _add_attempt_identity(initial)
+    initial.add_argument("--namespace-baseline", required=True, type=Path)
+
+    replay = subcommands.add_parser(
+        "flight-recorder-replay-evidence",
+        help="Collect exact Flight Recorder replay evidence.",
+    )
+    _add_attempt_identity(replay)
+    replay.add_argument("--baseline", required=True, type=Path)
+
+    rejection = subcommands.add_parser(
+        "flight-recorder-rejection-evidence",
+        help="Collect one Flight Recorder rejection.",
+    )
+    _add_attempt_identity(rejection)
 
     return parser
+
+
+def _add_attempt_identity(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--try-number", type=int, default=1)
 
 
 def _redact_command(value: Any) -> Any:
@@ -69,31 +95,47 @@ def _main() -> int:
     kubectl = KubectlClient(prefix)
     exit_code = 0
 
-    if args.command == "attempt-evidence":
-        expected_digest = (
-            _image_digest(ROOT / "kubernetes/apps/airflow/airflow/app/helmrelease.yaml")
-            if args.workflow == "flight-recorder" else None
-        )
-        result = collect_attempt_evidence(
-            kubectl,
+    expected_digest = None
+    if args.command == "lakehouse-evidence":
+        request = LakehouseEvidenceRequest(
             run_id=args.run_id,
             try_number=args.try_number,
             target=args.target,
-            workflow=args.workflow,
-            expected_airflow_digest=expected_digest,
             ledger_path=args.ledger,
         )
-        if args.workflow == "flight-recorder":
-            add_flight_recorder_checks(
-                result,
-                args.baseline,
-                root=ROOT,
+        expected_status = "complete" if args.require_complete else None
+    else:
+        expected_digest = _image_digest(
+            ROOT / "kubernetes/apps/airflow/airflow/app/helmrelease.yaml",
+        )
+        if args.command == "flight-recorder-initial-evidence":
+            request = FlightRecorderInitialEvidenceRequest(
+                run_id=args.run_id,
+                try_number=args.try_number,
                 namespace_baseline_path=args.namespace_baseline,
             )
-        if args.require_complete and result["status"] != "complete":
-            exit_code = 2
-        if args.require_rejected and result["status"] != "rejected":
-            exit_code = 2
+            expected_status = "complete"
+        elif args.command == "flight-recorder-replay-evidence":
+            request = FlightRecorderReplayEvidenceRequest(
+                run_id=args.run_id,
+                try_number=args.try_number,
+                baseline_path=args.baseline,
+            )
+            expected_status = "complete"
+        else:
+            request = FlightRecorderRejectionEvidenceRequest(
+                run_id=args.run_id,
+                try_number=args.try_number,
+            )
+            expected_status = "rejected"
+    result = collect_spark_attempt_evidence(
+        request,
+        kubectl=kubectl,
+        root=ROOT,
+        expected_airflow_digest=expected_digest,
+    )
+    if expected_status is not None and result["status"] != expected_status:
+        exit_code = 2
     print(json.dumps(_redact_command(result), indent=2, sort_keys=True))
     return exit_code
 

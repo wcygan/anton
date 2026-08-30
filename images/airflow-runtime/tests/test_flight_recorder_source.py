@@ -3,10 +3,17 @@
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import json
+from pathlib import Path
+import sys
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
+
+
+CONTRACT_SOURCE = Path(__file__).resolve().parents[3] / "images" / "flight-recorder-contract"
+if CONTRACT_SOURCE.is_dir():
+    sys.path.insert(0, str(CONTRACT_SOURCE))
 
 from anton_airflow.loki import (
     COMPLETE_HOUR_SCHEMA_VERSION,

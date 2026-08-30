@@ -22,7 +22,13 @@ class LeaseApi(Protocol):
 
     def replace_namespaced_lease(self, name: str, namespace: str, body: Mapping[str, Any]) -> Mapping[str, Any]: ...
 
-    def delete_namespaced_lease(self, name: str, namespace: str) -> Any: ...
+    def delete_namespaced_lease(
+        self,
+        name: str,
+        namespace: str,
+        *,
+        body: Mapping[str, Any] | None = None,
+    ) -> Any: ...
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -136,6 +142,43 @@ class LeaseCoordinator:
         if (current.get("spec") or {}).get("holderIdentity") != holder:
             raise LeaseConflict(f"Lease {self.lease_name} is not held by {holder!r}")
         self.api.delete_namespaced_lease(self.lease_name, self.namespace)
+
+    def release_idempotent(self, holder: str) -> bool:
+        """Release one matching Lease and report whether it was already absent."""
+        current = self.current()
+        if current is None:
+            return True
+        existing = (current.get("spec") or {}).get("holderIdentity")
+        if existing != holder:
+            raise LeaseConflict(f"Lease {self.lease_name} is held by {existing!r}")
+        metadata = current.get("metadata") or {}
+        resource_version = metadata.get("resourceVersion")
+        if not resource_version:
+            raise LeaseConflict(
+                f"Lease {self.lease_name} has no resource version for safe release"
+            )
+        preconditions = {"resourceVersion": str(resource_version)}
+        if metadata.get("uid"):
+            preconditions["uid"] = str(metadata["uid"])
+        try:
+            self.api.delete_namespaced_lease(
+                self.lease_name,
+                self.namespace,
+                body={
+                    "apiVersion": "v1",
+                    "kind": "DeleteOptions",
+                    "preconditions": preconditions,
+                },
+            )
+        except Exception as error:
+            if getattr(error, "status", None) == 404:
+                return True
+            if getattr(error, "status", None) == 409:
+                raise LeaseConflict(
+                    f"Lease {self.lease_name} changed before safe release"
+                ) from error
+            raise
+        return False
 
     def release_if_held(self, holder: str) -> None:
         """Release a holder after recovery without failing when it is already gone."""

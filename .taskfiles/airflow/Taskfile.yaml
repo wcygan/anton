@@ -9,7 +9,7 @@ tasks:
       TRY_NUMBER: '{{.TRY_NUMBER | default "1"}}'
       TARGET: '{{.TARGET | default "shadow"}}'
     cmd: >-
-      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
+      mise exec -- python3 scripts/airflow-lakehouse.py lakehouse-evidence
       --run-id "$RUN_ID"
       --try-number "$TRY_NUMBER"
       --target "$TARGET"
@@ -28,7 +28,7 @@ tasks:
       TARGET: '{{.TARGET | default "shadow"}}'
       LEDGER: '{{.LEDGER}}'
     cmd: >-
-      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
+      mise exec -- python3 scripts/airflow-lakehouse.py lakehouse-evidence
       --run-id "$RUN_ID"
       --try-number "$TRY_NUMBER"
       --target "$TARGET"
@@ -45,11 +45,9 @@ tasks:
     desc: Require complete live Flight Recorder run evidence
     silent: true
     cmd: >-
-      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
-      --workflow flight-recorder --target authoritative
+      mise exec -- python3 scripts/airflow-lakehouse.py flight-recorder-initial-evidence
       --run-id "{{.RUN_ID}}" --try-number "{{.TRY_NUMBER | default "1"}}"
       --namespace-baseline "{{.NAMESPACE_BASELINE}}"
-      --require-complete
     requires:
       vars: [RUN_ID, NAMESPACE_BASELINE]
     preconditions:
@@ -61,10 +59,9 @@ tasks:
     desc: Require replay evidence with unchanged Flight Recorder state
     silent: true
     cmd: >-
-      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
-      --workflow flight-recorder --target authoritative
+      mise exec -- python3 scripts/airflow-lakehouse.py flight-recorder-replay-evidence
       --run-id "{{.RUN_ID}}" --try-number "{{.TRY_NUMBER | default "1"}}"
-      --baseline "{{.BASELINE}}" --require-complete
+      --baseline "{{.BASELINE}}"
     requires:
       vars: [RUN_ID, BASELINE]
     preconditions:
@@ -76,10 +73,8 @@ tasks:
     desc: Require one accepted Flight Recorder hour rejection
     silent: true
     cmd: >-
-      mise exec -- python3 scripts/airflow-lakehouse.py attempt-evidence
-      --workflow flight-recorder --target authoritative
+      mise exec -- python3 scripts/airflow-lakehouse.py flight-recorder-rejection-evidence
       --run-id "{{.RUN_ID}}" --try-number "{{.TRY_NUMBER | default "1"}}"
-      --require-rejected
     requires:
       vars: [RUN_ID]
     preconditions:

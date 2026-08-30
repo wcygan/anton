@@ -12,6 +12,7 @@ PACKAGE_VERSION = "0.3.0"
 
 from .adapter import AttemptObservation, SparkApplicationAdapter, build_spark_application
 from .identity import AttemptIdentity, attempt_name, identity_hash
+from .lifecycle import SparkAttemptLifecycle, SparkAttemptMonitor
 from .operator import ApacheSparkApplicationOperator
 from .state import AttemptState, classify_application
 from .trigger import SparkApplicationTrigger

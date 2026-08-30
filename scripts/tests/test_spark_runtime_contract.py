@@ -56,6 +56,26 @@ class SparkRuntimeContractTests(unittest.TestCase):
                 ))
                 self.assertNotIn(f"/opt/spark/work-dir/{entrypoint}", dockerfile + application_spec)
 
+    def test_shared_complete_hour_contract_is_pinned_in_both_images(self) -> None:
+        sources = {
+            "Airflow Dockerfile": REPO / "images/airflow-runtime/Dockerfile",
+            "Spark Dockerfile": REPO / "images/spark-runtime/Dockerfile",
+            "Airflow capture": REPO / "images/airflow-runtime/src/anton_airflow/loki.py",
+            "Spark writer": REPO / "images/iceberg-log-spark/flight_recorder.py",
+        }
+        contents = {
+            name: path.read_text(encoding="utf-8")
+            for name, path in sources.items()
+        }
+        self.assertEqual(CONTRACT.shared_contract_failures(contents), [])
+        unused_import = "import anton_flight_recorder_contract as complete_hour_contract\n"
+        for consumer in ("Airflow capture", "Spark writer"):
+            with self.subTest(consumer=consumer):
+                self.assertTrue(CONTRACT.shared_contract_failures({
+                    **contents,
+                    consumer: unused_import,
+                }))
+
 
 if __name__ == "__main__":
     unittest.main()

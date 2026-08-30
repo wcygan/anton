@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Mapping
+from typing import Any
 
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 
@@ -60,55 +60,38 @@ class SparkApplicationTrigger(BaseTrigger):
             receipt_logger=logging.getLogger("anton_airflow.spark.trigger"),
             receipt_sink=receipt_buffer,
         )
-        startup_deadline = asyncio.get_running_loop().time() + self.startup_timeout
+        monitor = adapter.monitor_attempt(
+            self.attempt_name,
+            interval=self.poll_interval,
+            startup_timeout=self.startup_timeout,
+        )
         while True:
-            observation = await asyncio.to_thread(adapter.observe, self.attempt_name)
+            observation = await asyncio.to_thread(monitor.advance)
             if observation.state is AttemptState.ACTIVE:
-                await asyncio.to_thread(adapter.leases.renew, self.attempt_name)
-                adapter.record_receipt("lease_renewed", self.attempt_name, state=observation.state)
-                watcher = getattr(adapter.applications, "watch", None)
-                if watcher is None:
-                    await asyncio.sleep(self.poll_interval)
-                else:
-                    await asyncio.to_thread(
-                        watcher,
-                        namespace=self.namespace,
-                        name=self.attempt_name,
-                        timeout_seconds=max(1, int(self.poll_interval)),
-                    )
                 continue
             if observation.state is AttemptState.SUCCEEDED:
-                await asyncio.to_thread(adapter.leases.release, self.attempt_name)
                 self._finished = True
                 yield TriggerEvent(
                     {"state": "succeeded", "attempt": self.attempt_name, "receipts": receipt_buffer.items[-50:]}
                 )
                 return
             if observation.state is AttemptState.FAILED:
-                diagnostics = await asyncio.to_thread(adapter.collect_diagnostics, self.attempt_name)
-                await asyncio.to_thread(adapter.leases.release, self.attempt_name)
                 self._finished = True
                 yield TriggerEvent(
                     {
                         "state": "failed",
                         "attempt": self.attempt_name,
-                        "diagnostics": diagnostics,
+                        "diagnostics": observation.diagnostics,
                         "receipts": receipt_buffer.items[-50:],
                     }
                 )
                 return
-            if _status_is_pending(observation.resource) and asyncio.get_running_loop().time() < startup_deadline:
-                await asyncio.to_thread(adapter.leases.renew, self.attempt_name)
-                adapter.record_receipt("status_pending", self.attempt_name, state=observation.state)
-                await asyncio.sleep(self.poll_interval)
-                continue
-            diagnostics = await asyncio.to_thread(adapter.collect_diagnostics, self.attempt_name)
             self._finished = True
             yield TriggerEvent(
                 {
                     "state": "ambiguous",
                     "attempt": self.attempt_name,
-                    "diagnostics": diagnostics,
+                    "diagnostics": observation.diagnostics,
                     "receipts": receipt_buffer.items[-50:],
                 }
             )
@@ -127,11 +110,3 @@ class SparkApplicationTrigger(BaseTrigger):
             receipt_logger=logging.getLogger("anton_airflow.spark.trigger"),
         )
         await asyncio.to_thread(adapter.cancel_attempt, self.attempt_name)
-
-
-def _status_is_pending(resource: Mapping[str, Any] | None) -> bool:
-    """Return true before the Apache operator writes its first status."""
-    if not isinstance(resource, Mapping):
-        return False
-    status = resource.get("status")
-    return status is None or status == {}

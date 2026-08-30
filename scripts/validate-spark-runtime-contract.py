@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ REPO = Path(__file__).resolve().parents[1]
 RUNTIME = REPO / "images" / "spark-runtime"
 LAKEHOUSE_SOURCE = REPO / "images" / "iceberg-log-spark"
 AIRFLOW_SPEC = REPO / "images" / "airflow-runtime" / "src" / "anton_airflow" / "lakehouse.py"
+CONTRACT_SOURCE = REPO / "images" / "flight-recorder-contract" / "anton_flight_recorder_contract.py"
 
 
 def entrypoint_failures(dockerfile: str, application_spec: str) -> list[str]:
@@ -28,6 +30,70 @@ def entrypoint_failures(dockerfile: str, application_spec: str) -> list[str]:
     ]
 
 
+def shared_contract_failures(contents: dict[str, str]) -> list[str]:
+    """Return missing Complete Hour source and image mappings."""
+    required = {
+        "Airflow Dockerfile": (
+            "COPY --chown=airflow:0 images/flight-recorder-contract/anton_flight_recorder_contract.py /opt/airflow/lib/anton_flight_recorder_contract.py",
+        ),
+        "Spark Dockerfile": (
+            "COPY --chown=185:185 images/flight-recorder-contract/anton_flight_recorder_contract.py /opt/spark/application/anton_flight_recorder_contract.py",
+            "PYTHONPATH=/opt/spark/application:",
+        ),
+        "Airflow capture": (
+            "import anton_flight_recorder_contract as complete_hour_contract",
+        ),
+        "Spark writer": (
+            "import anton_flight_recorder_contract as complete_hour_contract",
+        ),
+    }
+    failures = [
+        f"{name} missing {value!r}"
+        for name, values in required.items()
+        for value in values
+        if value not in contents.get(name, "")
+    ]
+    required_usage = {
+        "Airflow capture": {
+            "component_catalog_sha256",
+            "component_manifest_key",
+            "encode_complete_hour_manifest",
+            "hour_manifest_key",
+            "raw_key",
+        },
+        "Spark writer": {
+            "COMPLETE_HOUR_MANIFEST_FIELDS",
+            "COMPLETE_HOUR_SOURCE_FIELDS",
+            "MAX_QUERY_LENGTH",
+            "SOURCE_MANIFEST_SCHEMA_VERSION",
+            "component_catalog_sha256",
+            "component_manifest_key",
+            "hour_manifest_key",
+            "raw_key",
+        },
+    }
+    for name, expected in required_usage.items():
+        try:
+            tree = ast.parse(contents.get(name, ""))
+        except SyntaxError:
+            failures.append(f"{name} was not valid Python")
+            continue
+        observed = {
+            node.attr
+            for node in ast.walk(tree)
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "complete_hour_contract"
+            )
+        }
+        failures.extend(
+            f"{name} does not use Complete Hour contract export {value!r}"
+            for value in sorted(expected - observed)
+        )
+    return failures
+
+
 def main() -> int:
     files = {
         "Dockerfile": RUNTIME / "Dockerfile",
@@ -35,6 +101,7 @@ def main() -> int:
         "runtime verifier": RUNTIME / "verify-runtime.py",
         "fixture application": LAKEHOUSE_SOURCE / "transform.py",
         "Flight Recorder application": LAKEHOUSE_SOURCE / "flight_recorder.py",
+        "Complete Hour contract": CONTRACT_SOURCE,
         "Airflow application spec": AIRFLOW_SPEC,
     }
     failures = [f"missing {name}: {path.relative_to(REPO)}" for name, path in files.items() if not path.is_file()]
@@ -46,6 +113,12 @@ def main() -> int:
     verifier = files["runtime verifier"].read_text(encoding="utf-8")
     application_spec = files["Airflow application spec"].read_text(encoding="utf-8")
     failures.extend(entrypoint_failures(dockerfile, application_spec))
+    failures.extend(shared_contract_failures({
+        "Airflow Dockerfile": (REPO / "images/airflow-runtime/Dockerfile").read_text(encoding="utf-8"),
+        "Spark Dockerfile": dockerfile,
+        "Airflow capture": (REPO / "images/airflow-runtime/src/anton_airflow/loki.py").read_text(encoding="utf-8"),
+        "Spark writer": files["Flight Recorder application"].read_text(encoding="utf-8"),
+    }))
     required = {
         "Dockerfile": (
             "ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f",
@@ -54,7 +127,7 @@ def main() -> int:
             "ARG PYTHON_VERSION=3.12.11",
             "ARG PYTHON_SHA256=7b8d59af8216044d2313de8120bfc2cc00a9bd2e542f15795e1d616c51faf3d6",
             "PYSPARK_PYTHON=/opt/python/bin/python3.12",
-            "PYTHONPATH=/opt/spark/python/lib/pyspark.zip",
+            "PYTHONPATH=/opt/spark/application:/opt/spark/python/lib/pyspark.zip",
             "python3 --version | grep -E '^Python 3[.]12[.]'",
             "verify-runtime.py --build",
         ),

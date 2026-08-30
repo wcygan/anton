@@ -1228,7 +1228,52 @@ def _task_pod_image_matches(pods: Sequence[Mapping[str, Any]], digest: str | Non
     )
 
 
-def collect_attempt_evidence(
+class AttemptObservationSource:
+    """Read bounded Spark Attempt observations from live and retained sources."""
+
+    def __init__(self, kubectl: KubectlClient) -> None:
+        self._kubectl = kubectl
+
+    def lakehouse(
+        self,
+        *,
+        run_id: str,
+        try_number: int,
+        target: str,
+        ledger_path: Path | None,
+        now: datetime | None,
+    ) -> dict[str, Any]:
+        """Read one lakehouse Spark Attempt."""
+        return _collect_attempt_observations(
+            self._kubectl,
+            run_id=run_id,
+            try_number=try_number,
+            target=target,
+            ledger_path=ledger_path,
+            now=now,
+        )
+
+    def flight_recorder(
+        self,
+        *,
+        run_id: str,
+        try_number: int,
+        expected_airflow_digest: str,
+        now: datetime | None,
+    ) -> dict[str, Any]:
+        """Read one Flight Recorder Spark Attempt."""
+        return _collect_attempt_observations(
+            self._kubectl,
+            run_id=run_id,
+            try_number=try_number,
+            target="authoritative",
+            workflow="flight-recorder",
+            expected_airflow_digest=expected_airflow_digest,
+            now=now,
+        )
+
+
+def _collect_attempt_observations(
     kubectl: KubectlClient,
     *,
     run_id: str,
@@ -1239,7 +1284,7 @@ def collect_attempt_evidence(
     ledger_path: Path | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Collect bounded live and retained evidence for one exact attempt."""
+    """Collect bounded observations for one exact Spark Attempt."""
     validate_evidence_run_id(run_id)
     dag_id, task_id, lease_name, require_scheduled = _evidence_identity(workflow, target)
     observed_at = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -1420,7 +1465,6 @@ def collect_attempt_evidence(
                 missing.append("resources")
     return {
         "schema_version": 1,
-        "status": "complete" if not missing else "incomplete",
         "observed_at": observed_at.isoformat(),
         "identity": {
             "dag_id": dag_id,

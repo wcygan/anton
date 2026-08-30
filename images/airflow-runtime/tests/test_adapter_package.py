@@ -139,6 +139,20 @@ class AdapterPackageTests(unittest.TestCase):
         self.assertEqual(fake_watch.call[2]["field_selector"], "metadata.name=attempt")
         self.assertEqual(fake_watch.call[2]["timeout_seconds"], 30)
 
+    def test_retained_recovery_probe_can_access_the_lease_coordinator(self) -> None:
+        coordinator = LeaseCoordinator(
+            object(),
+            namespace="lakehouse",
+            target="shadow",
+        )
+        adapter = SparkApplicationAdapter(
+            applications=object(),
+            leases=coordinator,
+            namespace="lakehouse",
+        )
+
+        self.assertIs(adapter.leases, coordinator)
+
     def test_lease_takeover_requires_expiry_and_inactive_prior_application(self) -> None:
         class Api:
             def __init__(self):

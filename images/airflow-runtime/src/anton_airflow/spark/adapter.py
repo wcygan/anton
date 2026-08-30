@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
 import time
 from typing import Any, Callable, Mapping, Protocol
 
 from .identity import AttemptIdentity
 from .lease import LeaseCoordinator
+from .lifecycle import (
+    AttemptObservation,
+    PodDiagnostics,
+    SparkAttemptLifecycle,
+    SparkAttemptMonitor,
+)
 from .receipts import ReceiptSink
-from .state import AttemptState, classify_application, state_transition_history
+from .state import AttemptState
 
 
 GROUP = "spark.apache.org"
@@ -28,22 +33,6 @@ class SparkApplicationClient(Protocol):
     def delete(self, *, namespace: str, name: str) -> Any: ...
 
     def watch(self, *, namespace: str, name: str, timeout_seconds: int) -> list[Mapping[str, Any]]: ...
-
-
-class PodDiagnostics(Protocol):
-    def list_pods(self, *, namespace: str, label_selector: str) -> list[Mapping[str, Any]]: ...
-
-    def read_log(self, *, namespace: str, name: str, container: str) -> str: ...
-
-    def list_events(self, *, namespace: str, field_selector: str) -> list[Mapping[str, Any]]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class AttemptObservation:
-    name: str
-    state: AttemptState
-    resource: Mapping[str, Any] | None = None
-    diagnostics: tuple[str, ...] = ()
 
 
 def _merge_env(existing: Any, correlation: Mapping[str, str]) -> list[dict[str, str]]:
@@ -147,15 +136,23 @@ class SparkApplicationAdapter:
         diagnostics_limit: int = 2000,
         receipts: ReceiptSink | None = None,
     ) -> None:
-        self.applications = applications
-        self.leases = leases
-        self.pods = pods
+        self._applications = applications
+        self._leases = leases
+        self._pods = pods
         self.namespace = namespace
-        self.diagnostics_limit = diagnostics_limit
-        self.receipts = receipts
-        self._last_states: dict[str, AttemptState] = {}
-        self._last_histories: dict[str, tuple[tuple[str, str], ...]] = {}
-        self._terminal_receipts: set[str] = set()
+        self.lifecycle = SparkAttemptLifecycle(
+            applications=applications,
+            leases=leases,
+            pods=pods,
+            namespace=namespace,
+            diagnostics_limit=diagnostics_limit,
+            receipts=receipts,
+        )
+
+    @property
+    def leases(self) -> LeaseCoordinator:
+        """Keep the retained recovery probe compatible."""
+        return self._leases
 
     def record_receipt(
         self,
@@ -167,78 +164,31 @@ class SparkApplicationAdapter:
         **details: Any,
     ) -> None:
         """Write one bounded structured record without exposing Secret data."""
-        if self.receipts is None:
-            return
-        record: dict[str, Any] = {
-            "event": event,
-            "attempt": name,
-            "namespace": self.namespace,
-        }
-        if state is not None:
-            record["state"] = state.value
-        if identity:
-            record["identity"] = dict(identity)
-        record.update(details)
-        self.receipts.record(record)
-
-    @staticmethod
-    def _resource_identity(resource: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
-        metadata = resource.get("metadata") if isinstance(resource, Mapping) else None
-        annotations = metadata.get("annotations") if isinstance(metadata, Mapping) else None
-        return annotations if isinstance(annotations, Mapping) else None
-
-    def _record_observation(self, observation: AttemptObservation) -> None:
-        """Record state and transition history once per changed observation."""
-        name = observation.name
-        identity = self._resource_identity(observation.resource)
-        previous = self._last_states.get(name)
-        if previous is not observation.state:
-            self.record_receipt(
-                "state_change",
-                name,
-                state=observation.state,
-                identity=identity,
-                previous_state=previous.value if previous else None,
-            )
-            self._last_states[name] = observation.state
-
-        history = tuple(
-            (
-                str(item.get("state", "")),
-                str(item.get("transitionTime") or item.get("timestamp") or ""),
-            )
-            for item in state_transition_history(observation.resource or {})
+        self.lifecycle.record_receipt(
+            event,
+            name,
+            state=state,
+            identity=identity,
+            **details,
         )
-        if history and self._last_histories.get(name) != history:
-            self._last_histories[name] = history
-            self.record_receipt(
-                "state_transition",
-                name,
-                state=observation.state,
-                identity=identity,
-                transitions=[{"state": state, "at": at} for state, at in history[-20:]],
-            )
-        if observation.state in {AttemptState.SUCCEEDED, AttemptState.FAILED} and name not in self._terminal_receipts:
-            self._terminal_receipts.add(name)
-            self.record_receipt(
-                "terminal_state",
-                name,
-                state=observation.state,
-                identity=identity,
-            )
 
     def observe(self, name: str) -> AttemptObservation:
-        try:
-            resource = self.applications.get(namespace=self.namespace, name=name)
-        except Exception as error:
-            if getattr(error, "status", None) == 404:
-                observation = AttemptObservation(name, AttemptState.ABSENT)
-                self._record_observation(observation)
-                return observation
-            raise
-        observation = AttemptObservation(name, classify_application(resource), resource)
-        self._record_observation(observation)
-        return observation
+        """Read one attempt through the shared lifecycle policy."""
+        return self.lifecycle.observe(name)
+
+    def monitor_attempt(
+        self,
+        name: str,
+        *,
+        interval: float,
+        startup_timeout: float = 60.0,
+    ) -> SparkAttemptMonitor:
+        """Create one lifecycle monitor for a synchronous or deferred wait."""
+        return self.lifecycle.monitor(
+            name,
+            interval=interval,
+            startup_timeout=startup_timeout,
+        )
 
     def submit_or_reattach(
         self,
@@ -254,11 +204,11 @@ class SparkApplicationAdapter:
                 raise RuntimeError(f"ambiguous SparkApplication state for {identity.name}")
             if existing.state is AttemptState.SUCCEEDED:
                 self.record_receipt("reattach_terminal", identity.name, state=existing.state, identity=identity.annotations())
-                self.leases.release_if_held(identity.name)
+                self._leases.release_if_held(identity.name)
             elif existing.state is AttemptState.FAILED:
                 self.record_receipt("reattach_failed", identity.name, state=existing.state, identity=identity.annotations())
-                diagnostics = self.collect_diagnostics(identity.name)
-                self.leases.release_if_held(identity.name)
+                diagnostics = self.lifecycle.collect_terminal_diagnostics(identity.name)
+                self._leases.release_if_held(identity.name)
                 return AttemptObservation(
                     identity.name,
                     existing.state,
@@ -269,11 +219,11 @@ class SparkApplicationAdapter:
                 self.record_receipt("reattach", identity.name, state=existing.state, identity=identity.annotations())
             return existing
         prior_application_active = False
-        current_lease = self.leases.current()
+        current_lease = self._leases.current()
         current_holder = (current_lease.get("spec") or {}).get("holderIdentity") if current_lease else None
         if current_holder and current_holder != identity.name:
             prior_application_active = self.prior_attempt_active(str(current_holder))
-        self.leases.acquire(identity.name, prior_application_active=prior_application_active)
+        self._leases.acquire(identity.name, prior_application_active=prior_application_active)
         self.record_receipt(
             "lease_acquired",
             identity.name,
@@ -288,18 +238,18 @@ class SparkApplicationAdapter:
             target=target,
         )
         try:
-            created = self.applications.create(namespace=self.namespace, body=body)
+            created = self._applications.create(namespace=self.namespace, body=body)
         except Exception as error:
             # A duplicate delivery races only with the same deterministic name.
             if getattr(error, "status", None) != 409:
-                self.leases.release(identity.name)
+                self._leases.release(identity.name)
                 raise
             self.record_receipt("duplicate_delivery", identity.name, identity=identity.annotations())
             return self.observe(identity.name)
         # A new custom resource can have no status until Spark Operator accepts it.
         # Creation itself is the submission boundary, so defer as an active attempt.
         observation = AttemptObservation(identity.name, AttemptState.ACTIVE, created)
-        self._record_observation(observation)
+        self.lifecycle.record_observation(observation)
         self.record_receipt(
             "submission",
             identity.name,
@@ -315,10 +265,10 @@ class SparkApplicationAdapter:
         prior = self.observe(name)
         if prior.state not in {AttemptState.ABSENT, AttemptState.SUCCEEDED, AttemptState.FAILED}:
             return True
-        if self.pods is None:
+        if self._pods is None:
             # No pod evidence is not proof of inactivity.
             return True
-        for pod in self.pods.list_pods(namespace=self.namespace, label_selector=f"anton.io/attempt-name={name}"):
+        for pod in self._pods.list_pods(namespace=self.namespace, label_selector=f"anton.io/attempt-name={name}"):
             phase = str((pod.get("status") or {}).get("phase", "Unknown"))
             if phase not in {"Succeeded", "Failed"}:
                 return True
@@ -357,7 +307,7 @@ class SparkApplicationAdapter:
                 state=AttemptState.SUCCEEDED,
                 identity=previous_identity.annotations(),
             )
-            self.leases.release_if_held(previous_identity.name)
+            self._leases.release_if_held(previous_identity.name)
             return AttemptObservation(
                 previous.name,
                 AttemptState.SUCCEEDED,
@@ -370,53 +320,12 @@ class SparkApplicationAdapter:
             identity=next_identity.annotations(),
             previous_attempt=previous_identity.name,
         )
-        self.leases.release_if_held(previous_identity.name)
+        self._leases.release_if_held(previous_identity.name)
         return self.submit_or_reattach(next_identity, application_spec=application_spec, target=target)
 
     def collect_diagnostics(self, name: str) -> tuple[str, ...]:
-        """Collect bounded pod tails and events without reading Secret data."""
-        if self.pods is None:
-            return ()
-        lines: list[str] = []
-        tails: list[dict[str, str]] = []
-        selector = f"anton.io/attempt-name={name}"
-        for pod in self.pods.list_pods(namespace=self.namespace, label_selector=selector):
-            pod_name = str((pod.get("metadata") or {}).get("name", "unknown"))
-            containers = (pod.get("spec") or {}).get("containers") or []
-            for container in containers:
-                container_name = str(container.get("name", ""))
-                if not container_name:
-                    continue
-                try:
-                    output = self.pods.read_log(namespace=self.namespace, name=pod_name, container=container_name)
-                except Exception as error:  # diagnostics must not mask the terminal state
-                    output = f"log read failed: {type(error).__name__}"
-                tail = output[-self.diagnostics_limit :]
-                role = str(
-                    ((pod.get("metadata") or {}).get("labels") or {}).get("spark-role")
-                    or ((pod.get("metadata") or {}).get("labels") or {}).get("sparkoperator.k8s.io/spark-role")
-                    or "unknown"
-                )
-                lines.append(f"pod/{pod_name} container/{container_name}:\n{tail}")
-                tails.append({"pod": pod_name, "container": container_name, "role": role, "tail": tail})
-        events: list[dict[str, str]] = []
-        for event in self.pods.list_events(
-            namespace=self.namespace,
-            field_selector=f"involvedObject.name={name}",
-        ):
-            reason = event.get("reason", "")
-            message = event.get("message", "")
-            lines.append(f"event {reason}: {message}"[-self.diagnostics_limit :])
-            events.append({"reason": str(reason), "message": str(message)[-self.diagnostics_limit :]})
-        self.record_receipt(
-            "failure_diagnostics",
-            name,
-            driver_tails=[item for item in tails if item["role"] == "driver"][-5:],
-            executor_tails=[item for item in tails if item["role"] == "executor"][-5:],
-            diagnostics=lines[-20:],
-            events=events[-20:],
-        )
-        return tuple(lines)[-20:]
+        """Collect diagnostics through the lifecycle module."""
+        return self.lifecycle.collect_diagnostics(name)
 
     def wait_for_completion(
         self,
@@ -426,36 +335,21 @@ class SparkApplicationAdapter:
         interval: float = 10.0,
     ) -> AttemptObservation:
         """Support the explicit non-deferrable mode without leaking ownership."""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            observation = self.observe(name)
-            if observation.state is AttemptState.ACTIVE:
-                time.sleep(interval)
-                continue
-            if observation.state is AttemptState.AMBIGUOUS:
-                raise RuntimeError(f"ambiguous SparkApplication state for {name}")
-            if observation.state in {AttemptState.SUCCEEDED, AttemptState.FAILED}:
-                self.leases.release(name)
-                if observation.state is AttemptState.FAILED:
-                    return AttemptObservation(
-                        name,
-                        observation.state,
-                        observation.resource,
-                        self.collect_diagnostics(name),
-                    )
-                return observation
-            raise RuntimeError(f"SparkApplication {name} disappeared before completion")
-        raise TimeoutError(f"SparkApplication {name} did not complete within {timeout:g}s")
+        return self.monitor_attempt(
+            name,
+            interval=interval,
+            startup_timeout=min(60.0, timeout),
+        ).run(timeout=timeout)
 
     def wait_for_stop(self, name: str, *, timeout: float = 30.0, interval: float = 1.0) -> AttemptObservation:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             observation = self.observe(name)
             if observation.state is AttemptState.ABSENT:
-                if self.pods is not None:
+                if self._pods is not None:
                     active_pods = [
                         pod
-                        for pod in self.pods.list_pods(
+                        for pod in self._pods.list_pods(
                             namespace=self.namespace,
                             label_selector=f"anton.io/attempt-name={name}",
                         )
@@ -478,13 +372,13 @@ class SparkApplicationAdapter:
         self.record_receipt("cancellation_requested", name)
         diagnostics = self.collect_diagnostics(name)
         try:
-            self.applications.delete(namespace=self.namespace, name=name)
+            self._applications.delete(namespace=self.namespace, name=name)
         except Exception as error:
             if getattr(error, "status", None) != 404:
                 raise
         self.wait_for_stop(name, timeout=timeout)
         # Releasing before stop could permit a second writer to overlap.
-        self.leases.release(name)
+        self._leases.release(name)
         self.record_receipt("cancellation_stopped", name, state=AttemptState.ABSENT)
         return diagnostics
 
