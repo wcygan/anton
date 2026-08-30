@@ -29,7 +29,7 @@ authority boundary requires operator approval.
 - `.scratch/airflow-spark-lakehouse/spec.md` owns implementation acceptance.
 - `images/airflow-runtime/src/anton_airflow/` owns workflow behavior.
 - `scripts/lib/airflow_shadow_gate.py` owns retained gate validation.
-- `scripts/lib/flight_recorder_evidence.py` owns live Flight Recorder evidence policy.
+- `scripts/lib/spark_attempt_evidence.py` owns live Flight Recorder evidence policy.
 - `scripts/airflow-lakehouse.py` owns the evidence command boundary.
 
 Use `seaweedfs-iceberg-data-access` for table-level Spark and Trino work.

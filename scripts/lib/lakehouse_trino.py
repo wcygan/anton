@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
+import re
 import subprocess
-from typing import Mapping, Protocol, Sequence
+from typing import Mapping, Protocol, Sequence, TypeAlias
 
 from cluster_target_contract import anton_kubectl_prefix
 
@@ -118,6 +121,21 @@ FLIGHT_RECORDER_CHECKS = (
     "flight-recorder-components",
     "flight-recorder-namespace-isolation",
 )
+UTC_TIMESTAMP_FIELDS = frozenset({
+    "committed_at",
+    "completed_at",
+    "event_timestamp",
+    "hour",
+    "window_end",
+    "window_start",
+})
+DDL_FIELDS = frozenset({"create table", "create_table"})
+
+CanonicalRow: TypeAlias = tuple[tuple[str, object], ...]
+ComparisonKey: TypeAlias = tuple[
+    tuple[str, tuple[tuple[CanonicalRow, ...], ...]],
+    ...,
+]
 
 
 class TrinoReadError(RuntimeError):
@@ -144,7 +162,7 @@ class FlightRecorderTrinoFacts:
     table_snapshots: tuple[tuple[object, ...], ...]
     component_counts: tuple[Mapping[str, object], ...]
     namespace_snapshots: tuple[tuple[str, object, str], ...]
-    comparison_key: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...]
+    comparison_key: ComparisonKey
 
 
 def subprocess_runner(
@@ -230,17 +248,214 @@ def _check_results(check: Mapping[str, object], name: str) -> list[list[object]]
     return results
 
 
+def _utc_timestamp(value: object) -> str:
+    if not isinstance(value, str):
+        raise TrinoReadError("Trino timestamp fact is not text")
+    candidate = value.strip()
+    if candidate.upper().endswith(" UTC"):
+        candidate = f"{candidate[:-4].rstrip()}+00:00"
+    elif candidate.endswith("Z"):
+        candidate = f"{candidate[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError as error:
+        raise TrinoReadError(f"Trino timestamp fact is invalid: {value}") from error
+    if parsed.tzinfo is None:
+        raise TrinoReadError(f"Trino timestamp fact has no time zone: {value}")
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _quoted_sql_end(value: str, start: int) -> int:
+    quote = value[start]
+    index = start + 1
+    while index < len(value):
+        if value[index] != quote:
+            index += 1
+            continue
+        if index + 1 < len(value) and value[index + 1] == quote:
+            index += 2
+            continue
+        return index + 1
+    raise TrinoReadError("Trino table contract DDL has an unterminated quote")
+
+
+def _normalize_sql_tokens(value: str) -> str:
+    if "\x00" in value:
+        raise TrinoReadError("Trino table contract DDL has an invalid character")
+    literals: list[str] = []
+    masked: list[str] = []
+    index = 0
+    while index < len(value):
+        if value[index] not in {"'", '"'}:
+            masked.append(value[index])
+            index += 1
+            continue
+        end = _quoted_sql_end(value, index)
+        marker = f"\x00{len(literals)}\x00"
+        literals.append(value[index:end])
+        masked.append(marker)
+        index = end
+    compact = re.sub(r"\s+", " ", "".join(masked)).strip().lower()
+    compact = re.sub(r"\s*([(),=\[\]])\s*", r"\1", compact)
+    for literal_index, literal in enumerate(literals):
+        compact = compact.replace(f"\x00{literal_index}\x00", literal)
+    return compact
+
+
+def _split_with_properties(value: str) -> tuple[str, ...]:
+    items: list[str] = []
+    start = 0
+    round_depth = 0
+    square_depth = 0
+    brace_depth = 0
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if character in {"'", '"'}:
+            index = _quoted_sql_end(value, index)
+            continue
+        if character == "(":
+            round_depth += 1
+        elif character == ")":
+            round_depth -= 1
+        elif character == "[":
+            square_depth += 1
+        elif character == "]":
+            square_depth -= 1
+        elif character == "{":
+            brace_depth += 1
+        elif character == "}":
+            brace_depth -= 1
+        elif character == "," and not any((round_depth, square_depth, brace_depth)):
+            items.append(value[start:index])
+            start = index + 1
+        if min(round_depth, square_depth, brace_depth) < 0:
+            raise TrinoReadError("Trino table contract WITH properties are invalid")
+        index += 1
+    if any((round_depth, square_depth, brace_depth)):
+        raise TrinoReadError("Trino table contract WITH properties are invalid")
+    items.append(value[start:])
+    if any(not item or "=" not in item for item in items):
+        raise TrinoReadError("Trino table contract WITH properties are invalid")
+    return tuple(items)
+
+
+def _canonicalize_with_properties(value: str) -> str:
+    depth = 0
+    with_start: int | None = None
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if character in {"'", '"'}:
+            index = _quoted_sql_end(value, index)
+            continue
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth < 0:
+                raise TrinoReadError("Trino table contract DDL parentheses are invalid")
+        elif (
+            depth == 0
+            and value.startswith("with(", index)
+            and (index == 0 or not (value[index - 1].isalnum() or value[index - 1] == "_"))
+        ):
+            with_start = index
+            break
+        index += 1
+    if depth != 0:
+        raise TrinoReadError("Trino table contract DDL parentheses are invalid")
+    if with_start is None:
+        return value
+
+    open_index = with_start + len("with")
+    depth = 1
+    index = open_index + 1
+    while index < len(value) and depth:
+        if value[index] in {"'", '"'}:
+            index = _quoted_sql_end(value, index)
+            continue
+        if value[index] == "(":
+            depth += 1
+        elif value[index] == ")":
+            depth -= 1
+        index += 1
+    if depth:
+        raise TrinoReadError("Trino table contract DDL parentheses are invalid")
+    close_index = index - 1
+    properties = _split_with_properties(value[open_index + 1:close_index])
+    ordered = ",".join(sorted(properties))
+    return f"{value[:open_index + 1]}{ordered}{value[close_index:]}"
+
+
+def _normalized_ddl(value: object) -> str:
+    if not isinstance(value, str):
+        raise TrinoReadError("Trino table contract DDL is not text")
+    return _canonicalize_with_properties(_normalize_sql_tokens(value))
+
+
+def _typed_value(
+    value: object,
+    *,
+    field: str | None = None,
+    ddl: bool = False,
+) -> object:
+    if ddl or field in DDL_FIELDS:
+        return ("ddl", _normalized_ddl(value))
+    if field in UTC_TIMESTAMP_FIELDS:
+        return ("utc_timestamp", _utc_timestamp(value))
+    if value is None:
+        return ("null",)
+    if isinstance(value, bool):
+        return ("boolean", value)
+    if type(value) is int:
+        return ("integer", value)
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise TrinoReadError("Trino numeric fact is not finite")
+        return ("number", repr(value))
+    if isinstance(value, str):
+        normalized = re.sub(r"\s+", " ", value).strip().lower() if field in {
+            "column", "type",
+        } else value
+        return ("text", normalized)
+    if isinstance(value, Mapping):
+        return ("object", _canonical_row(value))
+    if isinstance(value, list):
+        return ("array", tuple(_typed_value(item) for item in value))
+    raise TrinoReadError(f"Trino fact has unsupported type: {type(value).__name__}")
+
+
+def _canonical_row(row: Mapping[str, object], *, ddl: bool = False) -> CanonicalRow:
+    normalized: dict[str, object] = {}
+    for raw_key, value in row.items():
+        if not isinstance(raw_key, str):
+            raise TrinoReadError("Trino fact field name is invalid")
+        key = re.sub(r"\s+", " ", raw_key).strip().lower()
+        if not key or key in normalized:
+            raise TrinoReadError("Trino fact field name is invalid")
+        normalized[key] = _typed_value(
+            value,
+            field=key,
+            ddl=ddl and len(row) == 1,
+        )
+    return tuple(sorted(normalized.items()))
+
+
 def _comparison_key(
     checks: Mapping[str, Mapping[str, object]],
-) -> tuple[tuple[str, tuple[tuple[str, ...], ...]], ...]:
-    normalized = []
+) -> ComparisonKey:
+    normalized: list[tuple[str, tuple[tuple[CanonicalRow, ...], ...]]] = []
     for name in FLIGHT_RECORDER_CHECKS:
-        query_results = []
-        for rows in _check_results(checks[name], name):
-            query_results.append(tuple(sorted(
-                json.dumps(row, sort_keys=True, separators=(",", ":"))
-                for row in rows
-            )))
+        query_results: list[tuple[CanonicalRow, ...]] = []
+        for index, rows in enumerate(_check_results(checks[name], name)):
+            ddl = name == "flight-recorder-contract" and index % 2 == 1
+            canonical_rows = []
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    raise TrinoReadError(f"Trino check has invalid row: {name}")
+                canonical_rows.append(_canonical_row(row, ddl=ddl))
+            query_results.append(tuple(sorted(canonical_rows, key=repr)))
         normalized.append((name, tuple(query_results)))
     return tuple(normalized)
 
@@ -306,7 +521,7 @@ def flight_recorder_facts_from_checks(
         namespace.append((
             table,
             row.get("snapshot_id"),
-            str(row["committed_at"]),
+            _utc_timestamp(row["committed_at"]),
         ))
     if namespace_tables != {"normalized", "hourly"}:
         raise TrinoReadError("Flight Recorder namespace facts are invalid")

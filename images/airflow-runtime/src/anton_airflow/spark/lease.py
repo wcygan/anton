@@ -139,15 +139,21 @@ class LeaseCoordinator:
 
     def release(self, holder: str) -> None:
         current = self.api.get_namespaced_lease(self.lease_name, self.namespace)
-        if (current.get("spec") or {}).get("holderIdentity") != holder:
-            raise LeaseConflict(f"Lease {self.lease_name} is not held by {holder!r}")
-        self.api.delete_namespaced_lease(self.lease_name, self.namespace)
+        self._release_observed(holder, current)
 
     def release_idempotent(self, holder: str) -> bool:
         """Release one matching Lease and report whether it was already absent."""
         current = self.current()
         if current is None:
             return True
+        return self._release_observed(holder, current)
+
+    def _release_observed(
+        self,
+        holder: str,
+        current: Mapping[str, Any],
+    ) -> bool:
+        """Delete one observed Lease with identity compare-and-swap guards."""
         existing = (current.get("spec") or {}).get("holderIdentity")
         if existing != holder:
             raise LeaseConflict(f"Lease {self.lease_name} is held by {existing!r}")
@@ -186,4 +192,4 @@ class LeaseCoordinator:
         if current is None:
             return
         if (current.get("spec") or {}).get("holderIdentity") == holder:
-            self.api.delete_namespaced_lease(self.lease_name, self.namespace)
+            self._release_observed(holder, current)

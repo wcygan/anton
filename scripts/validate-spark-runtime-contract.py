@@ -62,12 +62,11 @@ def shared_contract_failures(contents: dict[str, str]) -> list[str]:
             "raw_key",
         },
         "Spark writer": {
-            "COMPLETE_HOUR_MANIFEST_FIELDS",
-            "COMPLETE_HOUR_SOURCE_FIELDS",
             "MAX_QUERY_LENGTH",
             "SOURCE_MANIFEST_SCHEMA_VERSION",
             "component_catalog_sha256",
             "component_manifest_key",
+            "decode_complete_hour_manifest",
             "hour_manifest_key",
             "raw_key",
         },

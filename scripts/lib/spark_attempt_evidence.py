@@ -34,8 +34,12 @@ from anton_flight_recorder_contract import (  # noqa: E402
 )
 from airflow_lakehouse_operations import (  # noqa: E402
     AttemptObservationSource,
+    FLIGHT_RECORDER_DAG_ID,
+    FLIGHT_RECORDER_TASK_ID,
     KubectlClient,
     OperationError,
+    attempt_name,
+    validate_evidence_run_id,
 )
 from lakehouse_trino import (  # noqa: E402
     FlightRecorderTrinoFacts,
@@ -46,6 +50,16 @@ from lakehouse_trino import (  # noqa: E402
 
 
 IMAGE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+EVIDENCE_SCHEMA_VERSION = 1
+FLIGHT_RECORDER_IDENTITY_FIELDS = frozenset({
+    "dag_id",
+    "run_id",
+    "task_id",
+    "try_number",
+    "attempt_name",
+    "target",
+    "run_type",
+})
 SOURCE_RECEIPT_FIELDS = SOURCE_MANIFEST_FIELDS | {"attempt", "manifest_key"}
 HOUR_RECEIPT_FIELDS = (COMPLETE_HOUR_MANIFEST_FIELDS - {"sources"}) | {
     "attempt", "manifest_key", "manifest_sha256",
@@ -145,6 +159,15 @@ EvidenceRequest: TypeAlias = (
     | FlightRecorderReplayEvidenceRequest
     | FlightRecorderRejectionEvidenceRequest
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _FlightRecorderReplayBaseline:
+    """Validated replay baseline facts used by one replay comparison."""
+
+    run_id: str
+    source_receipt: Mapping[str, object]
+    trino_facts: FlightRecorderTrinoFacts
 
 
 def _parse_utc(value: object) -> datetime | None:
@@ -542,21 +565,74 @@ def _read_mapping(path: Path, description: str) -> Mapping[str, object]:
     return document
 
 
-def _semantic_replay_matches(
+def _parse_flight_recorder_replay_baseline(
     baseline: Mapping[str, object],
+) -> _FlightRecorderReplayBaseline:
+    if (
+        type(baseline.get("schema_version")) is not int
+        or baseline.get("schema_version") != EVIDENCE_SCHEMA_VERSION
+    ):
+        raise OperationError("baseline Flight Recorder schema version is unsupported")
+    if baseline.get("status") != "complete" or baseline.get("missing") != []:
+        raise OperationError("baseline Flight Recorder evidence is not complete")
+
+    identity = baseline.get("identity")
+    if not isinstance(identity, Mapping) or set(identity) != FLIGHT_RECORDER_IDENTITY_FIELDS:
+        raise OperationError("baseline Flight Recorder identity is invalid")
+    run_id = identity.get("run_id")
+    try_number = identity.get("try_number")
+    if not isinstance(run_id, str) or type(try_number) is not int or try_number < 1:
+        raise OperationError("baseline Flight Recorder identity is invalid")
+    try:
+        validate_evidence_run_id(run_id)
+    except OperationError as error:
+        raise OperationError("baseline Flight Recorder identity is invalid") from error
+    expected_run_type = "scheduled" if run_id.startswith("scheduled__") else "manual_or_other"
+    if (
+        identity.get("dag_id") != FLIGHT_RECORDER_DAG_ID
+        or identity.get("task_id") != FLIGHT_RECORDER_TASK_ID
+        or identity.get("target") != "authoritative"
+        or identity.get("run_type") != expected_run_type
+    ):
+        raise OperationError("baseline Flight Recorder identity is invalid")
+    expected_attempt = attempt_name(
+        run_id=run_id,
+        try_number=try_number,
+        task_id=FLIGHT_RECORDER_TASK_ID,
+        dag_id=FLIGHT_RECORDER_DAG_ID,
+    )
+    if identity.get("attempt_name") != expected_attempt:
+        raise OperationError("baseline Flight Recorder attempt identity is invalid")
+
+    raw_trino = baseline.get("trino")
+    if not isinstance(raw_trino, Mapping) or any(
+        not isinstance(name, str) or not isinstance(check, Mapping)
+        for name, check in raw_trino.items()
+    ):
+        raise OperationError("baseline Flight Recorder Trino facts are invalid")
+    try:
+        trino_facts = flight_recorder_facts_from_checks(raw_trino)  # type: ignore[arg-type]
+    except TrinoReadError as error:
+        raise OperationError("baseline Flight Recorder Trino facts are invalid") from error
+    source_receipt = _source_receipt(baseline)
+    if not _valid_source_receipt(
+        source_receipt,
+        attempt=expected_attempt,
+        summary=trino_facts.summary,
+    ):
+        raise OperationError("baseline Flight Recorder source receipt is invalid")
+    return _FlightRecorderReplayBaseline(
+        run_id=run_id,
+        source_receipt=source_receipt,
+        trino_facts=trino_facts,
+    )
+
+
+def _semantic_replay_matches(
+    baseline: _FlightRecorderReplayBaseline,
     current: FlightRecorderTrinoFacts,
 ) -> bool:
-    raw = baseline.get("trino")
-    if not isinstance(raw, Mapping) or any(
-        not isinstance(name, str) or not isinstance(check, Mapping)
-        for name, check in raw.items()
-    ):
-        return False
-    try:
-        retained = flight_recorder_facts_from_checks(raw)  # type: ignore[arg-type]
-    except TrinoReadError:
-        return False
-    return retained.comparison_key == current.comparison_key
+    return baseline.trino_facts.comparison_key == current.comparison_key
 
 
 def _evaluate_flight_recorder_rejection(
@@ -640,19 +716,12 @@ def _evaluate_flight_recorder_report(
         if summary.get("latest_spark_attempt") != identity.get("attempt_name"):
             missing.append("flight_recorder_receipt_identity")
     else:
-        baseline_identity = replay_baseline.get("identity")
-        if (
-            not isinstance(baseline_identity, Mapping)
-            or baseline_identity.get("dag_id") != "airflow_flight_recorder"
-        ):
-            raise OperationError("baseline is not Flight Recorder evidence")
-        if replay_baseline.get("status") != "complete" or replay_baseline.get("missing"):
-            raise OperationError("baseline Flight Recorder evidence is not complete")
-        if baseline_identity.get("run_id") == identity.get("run_id"):
+        baseline = _parse_flight_recorder_replay_baseline(replay_baseline)
+        if baseline.run_id == identity.get("run_id"):
             raise OperationError("replay evidence requires a new Workflow Run ID")
-        if not _same_source(_source_receipt(replay_baseline), receipt):
+        if not _same_source(baseline.source_receipt, receipt):
             missing.append("flight_recorder_replay_source_changed")
-        if not _semantic_replay_matches(replay_baseline, facts):
+        if not _semantic_replay_matches(baseline, facts):
             missing.append("flight_recorder_replay_changed_state")
         if replay_baseline_path is not None:
             report["replay_baseline"] = str(replay_baseline_path)

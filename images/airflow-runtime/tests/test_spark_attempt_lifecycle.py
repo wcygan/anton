@@ -80,7 +80,7 @@ class SequenceApplications:
 class LeaseApi:
     def __init__(self) -> None:
         self.resource: Mapping[str, Any] | None = {
-            "metadata": {"resourceVersion": "1"},
+            "metadata": {"resourceVersion": "1", "uid": "lease-uid-1"},
             "spec": {
                 "holderIdentity": ATTEMPT,
                 "leaseDurationSeconds": 60,
@@ -89,6 +89,7 @@ class LeaseApi:
         }
         self.renewals = 0
         self.releases = 0
+        self.delete_bodies: list[Mapping[str, Any] | None] = []
 
     def get_namespaced_lease(self, name: str, namespace: str) -> Mapping[str, Any]:
         if self.resource is None:
@@ -105,7 +106,13 @@ class LeaseApi:
         body: Mapping[str, Any],
     ) -> Mapping[str, Any]:
         self.renewals += 1
-        self.resource = dict(body)
+        self.resource = {
+            **body,
+            "metadata": {
+                **dict(body.get("metadata") or {}),
+                "uid": "lease-uid-1",
+            },
+        }
         return self.resource
 
     def delete_namespaced_lease(
@@ -116,6 +123,7 @@ class LeaseApi:
         body: Mapping[str, Any] | None = None,
     ) -> Any:
         self.releases += 1
+        self.delete_bodies.append(body)
         self.resource = None
 
 
@@ -155,6 +163,62 @@ def lifecycle_events(receipts: list[Mapping[str, Any]]) -> list[str]:
 
 
 class SparkAttemptLifecycleTests(unittest.TestCase):
+    def test_explicit_release_uses_the_observed_lease_identity(self) -> None:
+        lease_api = LeaseApi()
+        lease_api.resource = {
+            "metadata": {"resourceVersion": "7", "uid": "lease-uid-7"},
+            "spec": {"holderIdentity": ATTEMPT},
+        }
+        coordinator = LeaseCoordinator(
+            lease_api,
+            namespace="lakehouse",
+            target="authoritative",
+        )
+
+        coordinator.release(ATTEMPT)
+
+        self.assertEqual(
+            lease_api.delete_bodies,
+            [
+                {
+                    "apiVersion": "v1",
+                    "kind": "DeleteOptions",
+                    "preconditions": {
+                        "resourceVersion": "7",
+                        "uid": "lease-uid-7",
+                    },
+                }
+            ],
+        )
+
+    def test_recovery_release_uses_the_observed_lease_identity(self) -> None:
+        lease_api = LeaseApi()
+        lease_api.resource = {
+            "metadata": {"resourceVersion": "8", "uid": "lease-uid-8"},
+            "spec": {"holderIdentity": ATTEMPT},
+        }
+        coordinator = LeaseCoordinator(
+            lease_api,
+            namespace="lakehouse",
+            target="authoritative",
+        )
+
+        coordinator.release_if_held(ATTEMPT)
+
+        self.assertEqual(
+            lease_api.delete_bodies,
+            [
+                {
+                    "apiVersion": "v1",
+                    "kind": "DeleteOptions",
+                    "preconditions": {
+                        "resourceVersion": "8",
+                        "uid": "lease-uid-8",
+                    },
+                }
+            ],
+        )
+
     def test_empty_operator_status_is_an_active_attempt_during_startup(self) -> None:
         class EmptyStatusApplications(SequenceApplications):
             def get(self, *, namespace: str, name: str) -> Mapping[str, Any]:
@@ -401,7 +465,7 @@ class SparkAttemptLifecycleTests(unittest.TestCase):
             "lh-replacement-attempt-a1",
         )
 
-    def test_watch_disconnect_causes_an_immediate_resource_reread(self) -> None:
+    def test_watch_disconnect_gets_one_immediate_reread_before_backoff(self) -> None:
         class ActiveApplications(SequenceApplications):
             def __init__(self) -> None:
                 super().__init__()
@@ -450,8 +514,147 @@ class SparkAttemptLifecycleTests(unittest.TestCase):
         monitor.advance()
 
         self.assertEqual(observation.state.value, "active")
-        self.assertEqual(sleeps, [])
+        self.assertEqual(sleeps, [1.0])
         self.assertEqual(applications.get_calls, 2)
+
+    def test_persistent_watch_disconnect_escalates_after_bounded_backoff(self) -> None:
+        class DisconnectedApplications(SequenceApplications):
+            def __init__(self) -> None:
+                super().__init__()
+                self.get_calls = 0
+
+            def get(self, *, namespace: str, name: str) -> Mapping[str, Any]:
+                self.get_calls += 1
+                return {
+                    "metadata": {"name": ATTEMPT},
+                    "status": {
+                        "currentState": {"currentStateSummary": "Submitted"},
+                    },
+                }
+
+            def watch(
+                self,
+                *,
+                namespace: str,
+                name: str,
+                timeout_seconds: int,
+            ) -> list[Mapping[str, Any]]:
+                raise TransientWatchError("the bounded watch disconnected")
+
+        sleeps: list[float] = []
+        applications = DisconnectedApplications()
+        lifecycle = SparkAttemptLifecycle(
+            applications=applications,
+            leases=LeaseCoordinator(
+                LeaseApi(),
+                namespace="lakehouse",
+                target="authoritative",
+            ),
+            namespace="lakehouse",
+            sleeper=sleeps.append,
+        )
+        monitor = lifecycle.monitor(ATTEMPT, interval=10.0)
+
+        monitor.advance()
+        monitor.advance()
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "watch failed 3 consecutive times",
+        ):
+            monitor.advance()
+
+        self.assertEqual(sleeps, [1.0])
+        self.assertEqual(applications.get_calls, 3)
+
+    def test_empty_watch_timeout_resets_the_exception_failure_count(self) -> None:
+        class EmptyWatchApplications(SequenceApplications):
+            def __init__(self) -> None:
+                super().__init__()
+                self.watch_calls = 0
+
+            def get(self, *, namespace: str, name: str) -> Mapping[str, Any]:
+                return {
+                    "metadata": {"name": ATTEMPT},
+                    "status": {
+                        "currentState": {"currentStateSummary": "Submitted"},
+                    },
+                }
+
+            def watch(
+                self,
+                *,
+                namespace: str,
+                name: str,
+                timeout_seconds: int,
+            ) -> list[Mapping[str, Any]]:
+                self.watch_calls += 1
+                if self.watch_calls in {1, 3}:
+                    raise TransientWatchError("the bounded watch disconnected")
+                return []
+
+        sleeps: list[float] = []
+        lifecycle = SparkAttemptLifecycle(
+            applications=EmptyWatchApplications(),
+            leases=LeaseCoordinator(
+                LeaseApi(),
+                namespace="lakehouse",
+                target="authoritative",
+            ),
+            namespace="lakehouse",
+            sleeper=sleeps.append,
+        )
+        monitor = lifecycle.monitor(ATTEMPT, interval=10.0)
+
+        monitor.advance()
+        monitor.advance()
+        monitor.advance()
+
+        self.assertEqual(sleeps, [])
+
+    def test_watch_event_resets_the_consecutive_failure_count(self) -> None:
+        class RecoveringWatchApplications(SequenceApplications):
+            def __init__(self) -> None:
+                super().__init__()
+                self.watch_calls = 0
+
+            def get(self, *, namespace: str, name: str) -> Mapping[str, Any]:
+                return {
+                    "metadata": {"name": ATTEMPT},
+                    "status": {
+                        "currentState": {"currentStateSummary": "Submitted"},
+                    },
+                }
+
+            def watch(
+                self,
+                *,
+                namespace: str,
+                name: str,
+                timeout_seconds: int,
+            ) -> list[Mapping[str, Any]]:
+                self.watch_calls += 1
+                if self.watch_calls in {1, 3}:
+                    raise TransientWatchError("the bounded watch disconnected")
+                return [{"type": "MODIFIED", "object": {"metadata": {"name": name}}}]
+
+        sleeps: list[float] = []
+        lifecycle = SparkAttemptLifecycle(
+            applications=RecoveringWatchApplications(),
+            leases=LeaseCoordinator(
+                LeaseApi(),
+                namespace="lakehouse",
+                target="authoritative",
+            ),
+            namespace="lakehouse",
+            sleeper=sleeps.append,
+        )
+        monitor = lifecycle.monitor(ATTEMPT, interval=10.0)
+
+        monitor.advance()
+        monitor.advance()
+        monitor.advance()
+
+        self.assertEqual(sleeps, [])
 
     def test_diagnostic_source_errors_do_not_mask_a_failed_terminal_state(self) -> None:
         class FailedApplications(SequenceApplications):

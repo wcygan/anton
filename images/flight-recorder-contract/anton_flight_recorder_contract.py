@@ -334,3 +334,19 @@ def encode_complete_hour_manifest(manifest: Mapping[str, object]) -> bytes:
     if len(payload) > MAX_COMPLETE_MANIFEST_BYTES:
         raise ValueError("Complete Hour manifest exceeded the byte limit")
     return payload
+
+
+def decode_complete_hour_manifest(payload: bytes) -> Mapping[str, object]:
+    """Decode and validate one canonical Complete Hour manifest."""
+    if type(payload) is not bytes or not 1 <= len(payload) <= MAX_COMPLETE_MANIFEST_BYTES:
+        raise ValueError("Complete Hour manifest size was invalid")
+    try:
+        manifest = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise ValueError("Complete Hour manifest was invalid") from error
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Complete Hour manifest fields were invalid")
+    canonical_payload = encode_complete_hour_manifest(manifest)
+    if payload != canonical_payload:
+        raise ValueError("Complete Hour manifest was not canonical")
+    return manifest

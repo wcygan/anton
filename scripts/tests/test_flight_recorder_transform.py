@@ -74,6 +74,18 @@ class FlightRecorderTransformTests(unittest.TestCase):
             hashlib.sha256(payload).hexdigest(),
         )
 
+    def test_complete_hour_contract_decodes_only_canonical_wire(self) -> None:
+        manifest, payload, _ = self.complete_hour()
+
+        self.assertEqual(
+            manifest,
+            COMPLETE_HOUR_CONTRACT.decode_complete_hour_manifest(payload),
+        )
+
+        noncanonical = json.dumps(manifest).encode()
+        with self.assertRaisesRegex(ValueError, "canonical"):
+            COMPLETE_HOUR_CONTRACT.decode_complete_hour_manifest(noncanonical)
+
     def test_complete_hour_contract_rejects_unknown_wire_fields(self) -> None:
         manifest, _, _ = self.complete_hour()
         cases = (
@@ -507,6 +519,70 @@ class FlightRecorderTransformTests(unittest.TestCase):
                     MODULE.HourlyRuntimeConfig.from_environment(changed_env), changed_payload,
                 )
 
+    def test_complete_hour_manifest_uses_shared_canonical_decoder(self) -> None:
+        _, payload, env = self.complete_hour()
+        config = MODULE.HourlyRuntimeConfig.from_environment(env)
+
+        with patch.object(
+            COMPLETE_HOUR_CONTRACT,
+            "decode_complete_hour_manifest",
+            wraps=COMPLETE_HOUR_CONTRACT.decode_complete_hour_manifest,
+        ) as decoder:
+            MODULE.validate_complete_hour_manifest(config, payload)
+
+        decoder.assert_called_once_with(payload)
+
+        noncanonical = json.dumps(json.loads(payload)).encode()
+        checksum = hashlib.sha256(noncanonical).hexdigest()
+        changed_env = {
+            **env,
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256": checksum,
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_URI": (
+                f"s3a://iceberg-raw/flight-recorder/hours/{env['FLIGHT_RECORDER_SOURCE_HOUR_ID']}/"
+                f"{checksum}.complete.json"
+            ),
+        }
+        with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "canonical"):
+            MODULE.validate_complete_hour_manifest(
+                MODULE.HourlyRuntimeConfig.from_environment(changed_env),
+                noncanonical,
+            )
+
+    def test_complete_hour_manifest_rejects_boolean_parent_counter(self) -> None:
+        manifest, _, env = self.complete_hour()
+        empty_checksum = hashlib.sha256(b"").hexdigest()
+        sources = [manifest["sources"][0]]
+        for retained in manifest["sources"][1:]:
+            window_id = retained["raw_key"].split("/", 3)[2]
+            sources.append({
+                **retained,
+                "entry_count": 0,
+                "raw_bytes": 0,
+                "raw_key": f"flight-recorder/raw/{window_id}/{empty_checksum}.jsonl",
+                "raw_sha256": empty_checksum,
+            })
+        changed = {
+            **manifest,
+            "source_count": True,
+            "raw_bytes": 10,
+            "sources": sources,
+        }
+        payload = (json.dumps(changed, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        checksum = hashlib.sha256(payload).hexdigest()
+        changed_env = {
+            **env,
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_SHA256": checksum,
+            "FLIGHT_RECORDER_COMPLETE_MANIFEST_URI": (
+                f"s3a://iceberg-raw/flight-recorder/hours/{env['FLIGHT_RECORDER_SOURCE_HOUR_ID']}/"
+                f"{checksum}.complete.json"
+            ),
+        }
+
+        with self.assertRaises(MODULE.FlightRecorderTransformError):
+            MODULE.validate_complete_hour_manifest(
+                MODULE.HourlyRuntimeConfig.from_environment(changed_env), payload,
+            )
+
     def test_complete_hour_manifest_has_an_aggregate_raw_byte_limit(self) -> None:
         _, payload, env = self.complete_hour()
         config = MODULE.HourlyRuntimeConfig.from_environment(env)
@@ -564,6 +640,61 @@ class FlightRecorderTransformTests(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.FlightRecorderTransformError, "child manifest checksum"):
                 MODULE._read_complete_hour_sources(spark, config, sources)
         reader.assert_called_once_with(spark, f's3a://iceberg-raw/{sources[0]["manifest_key"]}', MODULE.MAX_MANIFEST_BYTES)
+
+    def test_parent_source_counts_must_match_validated_child_objects(self) -> None:
+        _, payload, env = self.complete_hour()
+        config = MODULE.HourlyRuntimeConfig.from_environment(env)
+        source = dict(MODULE.validate_complete_hour_manifest(config, payload)[0])
+        start_ns, end_ns = (
+            int(value) for value in str(source["raw_key"]).split("/", 3)[2].split("-", 1)
+        )
+        raw_entry = {
+            "timestamp": str(start_ns + 1),
+            "labels": {"k8s_namespace_name": "airflow"},
+            "line": "line",
+        }
+        raw_payload = (
+            json.dumps(raw_entry, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode()
+        raw_checksum = hashlib.sha256(raw_payload).hexdigest()
+        raw_key = COMPLETE_HOUR_CONTRACT.raw_key(
+            start_ns=start_ns,
+            end_ns=end_ns,
+            checksum=raw_checksum,
+        )
+        child_manifest = {
+            "schema_version": MODULE.MANIFEST_SCHEMA_VERSION,
+            "query": source["query"],
+            "window_start": source["window_start"],
+            "window_end": source["window_end"],
+            "entry_count": 1,
+            "raw_bytes": len(raw_payload),
+            "raw_key": raw_key,
+            "raw_sha256": raw_checksum,
+        }
+        child_payload = (
+            json.dumps(child_manifest, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode()
+        source.update({
+            "manifest_sha256": hashlib.sha256(child_payload).hexdigest(),
+            "raw_key": raw_key,
+            "raw_sha256": raw_checksum,
+        })
+        cases = (
+            {**source, "entry_count": 2, "raw_bytes": len(raw_payload)},
+            {**source, "entry_count": 1, "raw_bytes": len(raw_payload) + 1},
+        )
+        for changed in cases:
+            with self.subTest(changed=changed), patch.object(
+                MODULE,
+                "_read_binary",
+                side_effect=(child_payload, raw_payload),
+            ):
+                with self.assertRaisesRegex(
+                    MODULE.FlightRecorderTransformError,
+                    "parent and child source counts",
+                ):
+                    MODULE._read_complete_hour_sources(object(), config, (changed,))
 
     def test_schema_migration_adds_only_missing_complete_hour_columns(self) -> None:
         class Field:

@@ -291,14 +291,22 @@ class AdapterPackageTests(unittest.TestCase):
                 return self.resource
 
             def create_namespaced_lease(self, namespace, body):
-                self.resource = body
-                return body
+                self.resource = {
+                    **body,
+                    "metadata": {
+                        **body["metadata"],
+                        "resourceVersion": "1",
+                        "uid": "lease-uid-1",
+                    },
+                }
+                return self.resource
 
             def replace_namespaced_lease(self, name, namespace, body):
                 self.resource = body
                 return body
 
-            def delete_namespaced_lease(self, name, namespace):
+            def delete_namespaced_lease(self, name, namespace, *, body=None):
+                self.assert_delete_body = body
                 self.released = True
                 self.resource = None
 
@@ -313,6 +321,10 @@ class AdapterPackageTests(unittest.TestCase):
         adapter.submit_or_reattach(identity, application_spec={"spec": {}}, target="shadow")
         adapter.cancel(identity, timeout=0.1,)
         self.assertTrue(leases.released)
+        self.assertEqual(
+            leases.assert_delete_body["preconditions"],
+            {"resourceVersion": "1", "uid": "lease-uid-1"},
+        )
 
     def test_foundation_dag_is_manual_and_bounded(self) -> None:
         dag_path = Path("/opt/airflow/dags/airflow_kubernetes_foundation.py")

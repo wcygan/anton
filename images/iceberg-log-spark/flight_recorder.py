@@ -235,84 +235,23 @@ def validate_complete_hour_manifest(
     if hashlib.sha256(payload).hexdigest() != config.complete_manifest_sha256:
         raise FlightRecorderTransformError("Flight Recorder complete manifest checksum conflicted")
     try:
-        manifest = json.loads(payload)
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        raise FlightRecorderTransformError("Flight Recorder complete manifest was invalid") from error
-    fields = complete_hour_contract.COMPLETE_HOUR_MANIFEST_FIELDS
-    source_fields = complete_hour_contract.COMPLETE_HOUR_SOURCE_FIELDS
+        manifest = complete_hour_contract.decode_complete_hour_manifest(payload)
+    except ValueError as error:
+        raise FlightRecorderTransformError(str(error)) from error
     expected_hours = (
         config.hour_start.isoformat().replace("+00:00", "Z"),
         config.hour_end.isoformat().replace("+00:00", "Z"),
     )
-    if not isinstance(manifest, Mapping) or set(manifest) != fields:
-        raise FlightRecorderTransformError("Flight Recorder complete manifest fields were invalid")
-    sources = manifest.get("sources")
-    valid_header = (
-        manifest.get("schema_version") == COMPLETE_HOUR_SCHEMA_VERSION
-        and manifest.get("kind") == complete_hour_contract.COMPLETE_HOUR_KIND
-        and manifest.get("status") == complete_hour_contract.COMPLETE_HOUR_STATUS
-        and (manifest.get("hour_start"), manifest.get("hour_end")) == expected_hours
-        and manifest.get("source_hour_id") == config.source_hour_id
-        and manifest.get("catalog_sha256") == component_catalog_sha256()
-        and manifest.get("component_count") == len(COMPONENT_QUERIES)
-        and manifest.get("chunk_count") == len(COMPONENT_QUERIES) * complete_hour_contract.CHUNKS_PER_HOUR
-        and isinstance(sources, list)
-        and len(sources) == len(COMPONENT_QUERIES) * complete_hour_contract.CHUNKS_PER_HOUR
-    )
-    if not valid_header:
+    if (
+        (manifest.get("hour_start"), manifest.get("hour_end")) != expected_hours
+        or manifest.get("source_hour_id") != config.source_hour_id
+    ):
         raise FlightRecorderTransformError("Flight Recorder complete manifest identity was invalid")
-    expected_matrix = tuple(
-        (component, query, index)
-        for component, query in COMPONENT_QUERIES
-        for index in range(complete_hour_contract.CHUNKS_PER_HOUR)
-    )
-    source_count, raw_bytes = 0, 0
-    for source, (component, query, index) in zip(sources, expected_matrix, strict=True):
-        if not isinstance(source, Mapping) or set(source) != source_fields:
-            raise FlightRecorderTransformError("Flight Recorder complete source fields were invalid")
-        chunk_ns = complete_hour_contract.WINDOW_SECONDS * 1_000_000_000
-        start_ns = int(config.source_hour_id.split("-", 1)[0]) + index * chunk_ns
-        end_ns = start_ns + chunk_ns
-        checksum = source.get("raw_sha256")
-        expected_manifest = component_manifest_key(component, query, start_ns, end_ns)
-        valid_checksum = (
-            isinstance(checksum, str)
-            and re.fullmatch(r"[0-9a-f]{64}", checksum) is not None
-        )
-        expected_raw = (
-            complete_hour_contract.raw_key(
-                start_ns=start_ns,
-                end_ns=end_ns,
-                checksum=checksum,
-            )
-            if valid_checksum
-            else ""
-        )
-        valid = (
-            (source.get("component"), source.get("query"), source.get("chunk_index"))
-            == (component, query, index)
-            and source.get("entry_limit") == ENTRY_LIMIT
-            and source.get("max_response_bytes") == MAX_RESPONSE_BYTES
-            and source.get("timeout_seconds") == TIMEOUT_SECONDS
-            and source.get("manifest_key") == expected_manifest
-            and isinstance(source.get("manifest_sha256"), str)
-            and re.fullmatch(r"[0-9a-f]{64}", str(source.get("manifest_sha256"))) is not None
-            and valid_checksum
-            and source.get("raw_key") == expected_raw
-            and source.get("window_start") == _datetime_ns(str(start_ns)).isoformat().replace("+00:00", "Z")
-            and source.get("window_end") == _datetime_ns(str(end_ns)).isoformat().replace("+00:00", "Z")
-            and type(source.get("entry_count")) is int and 0 <= int(source["entry_count"]) < ENTRY_LIMIT
-            and type(source.get("raw_bytes")) is int and 0 <= int(source["raw_bytes"]) <= MAX_RAW_BYTES
-            and (int(source["entry_count"]) == 0) == (int(source["raw_bytes"]) == 0)
-        )
-        if not valid:
-            raise FlightRecorderTransformError("Flight Recorder complete source identity was invalid")
-        source_count += int(source["entry_count"])
-        raw_bytes += int(source["raw_bytes"])
-    if manifest.get("source_count") != source_count or manifest.get("raw_bytes") != raw_bytes:
-        raise FlightRecorderTransformError("Flight Recorder complete source totals conflicted")
-    if raw_bytes > MAX_COMPLETE_RAW_BYTES:
+    if int(manifest["raw_bytes"]) > MAX_COMPLETE_RAW_BYTES:
         raise FlightRecorderTransformError("Flight Recorder complete total raw bytes exceeded the limit")
+    sources = manifest["sources"]
+    if not isinstance(sources, list):
+        raise FlightRecorderTransformError("Flight Recorder complete sources were invalid")
     return tuple(sources)
 
 
@@ -852,6 +791,13 @@ def _read_complete_hour_sources(
             expected_manifest_uri=manifest_uri,
             expected_query=str(source["query"]),
         )
+        if (
+            source["entry_count"] != len(child_entries)
+            or source["raw_bytes"] != len(raw_payload)
+        ):
+            raise FlightRecorderTransformError(
+                "Flight Recorder parent and child source counts conflicted"
+            )
         for entry in child_entries:
             entries.append({
                 **entry,

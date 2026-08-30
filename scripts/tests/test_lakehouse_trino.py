@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 import subprocess
 import sys
@@ -73,13 +74,93 @@ class LakehouseTrinoTests(unittest.TestCase):
         self.assertEqual(first_facts.comparison_key, second_facts.comparison_key)
         self.assertEqual(
             (
-                ("hourly", 40, "2026-08-14T10:59:00Z"),
-                ("normalized", 30, "2026-08-14T10:59:00Z"),
+                ("hourly", 40, "2026-08-14T10:59:00+00:00"),
+                ("normalized", 30, "2026-08-14T10:59:00+00:00"),
             ),
             first_facts.namespace_snapshots,
         )
         second["flight-recorder-components"]["results"][0][0]["source_count"] = 2  # type: ignore[index]
         changed_facts = flight_recorder_facts_from_checks(second)
+        self.assertNotEqual(first_facts.comparison_key, changed_facts.comparison_key)
+
+    def test_flight_recorder_facts_normalize_timestamps_and_ddl_formatting(self) -> None:
+        first = _flight_recorder_checks()
+        first["flight-recorder-contract"]["results"] = [[{
+            "Create Table": """CREATE TABLE iceberg.flight_recorder.events (
+              fingerprint varchar
+            ) WITH (
+              format_version = 2,
+              location = 's3://iceberg-warehouse/flight_recorder/events'
+            )""",
+        }]]
+        first["flight-recorder-snapshots"]["results"] = [[{
+            "snapshot_id": 10,
+            "committed_at": "2026-08-14T12:05:00Z",
+        }]]
+        second = deepcopy(first)
+        second["flight-recorder-contract"]["results"][0][0]["Create Table"] = (
+            "create table iceberg.flight_recorder.events(fingerprint varchar) "
+            "with(format_version=2,location='s3://iceberg-warehouse/flight_recorder/events')"
+        )
+        second["flight-recorder-snapshots"]["results"][0][0]["committed_at"] = (
+            "2026-08-14 12:05:00.000 UTC"
+        )
+        for row in second["flight-recorder-namespace-isolation"]["results"][0]:
+            row["committed_at"] = "2026-08-14 10:59:00.000 UTC"
+
+        first_facts = flight_recorder_facts_from_checks(first)
+        second_facts = flight_recorder_facts_from_checks(second)
+
+        self.assertEqual(first_facts.comparison_key, second_facts.comparison_key)
+        changed = deepcopy(second)
+        changed["flight-recorder-contract"]["results"][0][0]["Create Table"] = (
+            str(changed["flight-recorder-contract"]["results"][0][0]["Create Table"])
+            .replace("format_version=2", "format_version=1")
+        )
+        changed_facts = flight_recorder_facts_from_checks(changed)
+        self.assertNotEqual(first_facts.comparison_key, changed_facts.comparison_key)
+
+    def test_flight_recorder_facts_ignore_with_property_order(self) -> None:
+        first = _flight_recorder_checks()
+        first["flight-recorder-contract"]["results"] = [[{
+            "Create Table": (
+                "CREATE TABLE iceberg.flight_recorder.events (fingerprint varchar) WITH ("
+                "format_version = 2, "
+                "location = 's3://iceberg-warehouse/flight_recorder/events', "
+                "partitioning = ARRAY['event_date'])"
+            ),
+        }]]
+        second = deepcopy(first)
+        second["flight-recorder-contract"]["results"][0][0]["Create Table"] = (
+            "create table iceberg.flight_recorder.events(fingerprint varchar) with("
+            "partitioning=array['event_date'],"
+            "location='s3://iceberg-warehouse/flight_recorder/events',"
+            "format_version=2)"
+        )
+
+        first_facts = flight_recorder_facts_from_checks(first)
+        second_facts = flight_recorder_facts_from_checks(second)
+
+        self.assertEqual(first_facts.comparison_key, second_facts.comparison_key)
+
+    def test_flight_recorder_facts_preserve_quoted_path_case(self) -> None:
+        first = _flight_recorder_checks()
+        first["flight-recorder-contract"]["results"] = [[{
+            "Create Table": (
+                "CREATE TABLE iceberg.flight_recorder.events (fingerprint varchar) WITH ("
+                "format_version = 2, "
+                "location = 's3://iceberg-warehouse/flight_recorder/events')"
+            ),
+        }]]
+        changed = deepcopy(first)
+        changed["flight-recorder-contract"]["results"][0][0]["Create Table"] = (
+            str(changed["flight-recorder-contract"]["results"][0][0]["Create Table"])
+            .replace("/events'", "/Events'")
+        )
+
+        first_facts = flight_recorder_facts_from_checks(first)
+        changed_facts = flight_recorder_facts_from_checks(changed)
+
         self.assertNotEqual(first_facts.comparison_key, changed_facts.comparison_key)
 
     def test_flight_recorder_facts_require_every_fixed_check(self) -> None:

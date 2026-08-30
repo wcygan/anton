@@ -68,6 +68,13 @@ class SparkRuntimeContractTests(unittest.TestCase):
             for name, path in sources.items()
         }
         self.assertEqual(CONTRACT.shared_contract_failures(contents), [])
+        self.assertTrue(CONTRACT.shared_contract_failures({
+            **contents,
+            "Spark writer": contents["Spark writer"].replace(
+                "complete_hour_contract.decode_complete_hour_manifest",
+                "json.loads",
+            ),
+        }))
         unused_import = "import anton_flight_recorder_contract as complete_hour_contract\n"
         for consumer in ("Airflow capture", "Spark writer"):
             with self.subTest(consumer=consumer):

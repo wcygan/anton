@@ -861,7 +861,12 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
         self.assertFalse(_task_pod_image_matches([pod], digest))
 
     def test_flight_recorder_checks_require_exact_source_and_unchanged_replay(self) -> None:
-        attempt = "lh-airflow-run-flig-123-a1"
+        baseline_run_id = "run-1"
+        attempt = attempt_name(
+            run_id=baseline_run_id,
+            task_id="run_flight_recorder_spark_attempt",
+            dag_id="airflow_flight_recorder",
+        )
         source_receipt = {
             "schema_version": 1, "query": '{k8s_namespace_name="airflow"}',
             "window_start": "2026-08-14T12:00:00Z", "window_end": "2026-08-14T12:05:00Z",
@@ -972,8 +977,17 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             ]]},
         }
         result = {
+            "schema_version": 1,
             "status": "complete",
-            "identity": {"dag_id": "airflow_flight_recorder", "run_id": "run-1", "attempt_name": attempt},
+            "identity": {
+                "dag_id": "airflow_flight_recorder",
+                "run_id": baseline_run_id,
+                "task_id": "run_flight_recorder_spark_attempt",
+                "try_number": 1,
+                "attempt_name": attempt,
+                "target": "authoritative",
+                "run_type": "manual_or_other",
+            },
             "observed_at": "2026-08-14T12:10:00+00:00",
             "live": {
                 "spark_application": {"created_at": "2026-08-14T12:00:00+00:00"},
@@ -996,10 +1010,20 @@ class AirflowLakehouseOperationsTests(unittest.TestCase):
             self.assertEqual([], result["missing"])
             baseline = Path(directory) / "baseline.json"
             baseline.write_text(json.dumps(result), encoding="utf-8")
-            replay_receipt = {**source_receipt, "attempt": "attempt-2"}
+            replay_run_id = "run-2"
+            replay_attempt = attempt_name(
+                run_id=replay_run_id,
+                task_id="run_flight_recorder_spark_attempt",
+                dag_id="airflow_flight_recorder",
+            )
+            replay_receipt = {**source_receipt, "attempt": replay_attempt}
             replay = {
                 **result,
-                "identity": {**result["identity"], "run_id": "run-2", "attempt_name": "attempt-2"},
+                "identity": {
+                    **result["identity"],
+                    "run_id": replay_run_id,
+                    "attempt_name": replay_attempt,
+                },
                 "live": {
                     **result["live"],
                     "flight_recorder_source_loki": {"source_receipts": [replay_receipt]},

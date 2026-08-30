@@ -11,6 +11,10 @@ from .receipts import ReceiptSink
 from .state import AttemptState, classify_application, state_transition_history
 
 
+WATCH_BACKOFF_START_SECONDS = 1.0
+WATCH_FAILURE_LIMIT = 3
+
+
 class SparkApplicationObserver(Protocol):
     """Read and watch one Apache Spark Operator custom resource."""
 
@@ -174,6 +178,7 @@ class SparkAttemptLifecycle:
         self._last_states: dict[str, AttemptState] = {}
         self._last_histories: dict[str, tuple[tuple[str, str], ...]] = {}
         self._terminal_receipts: set[str] = set()
+        self._watch_failures: dict[str, int] = {}
 
     def monitor(
         self,
@@ -318,12 +323,42 @@ class SparkAttemptLifecycle:
                 timeout_seconds=max(1, int(interval)),
             )
         except Exception as error:
-            self.record_receipt(
-                "watch_fallback",
+            self._handle_watch_failure(
                 name,
-                state=AttemptState.ACTIVE,
+                interval=interval,
                 reason=type(error).__name__,
+                cause=error,
             )
+            return
+        self._watch_failures.pop(name, None)
+
+    def _handle_watch_failure(
+        self,
+        name: str,
+        *,
+        interval: float,
+        reason: str,
+        cause: Exception | None = None,
+    ) -> None:
+        failures = self._watch_failures.get(name, 0) + 1
+        self._watch_failures[name] = failures
+        self.record_receipt(
+            "watch_fallback",
+            name,
+            state=AttemptState.ACTIVE,
+            reason=reason,
+            consecutive_failures=failures,
+        )
+        if failures >= WATCH_FAILURE_LIMIT:
+            message = (
+                f"SparkApplication watch failed {failures} consecutive times "
+                f"for {name}"
+            )
+            if cause is not None:
+                raise RuntimeError(message) from cause
+            raise RuntimeError(message)
+        if failures > 1:
+            self._sleep(min(interval, WATCH_BACKOFF_START_SECONDS))
 
     def release(self, name: str, *, state: AttemptState) -> None:
         """Release the writer Lease after one terminal outcome."""

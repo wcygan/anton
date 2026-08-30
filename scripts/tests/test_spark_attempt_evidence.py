@@ -15,7 +15,7 @@ REPO = Path(__file__).resolve().parents[2]
 LIB = REPO / "scripts" / "lib"
 sys.path.insert(0, str(LIB))
 
-from airflow_lakehouse_operations import attempt_name  # noqa: E402
+from airflow_lakehouse_operations import OperationError, attempt_name  # noqa: E402
 from lakehouse_trino import flight_recorder_facts_from_checks  # noqa: E402
 from spark_attempt_evidence import (  # noqa: E402
     FlightRecorderInitialEvidenceRequest,
@@ -436,6 +436,64 @@ class SparkAttemptEvidenceTests(unittest.TestCase):
         self.assertEqual(str(baseline), replay["replay_baseline"])
         self.assertIn("trino", replay)
         self.assertIn("flight_recorder_replay_changed_state", changed["missing"])
+
+    def test_replay_baseline_requires_supported_schema_and_complete_identity(self) -> None:
+        first_client = FakeKubectl(target="authoritative")
+        checks = _trino_checks(latest_attempt="first-attempt")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            namespace = root / "namespace.json"
+            namespace.write_text(
+                json.dumps(checks["flight-recorder-namespace-isolation"]),
+                encoding="utf-8",
+            )
+            first = collect_spark_attempt_evidence(
+                FlightRecorderInitialEvidenceRequest(
+                    run_id="manual__flight_recorder_baseline",
+                    namespace_baseline_path=namespace,
+                ),
+                kubectl=first_client,
+                root=REPO,
+                expected_airflow_digest=DIGEST,
+                read_trino_facts=lambda _root: flight_recorder_facts_from_checks(
+                    _trino_checks(latest_attempt=first_client.attempt),
+                ),
+                now=NOW,
+            )
+            variants = {
+                "schema version": {**first, "schema_version": 2},
+                "identity": {
+                    **first,
+                    "identity": {
+                        key: value
+                        for key, value in first["identity"].items()
+                        if key != "task_id"
+                    },
+                },
+                "attempt identity": {
+                    **first,
+                    "identity": {**first["identity"], "attempt_name": "not-the-attempt"},
+                },
+            }
+            for expected_error, document in variants.items():
+                with self.subTest(expected_error=expected_error):
+                    baseline = root / f"baseline-{expected_error.replace(' ', '-')}.json"
+                    baseline.write_text(json.dumps(document), encoding="utf-8")
+                    replay_client = FakeKubectl(target="authoritative")
+                    with self.assertRaisesRegex(OperationError, expected_error):
+                        collect_spark_attempt_evidence(
+                            FlightRecorderReplayEvidenceRequest(
+                                run_id=f"manual__flight_recorder_replay_{expected_error.replace(' ', '_')}",
+                                baseline_path=baseline,
+                            ),
+                            kubectl=replay_client,
+                            root=REPO,
+                            expected_airflow_digest=DIGEST,
+                            read_trino_facts=lambda _root: flight_recorder_facts_from_checks(
+                                _trino_checks(latest_attempt=replay_client.attempt),
+                            ),
+                            now=NOW,
+                        )
 
     def test_flight_recorder_rejection_returns_rejected_without_trino(self) -> None:
         def unexpected_trino(_root: Path):
