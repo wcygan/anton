@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -91,6 +92,32 @@ class FlightRecorderWorkflowTests(unittest.TestCase):
 
     def operator(self):
         hour = LOKI.LokiHour.ending_at(self.end)
+        sources = []
+        for component, query in LOKI.COMPONENT_QUERIES:
+            for chunk_index, window in enumerate(hour.chunks):
+                identity = f"{component}-{chunk_index}".encode()
+                raw_sha256 = hashlib.sha256(b"raw-" + identity).hexdigest()
+                sources.append(LOKI.CompleteHourSource(
+                    component=component,
+                    chunk_index=chunk_index,
+                    entry_limit=LOKI.COMPLETE_HOUR_QUERY_LIMITS.entry_limit,
+                    max_response_bytes=LOKI.COMPLETE_HOUR_QUERY_LIMITS.max_response_bytes,
+                    timeout_seconds=LOKI.COMPLETE_HOUR_QUERY_LIMITS.timeout_seconds,
+                    manifest_key=LOKI.component_manifest_key(
+                        component=component,
+                        query=query,
+                        window=window,
+                        limits=LOKI.COMPLETE_HOUR_QUERY_LIMITS,
+                    ),
+                    manifest_sha256=hashlib.sha256(b"manifest-" + identity).hexdigest(),
+                    query=query,
+                    window_start=window.start.isoformat().replace("+00:00", "Z"),
+                    window_end=window.end.isoformat().replace("+00:00", "Z"),
+                    entry_count=7 if len(sources) < 24 else 6,
+                    raw_bytes=875,
+                    raw_key=LOKI.raw_key(window=window, checksum=raw_sha256),
+                    raw_sha256=raw_sha256,
+                ))
         manifest = LOKI.CompleteHourManifest(
             schema_version=LOKI.COMPLETE_HOUR_SCHEMA_VERSION,
             kind="flight_recorder_complete_hour",
@@ -98,12 +125,12 @@ class FlightRecorderWorkflowTests(unittest.TestCase):
             hour_start=hour.start.isoformat().replace("+00:00", "Z"),
             hour_end=hour.end.isoformat().replace("+00:00", "Z"),
             source_hour_id=f"{hour.start_ns}-{hour.end_ns}",
-            catalog_sha256="b" * 64,
-            component_count=4,
-            chunk_count=48,
-            source_count=312,
-            raw_bytes=42000,
-            sources=(),
+            catalog_sha256=LOKI.complete_hour_contract.component_catalog_sha256(),
+            component_count=len(LOKI.COMPONENT_QUERIES),
+            chunk_count=len(sources),
+            source_count=sum(source.entry_count for source in sources),
+            raw_bytes=sum(source.raw_bytes for source in sources),
+            sources=tuple(sources),
         )
 
         class Extractor:

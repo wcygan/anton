@@ -11,9 +11,22 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 
-CONTRACT_SOURCE = Path(__file__).resolve().parents[3] / "images" / "flight-recorder-contract"
-if CONTRACT_SOURCE.is_dir():
-    sys.path.insert(0, str(CONTRACT_SOURCE))
+TEST_SOURCE = Path(__file__).resolve()
+INSTALLED_CONTRACT = Path("/opt/airflow/lib/anton_flight_recorder_contract.py")
+REPOSITORY_CONTRACT = (
+    TEST_SOURCE.parents[3] / "images" / "flight-recorder-contract" / "anton_flight_recorder_contract.py"
+    if len(TEST_SOURCE.parents) > 3
+    else None
+)
+if REPOSITORY_CONTRACT is not None and REPOSITORY_CONTRACT.is_file():
+    CONTRACT_SOURCE = REPOSITORY_CONTRACT
+elif INSTALLED_CONTRACT.is_file():
+    CONTRACT_SOURCE = INSTALLED_CONTRACT
+else:
+    raise RuntimeError("Flight Recorder contract is not available from the repository or runtime image")
+sys.path.insert(0, str(CONTRACT_SOURCE.parent))
+
+import anton_flight_recorder_contract as flight_recorder_contract
 
 from anton_airflow.loki import (
     COMPLETE_HOUR_SCHEMA_VERSION,
@@ -92,6 +105,9 @@ class FlightRecorderSourceTests(unittest.TestCase):
                 "result": [{"stream": {"job": "airflow"}, "values": values}],
             },
         }
+
+    def test_complete_hour_contract_uses_selected_source(self) -> None:
+        self.assertEqual(CONTRACT_SOURCE.resolve(), Path(flight_recorder_contract.__file__).resolve())
 
     def test_window_is_exact_utc_and_half_open(self) -> None:
         self.assertEqual(timedelta(seconds=300), self.window.end - self.window.start)
