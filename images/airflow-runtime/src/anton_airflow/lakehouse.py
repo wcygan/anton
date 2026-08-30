@@ -8,7 +8,7 @@ from typing import Any
 
 SPARK_RUNTIME_IMAGE = (
     "192.168.1.106/library/spark-runtime@"
-    "sha256:9d40fb30c52d02d534dcd16f7fa2321193b4db5c63e277ea3e131cd032764130"
+    "sha256:c76663373f62ce1146b2170a64d04af23b6667d4d3cc66e550d370983d1d52d9"
 )
 CATALOG_URI = "http://seaweedfs-iceberg.storage.svc.cluster.local:8181"
 S3_ENDPOINT = "http://seaweedfs-s3.storage.svc.cluster.local:8333"
