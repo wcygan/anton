@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.27
 
-ARG AIRFLOW_BASE_IMAGE=apache/airflow:3.2.2-python3.12@sha256:bbe58e3204d550ab98dbf738a42c0e6663c455357ecd0e2d1440ef9cb6a75f00
+ARG AIRFLOW_BASE_IMAGE=apache/airflow:3.3.2-python3.12@sha256:9df9c8be4096b9cc626bd7cb1f2b8c712eef66c59c615f8c7e6200871ca10bd1
 
 FROM ${AIRFLOW_BASE_IMAGE} AS runtime
 
