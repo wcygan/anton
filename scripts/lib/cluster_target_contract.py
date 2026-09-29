@@ -1106,7 +1106,18 @@ def preflight_command(
     runner: RunStdout = run_stdout,
 ) -> list[PreflightViolation]:
     violations: list[PreflightViolation] = []
-    for operation in classify_command(command):
+    operations = classify_command(command)
+    # Configuration writes invalidate the identity observed before execution.
+    # Reject the whole compound command, including pipelines and either order.
+    if any(op.classification == "local-mutation" for op in operations) and any(
+        op.classification in {"cluster-mutation", "ambiguous-mutation"}
+        for op in operations
+    ):
+        return [PreflightViolation(
+            "shell", None, None, "separate configuration and cluster mutations",
+            "configuration changes and cluster mutations must run in separate commands",
+        )]
+    for operation in operations:
         if operation.classification not in {"cluster-mutation", "ambiguous-mutation"}:
             continue
         if operation.indirect:

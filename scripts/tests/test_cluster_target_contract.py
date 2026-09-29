@@ -300,6 +300,26 @@ class ClusterTargetContractTests(unittest.TestCase):
                 self.assertEqual(len(operations), 1)
                 self.assertEqual(operations[0].classification, "cluster-mutation")
 
+    def test_rejects_compound_configuration_and_cluster_mutations(self) -> None:
+        def unexpected_probe(command):
+            self.fail(f"compound command should fail before probing: {command}")
+
+        for command in (
+            "kubectl config use-context other && kubectl apply -f app.yaml",
+            "talosctl config context other; talosctl reboot",
+            "kubectl config set-cluster other --server=https://other.invalid | flux reconcile ks app",
+            "kubectl apply -f app.yaml; kubectl config use-context other",
+        ):
+            with self.subTest(command=command):
+                violations = preflight_command(command, REPO, environ={}, runner=unexpected_probe)
+                self.assertEqual(len(violations), 1)
+                self.assertIn("separate commands", violations[0].message)
+
+    def test_standalone_configuration_change_remains_allowed(self) -> None:
+        self.assertEqual(preflight_command(
+            "kubectl config use-context other", REPO, environ={}, runner=Runner({})
+        ), [])
+
     def test_preflight_rejects_explicit_wrong_context(self) -> None:
         runner = Runner({("kubectl", "config", "current-context"): "expected-context"})
         violations = preflight_command(

@@ -50,6 +50,18 @@ class AgentPolicyAdapterTests(unittest.TestCase):
         self.assertEqual(claude.returncode, 0, claude.stderr)
         self.assertEqual(codex.returncode, 0, codex.stderr)
 
+    def test_context_switch_and_mutation_rejected_by_both_adapters(self) -> None:
+        for command in (
+            "kubectl config use-context other && kubectl apply -f app.yaml",
+            "talosctl config context other; talosctl reboot",
+        ):
+            with self.subTest(command=command):
+                payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(REPO)}
+                for path, args in ((CLAUDE / "guard_k8s_context.py", ()), (CODEX, ("pre",))):
+                    result = run_hook(path, payload, *args)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("separate commands", result.stderr)
+
     def test_talos_apply_requires_approval_for_both_adapters(self) -> None:
         self.assert_command_blocked_by_both("talosctl apply-config --mode=auto -f machine.yaml")
 

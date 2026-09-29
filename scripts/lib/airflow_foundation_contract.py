@@ -601,9 +601,17 @@ def validate_spark_rbac(failures: list[str]) -> None:
         return
     role = next((item for item in documents if item.get("kind") == "Role"), None)
     binding = next((item for item in documents if item.get("kind") == "RoleBinding"), None)
-    if role is None or binding is None:
-        failures.append("Airflow Spark RBAC must contain one Role and one RoleBinding")
+    if role is None or binding is None or len(documents) != 2:
+        failures.append("Airflow Spark RBAC must contain exactly one Role and one RoleBinding")
         return
+    for document in (role, binding):
+        expect_equal(failures, "Airflow Spark RBAC apiVersion", document.get("apiVersion"), "rbac.authorization.k8s.io/v1")
+        metadata = document.get("metadata", {})
+        expect_equal(failures, "Airflow Spark RBAC name", metadata.get("name"), "airflow-spark-submit")
+        expect_equal(failures, "Airflow Spark RBAC namespace", metadata.get("namespace"), "lakehouse")
+    expect_equal(failures, "Airflow Spark RoleBinding roleRef", binding.get("roleRef"), {
+        "apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "airflow-spark-submit",
+    })
     expected_rules = {
         ("spark.apache.org", "sparkapplications"): {"get", "list", "watch", "create", "delete"},
         ("coordination.k8s.io", "leases"): {"get", "list", "watch", "create", "update", "patch", "delete"},
@@ -619,9 +627,16 @@ def validate_spark_rbac(failures: list[str]) -> None:
     for rule in rules:
         groups = rule.get("apiGroups", [])
         resources = rule.get("resources", [])
-        if len(groups) == 1:
+        verbs = rule.get("verbs", [])
+        if not all(isinstance(values, list) and values and all(isinstance(value, str) for value in values)
+                   for values in (groups, resources, verbs)):
+            failures.append("Airflow Spark Role rules require group, resource and verb lists")
+            continue
+        if set(rule) - {"apiGroups", "resources", "verbs"}:
+            failures.append("Airflow Spark Role rule has unsupported permission fields")
+        for group in groups:
             for resource in resources:
-                observed[(groups[0], resource)] = set(rule.get("verbs", []))
+                observed.setdefault((group, resource), set()).update(verbs)
     expect_equal(failures, "Airflow Spark Role rules", observed, expected_rules)
     binding_subjects = binding.get("subjects", [])
     if not isinstance(binding_subjects, list) or not all(isinstance(item, dict) for item in binding_subjects):

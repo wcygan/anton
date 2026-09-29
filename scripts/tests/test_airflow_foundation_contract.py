@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import copy
+import json
+from unittest.mock import patch
+
+from scripts.lib import airflow_foundation_contract as contract
+
 import subprocess
 import tempfile
 import unittest
@@ -10,6 +16,49 @@ from shutil import copy2
 
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+class SparkRbacContractTests(unittest.TestCase):
+    def setUp(self):
+        self.documents = json.loads(subprocess.check_output(
+            ["yq", "eval-all", "-o=json", "[.]", str(contract.AIRFLOW_SPARK_RBAC)], text=True
+        ))
+
+    def validate(self, documents):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rbac.yaml"
+            path.write_text("\n---\n".join(json.dumps(document) for document in documents))
+            failures = []
+            with patch.object(contract, "AIRFLOW_SPARK_RBAC", path):
+                contract.validate_spark_rbac(failures)
+            return failures
+
+    def test_accepts_current_permissions(self):
+        self.assertEqual(self.validate(self.documents), [])
+
+    def test_rejects_additive_permissions_in_either_order(self):
+        for index in (0, len(self.documents[0]["rules"])):
+            with self.subTest(index=index):
+                documents = copy.deepcopy(self.documents)
+                documents[0]["rules"].insert(index, {"apiGroups": [""], "resources": ["pods"], "verbs": ["create"]})
+                self.assertTrue(self.validate(documents))
+
+    def test_rejects_multi_group_permissions(self):
+        self.documents[0]["rules"].append({"apiGroups": ["", "apps"], "resources": ["pods"], "verbs": ["create"]})
+        self.assertTrue(self.validate(self.documents))
+
+    def test_rejects_additional_documents(self):
+        for kind in ("Role", "RoleBinding", "ClusterRoleBinding"):
+            with self.subTest(kind=kind):
+                self.assertTrue(self.validate(self.documents + [{"kind": kind}]))
+
+    def test_rejects_wrong_binding_target(self):
+        self.documents[1]["roleRef"] = {"apiGroup": "rbac.authorization.k8s.io", "kind": "ClusterRole", "name": "cluster-admin"}
+        self.assertTrue(self.validate(self.documents))
+
+    def test_rejects_wrong_namespace(self):
+        self.documents[0]["metadata"]["namespace"] = "other"
+        self.assertTrue(self.validate(self.documents))
 
 
 class AirflowFoundationContractTests(unittest.TestCase):
