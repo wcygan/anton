@@ -1,0 +1,9 @@
+# Use only in the public-only isolated environment documented in README.md.
+# Unlike Anton's default scope, the target is one whole application repository.
+scan:
+  mode: standard
+  scope:
+    paths: ["."]
+codex:
+  model: gpt-6-luna
+# CLI 0.1.31 cannot estimate this model's cost; no scanner cost cap is set.

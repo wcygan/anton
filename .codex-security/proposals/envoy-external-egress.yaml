@@ -1,0 +1,92 @@
+# Draft: not included in a Flux Kustomization. See README.md before rollout.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: envoy-external-egress
+  namespace: network
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/name: envoy
+      gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      gateway.envoyproxy.io/owning-gateway-namespace: network
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: envoy-gateway
+              app.kubernetes.io/name: gateway-helm
+              control-plane: envoy-gateway
+      ports:
+        - {port: 18000, protocol: TCP}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: bakery-site
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/controller: server
+              app.kubernetes.io/instance: bakery-server
+              app.kubernetes.io/name: bakery-server
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: food-site
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/controller: server
+              app.kubernetes.io/instance: food-site-server
+              app.kubernetes.io/name: food-site-server
+      ports:
+        - {port: 8000, protocol: TCP}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: homepage
+        # CS2Plant is deployed from its application repository, outside Anton.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cs2plant
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cs2plant
+              app.kubernetes.io/component: web
+      ports:
+        - {port: 3000, protocol: TCP}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/controller: echo
+              app.kubernetes.io/instance: echo
+              app.kubernetes.io/name: echo
+      ports:
+        - {port: 80, protocol: TCP}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: flux-system
+          podSelector:
+            matchLabels:
+              app: notification-controller
+              app.kubernetes.io/component: notification-controller
+              app.kubernetes.io/part-of: flux
+      # Service webhook-receiver:80 targets notification-controller:9292.
+      ports:
+        - {port: 9292, protocol: TCP}

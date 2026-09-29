@@ -1,0 +1,59 @@
+# Draft: not included in a Flux Kustomization. See README.md before rollout.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudflare-tunnel-egress
+  namespace: network
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/controller: cloudflare-tunnel
+      app.kubernetes.io/instance: cloudflare-tunnel
+      app.kubernetes.io/name: cloudflare-tunnel
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/name: envoy
+              gateway.envoyproxy.io/owning-gateway-name: envoy-external
+              gateway.envoyproxy.io/owning-gateway-namespace: network
+      # Service 443 translates to the Envoy listener's pod port 10443.
+      ports:
+        - {port: 10443, protocol: TCP}
+    - to:
+        # Published global IPv4 endpoints, checked 2026-09-29. cloudflared
+        # currently defaults to IPv4 and uses http2 (TCP), not QUIC (UDP).
+        - ipBlock: {cidr: 198.41.192.167/32}
+        - ipBlock: {cidr: 198.41.192.67/32}
+        - ipBlock: {cidr: 198.41.192.57/32}
+        - ipBlock: {cidr: 198.41.192.107/32}
+        - ipBlock: {cidr: 198.41.192.27/32}
+        - ipBlock: {cidr: 198.41.192.7/32}
+        - ipBlock: {cidr: 198.41.192.227/32}
+        - ipBlock: {cidr: 198.41.192.47/32}
+        - ipBlock: {cidr: 198.41.192.37/32}
+        - ipBlock: {cidr: 198.41.192.77/32}
+        - ipBlock: {cidr: 198.41.200.13/32}
+        - ipBlock: {cidr: 198.41.200.193/32}
+        - ipBlock: {cidr: 198.41.200.33/32}
+        - ipBlock: {cidr: 198.41.200.233/32}
+        - ipBlock: {cidr: 198.41.200.53/32}
+        - ipBlock: {cidr: 198.41.200.63/32}
+        - ipBlock: {cidr: 198.41.200.113/32}
+        - ipBlock: {cidr: 198.41.200.73/32}
+        - ipBlock: {cidr: 198.41.200.43/32}
+        - ipBlock: {cidr: 198.41.200.23/32}
+      ports:
+        - {port: 7844, protocol: TCP}

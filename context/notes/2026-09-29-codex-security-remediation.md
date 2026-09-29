@@ -136,3 +136,76 @@ The exact app-template 4.6.2 chart rendered all four modified workloads with
 automount disabled; all repository contracts and 346 tests passed. Natural
 Flux reconciliation and absence of projected API-token mounts remain deployment
 acceptance checks. No application images, credentials, or live commands changed.
+
+Read-only deployment verification after natural reconciliation found all eight
+replacement pods ready, with zero restarts, automount disabled, and zero API
+token mounts. The cloudflared HelmRelease reports its latest generation ready.
+No direct cluster mutation or force reconcile was performed.
+
+## Remaining public exposure priorities
+
+The edge egress proposals in `.codex-security/proposals/` are outside Flux and
+remain inactive. They preserve observed CoreDNS, external Envoy listener,
+Cloudflare transport, xDS, and all six public backend paths, including CS2Plant,
+whose manifests are owned outside Anton. Seven source connectivity tests cover
+required paths and forbidden private destinations, namespace/port boundaries,
+and accidental activation. These are source semantics, not a runtime test.
+Effective provider-side tunnel configuration must be checked before deployment.
+ADR 0029 requires acceptance of each workload before expanding isolation.
+
+A bounded manual review matched deployed image source identifiers to local
+application revisions: bakery `cc273ca`, food-site `65d6411`, homepage `9d7a0a2`.
+Bakery's existing local edits were preserved and excluded from review bundles.
+Bakery and food-site Dockerfiles package only static `dist/client` into nginx;
+their TanStack/Nitro server tooling is build-time. Homepage packages Vite `dist`
+and a Bun file server with a lexical path-containment check. No confirmed
+initial-access exploit was established. This is not a dependency audit, image
+inventory, full model scan, symlink/runtime reproduction, or proof that image
+contents match tags. Mutable nginx base tags and CI action tags remain build
+provenance gaps, not evidence of a reachable CVE.
+
+Prepared whole-application scanner configuration and prompt, and ignored
+source-only bundles with original revision/digest manifests. All three source
+configuration dry runs passed; an extracted food-site bundle also passed without
+Git metadata. Frozen scanner installation passed. No model-backed application
+scan ran: a disposable environment with only model authentication and no private
+connectivity is still required. Anonymous requests returned 404 for all three
+application repositories; no GitHub credential was accessed or source published.
+
+The deployed Receiver is ready and selects only GitRepository `flux-system`
+and Kustomization `flux-system`, for GitHub `ping`/`push`. Its deployed
+notification-controller v1.9.4 [handler](https://github.com/fluxcd/notification-controller/blob/v1.9.4/internal/server/receiver_handlers.go)
+calls signature validation before requesting reconciliation of those configured
+resources. The [go-github v64 validator](https://github.com/google/go-github/blob/v64.0.0/github/messages.go)
+requires a valid HMAC when the configured token is nonempty; an empty token does
+not provide that guarantee. No Secret values were read. No webhook-path/delivery
+replay cache was established in that handler; replay of an already signed
+request can request reconciliation again but cannot select arbitrary resources
+or inject manifests. Runtime invalid-signature/replay tests remain unperformed.
+
+The notification-controller ServiceAccount is bound to the shared
+`crd-controller-flux-system` ClusterRole: wildcard writes across Flux API groups
+and read access to Secrets across namespaces. This is a significant conditional
+impact if that Internet-facing process is independently compromised, not a new
+confirmed initial exploit. Next hardening should separate its identity/role
+from the other Flux controllers, scope its watched notification objects and
+secrets to `flux-system`, and permit only the receiver's intended reconciliation
+targets. First render the pinned Flux distribution and map actual controller
+cache, secret-watch, leader-election, and alert/provider requirements; blindly
+editing the shared role would affect unrelated controllers. No RBAC change was
+made during this bounded review.
+
+Cloudflare account Access/WAF/tunnel/DNS state and router NAT/UPnP/IPv6 firewall
+remain unverified because this session has no established read-only provider or
+router access. Gateway `allowedRoutes: All` and external LoadBalancer NodePorts
+exist; they are review surfaces, not proof of Internet exposure. Check for
+unexpected public hostnames/origins, retired tunnel DNS records, and a direct
+origin route bypassing Cloudflare. Keep administrative interfaces tailnet-only.
+Headlamp packet enforcement and token/login checks remain operator-gated live
+verification. The committed source changes do not close these coverage gaps.
+
+Final source validation: frozen scanner install, default source check, all three
+application dry runs, extracted-bundle dry run, all repository contracts and
+353 Python tests passed. `git diff --check` passed. Archives and manifests remain
+ignored with owner-only file permissions. No model calls, provider changes,
+cluster apply/reconcile, debug workloads, or synthetic traffic were performed.

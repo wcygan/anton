@@ -79,6 +79,55 @@ pnpm exec codex-security scan .. \
 Append `--dry-run` to validate these inputs without starting model work.
 Results remain in the scanner's private state directory outside the checkout.
 
+## Review public application source
+
+`public-app-review.yaml` and `public-app-review.md` review one whole website
+repository, including its container and build boundary. Run each application
+separately; this is not another scan of Anton's manifests. Prepare source-only
+inputs in the isolated environment above. Do not mount local application
+checkouts or copy their ignored files or authentication.
+
+From that environment's Anton checkout, select one exact deployed source
+revision (these identifiers were observed on 2026-09-29):
+
+| Application | Source repository | Source identifier in deployed image |
+| --- | --- | --- |
+| Bakery | `wcygan/kneadybynaturebakery` | `cc273ca` |
+| Food site | `wcygan/food-site` | `65d6411` |
+| Homepage | `nu-sync/homepage` | `9d7a0a2` |
+
+These repository identifiers returned 404 to anonymous requests at review time;
+do not assume they can be cloned without authentication. Local, ignored bundles
+were prepared under `.private/security-review/source-bundles/` from the exact
+committed revisions above. They include only `src/`, `public/`, the container
+and workflow files, package/lock files, and serving/build configuration. They
+exclude local edits, `.git`, dependencies, operator manifests, docs, ignored
+files, and operator credential files. `manifest.json` records each original source revision,
+included paths, archive digest, and file count. No source was published.
+
+Transfer only the reviewed source archives into the disposable environment
+without host mounts or GitHub credentials. For example, with the archive
+placed at `/review-inputs/food-site.tar.gz` inside that environment, from the
+Anton checkout:
+
+```sh
+mkdir -p ../food-site-source
+tar -xzf /review-inputs/food-site.tar.gz -C ../food-site-source
+pnpm --dir .codex-security exec codex-security scan "$(pwd)/../food-site-source" \
+  --config "$(pwd)/.codex-security/public-app-review.yaml" \
+  --auth chatgpt \
+  --scan-prompt-file "$(pwd)/.codex-security/public-app-review.md"
+```
+
+Append `--dry-run` to check scope and configuration without model work. Replace
+the repository and revision for the other applications. Inspect each report
+before starting the next. Bundle scans do not include Git history or excluded
+operator manifests; compare the files before and after scanning and stop on
+unexpected changes. These use the configured model without a scanner
+cost cap; they require model authentication inside the isolated environment.
+Source identifiers in image tags are leads, not cryptographic build provenance.
+Runtime image/package scanning and provider/router reviews remain separate.
+
 ## Review and retain evidence
 
 Use the installed CLI to discover saved-result commands:
