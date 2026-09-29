@@ -12,7 +12,7 @@ Stop when: the changed network resource matches the intended scope and read-only
 ## Contents
 
 - `envoy-gateway/`: Envoy Gateway controller, two shared Gateways, wildcard Certificate.
-- `cloudflare-tunnel/`: cloudflared tunnel to `envoy-external`; token comes from ESO.
+- `cloudflare-tunnel/`: cloudflared tunnel to `envoy-external`; infrastructure token comes from SOPS.
 - `cloudflare-dns/`: external-dns controller for Cloudflare records.
 - `k8s-gateway/`: split-horizon DNS for LAN clients.
 - `multus/`: thick-plugin Multus installed through GitRepository plus patches.

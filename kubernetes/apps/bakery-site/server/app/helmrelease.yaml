@@ -62,6 +62,7 @@ spec:
               limits:
                 memory: 256Mi
     defaultPodOptions:
+      automountServiceAccountToken: false
       imagePullSecrets:
         - name: ghcr-registry-secret
       securityContext:

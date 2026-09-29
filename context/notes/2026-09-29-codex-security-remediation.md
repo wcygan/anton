@@ -118,3 +118,21 @@ Broader public-edge egress isolation remains a separate improvement: first map
 cloudflared upstream/DNS needs and Envoy backend and control-plane connections.
 Website application source, Cloudflare policy, and other runtime coverage gaps
 from the report remain unresolved.
+
+## Public workload credential minimization
+
+Read-only inspection now confirms Headlamp's Kustomization has applied
+`fe5c94f1` and `headlamp-isolation` exists. Headlamp remains ready. This is
+deployment evidence, not a packet-level enforcement or login test.
+
+The bakery, food-site, echo, and cloudflared pods had Kubernetes ServiceAccount
+token mounts despite not needing the Kubernetes API. Set explicit
+`defaultPodOptions.automountServiceAccountToken: false` in all four owning
+HelmReleases. Homepage and both Envoy data planes already disable automount.
+No extra RBAC permissions or exploit through these tokens was established.
+Infrastructure controllers that use the API retain their tokens.
+
+The exact app-template 4.6.2 chart rendered all four modified workloads with
+automount disabled; all repository contracts and 346 tests passed. Natural
+Flux reconciliation and absence of projected API-token mounts remain deployment
+acceptance checks. No application images, credentials, or live commands changed.
