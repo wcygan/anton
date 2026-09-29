@@ -19,7 +19,10 @@ scanning does not authorize remediation, publication, or deployment.
 2. Use the pinned workspace package and frozen lockfile. Use installed CLI help
    for commands and flags. `mise exec -- task security:source-check` is safe in
    the operator checkout: it performs only a dry run without credentials or
-   model calls.
+   model calls, checking the scripts, exposure, and application profiles.
+   For application source snapshots, use `security:source-export` with explicit
+   `REPOSITORY` and `REVISION`; review its allowlisted file manifest before
+   transfer. Exported snapshots exclude local edits and Git history.
 3. For scans or validation, establish the disposable public-only VM/container
    described in the README. It must contain only required model authentication,
    with no operator secrets, host mounts, SSH agent, or private cluster access.

@@ -6,12 +6,30 @@ tasks:
   source-check:
     desc: Validate Codex Security source-scan configuration without model calls
     dir: '{{.ROOT_DIR}}/.codex-security'
-    cmd: pnpm check
+    cmds:
+      - pnpm check
+      - pnpm check:exposure
+      - pnpm check:app-config
     preconditions:
       - which pnpm node
       - test -f package.json
       - test -f codex-security.yaml
+      - test -f public-exposure-review.md
+      - test -f public-app-review.yaml
+      - test -f public-app-review.md
       - test -f node_modules/@openai/codex-security/package.json
+
+  source-export:
+    desc: Export committed application source to ignored private scan bundles
+    requires:
+      vars: [REPOSITORY, REVISION]
+    env:
+      SECURITY_SOURCE_REPOSITORY: '{{.REPOSITORY}}'
+      SECURITY_SOURCE_REVISION: '{{.REVISION}}'
+    cmd: python3 "{{.SCRIPTS_DIR}}/export-security-source.py" --repository "$SECURITY_SOURCE_REPOSITORY" --revision "$SECURITY_SOURCE_REVISION"
+    preconditions:
+      - which python3 git
+      - test -f '{{.SCRIPTS_DIR}}/export-security-source.py'
 
   audit:
     desc: Run agentless Trivy configuration/RBAC and Kubescape NSA scans

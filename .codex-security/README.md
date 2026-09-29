@@ -13,8 +13,11 @@ mise exec -- pnpm --dir .codex-security install --frozen-lockfile --ignore-scrip
 mise exec -- task security:source-check
 ```
 
-The check runs `scan --dry-run`: it validates local configuration and paths,
-without loading credentials, invoking a model, or accessing the cluster.
+The check runs three `scan --dry-run` commands: scripts, public exposure, and
+the application configuration/prompt. The application configuration check uses
+this tooling directory as a harmless placeholder target; check the actual
+application input separately before its scan. These checks do not load
+credentials, invoke a model, or access the cluster.
 Node requirements and the exact CLI version are recorded in `package.json`.
 Actual scans also require Python 3.10+ and an account with Codex Security access.
 
@@ -97,36 +100,61 @@ revision (these identifiers were observed on 2026-09-29):
 | Homepage | `nu-sync/homepage` | `9d7a0a2` |
 
 These repository identifiers returned 404 to anonymous requests at review time;
-do not assume they can be cloned without authentication. Local, ignored bundles
-were prepared under `.private/security-review/source-bundles/` from the exact
-committed revisions above. They include only `src/`, `public/`, the container
-and workflow files, package/lock files, and serving/build configuration. They
-exclude local edits, `.git`, dependencies, operator manifests, docs, ignored
-files, and operator credential files. `manifest.json` records each original source revision,
-included paths, archive digest, and file count. No source was published.
-
-Transfer only the reviewed source archives into the disposable environment
-without host mounts or GitHub credentials. For example, with the archive
-placed at `/review-inputs/food-site.tar.gz` inside that environment, from the
-Anton checkout:
+do not assume they can be cloned without authentication. To prepare a new
+snapshot from an existing local application checkout, run from the operator's
+Anton checkout (this exports source only, with no model calls):
 
 ```sh
-mkdir -p ../food-site-source
-tar -xzf /review-inputs/food-site.tar.gz -C ../food-site-source
-pnpm --dir .codex-security exec codex-security scan "$(pwd)/../food-site-source" \
+mise exec -- task security:source-export \
+  REPOSITORY=/Users/wcygan/Development/food-site \
+  REVISION=65d6411
+```
+
+Select the revision you want to assess; use a freshly verified deployed source
+identifier for a deployment review, or `REVISION=HEAD` to review latest committed
+source. Local edits are always excluded. The dated identifiers above are examples,
+not a command to keep scanning an old deployment forever.
+
+The command prints paths to a revision-named archive and JSON manifest under
+ignored `.private/security-review/source-bundles/`, with owner-only file
+permissions. It includes only committed `src/`, `public/`, container/workflow
+files, package/lock files, and serving/build configuration. It excludes local
+edits, `.git`, dependencies, operator manifests, docs, and ignored files. It
+rejects links, submodules, and recognized credential-like filenames before
+reading their payloads. The manifest records the full original source revision,
+actual file list, and archive digest. Review these before transfer: an allowlist
+does not detect secrets embedded in ordinary source files. No source is published.
+
+Transfer only the reviewed source archives into the disposable environment
+without host mounts or GitHub credentials. For example, transfer both printed
+files to `/review-inputs/` inside that environment. From its Anton checkout:
+
+```sh
+mkdir ../food-site-source-65d6411ce999
+tar -xzf /review-inputs/food-site-65d6411ce999.tar.gz -C ../food-site-source-65d6411ce999
+cp /review-inputs/food-site-65d6411ce999.json ../food-site-source-65d6411ce999/REVIEW_SOURCE.json
+pnpm --dir .codex-security exec codex-security scan "$(pwd)/../food-site-source-65d6411ce999" \
   --config "$(pwd)/.codex-security/public-app-review.yaml" \
   --auth chatgpt \
   --scan-prompt-file "$(pwd)/.codex-security/public-app-review.md"
 ```
 
-Append `--dry-run` to check scope and configuration without model work. Replace
-the repository and revision for the other applications. Inspect each report
+Append `--dry-run` to check scope and configuration without model work. Use a
+fresh extraction directory for each snapshot; do not overlay older contents.
+Replace the archive/manifest names and revision for the other applications.
+Inspect each report
 before starting the next. Bundle scans do not include Git history or excluded
 operator manifests; compare the files before and after scanning and stop on
 unexpected changes. These use the configured model without a scanner
 cost cap; they require model authentication inside the isolated environment.
 Source identifiers in image tags are leads, not cryptographic build provenance.
 Runtime image/package scanning and provider/router reviews remain separate.
+
+The reusable setup is complete when the frozen install and all three profile
+checks pass. A particular security review is complete only after its reports,
+coverage gaps, remediation, and applicable runtime acceptance are assessed.
+The inactive files in `proposals/` and outstanding runtime/provider/RBAC work
+are separate from scanner setup; they do not prevent future source scans.
 
 ## Review and retain evidence
 

@@ -209,3 +209,20 @@ application dry runs, extracted-bundle dry run, all repository contracts and
 353 Python tests passed. `git diff --check` passed. Archives and manifests remain
 ignored with owner-only file permissions. No model calls, provider changes,
 cluster apply/reconcile, debug workloads, or synthetic traffic were performed.
+
+## Reusable scan setup acceptance
+
+`security:source-check` now validates all three saved profiles/prompts through
+CLI dry runs; the application profile uses a harmless workspace placeholder.
+`security:source-export REPOSITORY=... REVISION=...` regenerates allowlisted
+application archives and manifests from an explicit committed revision into
+ignored private storage. It preserves dirty work, rejects links/submodules and
+recognized credential-like paths before reading their payloads, and records
+actual exported files, source revision, and archive digest. It is not a detector
+for credentials embedded in ordinary code. Excluded paths remain coverage gaps.
+
+Regression fixtures exercise commit selection versus dirty/untracked/ignored
+work, omitted operator files, new-revision regeneration, file permissions and
+provenance, link/credential-like-file rejection, and literal Task argument
+handling. Scanner setup acceptance is independent of the unresolved runtime,
+provider, notification RBAC, and model-backed review work above.

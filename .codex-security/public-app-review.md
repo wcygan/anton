@@ -6,8 +6,10 @@ edit source, deploy, run live probes, retrieve credentials, or contact private
 resources. Use only the isolated environment described in Anton's scan README.
 
 Establish the assessed commit and deployment shape from Dockerfile, build
-workflow, lockfile, serving entry point, and route configuration. Distinguish
-static client artifacts from a runtime SSR/API server. Build-time framework
+workflow, lockfile, serving entry point, and route configuration. When
+`REVIEW_SOURCE.json` is present, record its original commit and excluded paths
+as provenance and coverage limits. Distinguish static client artifacts from a
+runtime SSR/API server. Build-time framework
 dependencies are not automatically reachable production server code. Report
 when the assessed commit differs from the source identifier in the deployed
 image, and do not infer image contents or package versions from a mutable tag.

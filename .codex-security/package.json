@@ -8,7 +8,9 @@
     "node": "^22.13.0 || ^24.0.0 || ^26.0.0"
   },
   "scripts": {
-    "check": "codex-security scan .. --config codex-security.yaml --dry-run --json"
+    "check": "codex-security scan .. --config codex-security.yaml --dry-run --json",
+    "check:exposure": "codex-security scan .. --config codex-security.yaml --path kubernetes/apps --scan-prompt-file public-exposure-review.md --dry-run --json",
+    "check:app-config": "codex-security scan . --config public-app-review.yaml --scan-prompt-file public-app-review.md --dry-run --json"
   },
   "dependencies": {
     "@openai/codex-security": "0.1.31"
