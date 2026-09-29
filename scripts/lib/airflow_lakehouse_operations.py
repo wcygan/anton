@@ -706,40 +706,10 @@ def trigger_shadow_run(
     approval_token: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Plan or create one guarded shadow Workflow Run."""
-    request = validate_run_request(
-        run_id,
-        logical_date=logical_date,
-        source_window_end=source_window_end,
-        now=now,
+    """Reject the retired shadow entrypoint, including command previews."""
+    raise OperationError(
+        "shadow execution was retired after cutover; use the authoritative workflow"
     )
-    require_live_approval(execute, approval_token)
-    scheduler = kubectl.component_pod("scheduler")
-    scheduler_name = str((scheduler.get("metadata") or {}).get("name"))
-    argv = build_trigger_command(
-        kubectl.prefix,
-        scheduler_pod=scheduler_name,
-        run_id=run_id,
-        logical_date=request["logical_date"],
-        source_window_end=request["source_window_end"],
-    )
-    result: dict[str, Any] = {
-        "schema_version": 1,
-        "mode": "execute" if execute else "dry-run",
-        "target": "shadow",
-        "request": request,
-        "scheduler_pod": scheduler_name,
-        "command": list(argv),
-        "task_instance_confirmed": False,
-    }
-    if not execute:
-        return result
-    response = _run(kubectl.runner, argv, timeout_seconds=60)
-    result["trigger_output"] = _safe_json_or_text(response.stdout)
-    task_state = wait_for_task_instance(kubectl, scheduler_name, run_id, timeout_seconds=90)
-    result["task_instance_confirmed"] = True
-    result["task_instance"] = task_state
-    return result
 
 
 def wait_for_task_instance(
@@ -960,7 +930,12 @@ def _read_retained_json(path: Path, remaining_bytes: int) -> tuple[Any, int]:
         payload = stream.read(limit + 1)
     if len(payload) > limit:
         raise OperationError("retained evidence exceeds the size limit")
-    return json.loads(payload.decode("utf-8")), len(payload)
+    try:
+        return json.loads(payload.decode("utf-8")), len(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        # Stop rather than repeatedly reading invalid artifacts without charging
+        # their bytes against the successfully decoded payload budget.
+        raise OperationError("retained evidence must contain valid JSON") from error
 
 
 def _retained_evidence(ledger_path: Path | None, run_id: str) -> dict[str, Any] | None:

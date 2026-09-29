@@ -501,7 +501,7 @@ def validate_longhorn_release(release: dict[str, Any]) -> list[str]:
 def validate_image_source(failures: list[str]) -> None:
     dockerfile = (IMAGE_ROOT / "Dockerfile").read_text(encoding="utf-8")
     required_dockerfile = (
-        "apache/airflow:3.2.2-python3.12@sha256:",
+        "apache/airflow:3.3.2-python3.12@sha256:",
         "ARG AIRFLOW_VERSION=3.2.2",
         "ARG PYTHON_VERSION=3.12",
         "ARG KUBERNETES_PROVIDER_VERSION=10.21.0",

@@ -12,7 +12,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -21,6 +21,7 @@ sys.path.insert(0, str(LIB))
 
 from airflow_lakehouse_operations import (  # noqa: E402
     APPROVAL_TOKEN,
+    trigger_shadow_run,
     KubectlClient,
     OperationError,
     _loki_summary,
@@ -56,6 +57,8 @@ from spark_attempt_evidence import (  # noqa: E402
 )
 from airflow_lakehouse_recovery import (  # noqa: E402
     SCENARIOS,
+    execute_recovery_case,
+    RecoveryRuntime,
     _arm_action,
     _cancellation_probe_code,
     _duplicate_probe_code,
@@ -66,6 +69,41 @@ from airflow_lakehouse_recovery import (  # noqa: E402
 )
 
 
+class RetiredShadowExecutionTests(unittest.TestCase):
+    def test_retired_trigger_rejects_execution_and_preview_before_io(self):
+        for execute in (False, True):
+            client = Mock()
+            with self.subTest(execute=execute), self.assertRaisesRegex(OperationError, "retired"):
+                trigger_shadow_run(client, run_id="manual__security-check", execute=execute,
+                                   approval_token=APPROVAL_TOKEN)
+            self.assertEqual(client.mock_calls, [])
+
+    def test_retired_recovery_rejects_execution_before_io(self):
+        client, runner = Mock(), Mock()
+        with self.assertRaisesRegex(OperationError, "retired"):
+            execute_recovery_case(REPO, client, scenario="scheduler-restart",
+                                  run_id="manual__security-check", execute=True,
+                                  approval_token=APPROVAL_TOKEN, runner=runner)
+        self.assertEqual(client.mock_calls, [])
+        runner.assert_not_called()
+
+    def test_historical_recovery_plan_remains_readable_without_io(self):
+        client, runner = Mock(), Mock()
+        result = execute_recovery_case(REPO, client, scenario="scheduler-restart",
+                                       run_id="manual__security-check", runner=runner)
+        self.assertEqual(result["mode"], "dry-run")
+        self.assertTrue(result["retired"])
+        self.assertEqual(result["plan"]["target"], "shadow")
+        self.assertEqual(client.mock_calls, [])
+        runner.assert_not_called()
+
+    def test_runtime_cannot_bypass_retirement(self):
+        runtime = Mock()
+        with self.assertRaisesRegex(OperationError, "retired"):
+            RecoveryRuntime.trigger_only(runtime, "scheduler", "manual__security-check")
+        self.assertEqual(runtime.mock_calls, [])
+
+
 class RetainedEvidenceReadLimitTests(unittest.TestCase):
     def test_regular_file_at_limit_and_oversized_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -74,6 +112,17 @@ class RetainedEvidenceReadLimitTests(unittest.TestCase):
             self.assertEqual(_read_retained_json(path, 11), ({"ok": True}, 11))
             with self.assertRaisesRegex(OperationError, "size limit"):
                 _read_retained_json(path, 10)
+
+    def test_malformed_artifact_stops_collection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "invalid.json").write_bytes(b"not JSON")
+            ledger = root / "ledger.json"
+            ledger.write_text(json.dumps({"runs": [{"run_id": "test", "evidence": {
+                "first": "invalid.json", "second": "invalid.json",
+            }}]}))
+            with self.assertRaisesRegex(OperationError, "valid JSON"):
+                _retained_evidence(ledger, "test")
 
     def test_fifo_is_rejected_without_waiting_for_a_writer(self):
         with tempfile.TemporaryDirectory() as directory:

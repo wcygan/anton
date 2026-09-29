@@ -1,4 +1,4 @@
-"""Shadow-only recovery plans and bounded live execution."""
+"""Historical shadow recovery plans; live execution is retired."""
 
 from __future__ import annotations
 
@@ -13,10 +13,7 @@ from typing import Any, Callable, Mapping
 
 from airflow_lakehouse_operations import (
     AIRFLOW_NAMESPACE,
-    APPROVAL_TOKEN,
     DAG_ID,
-    LAKEHOUSE_NAMESPACE,
-    SPARK_RESOURCE,
     SHADOW_TASK_ID,
     TRINO_NAMESPACE,
     KubectlClient,
@@ -24,16 +21,10 @@ from airflow_lakehouse_operations import (
     Runner,
     application_outcome,
     attempt_name,
-    build_trigger_command,
     collect_gate_snapshot,
     evaluate_gate_preflight,
-    require_live_approval,
     subprocess_runner,
     validate_run_request,
-)
-from spark_attempt_evidence import (
-    LakehouseEvidenceRequest,
-    collect_spark_attempt_evidence,
 )
 
 
@@ -291,15 +282,7 @@ class RecoveryRuntime:
         raise OperationError("replacement triggerer did not renew the exact Lease")
 
     def trigger_only(self, scheduler_pod: str, run_id: str) -> Any:
-        command = build_trigger_command(
-            self.kubectl.prefix,
-            scheduler_pod=scheduler_pod,
-            run_id=run_id,
-        )
-        result = self.runner(command, 60)
-        if result.returncode != 0:
-            raise OperationError((result.stderr or result.stdout or "Airflow trigger failed")[-1000:])
-        return _last_json(result.stdout)
+        raise OperationError("shadow recovery execution was retired after cutover")
 
     def run_state(self, run_id: str) -> str | None:
         scheduler = self.component_name("scheduler")
@@ -462,190 +445,13 @@ def execute_recovery_case(
     timeout_seconds: float = 600,
     runner: Runner = subprocess_runner,
 ) -> dict[str, Any]:
-    """Plan or execute one approved shadow-only recovery scenario."""
+    """Retain historical recovery plans without allowing live execution."""
+    if execute:
+        raise OperationError("shadow recovery execution was retired after cutover")
     plan = build_recovery_plan(scenario, run_id)
-    require_live_approval(execute, approval_token)
-    result: dict[str, Any] = {
+    return {
         "schema_version": 1,
-        "mode": "execute" if execute else "dry-run",
+        "mode": "dry-run",
+        "retired": True,
         "plan": plan.as_dict(),
     }
-    if not execute:
-        return result
-
-    runtime = RecoveryRuntime(root, kubectl, runner=runner, timeout_seconds=timeout_seconds)
-    result["preflight"] = _preflight_or_raise(runtime)
-    if kubectl.spark_application(plan.attempt) is not None:
-        raise OperationError(f"SparkApplication already exists for {run_id}")
-    scheduler = runtime.component_name("scheduler")
-    result["started_at"] = datetime.now(timezone.utc).isoformat()
-
-    if scenario == "scheduler-restart":
-        old_scheduler = scheduler
-        armed = _arm_action(
-            lambda: runtime.active_application(plan.attempt),
-            lambda _: runtime.delete_pod(AIRFLOW_NAMESPACE, old_scheduler),
-            timeout_seconds=120,
-        )
-        result["trigger"] = runtime.trigger_only(scheduler, run_id)
-        result["mutation"] = armed.wait(150)
-        replacement = runtime.wait_component_replacement("scheduler", old_scheduler)
-        resource = runtime.wait_application(plan.attempt, {"succeeded"})
-        runtime.wait_no_lease()
-        result["replacement_pod"] = (replacement.get("metadata") or {}).get("name")
-        result["spark_outcome"] = application_outcome(resource)
-
-    elif scenario == "triggerer-restart":
-        old_triggerer = runtime.component_name("triggerer")
-        stopped: dict[str, str] = {}
-
-        def stop_driver(_: Any) -> str:
-            driver = runtime.driver_pod(plan.attempt, require_ready=True)
-            if not driver:
-                raise OperationError("ready driver pod disappeared")
-            stopped["pod"] = driver
-            return runtime.exec_pod(LAKEHOUSE_NAMESPACE, driver, "spark-kubernetes-driver", "pkill", "-STOP", "java")
-
-        armed = _arm_action(
-            lambda: runtime.driver_pod(plan.attempt, require_ready=True),
-            stop_driver,
-            timeout_seconds=120,
-        )
-        result["trigger"] = runtime.trigger_only(scheduler, run_id)
-        result["driver_hold"] = armed.wait(150)
-        lease_before = kubectl.lease()
-        try:
-            runtime.delete_pod(AIRFLOW_NAMESPACE, old_triggerer)
-            replacement = runtime.wait_component_replacement("triggerer", old_triggerer)
-            replacement_started = datetime.fromisoformat(
-                str((replacement.get("status") or {}).get("startTime")).replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
-            lease_after = runtime.wait_lease_renewal(plan.attempt, replacement_started)
-        finally:
-            if stopped.get("pod"):
-                runtime.exec_pod(
-                    LAKEHOUSE_NAMESPACE,
-                    stopped["pod"],
-                    "spark-kubernetes-driver",
-                    "pkill",
-                    "-CONT",
-                    "java",
-                )
-        resource = runtime.wait_application(plan.attempt, {"succeeded"})
-        runtime.wait_no_lease()
-        result["old_triggerer"] = old_triggerer
-        result["replacement_triggerer"] = (replacement.get("metadata") or {}).get("name")
-        result["lease_before"] = ((lease_before or {}).get("spec") or {}).get("renewTime")
-        result["lease_after"] = (lease_after.get("spec") or {}).get("renewTime")
-        result["spark_outcome"] = application_outcome(resource)
-
-    elif scenario in {"duplicate-delivery", "cancellation", "expired-lease-refusal"}:
-        probe_run_id = f"{run_id}-probe"
-        if scenario == "duplicate-delivery":
-            action = lambda _: runtime.adapter_probe(_duplicate_probe_code(run_id))
-        elif scenario == "cancellation":
-            action = lambda _: runtime.adapter_probe(_cancellation_probe_code(run_id))
-        else:
-            action = lambda _: runtime.adapter_probe(_expired_lease_probe_code(run_id, probe_run_id))
-        armed = _arm_action(
-            lambda: runtime.active_application(plan.attempt),
-            action,
-            timeout_seconds=120,
-        )
-        result["trigger"] = runtime.trigger_only(scheduler, run_id)
-        result["probe"] = armed.wait(150)
-        if scenario == "duplicate-delivery":
-            resource = runtime.wait_application(plan.attempt, {"succeeded"})
-            count = len(
-                [
-                    item
-                    for item in (kubectl.json("-n", LAKEHOUSE_NAMESPACE, "get", SPARK_RESOURCE, "-o", "json").get("items") or [])
-                    if ((item.get("metadata") or {}).get("annotations") or {}).get("anton.io/run-id") == run_id
-                ]
-            )
-            if count != 1:
-                raise OperationError(f"duplicate delivery created {count} SparkApplications")
-            result["resource_count"] = count
-            result["spark_outcome"] = application_outcome(resource)
-        elif scenario == "cancellation":
-            runtime.wait_application(plan.attempt, {"absent"})
-            runtime.wait_no_lease()
-            if kubectl.attempt_pods(plan.attempt):
-                raise OperationError("cancellation left attempt pods")
-            result["spark_outcome"] = "absent"
-        else:
-            probe_name = attempt_name(run_id=probe_run_id)
-            probe_result = result["probe"].get("action_result")
-            if not isinstance(probe_result, Mapping) or probe_result.get("result") != "LeaseTakeoverBlocked":
-                raise OperationError("expired Lease probe did not return LeaseTakeoverBlocked")
-            if kubectl.spark_application(probe_name) is not None:
-                raise OperationError("expired Lease probe created a SparkApplication")
-            resource = runtime.wait_application(plan.attempt, {"succeeded"})
-            runtime.wait_no_lease()
-            result["probe_attempt"] = probe_name
-            result["spark_outcome"] = application_outcome(resource)
-
-    elif scenario == "bounded-retry":
-        result["trigger"] = runtime.trigger_only(scheduler, run_id)
-        first = runtime.wait_application(plan.attempt, {"succeeded"})
-        probe = runtime.adapter_probe(_retry_probe_code(run_id))
-        second_name = attempt_name(run_id=run_id, try_number=2)
-        second = runtime.wait_application(second_name, {"succeeded"})
-        runtime.adapter_probe(_release_probe_code(run_id, 2))
-        runtime.wait_no_lease()
-        result["probe"] = probe
-        result["attempts"] = [
-            {"name": plan.attempt, "outcome": application_outcome(first)},
-            {"name": second_name, "outcome": application_outcome(second)},
-        ]
-
-    elif scenario == "precommit-failure":
-        snapshot_before = runtime.trino_snapshot()
-
-        def kill_driver(_: Any) -> str:
-            driver = runtime.driver_pod(plan.attempt)
-            if not driver:
-                raise OperationError("driver pod is missing at executor creation")
-            return runtime.exec_pod(
-                LAKEHOUSE_NAMESPACE,
-                driver,
-                "spark-kubernetes-driver",
-                "pkill",
-                "-9",
-                "java",
-            )
-
-        armed = _arm_action(
-            lambda: runtime.executor_pod(plan.attempt),
-            kill_driver,
-            timeout_seconds=120,
-            interval_seconds=0.1,
-        )
-        result["trigger"] = runtime.trigger_only(scheduler, run_id)
-        result["mutation"] = armed.wait(150)
-        resource = runtime.wait_application(plan.attempt, {"failed"})
-        snapshot_after = runtime.trino_snapshot()
-        runtime.wait_no_lease()
-        pods = kubectl.attempt_pods(plan.attempt)
-        roles = {
-            ((pod.get("metadata") or {}).get("labels") or {}).get("spark-role")
-            for pod in pods
-        }
-        if not {"driver", "executor"} <= roles:
-            raise OperationError("pre-commit failure did not retain driver and executor pods")
-        if snapshot_before != snapshot_after:
-            raise OperationError("pre-commit failure changed the shadow snapshot")
-        result["spark_outcome"] = application_outcome(resource)
-        result["snapshot_before"] = snapshot_before
-        result["snapshot_after"] = snapshot_after
-        result["retained_roles"] = sorted(str(role) for role in roles if role)
-
-    result["airflow_run_state"] = runtime.run_state(run_id)
-    result["evidence"] = collect_spark_attempt_evidence(
-        LakehouseEvidenceRequest(run_id=run_id),
-        kubectl=kubectl,
-        root=Path(__file__).resolve().parents[2],
-    )
-    result["completed_at"] = datetime.now(timezone.utc).isoformat()
-    result["passed"] = True
-    return result
