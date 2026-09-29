@@ -1,7 +1,7 @@
 # Codex Security for Anton
 
 This workspace pins the Codex Security CLI for repository source reviews
-and and supplies Anton's security context through `SECURITY.md`.
+and supplies Anton's security context through `SECURITY.md`.
 Trivy/Kubescape remain the separate cluster-posture and image-audit workflow.
 
 ## Install and check configuration
@@ -44,10 +44,11 @@ For CI, provision `OPENAI_API_KEY` through the runner's secret store and use
 `--auth api-key`; do not copy local authentication into CI. No CI scan is enabled
 by this migration. Source excerpts are sent to the selected model provider.
 
-The initial scan covers `scripts/` in standard mode with an estimated $5 limit.
+The initial scan covers `scripts/` in standard mode using `gpt-6-luna`.
 This is partial repository coverage, not a whole-repository security assessment.
-The limit applies to one attempt; in-flight requests can exceed it. Review the
-first results before widening scope or repeating scans. To select a different
+There is no scanner cost limit: CLI 0.1.31 cannot estimate GPT-6 Luna costs.
+Confirm the intended run scope before scanning and review the first results
+before widening scope or repeating scans. To select a different
 bounded scope, add `--path kubernetes/apps/<namespace>/<app>` to the scan command;
 CLI scope selection replaces the configured scope. Keep configuration from a
 trusted revision outside the assessed checkout when reviewing untrusted PRs.

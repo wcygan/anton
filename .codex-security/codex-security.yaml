@@ -4,7 +4,8 @@ scan:
   scope:
     paths: [scripts]
   knowledge_base: [../SECURITY.md]
-limits:
-  max_cost_usd_per_scan: 5
+codex:
+  model: gpt-6-luna
+# No cost limit: this CLI version has no GPT-6 Luna cost estimate.
 # Report-only. Patching, publication, and deployment remain separate actions.
 # Results use the CLI's private state directory outside this Git worktree.

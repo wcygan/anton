@@ -28,9 +28,10 @@ scanning does not authorize remediation, publication, or deployment.
 
 ## Execute and assess
 
-Use the README's standard scan first: `scripts/` and an estimated $5 ceiling per
-attempt. Widen only to the requested scope; report partial coverage explicitly.
-Model cost estimates are not hard spending caps. Keep output outside the Git
+Use the README's standard scan first: `scripts/` with `gpt-6-luna`. The current
+configuration has no scanner cost limit because CLI 0.1.31 cannot estimate this
+model's costs. Establish the intended run scope before scanning; widen only to
+the requested scope and report partial coverage explicitly. Keep output outside the Git
 worktree in private storage and record Git status before and after the run.
 Stop on unexpected edits and preserve them for inspection.
 
