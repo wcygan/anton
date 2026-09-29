@@ -92,6 +92,31 @@ def write_raw_ledger(path: Path, records: list[dict[str, Any]]) -> None:
     os.chmod(path, 0o600)
 
 
+class LedgerSizeLimitTests(unittest.TestCase):
+    def test_oversized_append_preserves_readable_ledger_and_preview_agrees(self):
+        with private_directory() as directory:
+            path = Path(directory) / "ledger.json"
+            collect_revision_observation(path, observation(1, 10, complete=True))
+            previous = path.read_bytes()
+            with mock.patch.object(ledger_module, "MAX_LEDGER_BYTES", len(previous)):
+                for action in (preview_revision_observation, collect_revision_observation):
+                    with self.subTest(action=action.__name__):
+                        with self.assertRaisesRegex(LedgerError, "size limit"):
+                            action(path, observation(2, 10, complete=True))
+                        self.assertEqual(path.read_bytes(), previous)
+                        self.assertEqual(len(read_revision_ledger(path)["records"]), 1)
+                        self.assertEqual(list(Path(directory).glob("*.tmp-*")), [])
+
+    def test_payload_limit_counts_encoded_bytes_and_accepts_exact_boundary(self):
+        candidate = {"value": "é"}
+        payload = ledger_module._canonical_payload(candidate)
+        with mock.patch.object(ledger_module, "MAX_LEDGER_BYTES", len(payload)):
+            self.assertEqual(ledger_module._canonical_payload(candidate), payload)
+        with mock.patch.object(ledger_module, "MAX_LEDGER_BYTES", len(payload) - 1):
+            with self.assertRaises(LedgerError):
+                ledger_module._canonical_payload(candidate)
+
+
 class RevisionConvergenceCollectorTests(unittest.TestCase):
     def test_complete_first_revision_is_an_upper_bound_record(self) -> None:
         record = new_revision_record_v2(observation(1, 3, complete=True))

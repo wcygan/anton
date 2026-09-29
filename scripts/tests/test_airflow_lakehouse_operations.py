@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -26,6 +27,7 @@ from airflow_lakehouse_operations import (  # noqa: E402
     _resource_summary,
     _retained_artifact_passed,
     _retained_evidence,
+    _read_retained_json,
     _task_pod_image_matches,
     airflow_loki_query,
     application_outcome,
@@ -62,6 +64,41 @@ from airflow_lakehouse_recovery import (  # noqa: E402
     _retry_probe_code,
     build_recovery_plan,
 )
+
+
+class RetainedEvidenceReadLimitTests(unittest.TestCase):
+    def test_regular_file_at_limit_and_oversized_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            path.write_bytes(b'{"ok":true}')
+            self.assertEqual(_read_retained_json(path, 11), ({"ok": True}, 11))
+            with self.assertRaisesRegex(OperationError, "size limit"):
+                _read_retained_json(path, 10)
+
+    def test_fifo_is_rejected_without_waiting_for_a_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "artifact.json"
+            os.mkfifo(path)
+            result = subprocess.run(
+                [sys.executable, "-c",
+                 "from airflow_lakehouse_operations import _read_retained_json; "
+                 "from pathlib import Path; import sys; _read_retained_json(Path(sys.argv[1]), 1024)", str(path)],
+                cwd=LIB, capture_output=True, text=True, timeout=5,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("regular file", result.stderr)
+
+    def test_total_budget_includes_repeated_artifact_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "artifact.json").write_text('{"ok":true}')
+            ledger = root / "ledger.json"
+            ledger.write_text(json.dumps({"runs": [{"run_id": "test", "evidence": {
+                "first": "artifact.json", "second": "artifact.json",
+            }}]}))
+            with patch("airflow_lakehouse_operations.MAX_RETAINED_EVIDENCE_BYTES", ledger.stat().st_size + 11):
+                with self.assertRaisesRegex(OperationError, "size limit"):
+                    _retained_evidence(ledger, "test")
 
 
 class RetainedArtifactContainmentTests(unittest.TestCase):

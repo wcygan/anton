@@ -65,7 +65,10 @@ tasks:
   external-secrets:force-refresh:
     desc: Force one approved ExternalSecret to refresh from 1Password
     prompt: This mutates one ExternalSecret annotation. Continue?
-    cmd: scripts/force-external-secret-refresh.sh "{{.NAMESPACE}}" "{{.NAME}}"
+    env:
+      ANTON_REFRESH_NAMESPACE: '{{.NAMESPACE}}'
+      ANTON_REFRESH_NAME: '{{.NAME}}'
+    cmd: scripts/force-external-secret-refresh.sh "$ANTON_REFRESH_NAMESPACE" "$ANTON_REFRESH_NAME"
     requires:
       vars: [NAMESPACE, NAME]
     preconditions:

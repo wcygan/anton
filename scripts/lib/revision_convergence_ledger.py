@@ -217,15 +217,20 @@ def preview_revision_observation(path: Path, observation: Mapping[str, Any]) -> 
     """Preview one transition without creating or replacing any file."""
 
     ledger = read_revision_ledger(path)
-    _, result = _transition_ledger(ledger, observation)
+    candidate, result = _transition_ledger(ledger, observation)
+    _canonical_payload(candidate)
     return result
 
 
 def _canonical_payload(ledger: Mapping[str, Any]) -> bytes:
-    return (json.dumps(ledger, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n").encode()
+    payload = (json.dumps(ledger, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n").encode()
+    if len(payload) > MAX_LEDGER_BYTES:
+        raise LedgerError("ledger exceeds the size limit; archive it before collecting more revisions")
+    return payload
 
 
 def _write_atomic(parent_fd: int, ledger_name: str, ledger: Mapping[str, Any]) -> None:
+    payload = _canonical_payload(ledger)
     temporary_name = f".{ledger_name}.tmp-{os.getpid()}-{secrets.token_hex(8)}"
     temporary_fd: int | None = None
     replaced = False
@@ -237,7 +242,6 @@ def _write_atomic(parent_fd: int, ledger_name: str, ledger: Mapping[str, Any]) -
             dir_fd=parent_fd,
         )
         os.fchmod(temporary_fd, LEDGER_MODE)
-        payload = _canonical_payload(ledger)
         offset = 0
         while offset < len(payload):
             offset += os.write(temporary_fd, payload[offset:])

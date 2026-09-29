@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
+import os
+import stat
 from pathlib import Path
 import re
 import subprocess
@@ -13,6 +15,9 @@ import time
 from typing import Any, Callable, Mapping, Protocol, Sequence
 from urllib.parse import quote
 
+
+MAX_RETAINED_JSON_BYTES = 1024 * 1024
+MAX_RETAINED_EVIDENCE_BYTES = 16 * MAX_RETAINED_JSON_BYTES
 
 DAG_ID = "airflow_spark_lakehouse"
 SHADOW_TASK_ID = "run_shadow_spark_attempt"
@@ -940,12 +945,30 @@ def _resource_pod_names(resource: Mapping[str, Any] | None, pods: Sequence[Mappi
     return sorted(names)
 
 
+def _read_retained_json(path: Path, remaining_bytes: int) -> tuple[Any, int]:
+    """Read a bounded regular file; nonblocking open prevents FIFO hangs."""
+    limit = min(MAX_RETAINED_JSON_BYTES, remaining_bytes)
+    if limit <= 0:
+        raise OperationError("retained evidence exceeds the total size limit")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise OperationError("retained evidence must be a regular file")
+        if info.st_size > limit:
+            raise OperationError("retained evidence exceeds the size limit")
+        payload = stream.read(limit + 1)
+    if len(payload) > limit:
+        raise OperationError("retained evidence exceeds the size limit")
+    return json.loads(payload.decode("utf-8")), len(payload)
+
+
 def _retained_evidence(ledger_path: Path | None, run_id: str) -> dict[str, Any] | None:
     if ledger_path is None:
         return None
     try:
-        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        ledger, consumed = _read_retained_json(ledger_path, MAX_RETAINED_EVIDENCE_BYTES)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise OperationError("retained ledger cannot be read") from error
     runs = ledger.get("runs") if isinstance(ledger, Mapping) else None
     if not isinstance(runs, list):
@@ -965,8 +988,10 @@ def _retained_evidence(ledger_path: Path | None, run_id: str) -> dict[str, Any] 
             path = (root / relative).resolve()
             if Path(relative).is_absolute() or not path.is_relative_to(root):
                 raise OperationError("retained artifact must stay within the ledger directory")
-            artifacts[str(name)] = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            artifact, size = _read_retained_json(path, MAX_RETAINED_EVIDENCE_BYTES - consumed)
+            consumed += size
+            artifacts[str(name)] = artifact
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             artifacts[str(name)] = {"error": "artifact cannot be read", "path": relative}
     return {"candidate": ledger.get("candidate"), "run": selected, "artifacts": artifacts}
 
