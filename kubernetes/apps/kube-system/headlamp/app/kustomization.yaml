@@ -5,4 +5,5 @@ resources:
   - ./helmrelease.yaml
   - ./helmrepository.yaml
   - ./ingress.yaml
+  - ./networkpolicy.yaml
   - ./rbac.yaml

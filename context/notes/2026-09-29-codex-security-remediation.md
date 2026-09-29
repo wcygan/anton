@@ -83,3 +83,38 @@ Verification: all repository contracts and 342 Python tests passed; scanner
 frozen install and source dry run passed; Docusaurus production build passed.
 The separate docs typecheck remains blocked by the existing TypeScript 6
 `baseUrl` deprecation in its Docusaurus configuration, unrelated to these edits.
+
+## Public exposure scan follow-up
+
+Scan `8b033a60-ec0d-4581-8f78-f63e14e2c7f2` reviewed `kubernetes/apps` at
+`222f51c2`. Its run-local artifacts contain one new low-severity finding,
+`network-exposure.missing-edge-egress-isolation`, with partial coverage. It
+describes conditional access from an independently compromised edge pod to
+Headlamp; it does not establish an Internet compromise or authentication bypass.
+
+Remediation adds `headlamp-isolation`, selecting only the Headlamp workload and
+allowing ingress only from its exact managed Tailscale Ingress proxy in namespace
+`tailscale`, on named TCP port `http`. The policy is wired into the Headlamp Flux
+app. This closes the reported ordinary pod-to-Headlamp path in desired state
+without restricting other `kube-system` workloads or changing gateway egress.
+
+Read-only preflight verified the Anton context and endpoint, Headlamp's applied
+labels and container port 4466, its Service mapping from port 80, and the dedicated
+Tailscale proxy's four parent/managed labels. No NetworkPolicy existed in
+`kube-system` at that evidence time. The pinned Headlamp 0.45.0 chart was rendered
+with repository values and matched those labels and port. All contracts and 346
+tests passed, including allowed/blocked selector cases and Kustomize inclusion.
+These checks do not reproduce network enforcement or authentication behavior.
+
+Status: source remediation complete; deployed enforcement verification pending.
+Acceptance requires the applied Flux revision and policy, Headlamp readiness,
+working Tailscale access/token login, blocked direct edge-to-Headlamp traffic,
+and rejection of unauthenticated data requests. Live synthetic traffic requires
+separate operator approval. Rollback and verification are documented in the
+Headlamp README. No apply, reconcile, debug workload, or live traffic test was
+performed during source remediation.
+
+Broader public-edge egress isolation remains a separate improvement: first map
+cloudflared upstream/DNS needs and Envoy backend and control-plane connections.
+Website application source, Cloudflare policy, and other runtime coverage gaps
+from the report remain unresolved.
