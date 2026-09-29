@@ -28,8 +28,8 @@ agent safety policy. Keep shared implementations in `scripts/lib/`, thin
 adapters at agent/tool boundaries, and golden behavior under `scripts/tests/`.
 When Claude and Codex enforce the same meaning, change the shared policy and its
 cross-adapter fixtures rather than either transport adapter alone.
-`scripts/cluster-targets.json` is the only committed fallback for Talos
-Tailscale endpoints.
+`scripts/cluster-targets.json` contains node names only. Talos fallback
+endpoints belong in ignored `.private/cluster-targets.json`; never commit them.
 
 ## Debugging
 

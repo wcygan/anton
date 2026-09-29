@@ -194,7 +194,7 @@ Two paths matching plan 0007 history:
 Operator chose option 1. Executed:
 ```
 talosctl --talosconfig ./talos/clusterconfig/talosconfig \
-         --endpoints 100.87.89.3 --nodes 100.75.61.79 \
+         --endpoints <k8s-2-tailscale-ip> --nodes <k8s-1-tailscale-ip> \
          reboot --mode=default
 ```
 Used **k8s-2 (etcd leader)** as the API endpoint so the in-flight talosctl call would survive k8s-1 going down. Reboot sequence completed cleanly:
@@ -310,4 +310,4 @@ Plan 0009 reopening + a new evidence note to be authored alongside the postmorte
 - Plan 0007 (k8s-2 remote diagnostic rollout — original ghost-pod recovery deadlock pattern documented in day-1 Log): `../plans/0007-k8s-2-remote-diagnostic-rollout.md`
 - BIOS-flash evidence (k8s-2 + k8s-3): `../notes/k8s-2-instability/evidence-2026-05-04-bios-1.27-flash.md`
 - Postmortem (to be filled in after mitigation): `../postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md`
-- Direct kubeconfig in use during this incident: `/tmp/anton-direct-kubeconfig` (talosctl kubeconfig, server URL pinned to `https://100.75.61.79:6443`, `--insecure-skip-tls-verify=true` due to Tailscale IP not in cert SAN)
+- Direct kubeconfig in use during this incident: `/tmp/anton-direct-kubeconfig` (talosctl kubeconfig, server URL pinned to `https://<k8s-1-tailscale-ip>:6443`, `--insecure-skip-tls-verify=true` due to Tailscale IP not in cert SAN)

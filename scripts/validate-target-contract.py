@@ -8,6 +8,9 @@
 from __future__ import annotations
 
 import re
+import ipaddress
+import json
+import tempfile
 import sys
 from pathlib import Path
 
@@ -20,7 +23,21 @@ from cluster_target_contract import classify_command, resolve_talos_targets  # n
 
 def main() -> int:
     failures: list[str] = []
-    fallback = resolve_talos_targets(REPO, source="fallback", environ={})
+    inventory = json.loads((REPO / "scripts/cluster-targets.json").read_text())
+    if any(set(node) != {"name"} for node in inventory["talos"]["nodes"]):
+        failures.append("public Talos inventory must contain names only")
+    # Validation must work in clean checkouts without private operator state.
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        (root / "scripts").mkdir()
+        (root / ".private").mkdir()
+        (root / "scripts/cluster-targets.json").write_text(json.dumps(inventory))
+        private = {"schema": 1, "talos": {"nodes": [
+            {"name": node["name"], "tailscale_ipv4": f"192.0.2.{i}"}
+            for i, node in enumerate(inventory["talos"]["nodes"], 1)
+        ]}}
+        (root / ".private/cluster-targets.json").write_text(json.dumps(private))
+        fallback = resolve_talos_targets(root, source="fallback", environ={})
     if fallback.source != "fallback" or len(fallback.nodes) != 3:
         failures.append("fallback inventory must resolve exactly three nodes")
     if fallback.addresses() != ",".join(node.address for node in fallback.nodes):
@@ -55,14 +72,22 @@ def main() -> int:
         REPO / ".claude" / "skills" / "talos-inspect" / "references" / "disks.md",
         REPO / ".claude" / "skills" / "talos-inspect" / "references" / "network.md",
     )
-    fallback_addresses = {node.address for node in fallback.nodes}
     for path in pointer_files:
         text = path.read_text(encoding="utf-8")
         if "scripts/cluster-targets.py" not in text:
             failures.append(f"missing target resolver pointer: {path.relative_to(REPO)}")
-        for address in fallback_addresses:
-            if address in text:
-                failures.append(f"copied fallback address outside inventory: {path.relative_to(REPO)}")
+
+    # Detect node-address copies without depending on the operator's private file.
+    tailnet_range = ipaddress.ip_network("100.64.0.0/10")
+    for path in (*pointer_files, REPO / "scripts/cluster-targets.json"):
+        text = path.read_text(encoding="utf-8")
+        for literal in re.findall(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b", text):
+            try:
+                address = ipaddress.ip_address(literal)
+            except ValueError:
+                continue
+            if address in tailnet_range:
+                failures.append(f"private node address in public guidance: {path.relative_to(REPO)}")
 
     task_guidance = (
         REPO / "AGENTS.md",

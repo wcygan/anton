@@ -62,7 +62,7 @@ the problem is upstream (Flux, app, ingress). Hand off to
 
 - **Read-only, always.** Never run `apply-config` without `--mode=no-reboot --dry-run`. This skill does not mutate machine config.
 - **Never paste** `talosconfig`, `controlplane.yaml`, `worker.yaml`, or any `*.sops.*` contents into the conversation. File paths are fine; contents are not.
-- **Never write the real tailnet name** into a committed file — use the placeholder `<tailnet-name>.ts.net` per repo `AGENTS.md`. Keep fallback node addresses in `scripts/cluster-targets.json` only.
+- **Never write the real tailnet name** into a committed file — use the placeholder `<tailnet-name>.ts.net` per repo `AGENTS.md`. Keep fallback node addresses in ignored `.private/cluster-targets.json` only.
 - **Don't improvise a fix.** If inspection reveals a mutation is needed (sysctl patch, version bump, bad disk, dead node), stop and hand off to the right skill.
 - **Cite the docs for anything unfamiliar.** Talos `v1.12` docs at `https://docs.siderolabs.com/talos/v1.12/` — WebFetch before guessing at resource schemas or flag names.
 

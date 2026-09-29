@@ -16,9 +16,9 @@ Monitoring cron `ba4b7418` (10-min cadence, deleted on reboot per the
 
 | Node  | Tailscale IP     | Uptime at 21:14Z | Reboot at    | Reboots during investigation |
 |-------|------------------|------------------|--------------|------------------------------|
-| k8s-1 | 100.75.61.79     | **609906s (7.1d)** | —            | 0 (baseline stable)        |
-| k8s-2 | 100.87.89.3      | 1646s (27m)      | ~2026-04-23 20:47Z | ~13 (pre-ADR-0020 at 3-4h cadence; 1 at 20:34Z on 04-21; this one) |
-| k8s-3 | 100.100.217.100  | 1748s (29m)      | ~2026-04-23 20:45Z | **1 — first reboot of k8s-3 in the entire investigation** |
+| k8s-1 | <k8s-1-tailscale-ip>     | **609906s (7.1d)** | —            | 0 (baseline stable)        |
+| k8s-2 | <k8s-2-tailscale-ip>      | 1646s (27m)      | ~2026-04-23 20:47Z | ~13 (pre-ADR-0020 at 3-4h cadence; 1 at 20:34Z on 04-21; this one) |
+| k8s-3 | <k8s-3-tailscale-ip>  | 1748s (29m)      | ~2026-04-23 20:45Z | **1 — first reboot of k8s-3 in the entire investigation** |
 
 ## Timeline — 2026-04-23 20:30Z → 21:15Z
 
@@ -237,7 +237,7 @@ kubelet-adjacent pods).
 Peer-agent review on 2026-04-24 verified plan 0006 Log line 115:
 
 > 2026-04-23: Controlled-reboot acceptance test — passed. [...] Reboot
-> issued via `talosctl -e 100.100.217.100 -n 100.100.217.100 reboot`
+> issued via `talosctl -e <k8s-3-tailscale-ip> -n <k8s-3-tailscale-ip> reboot`
 > at 20:44:37Z; k8s-3 back to Ready,SchedulingDisabled by 20:49:42Z.
 
 **k8s-3's 20:45Z reboot was an operator-initiated Harbor controlled-

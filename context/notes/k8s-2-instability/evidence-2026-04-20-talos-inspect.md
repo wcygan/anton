@@ -18,11 +18,11 @@ Four things, per `2026-04-20-multi-agent-rca.md`:
 ### Talos runtime watchdog: NOT configured on any node
 
 ```
-$ talosctl -n 100.87.89.3 get watchdogtimerconfigs -o yaml
+$ talosctl -n <k8s-2-tailscale-ip> get watchdogtimerconfigs -o yaml
 (empty)
-$ talosctl -n 100.87.89.3 get watchdogtimerstatuses -o yaml
+$ talosctl -n <k8s-2-tailscale-ip> get watchdogtimerstatuses -o yaml
 (empty)
-$ talosctl -n 100.75.61.79 get watchdogtimerconfigs -o yaml
+$ talosctl -n <k8s-1-tailscale-ip> get watchdogtimerconfigs -o yaml
 (empty)    # k8s-1 baseline
 ```
 

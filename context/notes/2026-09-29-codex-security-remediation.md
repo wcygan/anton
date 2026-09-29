@@ -15,7 +15,7 @@ regression verification, not a new scanner validation or runtime security audit.
 | Admission CEL checked only for tokens | Fixed | `b709c42d`: compare independent complete policy and binding specs; no claim of runtime CEL evaluation |
 | ExternalSecret discovery bypass through YAML spelling | Fixed | `b709c42d`: parse all YAML documents before kind selection |
 | Retained artifact path escape | Fixed | `b709c42d`: resolved containment checks; `ee84a92f`: bounded regular-file reads |
-| Public internal node endpoints | Open design decision | Existing `scripts/AGENTS.md` explicitly retains a committed offline fallback. Moving it to private configuration changes fresh-clone and offline operation. No credentials or public reachability were established; exact values are omitted here. |
+| Public internal node endpoints | Fixed in current source | Public inventory contains names only; endpoints moved to ignored `.private/cluster-targets.json`. Existing local fallback preserved. Fresh clones need live discovery or private setup. Previously published addresses remain in Git history. |
 
 ## All 19 deferred entries
 
@@ -36,7 +36,7 @@ They are not 19 additional confirmed vulnerabilities.
 | `cluster-talos-env-target`, `cluster-kube-env-identity` | Rejected security candidates: intentional operator environment overrides, with no lower-trust setter established. |
 | `cluster-talos-context-switch` | Duplicate of fixed compound-command finding (`5067db7a`). |
 | `baseline-retained-path-traversal`, `airflow-retained-path-traversal` | Duplicates of fixed retained-path finding (`b709c42d`, `ee84a92f`). |
-| `baseline-topology-exposure` | Duplicate of the open endpoint disclosure design decision above. |
+| `baseline-topology-exposure` | Duplicate of the endpoint disclosure fix above. |
 
 ## Final repository hardening
 
@@ -59,3 +59,27 @@ live recovery tests were performed. These checks do not prove deployed revision,
 container compatibility, or complete vulnerability coverage. Retained local
 evidence and operator environment configuration remain trusted inputs; neither
 is a security boundary against an actor controlling the operator account.
+
+## Endpoint privacy follow-up
+
+The private fallback migration closes the last open source finding. Regression
+checks cover complete live discovery and overrides without private state,
+complete-set fallback, malformed/missing private files, and redacted output.
+Validation uses synthetic addresses and does not require operator state. Copies
+of the old endpoints were also redacted from 12 historical records in current
+source, preserving node identity with placeholders.
+No endpoint rotation or Git history rewrite was performed. Historic disclosure
+cannot be undone by this source fix; an address is not an authentication token.
+
+A bounded source inspection of public exposure found no additional confirmed
+exploit: bakery and food-site declare Envoy-only ingress and DNS-only egress;
+the Flux webhook declares GitHub event handling with a secret reference.
+Wildcard tunnel routing and cross-namespace Gateway attachment remain review
+subjects, not independently confirmed internet exploits. A dedicated exposure
+scan, application-source review, rendered-chart inspection, Cloudflare policy
+review, and live enforcement checks remain coverage gaps.
+
+Verification: all repository contracts and 342 Python tests passed; scanner
+frozen install and source dry run passed; Docusaurus production build passed.
+The separate docs typecheck remains blocked by the existing TypeScript 6
+`baseUrl` deprecation in its Docusaurus configuration, unrelated to these edits.

@@ -32,7 +32,7 @@ addresses server-side. Do not pass the Tailscale IPs as
 
 The wrapper resolves all three node targets through one interface. It prefers a
 complete live `tailscale status --json` result and falls back as one set to the
-committed inventory in `scripts/cluster-targets.json`; it never mixes live and
+ignored private inventory in `.private/cluster-targets.json`; it never mixes live and
 fallback addresses. Inspect the selected source with redacted evidence:
 
 ```sh
@@ -52,8 +52,38 @@ TALOS_TAILSCALE_NODES='k8s-1=100.x.x.x,k8s-2=100.x.x.x,k8s-3=100.x.x.x' \
 ```
 
 If an address changes permanently, update the mapping in
-`scripts/cluster-targets.json`; scripts, tasks, hooks, runbooks, and skills all
-consume that interface. Keep the literal tailnet name out of committed files.
+`.private/cluster-targets.json`; scripts, tasks, hooks, runbooks, and skills all
+consume the shared resolver. Keep endpoint addresses and the literal tailnet
+name out of committed files.
+
+### Private fallback setup
+
+The public `scripts/cluster-targets.json` records expected node names and cluster
+identity only. Without complete live discovery, a fresh clone fails closed
+unless the operator supplies the complete environment override above or creates
+`.private/cluster-targets.json`. That directory is already ignored by Git.
+
+Use this shape with current addresses obtained from your trusted node inventory
+(the documentation addresses below must be replaced before use):
+
+```json
+{
+  "schema": 1,
+  "talos": {
+    "nodes": [
+      {"name": "k8s-1", "tailscale_ipv4": "192.0.2.1"},
+      {"name": "k8s-2", "tailscale_ipv4": "192.0.2.2"},
+      {"name": "k8s-3", "tailscale_ipv4": "192.0.2.3"}
+    ]
+  }
+}
+```
+
+Restrict the file to its owner (`chmod 600 .private/cluster-targets.json`) and
+retain it in your private operator backup. Missing, malformed, or mismatched
+fallbacks produce an error; the resolver never mixes partial live results with
+fallback addresses. Without an environment override, `--source live` requires
+discovery and never uses fallback.
 
 ## Flux version
 

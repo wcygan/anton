@@ -328,6 +328,24 @@ def _live_nodes(status: dict, expected_names: tuple[str, ...]) -> tuple[NodeTarg
     return tuple(NodeTarget(name, discovered[name]) for name in expected_names)
 
 
+def _private_fallback_nodes(root: Path, expected_names: tuple[str, ...]) -> tuple[NodeTarget, ...]:
+    """Read operator-owned endpoints without publishing them in Git."""
+    path = root / ".private" / "cluster-targets.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("schema") != 1:
+            raise ValueError("unsupported schema")
+        nodes = _validated_nodes(data["talos"]["nodes"])
+        if tuple(node.name for node in nodes) != expected_names:
+            raise ValueError("node set mismatch")
+        return nodes
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise ValueError(
+            "private Talos fallback unavailable or invalid; configure "
+            ".private/cluster-targets.json or TALOS_TAILSCALE_NODES"
+        ) from None
+
+
 def resolve_talos_targets(
     root: Path,
     *,
@@ -339,14 +357,19 @@ def resolve_talos_targets(
         raise ValueError(f"unsupported target source {source!r}")
     environment = os.environ if environ is None else environ
     inventory = load_inventory(root)
-    fallback = _validated_nodes(inventory["talos"]["nodes"])
-    expected_names = tuple(node.name for node in fallback)
+    expected_names = tuple(node["name"] for node in inventory["talos"]["nodes"])
+    if (
+        not expected_names
+        or any(not isinstance(name, str) or not name for name in expected_names)
+        or len(set(expected_names)) != len(expected_names)
+    ):
+        raise ValueError("cluster targets require unique non-empty node names")
 
     override = environment.get("TALOS_TAILSCALE_NODES", "").strip()
     if override:
         return TargetResolution(parse_mapping(override, expected_names), "override")
     if source == "fallback":
-        return TargetResolution(fallback, "fallback")
+        return TargetResolution(_private_fallback_nodes(root, expected_names), "fallback")
 
     status = _tailscale_status(runner)
     live = _live_nodes(status, expected_names) if status else None
@@ -355,7 +378,7 @@ def resolve_talos_targets(
     if source == "live":
         raise ValueError("live Tailscale status did not resolve every Anton node")
     reason = "tailscale status unavailable" if status is None else "live node set incomplete"
-    return TargetResolution(fallback, "fallback", reason)
+    return TargetResolution(_private_fallback_nodes(root, expected_names), "fallback", reason)
 
 
 def expected_kube_context(
@@ -1216,7 +1239,15 @@ def preflight_command(
                 )
                 continue
             if actual == expected:
-                resolution = resolve_talos_targets(root, environ=environ, runner=runner)
+                try:
+                    resolution = resolve_talos_targets(root, environ=environ, runner=runner)
+                except (OSError, ValueError, KeyError, TypeError):
+                    violations.append(PreflightViolation(
+                        operation.binary, operation.subcommand, "unresolved inventory",
+                        "complete Anton Talos node inventory",
+                        "cannot resolve Talos targets; configure live discovery or private fallback",
+                    ))
+                    continue
                 allowed = {
                     value
                     for node in resolution.nodes

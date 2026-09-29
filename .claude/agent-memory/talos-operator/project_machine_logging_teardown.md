@@ -16,4 +16,4 @@ talosctl --talosconfig ./talos/clusterconfig/talosconfig \
   --endpoints <tailscale-ip> --nodes <tailscale-ip> \
   apply-config --file ./talos/clusterconfig/kubernetes-<node>.yaml --mode=auto
 ```
-Tailscale IPs at the time: k8s-1=100.75.61.79, k8s-2=100.87.89.3, k8s-3=100.100.217.100. The Taskfile `task talos:apply-node` precondition uses LAN endpoints and fails off-LAN — direct talosctl is the working path.
+Tailscale IPs at the time: k8s-1=<k8s-1-tailscale-ip>, k8s-2=<k8s-2-tailscale-ip>, k8s-3=<k8s-3-tailscale-ip>. The Taskfile `task talos:apply-node` precondition uses LAN endpoints and fails off-LAN — direct talosctl is the working path.

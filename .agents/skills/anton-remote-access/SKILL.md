@@ -46,6 +46,11 @@ For direct inspection, resolve the effective set with
 comma-separated result for `--nodes`. The health wrapper is preferred because
 it probes the complete set before running the server-side health check.
 
+Fallback addresses live in ignored `.private/cluster-targets.json`; the public
+inventory contains node names only. Fresh clones use complete live Tailscale
+discovery or an explicit `TALOS_TAILSCALE_NODES` override until private fallback
+setup is complete. See `docs/docs/runbooks/talos-health.md` for the file format.
+
 ## Mutation Handoff
 
 For apply, upgrade, reset, drain, delete, or reconcile commands, first present the exact command, target node or namespace, expected effect, and rollback or verification step. Proceed only after the operator explicitly approves that action.

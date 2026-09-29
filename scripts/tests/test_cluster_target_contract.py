@@ -6,6 +6,8 @@ import json
 import re
 import sys
 import unittest
+import tempfile
+import shutil
 from pathlib import Path
 
 
@@ -40,29 +42,76 @@ class Runner:
 
 
 class ClusterTargetContractTests(unittest.TestCase):
-    @staticmethod
-    def _talos_lan_addresses() -> list[str]:
-        source = (REPO / "talos" / "talconfig.yaml").read_text(encoding="utf-8")
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        for relative in ("scripts/cluster-targets.json", "talos/talconfig.yaml"):
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO / relative, target)
+        private = self.root / ".private" / "cluster-targets.json"
+        private.parent.mkdir()
+        private.write_text(json.dumps({"schema": 1, "talos": {"nodes": [
+            {"name": f"k8s-{i}", "tailscale_ipv4": f"192.0.2.{i}"}
+            for i in range(1, 4)
+        ]}}))
+
+    def test_missing_private_inventory_fails_closed(self) -> None:
+        (self.root / ".private" / "cluster-targets.json").unlink()
+        with self.assertRaisesRegex(ValueError, "private Talos fallback"):
+            resolve_talos_targets(self.root, environ={}, runner=Runner({}))
+
+    def test_missing_private_inventory_returns_blocking_preflight_violation(self) -> None:
+        (self.root / ".private" / "cluster-targets.json").unlink()
+        runner = Runner({("talosctl", "config", "info"): "Current context: kubernetes\n"})
+        violations = preflight_command("talosctl reboot", self.root, environ={}, runner=runner)
+        self.assertEqual(len(violations), 1)
+        self.assertIn("cannot resolve Talos targets", violations[0].message)
+
+    def test_live_discovery_does_not_require_private_inventory(self) -> None:
+        (self.root / ".private" / "cluster-targets.json").unlink()
+        self.test_uses_complete_live_tailscale_inventory()
+
+    def test_complete_override_does_not_require_private_inventory(self) -> None:
+        (self.root / ".private" / "cluster-targets.json").unlink()
+        result = resolve_talos_targets(self.root, environ={
+            "TALOS_TAILSCALE_NODES": "k8s-1=192.0.2.1,k8s-2=192.0.2.2,k8s-3=192.0.2.3",
+        }, runner=Runner({}))
+        self.assertEqual(result.source, "override")
+
+    def test_invalid_private_inventory_fails_closed(self) -> None:
+        private = self.root / ".private" / "cluster-targets.json"
+        cases = ["bad JSON", "{}", '{"schema": 2}', json.dumps({
+            "schema": 1, "talos": {"nodes": [{"name": "other", "tailscale_ipv4": "192.0.2.1"}]}
+        })]
+        for payload in cases:
+            private.write_text(payload)
+            with self.subTest(payload=payload), self.assertRaisesRegex(ValueError, "private Talos fallback"):
+                resolve_talos_targets(self.root, source="fallback", environ={}, runner=Runner({}))
+
+    def _talos_lan_addresses(self) -> list[str]:
+        source = (self.root / "talos" / "talconfig.yaml").read_text(encoding="utf-8")
         return re.findall(r'(?m)^\s+ipAddress:\s*["\']?([^"\'\s]+)', source)
 
     def test_committed_talos_context_matches_generated_config(self) -> None:
-        source = (REPO / "talos" / "talconfig.yaml").read_text(encoding="utf-8")
+        source = (self.root / "talos" / "talconfig.yaml").read_text(encoding="utf-8")
         cluster = re.search(r"(?m)^clusterName:\s*(\S+)", source)
         self.assertIsNotNone(cluster)
-        self.assertEqual(expected_talos_context(REPO, environ={}), cluster.group(1))
-        self.assertEqual(expected_talos_cluster(REPO), cluster.group(1))
+        self.assertEqual(expected_talos_context(self.root, environ={}), cluster.group(1))
+        self.assertEqual(expected_talos_cluster(self.root), cluster.group(1))
 
     def test_uses_complete_live_tailscale_inventory(self) -> None:
         live = {"k8s-1": "100.64.0.1", "k8s-2": "100.64.0.2", "k8s-3": "100.64.0.3"}
         runner = Runner({("tailscale", "status", "--json"): status(live)})
-        result = resolve_talos_targets(REPO, environ={}, runner=runner)
+        result = resolve_talos_targets(self.root, environ={}, runner=runner)
         self.assertEqual(result.source, "live")
         self.assertEqual({node.name: node.address for node in result.nodes}, live)
 
     def test_falls_back_as_one_complete_set(self) -> None:
         partial = {"k8s-1": "100.64.0.1"}
         runner = Runner({("tailscale", "status", "--json"): status(partial)})
-        result = resolve_talos_targets(REPO, environ={}, runner=runner)
+        result = resolve_talos_targets(self.root, environ={}, runner=runner)
         self.assertEqual(result.source, "fallback")
         self.assertEqual(result.fallback_reason, "live node set incomplete")
         self.assertEqual(len(result.nodes), 3)
@@ -79,20 +128,20 @@ class ClusterTargetContractTests(unittest.TestCase):
                 ): status(live),
             }
         )
-        result = resolve_talos_targets(REPO, environ={}, runner=runner)
+        result = resolve_talos_targets(self.root, environ={}, runner=runner)
         self.assertEqual(result.source, "live")
 
     def test_redacted_evidence_hides_addresses(self) -> None:
-        result = resolve_talos_targets(REPO, source="fallback", environ={})
+        result = resolve_talos_targets(self.root, source="fallback", environ={})
         evidence = result.evidence()
         self.assertTrue(all(node["address"] == "<redacted>" for node in evidence["nodes"]))
 
     def test_address_list_preserves_resolved_node_order(self) -> None:
-        result = resolve_talos_targets(REPO, source="fallback", environ={})
+        result = resolve_talos_targets(self.root, source="fallback", environ={})
         self.assertEqual(result.addresses().split(","), [node.address for node in result.nodes])
 
     def test_anton_kubectl_prefix_binds_verified_context_and_endpoint(self) -> None:
-        canonical = str(REPO / "kubeconfig")
+        canonical = str(self.root / "kubeconfig")
         expected = "expected-context"
         expected_endpoint = "https://expected.invalid"
         endpoint_query = ("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
@@ -122,7 +171,7 @@ class ClusterTargetContractTests(unittest.TestCase):
             }
         )
         prefix = anton_kubectl_prefix(
-            REPO,
+            self.root,
             environ={"ANTON_KUBE_CONTEXT": expected, "ANTON_KUBE_ENDPOINT": expected_endpoint},
             runner=runner,
         )
@@ -144,14 +193,14 @@ class ClusterTargetContractTests(unittest.TestCase):
         runner = Runner({})
         with self.assertRaisesRegex(TargetPreflightError, "cannot resolve Kubernetes context") as caught:
             anton_kubectl_prefix(
-                REPO,
+                self.root,
                 environ={"ANTON_KUBE_CONTEXT": "expected-context"},
                 runner=runner,
             )
         self.assertNotIn("expected-context", str(caught.exception))
 
     def test_anton_kubectl_prefix_rejects_wrong_context_without_identity(self) -> None:
-        canonical = str(REPO / "kubeconfig")
+        canonical = str(self.root / "kubeconfig")
         runner = Runner(
             {
                 (
@@ -168,7 +217,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(TargetPreflightError, "context is not the Anton target") as caught:
             anton_kubectl_prefix(
-                REPO,
+                self.root,
                 environ={
                     "ANTON_KUBE_CONTEXT": "expected-context",
                     "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
@@ -179,7 +228,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertNotIn("expected-context", str(caught.exception))
 
     def test_anton_kubectl_prefix_rejects_wrong_endpoint_without_identity(self) -> None:
-        canonical = str(REPO / "kubeconfig")
+        canonical = str(self.root / "kubeconfig")
         expected = "expected-context"
         endpoint_query = ("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
         runner = Runner(
@@ -209,7 +258,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(TargetPreflightError, "endpoint is not the Anton target") as caught:
             anton_kubectl_prefix(
-                REPO,
+                self.root,
                 environ={
                     "ANTON_KUBE_CONTEXT": expected,
                     "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
@@ -220,7 +269,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertNotIn("expected.invalid", str(caught.exception))
 
     def test_anton_kubectl_prefix_rejects_self_referential_operator_kubeconfig(self) -> None:
-        canonical = str(REPO / "kubeconfig")
+        canonical = str(self.root / "kubeconfig")
         untrusted_context = "tailscale-operator.untrusted.invalid"
         endpoint_query = ("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
         runner = Runner(
@@ -250,7 +299,7 @@ class ClusterTargetContractTests(unittest.TestCase):
             }
         )
         with self.assertRaisesRegex(TargetPreflightError, "context is not the Anton target") as caught:
-            anton_kubectl_prefix(REPO, environ={}, runner=runner)
+            anton_kubectl_prefix(self.root, environ={}, runner=runner)
         self.assertNotIn("untrusted", str(caught.exception))
 
     def test_classifies_wrapped_commands(self) -> None:
@@ -275,7 +324,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertEqual(command_path[0].classification, "ambiguous-mutation")
         violations = preflight_command(
             "command -p kubectl apply -f app.yaml",
-            REPO,
+            self.root,
             environ={"ANTON_KUBE_CONTEXT": "expected-context"},
             runner=Runner({}),
         )
@@ -311,20 +360,20 @@ class ClusterTargetContractTests(unittest.TestCase):
             "kubectl apply -f app.yaml; kubectl config use-context other",
         ):
             with self.subTest(command=command):
-                violations = preflight_command(command, REPO, environ={}, runner=unexpected_probe)
+                violations = preflight_command(command, self.root, environ={}, runner=unexpected_probe)
                 self.assertEqual(len(violations), 1)
                 self.assertIn("separate commands", violations[0].message)
 
     def test_standalone_configuration_change_remains_allowed(self) -> None:
         self.assertEqual(preflight_command(
-            "kubectl config use-context other", REPO, environ={}, runner=Runner({})
+            "kubectl config use-context other", self.root, environ={}, runner=Runner({})
         ), [])
 
     def test_preflight_rejects_explicit_wrong_context(self) -> None:
         runner = Runner({("kubectl", "config", "current-context"): "expected-context"})
         violations = preflight_command(
             "kubectl --context definitely-wrong delete pod demo",
-            REPO,
+            self.root,
             environ={"ANTON_KUBE_CONTEXT": "expected-context"},
             runner=runner,
         )
@@ -341,7 +390,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertEqual(repeated_kube.server, "https://last.invalid")
         repeated_violations = preflight_command(
             "kubectl --context expected-context --context definitely-wrong apply -f app.yaml",
-            REPO,
+            self.root,
             environ={
                 "ANTON_KUBE_CONTEXT": "expected-context",
                 "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
@@ -368,7 +417,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         talos_violations = preflight_command(
             "talosctl --context kubernetes --context wrong reboot",
-            REPO,
+            self.root,
             environ={},
             runner=Runner({}),
         )
@@ -402,7 +451,7 @@ class ClusterTargetContractTests(unittest.TestCase):
             with self.subTest(command=command):
                 violations = preflight_command(
                     command,
-                    REPO,
+                    self.root,
                     environ={"ANTON_KUBE_CONTEXT": "expected-context"},
                     runner=Runner({("kubectl", "config", "current-context"): "expected-context"}),
                 )
@@ -429,7 +478,7 @@ class ClusterTargetContractTests(unittest.TestCase):
             with self.subTest(command=command):
                 violations = preflight_command(
                     command,
-                    REPO,
+                    self.root,
                     environ={"ANTON_KUBE_CONTEXT": "expected-context"},
                     runner=runner,
                 )
@@ -440,7 +489,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         runner = Runner({("kubectl", "config", "current-context"): "expected-context"})
         violations = preflight_command(
             "/tmp/kubectl apply -f app.yaml",
-            REPO,
+            self.root,
             environ={"ANTON_KUBE_CONTEXT": "expected-context"},
             runner=runner,
         )
@@ -449,7 +498,7 @@ class ClusterTargetContractTests(unittest.TestCase):
 
         wrapped = preflight_command(
             "mise exec -- /tmp/kubectl apply -f app.yaml",
-            REPO,
+            self.root,
             environ={"ANTON_KUBE_CONTEXT": "expected-context"},
             runner=runner,
         )
@@ -486,7 +535,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertEqual(
             preflight_command(
                 "mise --cd /tmp exec -- kubectl apply -f app.yaml",
-                REPO,
+                self.root,
                 environ={
                     "ANTON_KUBE_CONTEXT": "expected-context",
                     "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
@@ -514,7 +563,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertEqual(
             preflight_command(
                 "mise exec -- talosctl reboot",
-                REPO,
+                self.root,
                 environ={},
                 runner=runner,
             ),
@@ -543,7 +592,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertEqual(
             preflight_command(
                 "TALOSCONFIG=./talos/clusterconfig/talosconfig talosctl reboot",
-                REPO,
+                self.root,
                 environ={},
                 runner=runner,
             ),
@@ -553,7 +602,7 @@ class ClusterTargetContractTests(unittest.TestCase):
     def test_indirect_read_remains_read_only(self) -> None:
         operations = classify_command("sudo kubectl get pods -A")
         self.assertEqual(operations[0].classification, "read")
-        self.assertEqual(preflight_command("sudo kubectl get pods -A", REPO, environ={}), [])
+        self.assertEqual(preflight_command("sudo kubectl get pods -A", self.root, environ={}), [])
 
     def test_preflight_honors_command_scoped_kubeconfig(self) -> None:
         runner = Runner(
@@ -563,7 +612,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         violations = preflight_command(
             "KUBECONFIG=/tmp/wrong kubectl delete pod demo",
-            REPO,
+            self.root,
             environ={"ANTON_KUBE_CONTEXT": "expected-context"},
             runner=runner,
         )
@@ -578,7 +627,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         violations = preflight_command(
             "kubectl --kubeconfig=/tmp/wrong delete pod demo",
-            REPO,
+            self.root,
             environ={"ANTON_KUBE_CONTEXT": "expected-context"},
             runner=runner,
         )
@@ -593,7 +642,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         violations = preflight_command(
             "kubectl --server https://wrong.invalid apply -f app.yaml",
-            REPO,
+            self.root,
             environ={
                 "ANTON_KUBE_CONTEXT": "expected-context",
                 "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
@@ -620,7 +669,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         violations = preflight_command(
             "KUBECONFIG=/tmp/other kubectl apply -f app.yaml",
-            REPO,
+            self.root,
             environ={
                 "ANTON_KUBE_CONTEXT": "expected-context",
                 "ANTON_KUBE_ENDPOINT": "https://expected.invalid",
@@ -646,7 +695,7 @@ class ClusterTargetContractTests(unittest.TestCase):
             with self.subTest(command=command):
                 violations = preflight_command(
                     command,
-                    REPO,
+                    self.root,
                     environ={"ANTON_TALOS_CONTEXT": "expected-context"},
                     runner=runner,
                 )
@@ -662,14 +711,14 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         violations = preflight_command(
             "talosctl --nodes 203.0.113.99 reboot",
-            REPO,
+            self.root,
             environ={},
             runner=runner,
         )
         self.assertEqual(len(violations), 1)
         self.assertIn("target", violations[0].message)
 
-        implicit = preflight_command("talosctl reboot", REPO, environ={}, runner=runner)
+        implicit = preflight_command("talosctl reboot", self.root, environ={}, runner=runner)
         self.assertEqual(len(implicit), 1)
         self.assertIn("target", implicit[0].message)
 
@@ -681,7 +730,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         violations = preflight_command(
             "talosctl --cluster other reboot",
-            REPO,
+            self.root,
             environ={},
             runner=runner,
         )
@@ -694,7 +743,7 @@ class ClusterTargetContractTests(unittest.TestCase):
 
     def test_preflight_fails_closed_when_context_is_missing(self) -> None:
         runner = Runner({("tailscale", "status", "--json"): None, ("kubectl", "config", "current-context"): None})
-        violations = preflight_command("kubectl apply -f app.yaml", REPO, environ={}, runner=runner)
+        violations = preflight_command("kubectl apply -f app.yaml", self.root, environ={}, runner=runner)
         self.assertEqual(len(violations), 1)
         self.assertIn("cannot resolve", violations[0].message)
 
@@ -709,9 +758,9 @@ class ClusterTargetContractTests(unittest.TestCase):
                 ("kubectl", "--context", expected, *endpoint_query): f"https://{expected}",
             }
         )
-        self.assertEqual(preflight_command("kubectl exec pod -- true", REPO, environ={}, runner=runner), [])
+        self.assertEqual(preflight_command("kubectl exec pod -- true", self.root, environ={}, runner=runner), [])
 
-        canonical_config = str(REPO / "kubeconfig")
+        canonical_config = str(self.root / "kubeconfig")
         canonical_runner = Runner(
             {
                 (
@@ -739,7 +788,7 @@ class ClusterTargetContractTests(unittest.TestCase):
             }
         )
         self.assertEqual(
-            preflight_command("kubectl apply -f app.yaml", REPO, environ={}, runner=canonical_runner),
+            preflight_command("kubectl apply -f app.yaml", self.root, environ={}, runner=canonical_runner),
             [],
         )
 
@@ -752,7 +801,7 @@ class ClusterTargetContractTests(unittest.TestCase):
         )
         violations = preflight_command(
             "kubectl apply -f app.yaml",
-            REPO,
+            self.root,
             environ={},
             runner=wrong_endpoint,
         )

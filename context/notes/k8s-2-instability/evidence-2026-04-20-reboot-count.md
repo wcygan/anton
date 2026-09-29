@@ -38,7 +38,7 @@ This finding **independently corroborates cluster-triage's "zombies persist acro
 
 ## Secondary data: talosctl boot resources
 
-`talosctl -n 100.87.89.3 get bootedentries` returned an empty result set on k8s-2 — resource is registered but empty. `bootstatuses` is not a registered resource on this Talos version (v1.12.6). The node's boot history via talosctl requires a different path (machined log, `get machinestatus`, dmesg).
+`talosctl -n <k8s-2-tailscale-ip> get bootedentries` returned an empty result set on k8s-2 — resource is registered but empty. `bootstatuses` is not a registered resource on this Talos version (v1.12.6). The node's boot history via talosctl requires a different path (machined log, `get machinestatus`, dmesg).
 
 ## Implications for the plan
 

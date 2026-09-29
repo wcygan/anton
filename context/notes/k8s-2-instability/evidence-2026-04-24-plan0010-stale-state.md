@@ -31,7 +31,7 @@ were present.
 Source:
 
 ```text
-talosctl -n 100.87.89.3 --endpoints=100.75.61.79 \
+talosctl -n <k8s-2-tailscale-ip> --endpoints=<k8s-1-tailscale-ip> \
   --talosconfig=/Users/wcygan/Development/anton/talos/clusterconfig/talosconfig \
   containers -k
 ```
@@ -55,7 +55,7 @@ line in the 1000-line tail was a kubelet proxy broken-pipe message at
 Source:
 
 ```text
-talosctl -n 100.87.89.3 --endpoints=100.75.61.79 \
+talosctl -n <k8s-2-tailscale-ip> --endpoints=<k8s-1-tailscale-ip> \
   --talosconfig=/Users/wcygan/Development/anton/talos/clusterconfig/talosconfig \
   logs kubelet --tail=1000
 ```

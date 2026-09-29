@@ -25,7 +25,7 @@ mise exec -- kubectl get nodes
 
 Talos inspection resolves `k8s-1`, `k8s-2`, and `k8s-3` through
 `scripts/cluster-targets.py`. It accepts a complete live `tailscale status
---json` result or falls back as one set to `scripts/cluster-targets.json`; it
+--json` result or falls back as one set to ignored `.private/cluster-targets.json`; it
 never mixes live and fallback addresses. Generated LAN endpoints remain valid
 only from the home network.
 
@@ -76,8 +76,9 @@ mise exec -- kubectl config view --minify
 
 Per the top-level repository rule, keep the real tailnet name out of Git. Use
 `<tailnet-name>.ts.net` in documentation, examples, and commit messages. The
-only committed Tailscale node-address fallback is
-`scripts/cluster-targets.json`; other docs and skills consume its resolver.
+committed `scripts/cluster-targets.json` contains node names only. Keep fallback
+addresses in ignored `.private/cluster-targets.json`; all callers consume the
+shared resolver. See `docs/docs/runbooks/talos-health.md` for private setup.
 
 If you discover a real tailnet name in the working tree, do not commit until it has been replaced with the placeholder.
 

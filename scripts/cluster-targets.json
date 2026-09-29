@@ -8,9 +8,15 @@
     "context": "kubernetes",
     "cluster": "kubernetes",
     "nodes": [
-      {"name": "k8s-1", "tailscale_ipv4": "100.75.61.79"},
-      {"name": "k8s-2", "tailscale_ipv4": "100.87.89.3"},
-      {"name": "k8s-3", "tailscale_ipv4": "100.100.217.100"}
+      {
+        "name": "k8s-1"
+      },
+      {
+        "name": "k8s-2"
+      },
+      {
+        "name": "k8s-3"
+      }
     ]
   }
 }

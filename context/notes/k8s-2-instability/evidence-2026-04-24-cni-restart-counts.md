@@ -132,8 +132,8 @@ operator-initiated controlled-reboot acceptance test on k8s-3:
 
 - 20:35:41Z cordoned k8s-3
 - 20:35:57Z drain started
-- 20:44:37Z reboot issued via `talosctl -e 100.100.217.100 -n
-  100.100.217.100 reboot`
+- 20:44:37Z reboot issued via `talosctl -e <k8s-3-tailscale-ip> -n
+  <k8s-3-tailscale-ip> reboot`
 - 20:49:42Z k8s-3 back Ready (~5 min; normal Talos reboot cadence)
 
 The "k8s-3 reboot at 20:45Z" this file treats as cascade evidence is
