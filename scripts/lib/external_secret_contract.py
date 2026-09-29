@@ -234,22 +234,18 @@ def validate_admission_guard(documents: list[dict[str, Any]]) -> tuple[str, ...]
         if isinstance(rule, dict)
     ):
         failures.append("admission guard must match ExternalSecret CREATE and UPDATE")
-    expressions = "\n".join(
-        validation.get("expression", "")
-        for validation in policy.get("spec", {}).get("validations", [])
-        if isinstance(validation, dict)
+    # Pin the reviewed full specs, not tokens that can survive in dead CEL
+    # branches. Changes to expressions or selectors require explicit review of
+    # this independent contract. This is a drift check, not a CEL interpreter.
+    expected_specs = load_inventory(
+        Path(__file__).resolve().parents[1] / "data" / "external-secret-admission-contract.json"
     )
-    required_fragments = (
-        "onepassword-connect",
-        REFRESH_CLASS_ANNOTATION,
-        "duration('24h')",
-        "remoteRef.key.matches",
-        "!has(entry.remoteRef.property)",
-        "dataFrom",
-    )
-    for fragment in required_fragments:
-        if fragment not in expressions:
-            failures.append(f"admission guard is missing expression fragment {fragment!r}")
+    if len(documents) != 2 or {document.get("kind") for document in documents} != set(expected_specs):
+        failures.append("admission guard must contain exactly one policy and one binding")
+    for document in documents:
+        kind = document.get("kind")
+        if kind in expected_specs and document.get("spec") != expected_specs[kind]:
+            failures.append(f"admission guard {kind} spec differs from the reviewed contract")
     if binding is None:
         failures.append("admission guard must define a ValidatingAdmissionPolicyBinding")
     else:
@@ -277,19 +273,15 @@ def load_yaml_documents(repo: Path, path: Path) -> list[dict[str, Any]]:
 def load_external_secrets(repo: Path) -> dict[str, dict[str, Any]]:
     documents: dict[str, dict[str, Any]] = {}
     root = repo / "kubernetes" / "apps"
-    for path in sorted(root.rglob("*.yaml")):
-        text = path.read_text(encoding="utf-8")
-        if "kind: ExternalSecret" not in text:
-            continue
-        result = subprocess.run(
-            ["yq", "-o=json", ".", str(path)],
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            raise ValueError(f"cannot parse {path.relative_to(repo)}: {result.stderr.strip()}")
-        document = json.loads(result.stdout)
-        documents[path.relative_to(repo).as_posix()] = document
+    for path in sorted(path for path in root.rglob("*") if path.suffix in {".yaml", ".yml"}):
+        parsed = load_yaml_documents(repo, path)
+        for index, document in enumerate(parsed):
+            if not isinstance(document, dict) or document.get("kind") != "ExternalSecret":
+                continue
+            key = path.relative_to(repo).as_posix()
+            # Existing inventory keys identify single-document manifests.
+            # Multiple documents get distinct identities and must be approved.
+            if len(parsed) != 1:
+                key += f"#document-{index + 1}"
+            documents[key] = document
     return documents

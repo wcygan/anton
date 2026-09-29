@@ -25,6 +25,7 @@ from airflow_lakehouse_operations import (  # noqa: E402
     _loki_summary,
     _resource_summary,
     _retained_artifact_passed,
+    _retained_evidence,
     _task_pod_image_matches,
     airflow_loki_query,
     application_outcome,
@@ -61,6 +62,28 @@ from airflow_lakehouse_recovery import (  # noqa: E402
     _retry_probe_code,
     build_recovery_plan,
 )
+
+
+class RetainedArtifactContainmentTests(unittest.TestCase):
+    def test_artifact_paths_stay_inside_ledger_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            inside = evidence / "valid.json"
+            inside.write_text('{"passed": true}')
+            outside = root / "outside.json"
+            outside.write_text('{"sentinel": "must-not-be-returned"}')
+            (evidence / "escape.json").symlink_to(outside)
+            ledger = evidence / "ledger.json"
+            for reference in ("../outside.json", str(outside), "escape.json", "valid.json"):
+                with self.subTest(reference=reference):
+                    ledger.write_text(json.dumps({"runs": [{"run_id": "test", "evidence": {"artifact": reference}}]}))
+                    if reference == "valid.json":
+                        self.assertEqual(_retained_evidence(ledger, "test")["artifacts"], {"artifact": {"passed": True}})
+                    else:
+                        with self.assertRaisesRegex(OperationError, "ledger directory"):
+                            _retained_evidence(ledger, "test")
 
 
 def _load_identity_module():

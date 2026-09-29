@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import copy
+import json
+import tempfile
+from pathlib import Path
+
 import unittest
 
-from scripts.lib.external_secret_contract import validate_admission_guard, validate_contract
+from scripts.lib.external_secret_contract import load_external_secrets, validate_admission_guard, validate_contract
 
 
 PATH = "kubernetes/apps/example/app/externalsecret.yaml"
@@ -53,6 +58,58 @@ def inventory() -> dict:
             }
         },
     }
+
+
+class AdmissionPolicyContractTests(unittest.TestCase):
+    def setUp(self):
+        path = Path(__file__).resolve().parents[1] / "data/external-secret-admission-contract.json"
+        self.documents = [
+            {"kind": kind, "metadata": {"name": "external-secret-onepassword-guard"}, "spec": spec}
+            for kind, spec in json.loads(path.read_text()).items()
+        ]
+
+    def test_accepts_reviewed_spec(self):
+        self.assertEqual(validate_admission_guard(self.documents), ())
+
+    def test_rejects_permissive_expression_with_original_tokens(self):
+        for index in range(len(self.documents[0]["spec"]["validations"])):
+            documents = copy.deepcopy(self.documents)
+            validation = documents[0]["spec"]["validations"][index]
+            validation["expression"] = "true || (" + validation["expression"] + ")"
+            self.assertTrue(validate_admission_guard(documents))
+
+    def test_rejects_selectors_that_skip_validation(self):
+        for index in (0, 1):
+            documents = copy.deepcopy(self.documents)
+            documents[index]["spec"].setdefault("matchResources" if index else "matchConstraints", {})["namespaceSelector"] = {"matchLabels": {"skip": "yes"}}
+            self.assertTrue(validate_admission_guard(documents))
+
+
+class ExternalSecretDiscoveryTests(unittest.TestCase):
+    def test_discovers_quoted_kind_flow_yaml_and_yml(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            root = repo / "kubernetes/apps/example"
+            root.mkdir(parents=True)
+            for filename, content in (
+                ("quoted.yaml", '\"kind\": ExternalSecret\nmetadata: {name: quoted}\n'),
+                ("flow.yml", json.dumps(manifest())),
+            ):
+                (root / filename).write_text(content)
+            documents = load_external_secrets(repo)
+            self.assertEqual(len(documents), 2)
+            self.assertTrue(all(item["kind"] == "ExternalSecret" for item in documents.values()))
+            self.assertTrue(any("not approved" in failure for failure in validate_contract(documents, inventory()).failures))
+
+    def test_keeps_multiple_documents_distinct(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            root = repo / "kubernetes/apps/example"
+            root.mkdir(parents=True)
+            (root / "multiple.yaml").write_text("\n---\n".join(json.dumps(manifest()) for _ in range(2)))
+            documents = load_external_secrets(repo)
+            self.assertEqual(len(documents), 2)
+            self.assertTrue(any("not approved" in failure for failure in validate_contract(documents, inventory()).failures))
 
 
 class ExternalSecretContractTests(unittest.TestCase):

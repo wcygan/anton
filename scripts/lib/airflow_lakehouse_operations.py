@@ -960,8 +960,11 @@ def _retained_evidence(ledger_path: Path | None, run_id: str) -> dict[str, Any] 
     for name, relative in evidence.items():
         if not isinstance(relative, str):
             continue
-        path = ledger_path.parent / relative
         try:
+            root = ledger_path.parent.resolve()
+            path = (root / relative).resolve()
+            if Path(relative).is_absolute() or not path.is_relative_to(root):
+                raise OperationError("retained artifact must stay within the ledger directory")
             artifacts[str(name)] = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             artifacts[str(name)] = {"error": "artifact cannot be read", "path": relative}
