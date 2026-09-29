@@ -1,4 +1,4 @@
-# anton
+# Anton security policy
 
 ## What this codebase does
 
@@ -62,3 +62,22 @@ cluster state: this scan cannot prove that the cluster currently matches Git.
 - The repository's security audit scripts intentionally invoke read-only
   `kubectl`, Trivy, and Kubescape checks; they do not themselves prove a
   vulnerability in the cluster.
+
+## Review and verification policy
+
+Codex Security is the source-review tool; see `.codex-security/README.md` for
+setup and `.agents/skills/codex-security/SKILL.md` for the agent workflow.
+The scanner reviews committed intent, not the running cluster. Findings need
+cited source, attacker prerequisites, affected boundaries, and explicit coverage
+limits. Runtime validation must use an isolated test environment; static
+reasoning alone must not be labeled a reproduced exploit.
+
+Use the narrowest necessary privileges. Infrastructure exceptions require a
+specific operational reason and bounded scope. Compare network isolation with
+ADR 0029, while treating its desired posture separately from deployment proof.
+Keep raw findings private; publish only reviewed, sanitized summaries.
+
+Remediate at the authoritative owner and validate the change with relevant
+repository contracts. For live findings, record the fix revision, Flux
+reconciliation, applied configuration, controller readiness, and user-visible
+verification before marking the issue resolved. A merged patch is insufficient.

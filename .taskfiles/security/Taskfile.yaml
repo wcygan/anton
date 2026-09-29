@@ -3,6 +3,16 @@ version: '3'
 
 tasks:
 
+  source-check:
+    desc: Validate Codex Security source-scan configuration without model calls
+    dir: '{{.ROOT_DIR}}/.codex-security'
+    cmd: pnpm check
+    preconditions:
+      - which pnpm node
+      - test -f package.json
+      - test -f codex-security.yaml
+      - test -f node_modules/@openai/codex-security/package.json
+
   audit:
     desc: Run agentless Trivy configuration/RBAC and Kubescape NSA scans
     cmd: bash {{.SCRIPTS_DIR}}/security-audit.sh cluster
