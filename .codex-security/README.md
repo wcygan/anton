@@ -56,6 +56,29 @@ trusted revision outside the assessed checkout when reviewing untrusted PRs.
 Scanning is report-only; omit patching, PR creation, publishing, and post-scan
 automation. Stop on unexpected source changes and retain the diff for review.
 
+## Public exposure review
+
+Use the saved `public-exposure-review.md` prompt to trace unauthenticated
+Internet access through Cloudflare, Envoy, routes, and public workloads, then
+assess possible access to private resources after a workload compromise.
+This replaces the initial scripts scope with `kubernetes/apps`; application
+source in other repositories and live Cloudflare settings remain separate
+review work. It uses the configured `gpt-6-luna` in standard mode with no cost
+cap. It runs one scan to completion, not an indefinite scan or repair loop.
+
+From `.codex-security` in the isolated environment described above:
+
+```sh
+pnpm exec codex-security scan .. \
+  --config codex-security.yaml \
+  --auth chatgpt \
+  --path kubernetes/apps \
+  --scan-prompt-file public-exposure-review.md
+```
+
+Append `--dry-run` to validate these inputs without starting model work.
+Results remain in the scanner's private state directory outside the checkout.
+
 ## Review and retain evidence
 
 Use the installed CLI to discover saved-result commands:
