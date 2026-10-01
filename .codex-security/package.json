@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Pinned Codex Security tooling for Anton source reviews",
-  "packageManager": "pnpm@11.15.1",
+  "packageManager": "pnpm@12.8.1",
   "engines": {
     "node": "^22.13.0 || ^24.0.0 || ^26.0.0"
   },
