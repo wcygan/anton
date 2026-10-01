@@ -2,7 +2,7 @@
 # the resulting image digest in spark-fixture/app/job.yaml before rollout.
 # Digest observed during the offline build; keep the Harbor release input
 # reproducible instead of resolving the mutable upstream tag at rollout time.
-FROM apache/spark:3.5.9-python3@sha256:af02a459c8706e031c835c16f9db3c463816776e2543dd0f828af65606bcf392
+FROM apache/spark:4.2.0-python3@sha256:fc64959c04bd87b0ac686be9aaa9008b69cdb1afc695400528279c8b01f43d89
 
 USER root
 ARG ICEBERG_VERSION=1.5.2
