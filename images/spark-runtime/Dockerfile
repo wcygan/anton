@@ -23,7 +23,7 @@ RUN mvn --batch-mode --no-transfer-progress dependency:tree -DoutputFile=/build/
  && mvn --batch-mode --no-transfer-progress dependency:copy-dependencies \
       -DincludeScope=runtime -DoutputDirectory=/build/jars
 
-FROM apache/spark:4.1.3-scala2.13-java21-python3-ubuntu@sha256:bf9d035a7c32a8ca46aa58d6348182ffd7d2dff6409206ecfbb3915ff1fef211
+FROM apache/spark:4.2.0-scala2.13-java21-python3-ubuntu@sha256:fc64959c04bd87b0ac686be9aaa9008b69cdb1afc695400528279c8b01f43d89
 USER root
 COPY --from=python /opt/python /opt/python
 COPY --from=dependencies /build/jars/ /opt/spark/jars/
