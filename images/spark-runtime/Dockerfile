@@ -1,5 +1,5 @@
 # Build context: repository root. The final image makes no dependency downloads.
-FROM ubuntu:22.04@sha256:b8b6ee6aa931ecd9d0d952abc34dc0e5f7c6a30c6bb71b079fe399fde0329c02 AS python
+FROM ubuntu:26.04@sha256:3595d7fc4286a33fad0fd853a4063e654287a9c3787437d7937c94ca3f7a804e AS python
 ARG PYTHON_VERSION=3.12.11
 ARG PYTHON_SHA256=7b8d59af8216044d2313de8120bfc2cc00a9bd2e542f15795e1d616c51faf3d6
 RUN apt-get update \
