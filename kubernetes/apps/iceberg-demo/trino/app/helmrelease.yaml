@@ -8,7 +8,7 @@ spec:
     spec:
       chart: trino
       # renovate: registryUrl=https://trinodb.github.io/charts
-      version: 1.42.2
+      version: 1.44.0
       sourceRef:
         kind: HelmRepository
         name: trino
