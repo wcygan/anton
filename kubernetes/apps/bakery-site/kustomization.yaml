@@ -7,4 +7,3 @@ components:
 
 resources:
   - ./namespace.yaml
-  - ./server/ks.yaml
