@@ -11,6 +11,12 @@ spec:
         apiVersions: ["v1"]
         operations: ["CREATE", "UPDATE"]
         resources: ["externalsecrets"]
+  # Permit only explicitly marked metadata updates to existing hourly objects.
+  # CREATE and credential/refresh spec changes still use the normal guard.
+  variables:
+    - name: legacyMetadataOnly
+      expression: >-
+        request.operation == 'UPDATE' && oldObject != null && has(object.metadata.annotations) && 'anton.wcygan.net/preserve-legacy-spec' in object.metadata.annotations && object.metadata.annotations['anton.wcygan.net/preserve-legacy-spec'] == 'true' && has(oldObject.spec.refreshPolicy) && oldObject.spec.refreshPolicy == 'Periodic' && has(oldObject.spec.refreshInterval) && duration(oldObject.spec.refreshInterval) == duration('1h') && object.spec == oldObject.spec
   validations:
     - expression: >-
         has(object.spec.secretStoreRef) &&
@@ -19,15 +25,15 @@ spec:
         object.spec.secretStoreRef.name == 'onepassword-connect'
       message: ExternalSecrets must use ClusterSecretStore onepassword-connect.
     - expression: >-
-        has(object.metadata.annotations) &&
+        (has(object.metadata.annotations) &&
         'anton.wcygan.net/secret-refresh-class' in object.metadata.annotations &&
-        object.metadata.annotations['anton.wcygan.net/secret-refresh-class'] in ['stable', 'development']
+        object.metadata.annotations['anton.wcygan.net/secret-refresh-class'] in ['stable', 'development']) || variables.legacyMetadataOnly
       message: ExternalSecrets must declare a stable or development refresh class.
     - expression: >-
-        object.spec.refreshPolicy == 'OnChange' ||
+        (object.spec.refreshPolicy == 'OnChange' ||
         (object.spec.refreshPolicy == 'Periodic' &&
         has(object.spec.refreshInterval) &&
-        duration(object.spec.refreshInterval) >= duration('24h'))
+        duration(object.spec.refreshInterval) >= duration('24h'))) || variables.legacyMetadataOnly
       message: ExternalSecrets must use OnChange or a Periodic interval of at least 24h.
     - expression: >-
         !has(object.spec.data) || object.spec.data.all(entry,

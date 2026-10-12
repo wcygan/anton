@@ -68,6 +68,11 @@ class AdmissionPolicyContractTests(unittest.TestCase):
             for kind, spec in json.loads(path.read_text()).items()
         ]
 
+    def test_rejects_widened_legacy_metadata_exception(self):
+        documents = copy.deepcopy(self.documents)
+        documents[0]['spec']['variables'][0]['expression'] = 'true'
+        self.assertTrue(validate_admission_guard(documents))
+
     def test_accepts_reviewed_spec(self):
         self.assertEqual(validate_admission_guard(self.documents), ())
 
