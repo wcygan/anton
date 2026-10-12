@@ -8,3 +8,6 @@ spec:
     - dnsName: "echo.${SECRET_DOMAIN_THREE}"
       recordType: CNAME
       targets: ["external.${SECRET_DOMAIN_THREE}"]
+    - dnsName: "echo.${SECRET_DOMAIN}"
+      recordType: CNAME
+      targets: ["external.${SECRET_DOMAIN}"]

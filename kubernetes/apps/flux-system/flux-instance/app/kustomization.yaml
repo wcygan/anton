@@ -8,6 +8,7 @@ resources:
   - ./externalsecret.yaml
   - ./image-automation-gitrepository.yaml
   - ./httproute.yaml
+  - ./dnsendpoint.yaml
   - ./receiver.yaml
   - ./podmonitor.yaml
   - ./networkpolicy.yaml

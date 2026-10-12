@@ -22,10 +22,10 @@ spec:
       - --cloudflare-proxied
       - --crd-source-apiversion=externaldns.k8s.io/v1alpha1
       - --crd-source-kind=DNSEndpoint
-      - --gateway-name=envoy-external
     triggerLoopOnEvent: true
     policy: sync
-    sources: ["crd", "gateway-httproute"]
+    # Tunnel CNAMEs are authoritative; Gateway status contains private LAN IPs.
+    sources: ["crd"]
     txtPrefix: k8s.
     txtOwnerId: default
     domainFilters: ["${SECRET_DOMAIN}", "${SECRET_DOMAIN_TWO}", "${SECRET_DOMAIN_THREE}"]
@@ -33,6 +33,5 @@ spec:
       enabled: true
     podAnnotations:
       secret.reloader.stakater.com/reload: *secret
-    # external-dns is the DNS write path to Cloudflare for HTTPRoute hosts;
-    # without it new routes never resolve externally.
+    # Public routes declare explicit DNSEndpoints targeting the shared tunnel.
     priorityClassName: system-cluster-critical
