@@ -4,6 +4,7 @@ kind: ImageUpdateAutomation
 metadata:
   name: homepage
 spec:
+  suspend: true
   interval: 5m
   sourceRef:
     kind: GitRepository
