@@ -132,7 +132,7 @@ Public site verification:
 
 ### Batch 2: bulk force-delete of remaining `Unknown` ghosts on k8s-1 (2026-05-05T20:05Z)
 
-Used a single `xargs -L1 -P5` parallel sweep against `kubectl get pods -A` filtered to phase=`Unknown`. Scope: every namespace including network/cloudflare-dns + envoy-internal old replica, kube-system (hubble, metrics-server, reloader, terminating coredns), cert-manager, external-secrets, default (echo + homepage), csgoplant (app x2 + dragonfly + postgres-1), databases (cnpg + dragonfly-operator), observability (prometheus + grafana + kps-operator), registries (harbor jobservice/nginx/portal x2/postgres x3/redis x3/registry), storage (csi-attacher x2 / csi-provisioner x3 / csi-resizer x2 / csi-snapshotter x3 / engine-image / longhorn-driver-deployer / longhorn-manager / longhorn-ui x2 / seaweedfs-filer-1 / seaweedfs-master-0,1,2 / seaweedfs-volume-1,2), tailscale (ts-grafana statefulset pod).
+Used a single `xargs -L1 -P5` parallel sweep against `kubectl get pods -A` filtered to phase=`Unknown`. Scope: every namespace including network/cloudflare-dns + envoy-internal old replica, kube-system (hubble, metrics-server, reloader, terminating coredns), cert-manager, external-secrets, default (echo + sample-site-a), csgoplant (app x2 + dragonfly + postgres-1), databases (cnpg + dragonfly-operator), observability (prometheus + grafana + kps-operator), registries (harbor jobservice/nginx/portal x2/postgres x3/redis x3/registry), storage (csi-attacher x2 / csi-provisioner x3 / csi-resizer x2 / csi-snapshotter x3 / engine-image / longhorn-driver-deployer / longhorn-manager / longhorn-ui x2 / seaweedfs-filer-1 / seaweedfs-master-0,1,2 / seaweedfs-volume-1,2), tailscale (ts-grafana statefulset pod).
 
 All Unknown pods cleared from the API. ReplicaSets / StatefulSets / DaemonSets actively re-creating replacements; scheduler placing them on k8s-2 and k8s-3 (with some still binding on k8s-1 as it stabilizes).
 
@@ -218,7 +218,7 @@ kubectl uncordon k8s-1
 kubectl delete pod -n storage \
   engine-image-ei-…hrpbf longhorn-driver-deployer-…ht4mj longhorn-manager-swvxg \
   --force --grace-period=0
-kubectl delete pod -n bakery-site bakery-server-75d74bdf57-sh2d9 --force --grace-period=0
+kubectl delete pod -n sample-site-c sample-site-c-server-75d74bdf57-sh2d9 --force --grace-period=0
 kubectl delete pod -n registries \
   harbor-core-…dghsv harbor-core-…s7j9z harbor-exporter-…f78cg harbor-registry-…rr4d8 \
   --force --grace-period=0
@@ -227,7 +227,7 @@ kubectl delete pod -n storage \
   csi-attacher-…msfdv csi-resizer-…gtsf4 longhorn-csi-plugin-h2s8m \
   --force --grace-period=0
 ```
-Reason: pods that were `Error` / `Completed` / `Init:0/1` from before the reboot needed force-replace so DaemonSets / ReplicaSets create fresh pods against the new k8s-1 kubelet/containerd. The `bakery-server` pod had exited cleanly (`exitCode 0` at `2026-05-05T20:27:37Z`) during the reboot's stopAllPods phase but the kubelet didn't restart it (state-loss during reboot); replacing the pod brings the bakery back.
+Reason: pods that were `Error` / `Completed` / `Init:0/1` from before the reboot needed force-replace so DaemonSets / ReplicaSets create fresh pods against the new k8s-1 kubelet/containerd. The `sample-site-c-server` pod had exited cleanly (`exitCode 0` at `2026-05-05T20:27:37Z`) during the reboot's stopAllPods phase but the kubelet didn't restart it (state-loss during reboot); replacing the pod brings the bakery back.
 
 ### Public-site recovery confirmed (2026-05-05T20:32Z, post-reboot)
 
@@ -261,7 +261,7 @@ $ kubectl get nodes                            → all 3 Ready
 - ✅ Harbor full stack 1/1 across the board (core ×2, exporter, postgres ×3, redis ×3, portal ×2, nginx, registry)
 - ✅ Longhorn full stack 3/3 nodes (csi-plugin, manager, instance-manager) — all 3 CSINodes registered with `driver.longhorn.io`
 - ✅ csgoplant-app-…55rj4 1/1 Running on k8s-3, csgoplant-postgres-1 1/1 Running on k8s-3, csgoplant-dragonfly-0 1/1 Running on k8s-2 — backing the recovered <public-site-A>
-- ✅ bakery-server-…hzzzl 1/1 Running on k8s-3 — backing the recovered <public-site-B>
+- ✅ sample-site-c-server-…hzzzl 1/1 Running on k8s-3 — backing the recovered <public-site-B>
 - ⏳ Two pods still finishing their initial Run after force-replace at 20:34Z: `harbor-jobservice-…zn9n4` and `seaweedfs-volume-1` (both ContainerCreating, <30 s old, expected to settle within a minute)
 
 ### Recovery summary
@@ -274,7 +274,7 @@ $ kubectl get nodes                            → all 3 Ready
 | Mitigate batch 2 | 20:05Z | Bulk force-delete of all remaining `Unknown` ghosts | ~50 pods cleared; storage / Harbor / observability stacks begin re-converging |
 | Mitigate batch 3 | 20:09Z | Cordon k8s-1 + force-delete pods stuck on k8s-1 to reschedule onto k8s-2/k8s-3 | csgoplant + harbor + seaweedfs StatefulSets escape k8s-1 kubelet wedge; `<public-site-A>` 200 |
 | Repair k8s-1 | 20:29Z | Graceful reboot of k8s-1 via `talosctl reboot --mode=default` | New boot ID `65fc58fd…`; kubelet healthy; etcd term unchanged at 32 |
-| Mitigate batch 5 | 20:30Z | Uncordon k8s-1, force-replace stale `Error` / `Completed` pods (bakery-server, harbor-core, harbor-exporter, harbor-registry, kube-state-metrics, csi-attacher, csi-resizer, longhorn-csi-plugin) so DaemonSets/ReplicaSets create fresh pods against the new kubelet | Cluster fully recovers |
+| Mitigate batch 5 | 20:30Z | Uncordon k8s-1, force-replace stale `Error` / `Completed` pods (sample-site-c-server, harbor-core, harbor-exporter, harbor-registry, kube-state-metrics, csi-attacher, csi-resizer, longhorn-csi-plugin) so DaemonSets/ReplicaSets create fresh pods against the new kubelet | Cluster fully recovers |
 | Steady state | 20:35Z | Final verification | 2 pods left in ContainerCreating (Harbor jobservice + seaweedfs-volume-1), both freshly recreated; everything else Running |
 
 ### Hypothesis update for plan 0009

@@ -34,20 +34,20 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: bakery-site
+              kubernetes.io/metadata.name: sample-site-c
           podSelector:
             matchLabels:
               app.kubernetes.io/controller: server
-              app.kubernetes.io/instance: bakery-server
-              app.kubernetes.io/name: bakery-server
+              app.kubernetes.io/instance: sample-site-c-server
+              app.kubernetes.io/name: sample-site-c-server
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: food-site
+              kubernetes.io/metadata.name: sample-site-b
           podSelector:
             matchLabels:
               app.kubernetes.io/controller: server
-              app.kubernetes.io/instance: food-site-server
-              app.kubernetes.io/name: food-site-server
+              app.kubernetes.io/instance: sample-site-b-server
+              app.kubernetes.io/name: sample-site-b-server
       ports:
         - {port: 8000, protocol: TCP}
     - to:
@@ -56,14 +56,14 @@ spec:
               kubernetes.io/metadata.name: default
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: homepage
-        # CS2Plant is deployed from its application repository, outside Anton.
+              app.kubernetes.io/name: sample-site-a
+        # sample-site-d is deployed from its application repository, outside Anton.
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: cs2plant
+              kubernetes.io/metadata.name: sample-site-d
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: cs2plant
+              app.kubernetes.io/name: sample-site-d
               app.kubernetes.io/component: web
       ports:
         - {port: 3000, protocol: TCP}

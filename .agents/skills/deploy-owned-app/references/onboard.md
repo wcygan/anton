@@ -23,14 +23,14 @@ Ask, in order, only what isn't already known from context:
 
 Read `<app-repo>/Dockerfile`. If it exists, skip. If not, generate one based on the stack:
 
-- **Bun + TanStack Start (static)**: multi-stage Bun build → nginx-unprivileged on 8080. Reference: `/Users/wcygan/Development/homepage/Dockerfile`.
+- **Bun + TanStack Start (static)**: multi-stage Bun build → nginx-unprivileged on 8080. Reference: `/Users/wcygan/Development/sample-site-a/Dockerfile`.
 - **Node app (server)**: multi-stage Node build → distroless on 3000.
 - **Go**: scratch + static binary.
 - **Other**: ask the operator and use a sensible default.
 
 ### A2. GH Actions workflow
 
-Author `<app-repo>/.github/workflows/build.yaml`. Reference shape: `/Users/wcygan/Development/homepage/.github/workflows/build.yaml`. Key constraints:
+Author `<app-repo>/.github/workflows/build.yaml`. Reference shape: `/Users/wcygan/Development/sample-site-a/.github/workflows/build.yaml`. Key constraints:
 
 - Trigger: `push: branches: [main]` plus `workflow_dispatch: {}`
 - `permissions: { contents: read, packages: write }`
@@ -96,7 +96,7 @@ Layout under `kubernetes/apps/<ns>/<app>/`:
     └── imageupdateautomation.yaml  image.toolkit.fluxcd.io/v1beta2 (NOT v1beta1 — see plan 0012)
 ```
 
-Reference all of these at `/Users/wcygan/Development/anton/kubernetes/apps/default/homepage/` — copy and adapt.
+Reference all of these at `/Users/wcygan/Development/anton/kubernetes/apps/default/sample-site-a/` — copy and adapt.
 
 Critical details (each one is a recorded pitfall from plan 0012):
 

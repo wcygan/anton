@@ -8,11 +8,11 @@ they do not establish or fix an initial Internet compromise.
 | Selected workload | Allowed destinations |
 | --- | --- |
 | cloudflared | CoreDNS TCP/UDP 53; external Envoy TCP 10443; the 20 published global Cloudflare IPv4 tunnel endpoints TCP 7844 |
-| external Envoy | CoreDNS TCP/UDP 53; Envoy Gateway xDS TCP 18000; bakery/food-site TCP 8000; homepage/CS2Plant TCP 3000; echo TCP 80; Flux webhook TCP 9292 |
+| external Envoy | CoreDNS TCP/UDP 53; Envoy Gateway xDS TCP 18000; bakery/sample-site-b TCP 8000; sample-site-a/sample-site-d TCP 3000; echo TCP 80; Flux webhook TCP 9292 |
 
 The exact pod labels, Service target ports, public HTTPRoute backends, and
 readiness were observed through the verified Anton context on 2026-09-29.
-CS2Plant's route and workload are managed outside this repository, so they must
+sample-site-d's route and workload are managed outside this repository, so they must
 remain in the inventory and be rechecked before rollout. No SecurityPolicy or
 EnvoyExtensionPolicy was present at that observation time; new external auth,
 tracing, rate limiting, WASM, or backend dependencies need explicit exceptions.
@@ -62,3 +62,7 @@ or node-origin traffic. Kubernetes policies are additive; an overlapping allow
 policy can widen egress. DNS and authorized upstreams remain permitted channels.
 Router NAT, UPnP, IPv6 firewall, NodePorts, and direct-origin ingress require a
 separate external-network review.
+
+Public application selectors in these files are neutral test fixtures, not live
+application inventories. Actual application-specific proposals and evidence are
+maintained privately. These draft files remain unregistered with Flux.

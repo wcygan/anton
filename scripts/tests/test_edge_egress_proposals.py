@@ -92,10 +92,10 @@ class EdgeEgressProposalTests(unittest.TestCase):
     def test_envoy_retains_each_public_backend_on_its_pod_port(self):
         policy = self.policies["envoy-external"]
         cases = [
-            ("bakery-site", {"app.kubernetes.io/controller": "server", "app.kubernetes.io/instance": "bakery-server", "app.kubernetes.io/name": "bakery-server"}, 8000),
-            ("food-site", {"app.kubernetes.io/controller": "server", "app.kubernetes.io/instance": "food-site-server", "app.kubernetes.io/name": "food-site-server"}, 8000),
-            ("default", {"app.kubernetes.io/name": "homepage"}, 3000),
-            ("cs2plant", {"app.kubernetes.io/name": "cs2plant", "app.kubernetes.io/component": "web"}, 3000),
+            ("sample-site-c", {"app.kubernetes.io/controller": "server", "app.kubernetes.io/instance": "sample-site-c-server", "app.kubernetes.io/name": "sample-site-c-server"}, 8000),
+            ("sample-site-b", {"app.kubernetes.io/controller": "server", "app.kubernetes.io/instance": "sample-site-b-server", "app.kubernetes.io/name": "sample-site-b-server"}, 8000),
+            ("default", {"app.kubernetes.io/name": "sample-site-a"}, 3000),
+            ("sample-site-d", {"app.kubernetes.io/name": "sample-site-d", "app.kubernetes.io/component": "web"}, 3000),
             ("default", {"app.kubernetes.io/controller": "echo", "app.kubernetes.io/instance": "echo", "app.kubernetes.io/name": "echo"}, 80),
             ("flux-system", {"app": "notification-controller", "app.kubernetes.io/component": "notification-controller", "app.kubernetes.io/part-of": "flux"}, 9292),
         ]

@@ -1,6 +1,6 @@
 ---
 name: deploy-owned-app
-description: Drive the full lifecycle of an owned anton app deployed via Flux image-automation (ADR 0024 / plan 0012). Two modes auto-detected by checking for an existing `ImageRepository`. **Onboard mode** (new app, no ImageRepository found) — guides authoring the Dockerfile + GH Actions workflow in the app repo, flipping the GHCR package public, scaffolding the anton-side manifests (Deployment + Service + HTTPRoute + DNSEndpoint + 3 image-automation CRs), wiring them into the parent kustomization, committing, and watching the first rollout. **Redeploy mode** (ImageRepository exists) — short-circuits the default 5m polling cadence: `flux reconcile image repository/update`, GitRepository fetch, Kustomization apply, deployment rollout watch, public-URL HTTP-200 check. Works for any owned app following the ADR 0024 / plan 0012 pattern (homepage today, others later). On stuck loops, reports where it failed and hands off to `debug-flux-reconciliation`. Keywords — deploy, deploy app, deploy homepage, redeploy, redeploy app, redeploy homepage, onboard app, new owned app, set up app, kick flux, force reconcile, force redeploy, image-automation, image update, GHCR, deploy now, see it live, watch the loop, verify deploy.
+description: Drive the full lifecycle of an owned anton app deployed via Flux image-automation (ADR 0024 / plan 0012). Two modes auto-detected by checking for an existing `ImageRepository`. **Onboard mode** (new app, no ImageRepository found) — guides authoring the Dockerfile + GH Actions workflow in the app repo, flipping the GHCR package public, scaffolding the anton-side manifests (Deployment + Service + HTTPRoute + DNSEndpoint + 3 image-automation CRs), wiring them into the parent kustomization, committing, and watching the first rollout. **Redeploy mode** (ImageRepository exists) — short-circuits the default 5m polling cadence: `flux reconcile image repository/update`, GitRepository fetch, Kustomization apply, deployment rollout watch, public-URL HTTP-200 check. Works for any owned app following the ADR 0024 / plan 0012 pattern (sample-site-a today, others later). On stuck loops, reports where it failed and hands off to `debug-flux-reconciliation`. Keywords — deploy, deploy app, deploy sample-site-a, redeploy, redeploy app, redeploy sample-site-a, onboard app, new owned app, set up app, kick flux, force reconcile, force redeploy, image-automation, image update, GHCR, deploy now, see it live, watch the loop, verify deploy.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 argument-hint: <app-name> [--no-force] [--no-watch] [--no-verify]
 ---
@@ -112,7 +112,7 @@ See [references/troubleshoot.md](references/troubleshoot.md) for the full failur
 - `debug-flux-reconciliation` — what to run when this skill stops on a stuck reconcile.
 - `anton-cluster-health` — when the failure looks cluster-wide rather than app-specific.
 - `observability-integrate` — wire a deploy-frequency / image-automation-success panel after the first successful onboard.
-- ADRs/plans: [`0024`](../../../context/adrs/0024-adopt-image-automation-for-owned-apps.md) (decision), [`0012`](../../../context/plans/0012-image-automation-homepage-rollout.md) (homepage as canonical example), [`0023`](../../../context/adrs/0023-shared-cloudflare-tunnel-only.md) (shared tunnel; gateway constraint).
+- ADRs/plans: [`0024`](../../../context/adrs/0024-adopt-image-automation-for-owned-apps.md) (decision), [`0012`](../../../context/plans/0012-image-automation-sample-site-a-rollout.md) (sample-site-a as canonical example), [`0023`](../../../context/adrs/0023-shared-cloudflare-tunnel-only.md) (shared tunnel; gateway constraint).
 
 ## Anti-patterns
 
@@ -124,7 +124,7 @@ See [references/troubleshoot.md](references/troubleshoot.md) for the full failur
 
 ## Example sessions
 
-User: `/deploy-owned-app homepage` (already exists in cluster)
+User: `/deploy-owned-app sample-site-a` (already exists in cluster)
 
 Skill detects ImageRepository → redeploy mode → kicks chain → watches rollout → verifies HTTPS 200 → reports "32s end-to-end."
 
@@ -132,10 +132,10 @@ User: `/deploy-owned-app newproject` (no ImageRepository found)
 
 Skill detects no ImageRepository → onboard mode → asks: app repo path, registry (GHCR/Harbor), gateway choice, hostname → scaffolds 10 files → presents diff → on user confirm, commits + pushes → watches first reconcile → verifies HTTPS 200 → reports "onboarded in 4m12s."
 
-User: `redeploy homepage` (description-triggered)
+User: `redeploy sample-site-a` (description-triggered)
 
-Skill detects existing ImageRepository → redeploy mode → same as `/deploy-owned-app homepage`.
+Skill detects existing ImageRepository → redeploy mode → same as `/deploy-owned-app sample-site-a`.
 
-User: `/deploy-owned-app homepage --no-force`
+User: `/deploy-owned-app sample-site-a --no-force`
 
 Status print only — no reconciles fired. Useful when paired with a tail of `flux events` to passively observe.

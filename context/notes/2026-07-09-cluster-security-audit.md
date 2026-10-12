@@ -61,7 +61,7 @@ inventory; the durable repository record is the normalized summary below.
 
 Two deployed images could not be scanned from the audit host:
 
-1. The private Harbor `cs2plant` image was unreachable from the current
+1. The private Harbor `sample-site-d` image was unreachable from the current
    off-LAN path.
 2. A digest-pinned private GHCR bakery image rejected anonymous access.
 

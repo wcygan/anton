@@ -23,12 +23,12 @@ Anton was bootstrapped from `onedr0p/cluster-template`, which ships a `.renovate
 
 This works well for the artifacts Renovate is designed for: upstream Helm charts, mirrored images (`mirror.gcr.io/...`), GitHub Actions, and base-image digests. It does **not** fit two adjacent use cases that have now arrived:
 
-1. The `nu-sync/homepage` app — a brand-new Bun + TanStack Start static site, public, expected to ship frequently, where "deploys eventually after a code push" is the goal but a weekly Renovate batch is too slow and the merge gate is friction without value.
+1. The `nu-sync/sample-site-a` app — a brand-new Bun + TanStack Start static site, public, expected to ship frequently, where "deploys eventually after a code push" is the goal but a weekly Renovate batch is too slow and the merge gate is friction without value.
 2. `csgoplant` — an existing private app currently deployed via a local `just deploy` script that bypasses GitOps entirely (builds, pushes to Harbor's anonymous-pull `library/` project, applies manifests via `kubectl`). The script-driven flow is a drift risk and is not how every other anton workload is managed.
 
 Both want a path that is *pull-based* (Flux watches the registry; CI's only job is "build and push"), supports multiple deploys per day, and works at the controller level rather than per-repo.
 
-The 2026-04-30 web research pass showed the homelab community (`onedr0p/home-ops`, `buroa/k8s-gitops`, `szinn/k8s-homelab`, `nickclyde/homelab`, `gabe565/home-ops` and other cluster-template descendants) overwhelmingly skips Flux's image-automation controllers and uses Renovate exclusively, *because* their owned-app deploy frequency is low. anton diverges here only because the homepage and csgoplant deploy cadences are higher than the cluster-template-default Renovate model serves cleanly. Renovate stays for everything else; image-automation is added on top, scoped narrowly to images the operator builds.
+The 2026-04-30 web research pass showed the homelab community (`onedr0p/home-ops`, `buroa/k8s-gitops`, `szinn/k8s-homelab`, `nickclyde/homelab`, `gabe565/home-ops` and other cluster-template descendants) overwhelmingly skips Flux's image-automation controllers and uses Renovate exclusively, *because* their owned-app deploy frequency is low. anton diverges here only because the sample-site-a and csgoplant deploy cadences are higher than the cluster-template-default Renovate model serves cleanly. Renovate stays for everything else; image-automation is added on top, scoped narrowly to images the operator builds.
 
 The two controllers (`image-reflector-controller` scans registries; `image-automation-controller` writes commits) are first-class Flux components — they slot into the existing `flux-instance.spec.values.instance.components` list, share the same deploy key as the rest of Flux's GitOps loop, and emit events through the existing `notification-controller`. There is no new credential surface beyond per-private-registry pull tokens (which would be needed under any strategy that uses a private registry).
 
@@ -60,7 +60,7 @@ Anton will adopt Flux image-automation on a two-track model:
 
 6. **Tracking is layered, not single-source.** The five existing layers (anton's git log filtered to `--author=flux`, `flux get image {repository,policy,update}`, `flux events`, notification-controller `Alert` to a chat webhook, and Prometheus metrics from the new controllers via the existing kube-prometheus-stack PodMonitor) are sufficient. The minimum-viable subset is **git log + a notification-controller `Alert`**; the metrics dashboard is optional and deferred.
 
-The first concrete adopter is `nu-sync/homepage`. `csgoplant` will follow once the existing local `just deploy` script is retired, manifests are migrated into anton (separate work), and a Harbor private project replaces the current `library/` push target.
+The first concrete adopter is `nu-sync/sample-site-a`. `csgoplant` will follow once the existing local `just deploy` script is retired, manifests are migrated into anton (separate work), and a Harbor private project replaces the current `library/` push target.
 
 ## Alternatives considered
 
@@ -74,7 +74,7 @@ The first concrete adopter is `nu-sync/homepage`. `csgoplant` will follow once t
 
 - **`imagePullPolicy: Always` + scheduled `kubectl rollout restart`.** Rejected — fights immutable-tag discipline, doesn't pick up tag changes Flux can see, and trades GitOps reproducibility for a cron job.
 
-- **Harbor as the universal registry for owned apps (including public ones).** Rejected — for the public homepage there is no privacy benefit, GHCR is free and outside the cluster's failure boundary, and Harbor's authenticated-push realm-URL bug (`kubernetes/apps/registries/CLAUDE.md`) is unfixed. GHCR for public sidesteps both. Harbor remains correct for private owned apps where the privacy is the point.
+- **Harbor as the universal registry for owned apps (including public ones).** Rejected — for the public sample-site-a there is no privacy benefit, GHCR is free and outside the cluster's failure boundary, and Harbor's authenticated-push realm-URL bug (`kubernetes/apps/registries/CLAUDE.md`) is unfixed. GHCR for public sidesteps both. Harbor remains correct for private owned apps where the privacy is the point.
 
 - **GHCR-private + imagePullSecret as the universal registry.** Rejected for private apps because Harbor already runs, is SeaweedFS-backed, gives free in-cluster pulls via Spegel, and is the registry ADR 0015 already justified.
 
@@ -107,8 +107,8 @@ Wire a `notification-controller` `Provider` + `Alert` for `ImageRepository` and 
 ## Follow-ups
 
 - [ ] Add `image-reflector-controller` and `image-automation-controller` to `kubernetes/apps/flux-system/flux-instance/app/helmrelease.yaml` `components:` list.
-- [ ] Author `kubernetes/apps/default/homepage/` as the first concrete adopter (3-file Flux pattern + the three image-automation CRs + GHCR public package). Use the `add-flux-app` skill.
-- [ ] Author the matching `nu-sync/homepage` GitHub repo with a Dockerfile and a GitHub Actions workflow whose only job is "build, push to GHCR, done." No cross-repo write to anton.
+- [ ] Author `kubernetes/apps/default/sample-site-a/` as the first concrete adopter (3-file Flux pattern + the three image-automation CRs + GHCR public package). Use the `add-flux-app` skill.
+- [ ] Author the matching `nu-sync/sample-site-a` GitHub repo with a Dockerfile and a GitHub Actions workflow whose only job is "build, push to GHCR, done." No cross-repo write to anton.
 - [ ] Wire a `notification-controller` `Provider` + `Alert` for `ImageRepository` / `ImageUpdateAutomation` events on first adoption.
-- [ ] After homepage is stable, plan the csgoplant migration: Harbor private project, robot accounts, ExternalSecret for the pull token, manifests into `kubernetes/apps/csgoplant/`, retire `csgoplant/scripts/deploy.py`. Capture as a `planner` plan, not inline here.
+- [ ] After sample-site-a is stable, plan the csgoplant migration: Harbor private project, robot accounts, ExternalSecret for the pull token, manifests into `kubernetes/apps/csgoplant/`, retire `csgoplant/scripts/deploy.py`. Capture as a `planner` plan, not inline here.
 - [ ] If Renovate ever opens a noisy PR for an owned-app image (race condition between the two writers), add an exclusion `packageRule` for owned-app image patterns to `.renovaterc.json5`. Defer until observed.

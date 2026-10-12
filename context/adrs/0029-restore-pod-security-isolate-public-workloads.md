@@ -23,7 +23,7 @@ This supersedes ADR 0025 because the threat model has changed. The 2026-07-09
 security audit found that Anton deletes Talos's default PodSecurity admission
 configuration, leaves several namespaces unlabeled, and has only two live
 NetworkPolicies despite multiple Cloudflare-routed workloads. It also found an
-ingress rule in cs2plant that allows its application port from every source.
+ingress rule in sample-site-d that allows its application port from every source.
 
 ADR 0025 correctly kept chart-shipped NetworkPolicies enabled, but deferred
 targeted default-deny isolation and treated Cilium's `allowLocalhost: always`
@@ -70,5 +70,5 @@ route, probe, metrics, and dependency checks before the next workload changes.
 ## Follow-ups
 
 - [ ] Label all committed namespaces and restore Talos's default PodSecurity configuration.
-- [ ] Add and validate targeted isolation for cs2plant, bakery, echo, homepage, and the Flux webhook.
+- [ ] Add and validate targeted isolation for sample-site-d, bakery, echo, sample-site-a, and the Flux webhook.
 - [ ] Track privileged namespace exceptions in plan 0019 and narrow them as host workloads are redesigned.

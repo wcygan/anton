@@ -86,19 +86,17 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 54)
+        self.assertEqual(len(MODULE.discover_application_roots()), 51)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [
                 "kubernetes/apps/airflow/airflow/app",
                 "kubernetes/apps/airflow/airflow-database/app",
                 "kubernetes/apps/airflow/flight-recorder/app",
-                "kubernetes/apps/bakery-site/server/app",
                 "kubernetes/apps/cert-manager/cert-manager/app",
                 "kubernetes/apps/databases/cloudnative-pg/app",
                 "kubernetes/apps/databases/dragonfly-operator/app",
                 "kubernetes/apps/default/echo/app",
-                "kubernetes/apps/default/homepage/app",
                 "kubernetes/apps/external-secrets/external-secrets/app",
                 "kubernetes/apps/external-secrets/onepassword-store/app",
                 "kubernetes/apps/flux-system/auxiliary/app",

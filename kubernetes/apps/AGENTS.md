@@ -37,7 +37,7 @@ Use SOPS for bootstrap or infrastructure secrets that must exist before ESO is r
 
 ## Exposure Policy
 
-Attach HTTPRoutes to `envoy-internal` for LAN/internal access and `envoy-external` only for Cloudflare-fronted public access. Secondary domains require a `DNSEndpoint`; HTTPRoute annotations alone are insufficient.
+Attach HTTPRoutes to `envoy-internal` for LAN/internal access and `envoy-external` only for Cloudflare-fronted public access. Every public hostname requires an explicit tunnel-CNAME `DNSEndpoint`; the Cloudflare DNS controller uses only its CRD source. HTTPRoute status addresses are private gateway IPs and must not be published as proxied A records.
 
 ## Validation
 

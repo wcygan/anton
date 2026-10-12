@@ -36,7 +36,7 @@ The first tolerated cohort should be deliberately boring:
 Preferred implementation when Stage A begins: create or enable a purpose-built
 `playground` Deployment such as `k8s-2-rejoin-smoke` with 5-10 small replicas,
 the rejoin toleration, and no service-critical role. Existing app candidates
-like `default/echo` or `bakery-site/bakery-server` can be used later only if
+like `default/echo` or `sample-site-c/sample-site-c-server` can be used later only if
 patched explicitly; they are not the first cohort by default.
 
 ## Topology/anti-affinity review

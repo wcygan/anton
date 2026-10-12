@@ -13,7 +13,7 @@ Workloads currently running on each node, after canonicalizing StatefulSet/Deplo
 | Observability — heavy | talos-log-sink-vector, ntfy | **Prometheus, Alertmanager, Grafana, kps-operator** | hubble-relay, hubble-ui, metrics-server |
 | Operators | longhorn-driver-deployer | **cilium-operator, cnpg, kps-operator** | dragonfly-operator, ts-operator, cert-manager, ESO controller, ESO webhook, ESO cert-controller |
 | Networking — DP | cilium, cilium-envoy | cloudflare-dns | envoy-gateway, envoy-internal, cloudflare-tunnel |
-| Stateful (DB / cache / app) | homepage, harbor-jobservice, harbor-exporter | csgoplant-dragonfly, harbor-nginx, instance-mgr-dea (Longhorn) | csgoplant-postgres, bakery-server, instance-mgr-05fc (Longhorn) |
+| Stateful (DB / cache / app) | sample-site-a, harbor-jobservice, harbor-exporter | csgoplant-dragonfly, harbor-nginx, instance-mgr-dea (Longhorn) | csgoplant-postgres, sample-site-c-server, instance-mgr-05fc (Longhorn) |
 | Misc | kube-state-metrics | reloader, cert-manager-webhook | — |
 
 (k8s-1 is currently underloaded post-incident — its pre-2026-05-05 placement may have been heavier.)

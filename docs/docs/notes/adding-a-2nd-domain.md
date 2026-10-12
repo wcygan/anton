@@ -1,5 +1,7 @@
 # Multi-Domain Support in Talos Kubernetes Cluster
 
+> Current DNS behavior: Cloudflare external-dns uses only explicit DNSEndpoint CRDs. Declare a tunnel CNAME for every public hostname on any domain. Gateway status exposes private LAN addresses and is not a valid Cloudflare-proxied target. Historical HTTPRoute-source examples below do not describe the current controller configuration.
+
 ## Overview
 
 This document describes the architecture and implementation for hosting multiple domains from a single Talos Kubernetes cluster using Flux GitOps, with Cloudflare as the DNS provider and SSL certificate authority.

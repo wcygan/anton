@@ -15,7 +15,7 @@ before widening a query.
 ## Workload targeting
 
 ```logql
-{k8s_namespace_name="food-site", k8s_deployment_name="food-site-server"}
+{k8s_namespace_name="sample-site-b", k8s_deployment_name="sample-site-b-server"}
 {k8s_namespace_name="observability"}
   | k8s_pod_name=~"otel-collector-.*"
 {k8s_namespace_name="registries", k8s_deployment_name="harbor-registry"}

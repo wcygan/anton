@@ -70,7 +70,7 @@ If the iter #3/#6 PM-QoS DaemonSet caps C-states at C0/C1, k8s-1's RX drop rate 
 
 ### Hypothesis B — k8s-1 hosts a specific workload that overwhelms its ring buffer
 
-k8s-1 currently runs longhorn-driver-deployer + cilium-agent + cilium-envoy + ntfy + talos-log-sink-vector + harbor-jobservice + harbor-exporter + homepage. Heavy network workloads. **But** k8s-2 and k8s-3 host comparable network workloads (cilium-operator, envoy-gateway, envoy-internal, cloudflare-tunnel) at higher pod density and aren't dropping packets.
+k8s-1 currently runs longhorn-driver-deployer + cilium-agent + cilium-envoy + ntfy + talos-log-sink-vector + harbor-jobservice + harbor-exporter + sample-site-a. Heavy network workloads. **But** k8s-2 and k8s-3 host comparable network workloads (cilium-operator, envoy-gateway, envoy-internal, cloudflare-tunnel) at higher pod density and aren't dropping packets.
 
 **Less consistent** with the workload-density reading. Doesn't predict why k8s-1 specifically.
 

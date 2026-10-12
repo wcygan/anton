@@ -21,17 +21,17 @@ Accepted
 
 Anton's public ingress topology since plan 0001's bootstrap is intentionally minimal: one Cloudflare Tunnel running as a Flux-managed Deployment in the `network` namespace, terminating into `envoy-external` (Gateway API), which routes to per-app `HTTPRoute`s. ADR 0012 codified the higher-level "Cloudflare tunnel reserved for genuinely public; Tailscale operator for off-LAN admin" split. ADR 0012 did NOT address the question of how many Cloudflare tunnels the cluster runs.
 
-On 2026-04-29 a redeploy of csgoplant onto anton failed end-to-end with Cloudflare error 1033 on `cs2plant.example.com` despite the cluster-side stack reporting healthy: pods Ready, HTTPRoute `Accepted=True`, DNSEndpoint resource present, app's own `/api/health` returning `{"status":"healthy"}`. The cause was discovered by querying the Cloudflare DNS API directly (orange-cloud-proxied records hide the true CNAME target from `dig`):
+On 2026-04-29 a redeploy of csgoplant onto anton failed end-to-end with Cloudflare error 1033 on `sample-site-d.example.com` despite the cluster-side stack reporting healthy: pods Ready, HTTPRoute `Accepted=True`, DNSEndpoint resource present, app's own `/api/health` returning `{"status":"healthy"}`. The cause was discovered by querying the Cloudflare DNS API directly (orange-cloud-proxied records hide the true CNAME target from `dig`):
 
 ```
-cs2plant.example.com CNAME → <orphan-uuid>.cfargotunnel.com  (proxied=true)
+sample-site-d.example.com CNAME → <orphan-uuid>.cfargotunnel.com  (proxied=true)
 ```
 
 That UUID was not the shared `kubernetes` tunnel. It was a stale per-app tunnel named `csgoplant`, created on 2026-02-11 for an earlier incarnation of the app that ran with its own `cloudflared` sidecar (`k8s/cloudflared-deployment.yaml` + an ESO entry for `CLOUDFLARE_TUNNEL_TOKEN`). When that earlier deploy was decommissioned, four artifacts were left behind:
 
 1. The tunnel registration in Cloudflare (`cloudflared tunnel list` showed it with 0 active connections).
 2. The Public Hostname mapping in Cloudflare's Zero Trust dashboard.
-3. The auto-created CNAME `cs2plant.example.com → <orphan>.cfargotunnel.com`.
+3. The auto-created CNAME `sample-site-d.example.com → <orphan>.cfargotunnel.com`.
 4. The 1Password token entry for the tunnel.
 
 `external-dns` saw the foreign CNAME (no `k8s.cname-…` TXT ownership marker) and silently refused to overwrite it under `policy: sync`. The new DNSEndpoint resource was applied to the cluster but never reached Cloudflare. Public requests followed the foreign CNAME to a tunnel with no live cloudflared on the other side, and Cloudflare returned 1033.

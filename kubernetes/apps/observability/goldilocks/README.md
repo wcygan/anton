@@ -27,7 +27,7 @@ goldilocks.fairwinds.com/enabled: "true"
 Initial canaries:
 
 - `default`
-- `bakery-site`
+- `sample-site-c`
 
 Do not enable `goldilocks.fairwinds.com/vpa-update-mode=auto` without a new
 operator decision. The chart installs VPA recommender only; the updater and

@@ -8,12 +8,7 @@ readonly USER_AGENT="anton-public-uptime/1.0"
 readonly MONITOR_HEADER="X-Anton-Uptime-Monitor: github-actions"
 # echo.wcygan.net is deliberately excluded: its Cloudflare zone returns 403 to
 # GitHub-hosted runners before requests reach the shared echo origin.
-readonly ENDPOINTS=(
-  "https://echo.nu-sync.net/"
-  "https://cs2plant.nu-sync.net/"
-  "https://nu-sync.net/"
-  "https://kneadybynaturebakery.com/"
-)
+readonly ENDPOINTS=("https://echo.nu-sync.net/")
 
 check_endpoint() {
     local endpoint="$1"
@@ -63,7 +58,7 @@ check_endpoint() {
 main() {
     check_cli awk curl dig
     if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-        printf '## Public endpoint uptime\n\nPublic surfaces: `echo.nu-sync.net`, `cs2plant.nu-sync.net`, `nu-sync.net`, and `kneadybynaturebakery.com`. `echo.wcygan.net` is excluded because its Cloudflare zone rejects GitHub-hosted traffic before origin. User-Agent: `%s`. Disclosure header: `%s`. Bounded curl: 10s connect, 20s total. TTFB gate: ≤ %ss.\n\n| Endpoint | DNS | TLS | HTTP | TTFB (s) |\n| --- | --- | --- | --- | --- |\n' "$USER_AGENT" "$MONITOR_HEADER" "$TTFB_LIMIT_SECONDS" >>"$GITHUB_STEP_SUMMARY"
+        printf '## Public utility uptime\n\n| Endpoint | DNS | TLS | HTTP | TTFB (s) |\n| --- | --- | --- | --- | --- |\n' >>"$GITHUB_STEP_SUMMARY"
     fi
 
     local endpoint failed=0
@@ -76,6 +71,7 @@ main() {
     if ((failed)); then
         log error "One or more public endpoint checks failed"
     fi
+    return "$failed"
 }
 
 main "$@"

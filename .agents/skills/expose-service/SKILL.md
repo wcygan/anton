@@ -46,7 +46,7 @@ Both envoy gateways live in namespace `network`. HTTPRoutes must set `parentRefs
    - **Tailscale Service annotation (Recipe B, raw TCP / non-HTTP)** — add `tailscale.com/expose: "true"` and `tailscale.com/hostname: <short-slug>` to the Service's annotations. Prefer the chart's `service.annotations` knob over a Kustomize patch. Recipe: `references/tailscale.md`.
    - **Combined (HTTPRoute + Tailscale Ingress)** — do both; they are independent and don't conflict. Same-PR bundling of Tailscale work with Cilium / gateway / CNI changes is forbidden (ADR 0012).
 3. **Wire any new manifest file** into `kubernetes/apps/<ns>/<app>/app/kustomization.yaml`. Annotation-only changes via chart values need no kustomization edit.
-4. **If the hostname is on a secondary domain** (not `${SECRET_DOMAIN}`), also add a `DNSEndpoint` resource and verify the gateway's cert listener covers the domain — see `references/secondary-domain.md`. Skipping this is the single most common footgun in this skill. (Does not apply to Tailscale — MagicDNS handles its own.)
+4. **For every public hostname**, add an explicit CNAME `DNSEndpoint` targeting the existing `external.<domain>` tunnel alias. Cloudflare DNS uses its CRD source only; HTTPRoute status contains private gateway IPs. For secondary domains also verify the gateway certificate listener — see `references/secondary-domain.md`. Tailscale uses MagicDNS instead.
 5. **Ship it.** If any `*.sops.*` files are new, run `sops -e -i <file>` to encrypt. Then commit + push, and `task reconcile` (or wait for the Flux interval).
 6. **Verify.** Run the checks in `references/verify.md`; for the Tailscale path, also verify as documented in `references/tailscale.md`.
 
@@ -63,7 +63,7 @@ HTTPRoute path:
 - [ ] `parentRefs[0].sectionName: https` set (attach to TLS listener, not port 80)
 - [ ] `backendRefs[].name` matches an actual `Service` in the app's namespace
 - [ ] HTTPRoute (and `DNSEndpoint`, if any) listed in `app/kustomization.yaml`
-- [ ] If hostname is on `${SECRET_DOMAIN_TWO}` → `DNSEndpoint` resource present
+- [ ] Every public hostname has a tunnel-CNAME `DNSEndpoint`; add the cloudflare-dns dependency even on the primary domain
 - [ ] If a new second-domain cert was added → gateway listener's `tls.certificateRefs` updated
 
 Tailscale Ingress path (Recipe A):

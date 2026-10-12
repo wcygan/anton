@@ -53,7 +53,7 @@ path, native LogQL in the existing Grafana, object-storage support, and a
 monolithic mode that avoids additional databases, gateways, and replicas.
 VictoriaLogs remains a reasonable future evaluation, but adopting it now
 would add a different query and provisioning path. The ClickStack experiment
-(ClickHouse, Keeper, MongoDB, HyperDX, and its homepage-only collector) was
+(ClickHouse, Keeper, MongoDB, HyperDX, and its sample-site-a-only collector) was
 useful as a time-boxed evaluation but is not the durable platform choice.
 
 ## Non-goals and consequences

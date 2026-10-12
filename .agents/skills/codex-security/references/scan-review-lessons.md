@@ -74,7 +74,7 @@ fresh extraction directories so older files do not contaminate a new snapshot.
   intended semantics; they do not reproduce packet enforcement.
 - Enumerate current public backends across namespaces before restricting edge
   traffic. Anton's source tree can omit externally owned applications such as
-  CS2Plant. Account for DNS, origin listener ports, xDS, probes, metrics, and
+  sample-site-d. Account for DNS, origin listener ports, xDS, probes, metrics, and
   effective provider configuration. The
   [proposal guide](../../../../.codex-security/proposals/README.md) records the
   staged rollout; recheck its dated inventory before use.

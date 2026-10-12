@@ -36,7 +36,7 @@ spec:
 ```
 
 Notes:
-- `metadata.namespace: flux-system` is required — Flux Kustomizations always live in `flux-system`.
+- Namespace-level Kustomize transforms determine the rendered child Kustomization namespace. An authored `metadata.namespace: flux-system` is overwritten when the parent sets `namespace: <app-namespace>`. Preserve the rendered identity during ownership transfers. Keep `sourceRef.namespace: flux-system` explicit; `targetNamespace` controls applied resources, not the child Kustomization identity.
 - `spec.path` MUST end in `/app`. The directory layout is enforced by every existing app.
 - `postBuild.substituteFrom` is the ONLY way `${VAR}` references in your manifests get resolved. Omit it and `${SECRET_DOMAIN}` will land literally in the cluster.
 - Do NOT add `decryption.provider: sops`, retry policies, or HelmRelease defaults — they are inherited from `kubernetes/flux/cluster/ks.yaml` patches.
@@ -106,6 +106,7 @@ Path: `kubernetes/apps/<ns>/kustomization.yaml`
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: kube-system # use this directory’s actual namespace
 resources:
   - ./namespace.yaml
   - ./reloader/ks.yaml          # ← add this line for each new app

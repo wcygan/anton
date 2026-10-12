@@ -95,9 +95,9 @@ revision (these identifiers were observed on 2026-09-29):
 
 | Application | Source repository | Source identifier in deployed image |
 | --- | --- | --- |
-| Bakery | `wcygan/kneadybynaturebakery` | `cc273ca` |
-| Food site | `wcygan/food-site` | `65d6411` |
-| Homepage | `nu-sync/homepage` | `9d7a0a2` |
+| Bakery | `wcygan/sample-site-c` | `cc273ca` |
+| Food site | `wcygan/sample-site-b` | `65d6411` |
+| sample-site-a | `nu-sync/sample-site-a` | `9d7a0a2` |
 
 These repository identifiers returned 404 to anonymous requests at review time;
 do not assume they can be cloned without authentication. To prepare a new
@@ -106,7 +106,7 @@ Anton checkout (this exports source only, with no model calls):
 
 ```sh
 mise exec -- task security:source-export \
-  REPOSITORY=/Users/wcygan/Development/food-site \
+  REPOSITORY=/Users/wcygan/Development/sample-site-b \
   REVISION=65d6411
 ```
 
@@ -130,10 +130,10 @@ without host mounts or GitHub credentials. For example, transfer both printed
 files to `/review-inputs/` inside that environment. From its Anton checkout:
 
 ```sh
-mkdir ../food-site-source-65d6411ce999
-tar -xzf /review-inputs/food-site-65d6411ce999.tar.gz -C ../food-site-source-65d6411ce999
-cp /review-inputs/food-site-65d6411ce999.json ../food-site-source-65d6411ce999/REVIEW_SOURCE.json
-pnpm --dir .codex-security exec codex-security scan "$(pwd)/../food-site-source-65d6411ce999" \
+mkdir ../sample-site-b-source-65d6411ce999
+tar -xzf /review-inputs/sample-site-b-65d6411ce999.tar.gz -C ../sample-site-b-source-65d6411ce999
+cp /review-inputs/sample-site-b-65d6411ce999.json ../sample-site-b-source-65d6411ce999/REVIEW_SOURCE.json
+pnpm --dir .codex-security exec codex-security scan "$(pwd)/../sample-site-b-source-65d6411ce999" \
   --config "$(pwd)/.codex-security/public-app-review.yaml" \
   --auth chatgpt \
   --scan-prompt-file "$(pwd)/.codex-security/public-app-review.md"

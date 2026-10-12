@@ -36,7 +36,7 @@ On 2026-05-01, both `envoy-external` and `envoy-internal` data planes silently f
 - [x] Decide target chart version — went with v1.7.2 (the open Renovate PR). Patch only, no breaking changes, low risk.
 - [x] Bump pin via merging Renovate PR #260 (commit `27caeec1`, merged 2026-05-01 17:27Z). HelmRelease reconciled successfully (`network/envoy-gateway.v3` with `gateway-helm@v1.7.2`).
 - [x] **Question resolved:** chart upgrade to v1.7.2 *did* roll the data-plane Deployments (new ReplicaSet hashes `ff96479` and `76c7d867fd`), so all data planes are now on envoy v1.37.2 + sidecar v1.7.2. No additional manual restart needed.
-- [x] Monitor `envoy-external` and `envoy-internal` past 2× SA token TTL — at 19:03Z (95m uptime, 35m past first SA-token rotation window), zero `token review found error` lines in controller log, zero envoy xDS-stream warnings, 3/3 200s on `cs2plant.nu-sync.net/api/health`. **First rotation cycle completed cleanly on v1.7.2.**
+- [x] Monitor `envoy-external` and `envoy-internal` past 2× SA token TTL — at 19:03Z (95m uptime, 35m past first SA-token rotation window), zero `token review found error` lines in controller log, zero envoy xDS-stream warnings, 3/3 200s on `site-d.example.com/api/health`. **First rotation cycle completed cleanly on v1.7.2.**
 
 ### Detect
 - [ ] Author PrometheusRule: alert when `envoy-gateway` controller log rate of `token review found error` >0 sustained
@@ -49,7 +49,7 @@ On 2026-05-01, both `envoy-external` and `envoy-internal` data planes silently f
 
 ## Log
 
-- 2026-05-01: Plan opened after live incident. envoy-external + envoy-internal stuck on stale xDS state for ~12h because SA token rotation broke and controller rejected expired tokens with `jwt-auth-interceptor / token review found error: invalid bearer token, service account token has expired`. Symptom was envoy round-robining csgoplant traffic to dead pod IPs `10.42.1.71` and `10.42.1.184`. Manual `kubectl rollout restart deployment/{envoy-external,envoy-internal} -n network` unblocked — fresh pods spread across `k8s-1` and `k8s-3` (previously both deployments were stacked on `k8s-1`). Verified via 5/5 200s on `cs2plant.nu-sync.net/api/health` and access log showing live upstream `10.42.1.169:3000`.
+- 2026-05-01: Plan opened after live incident. envoy-external + envoy-internal stuck on stale xDS state for ~12h because SA token rotation broke and controller rejected expired tokens with `jwt-auth-interceptor / token review found error: invalid bearer token, service account token has expired`. Symptom was envoy round-robining csgoplant traffic to dead pod IPs `10.42.1.71` and `10.42.1.184`. Manual `kubectl rollout restart deployment/{envoy-external,envoy-internal} -n network` unblocked — fresh pods spread across `k8s-1` and `k8s-3` (previously both deployments were stacked on `k8s-1`). Verified via 5/5 200s on `site-d.example.com/api/health` and access log showing live upstream `10.42.1.169:3000`.
 - 2026-05-01: Renovate PR #260 (`gateway-helm v1.7.1 → v1.7.2`, patch) found open since 2026-04-18. Designated as first investigation target.
 - 2026-05-01: Reviewed v1.7.2 release notes — envoy 1.37.1→1.37.2, ratelimit bump, go 1.25.9. Nothing explicit about SA token rotation. Merged anyway as a low-risk floor; will revisit v1.8.x if rotation still breaks.
 - 2026-05-01: Merged PR #260 (commit `27caeec1`). Flux force-reconciled. HelmRelease `envoy-gateway.v3` reports Helm upgrade succeeded with `gateway-helm@v1.7.2`. Controller pod is now on `gateway:v1.7.2`. Initial assumption (data planes won't auto-roll) was wrong — chart upgrade *did* trigger a rolling restart of envoy-external + envoy-internal Deployments (new RS hashes `ff96479` / `76c7d867fd`, all on envoy v1.37.2 + sidecar v1.7.2).
@@ -60,6 +60,6 @@ On 2026-05-01, both `envoy-external` and `envoy-internal` data planes silently f
 
 - Related ADRs: 0007 (kube-prometheus-stack — owns the alerting plumbing), 0023 (cloudflare-tunnel public ingress — affected blast radius)
 - HelmRelease: `kubernetes/apps/network/envoy-gateway/app/helmrelease.yaml` (currently `gateway-helm@v1.7.1`, pinned 2025-10-27)
-- Postmortem: `~/Development/csgoplant/docs/postmortems/2026-05-01-cs2plant-zero-endpoints-outage.md` (app-side root causes); this plan covers the gateway-side root cause that surfaced during that incident
+- Postmortem: `~/Development/csgoplant/docs/postmortems/2026-05-01-sample-site-d-zero-endpoints-outage.md` (app-side root causes); this plan covers the gateway-side root cause that surfaced during that incident
 - Renovate dashboard: GitHub issue in this repo titled "Dependency Dashboard"
 - Memory entries superseded: none

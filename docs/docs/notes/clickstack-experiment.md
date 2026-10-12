@@ -4,7 +4,7 @@ The ClickStack experiment is historical and is no longer under review. Its
 managed source-of-truth manifests were removed when the cluster's durable
 Kubernetes pod-log path moved to the OTel Collector DaemonSet and monolithic
 Loki. The experiment evaluated ClickHouse, Keeper, MongoDB, HyperDX, and a
-narrow homepage-only collector; it did not become the production log backend.
+narrow sample-site-a-only collector; it did not become the production log backend.
 
 The successor architecture, retention contract, queries, rollout order, and
 operator-only teardown procedure are maintained in the canonical

@@ -72,7 +72,7 @@ No endpoint rotation or Git history rewrite was performed. Historic disclosure
 cannot be undone by this source fix; an address is not an authentication token.
 
 A bounded source inspection of public exposure found no additional confirmed
-exploit: bakery and food-site declare Envoy-only ingress and DNS-only egress;
+exploit: bakery and sample-site-b declare Envoy-only ingress and DNS-only egress;
 the Flux webhook declares GitHub event handling with a secret reference.
 Wildcard tunnel routing and cross-namespace Gateway attachment remain review
 subjects, not independently confirmed internet exploits. A dedicated exposure
@@ -125,10 +125,10 @@ Read-only inspection now confirms Headlamp's Kustomization has applied
 `fe5c94f1` and `headlamp-isolation` exists. Headlamp remains ready. This is
 deployment evidence, not a packet-level enforcement or login test.
 
-The bakery, food-site, echo, and cloudflared pods had Kubernetes ServiceAccount
+The bakery, sample-site-b, echo, and cloudflared pods had Kubernetes ServiceAccount
 token mounts despite not needing the Kubernetes API. Set explicit
 `defaultPodOptions.automountServiceAccountToken: false` in all four owning
-HelmReleases. Homepage and both Envoy data planes already disable automount.
+HelmReleases. sample-site-a and both Envoy data planes already disable automount.
 No extra RBAC permissions or exploit through these tokens was established.
 Infrastructure controllers that use the API retain their tokens.
 
@@ -146,7 +146,7 @@ No direct cluster mutation or force reconcile was performed.
 
 The edge egress proposals in `.codex-security/proposals/` are outside Flux and
 remain inactive. They preserve observed CoreDNS, external Envoy listener,
-Cloudflare transport, xDS, and all six public backend paths, including CS2Plant,
+Cloudflare transport, xDS, and all six public backend paths, including sample-site-d,
 whose manifests are owned outside Anton. Seven source connectivity tests cover
 required paths and forbidden private destinations, namespace/port boundaries,
 and accidental activation. These are source semantics, not a runtime test.
@@ -154,10 +154,10 @@ Effective provider-side tunnel configuration must be checked before deployment.
 ADR 0029 requires acceptance of each workload before expanding isolation.
 
 A bounded manual review matched deployed image source identifiers to local
-application revisions: bakery `cc273ca`, food-site `65d6411`, homepage `9d7a0a2`.
+application revisions: bakery `cc273ca`, sample-site-b `65d6411`, sample-site-a `9d7a0a2`.
 Bakery's existing local edits were preserved and excluded from review bundles.
-Bakery and food-site Dockerfiles package only static `dist/client` into nginx;
-their TanStack/Nitro server tooling is build-time. Homepage packages Vite `dist`
+Bakery and sample-site-b Dockerfiles package only static `dist/client` into nginx;
+their TanStack/Nitro server tooling is build-time. sample-site-a packages Vite `dist`
 and a Bun file server with a lexical path-containment check. No confirmed
 initial-access exploit was established. This is not a dependency audit, image
 inventory, full model scan, symlink/runtime reproduction, or proof that image
@@ -166,7 +166,7 @@ provenance gaps, not evidence of a reachable CVE.
 
 Prepared whole-application scanner configuration and prompt, and ignored
 source-only bundles with original revision/digest manifests. All three source
-configuration dry runs passed; an extracted food-site bundle also passed without
+configuration dry runs passed; an extracted sample-site-b bundle also passed without
 Git metadata. Frozen scanner installation passed. No model-backed application
 scan ran: a disposable environment with only model authentication and no private
 connectivity is still required. Anonymous requests returned 404 for all three

@@ -49,6 +49,7 @@ tasks:
   contracts:validate:
     desc: Validate committed cluster operation contracts
     cmds:
+      - python3 scripts/validate-public-privacy.py
       - python3 scripts/validate-flux-contract.py
       - python3 scripts/validate-flux-postbuild-contract.py
       - python3 scripts/validate-log-contract.py

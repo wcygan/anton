@@ -29,7 +29,7 @@ Anton's MS-01 nodes have demonstrated a recurring failure mode of simultaneous (
 ### Phase 1 — PR1: dependsOn graph + wait flips (this session)
 
 - [x] Edit 5 platform-layer ks.yamls — flip `wait: false` → `wait: true`: external-secrets, envoy-gateway, multus, storage-vxlan, kube-prometheus-stack.
-- [x] Edit 11 consumer ks.yamls — add `dependsOn` per the table in the handoff plan: longhorn-config, longhorn, bakery-server, echo, homepage, flux-instance, cloudflare-tunnel, kube-prometheus-stack, ntfy, harbor-config, seaweedfs-config.
+- [x] Edit 11 consumer ks.yamls — add `dependsOn` per the table in the handoff plan: longhorn-config, longhorn, sample-site-c-server, echo, sample-site-a, flux-instance, cloudflare-tunnel, kube-prometheus-stack, ntfy, harbor-config, seaweedfs-config.
 - [x] Run `conventions-linter` subagent on the diff.
 - [x] Verify SOPS encryption status repo-wide.
 - [x] Commit and push branch; open PR referencing this plan.
