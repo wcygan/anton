@@ -86,7 +86,7 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 53)
+        self.assertEqual(len(MODULE.discover_application_roots()), 54)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [
@@ -101,6 +101,7 @@ resources: []
                 "kubernetes/apps/default/homepage/app",
                 "kubernetes/apps/external-secrets/external-secrets/app",
                 "kubernetes/apps/external-secrets/onepassword-store/app",
+                "kubernetes/apps/flux-system/auxiliary/app",
                 "kubernetes/apps/flux-system/flux-instance/app",
                 "kubernetes/apps/flux-system/flux-operator/app",
                 "kubernetes/apps/iceberg-demo/trino/app",

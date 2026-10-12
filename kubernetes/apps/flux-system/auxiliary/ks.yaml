@@ -1,0 +1,24 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: auxiliary
+  namespace: flux-system
+spec:
+  # Enable only after the private source and credentials are prepared.
+  suspend: true
+  interval: 5m
+  path: ./kubernetes/apps/flux-system/auxiliary/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  dependsOn:
+    - name: external-secrets
+      namespace: external-secrets
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
+  wait: false

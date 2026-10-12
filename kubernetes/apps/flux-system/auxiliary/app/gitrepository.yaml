@@ -1,0 +1,14 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: auxiliary
+  namespace: flux-system
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  # An unset URL fails closed at source fetch, even if mistakenly enabled.
+  url: "${SECRET_AUXILIARY_GIT_URL:=https://unconfigured.invalid/disabled.git}"
+  secretRef:
+    name: auxiliary-git-auth
