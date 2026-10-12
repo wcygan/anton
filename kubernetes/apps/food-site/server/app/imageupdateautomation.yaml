@@ -4,6 +4,7 @@ kind: ImageUpdateAutomation
 metadata:
   name: food-site-server
 spec:
+  suspend: true
   interval: 5m
   sourceRef:
     kind: GitRepository
