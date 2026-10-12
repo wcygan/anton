@@ -6,7 +6,7 @@ metadata:
   namespace: flux-system
 spec:
   # Enable only after the private source and credentials are prepared.
-  suspend: true
+  suspend: false
   interval: 5m
   path: ./kubernetes/apps/flux-system/auxiliary/app
   prune: true
