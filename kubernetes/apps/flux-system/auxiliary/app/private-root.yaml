@@ -6,7 +6,7 @@ metadata:
   namespace: flux-system
 spec:
   # Authenticate and verify the source before enabling private workloads.
-  suspend: true
+  suspend: false
   interval: 1m
   path: ./clusters/anton
   prune: true
