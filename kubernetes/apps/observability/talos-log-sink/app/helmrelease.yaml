@@ -167,7 +167,7 @@ spec:
         file:
           type: file
           inputs: [retention_class]
-          path: /vector-data-dir/talos-{{ retention_class }}-%Y-%m-%d.log
+          path: /vector-data-dir/talos-{{ "{{ retention_class }}" }}-%Y-%m-%d.log
           encoding:
             codec: json
 
