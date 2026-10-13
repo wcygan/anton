@@ -57,6 +57,15 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   filer:
     replicas: 2                     # Phase 1 verdict: 2 holds under pod-kill
+    # The embedded LevelDB store lives at /data/filerldb2. Keep each filer's
+    # metadata across pod recreation and simultaneous node restarts.
+    persistence:
+      enabled: true
+      mountPath: /data
+      storageClassName: longhorn
+      resources:
+        requests:
+          storage: 4Gi
     affinity:
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
