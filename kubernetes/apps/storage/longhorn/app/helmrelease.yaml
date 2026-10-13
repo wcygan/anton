@@ -63,6 +63,12 @@ spec:
       # exact reason that shim solves.
       storageNetwork: storage/longhorn-storage
 
+    # Include disk-scan/kernel memory headroom; keep CPU and limits unchanged.
+    longhornManager:
+      resources:
+        requests:
+          memory: 3Gi
+
     # ServiceMonitor for longhorn-manager metrics (plan 0002 acceptance).
     # Discovered by kps's cluster-wide ServiceMonitor selector.
     metrics:
