@@ -57,6 +57,16 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   filer:
     replicas: 2                     # Phase 1 verdict: 2 holds under pod-kill
+    # Embedded LevelDB is the S3 object index, not disposable runtime state.
+    persistence:
+      enabled: true
+      mountPath: /data
+      storageClassName: longhorn
+      annotations:
+        kustomize.toolkit.fluxcd.io/prune: disabled
+      resources:
+        requests:
+          storage: 4Gi
     affinity:
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
