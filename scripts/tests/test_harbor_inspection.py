@@ -14,7 +14,7 @@ APP = ROOT / "kubernetes/apps/registries/harbor-config/app"
 
 
 class HarborInspection(unittest.TestCase):
-    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False, missing_manifest=False, execution_status="Success", ambiguous_execution=False):
+    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False, missing_manifest=False, execution_status="Success", ambiguous_execution=False, empty_schedule=False):
         requests = []
         submitted = []
 
@@ -36,6 +36,9 @@ class HarborInspection(unittest.TestCase):
                         return
                     body = {"schemaVersion": 2, "config": {"digest": "sha256:"+"b"*64}, "layers": []}
                 elif path == "/system/gc/schedule":
+                    if empty_schedule:
+                        requests.append(("GET", path, None))
+                        self.send_response(200); self.end_headers(); return
                     body = schedule
                 elif path.startswith("/system/gc?"):
                     body = [{"id": 7, "job_status": "Success", "job_parameters": '{"dry_run":true,"delete_untagged":false,"workers":1}'}]
@@ -205,3 +208,8 @@ class HarborInspection(unittest.TestCase):
         workload={"items":[{"metadata":{"annotations":{"large":"x"*300000}},"spec":{"containers":[{"image":"registry/library/demo:v1"}]}}]}
         output,_=self.run_script("verify-images",self.schedule(),workload=workload)
         self.assertEqual(json.loads(output)["verified_artifacts"],1)
+
+    def test_disabled_gc_empty_body_is_inspectable_without_writes(self):
+        output,requests=self.run_script("inspect",self.schedule(),empty_schedule=True)
+        self.assertEqual(json.loads(output)["gc"],{"schedule":{"type":"None","cron":None},"parameters":None})
+        self.assertTrue(all(method=="GET" for method,_,_ in requests))
