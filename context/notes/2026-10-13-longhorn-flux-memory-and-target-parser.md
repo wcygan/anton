@@ -30,9 +30,9 @@ memory-request setting or CR field. The built-in Kubernetes 1.36
 MutatingAdmissionPolicy avoids an additional controller and namespace-wide
 defaults. It adds only the memory request for single-container pods in storage
 with v1 instance-manager labels and a controlling Longhorn InstanceManager
-owner. CPU and limits are not patched. It applies on CREATE and UPDATE,
-including pods/resize, so replacements and subsequent updates retain the
-Git-defined request. The policy intentionally excludes v2 and different pod
+owner. CPU and limits are not patched. It applies on Pod CREATE and pods/resize
+UPDATE, so replacements and request resizes retain the Git-defined request.
+Ordinary Pod metadata/status updates do not mutate resources. The policy excludes v2 and different pod
 shapes; revisit it when upgrading Longhorn's generated pod layout.
 
 Existing instance-manager pods were resized through the Kubernetes resize

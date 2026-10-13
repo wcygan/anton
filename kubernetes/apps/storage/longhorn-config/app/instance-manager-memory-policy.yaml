@@ -20,8 +20,13 @@ spec:
     resourceRules:
       - apiGroups: [""]
         apiVersions: [v1]
-        operations: [CREATE, UPDATE]
-        resources: [pods, pods/resize]
+        operations: [CREATE]
+        resources: [pods]
+        scope: Namespaced
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [UPDATE]
+        resources: [pods/resize]
         scope: Namespaced
   matchConditions:
     - name: owned-single-container-v1-instance-manager
