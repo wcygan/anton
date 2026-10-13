@@ -14,7 +14,7 @@ api_url="$${HARBOR_API_URL%/}"
 auth="$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}"
 mode="$${MODE:-reconcile}"
 case "$${mode}" in
-  reconcile|gc-dry-run|inspect) ;;
+  reconcile|gc-dry-run|inspect|verify-images) ;;
   *) echo "unsupported mode" >&2; exit 1 ;;
 esac
 
@@ -22,7 +22,7 @@ harbor_request() {
   method="$${1}"
   path="$${2}"
   payload="$${3:-}"
-  if [ "$${mode}" = inspect ] && [ "$${method}" != GET ]; then
+  if { [ "$${mode}" = inspect ] || [ "$${mode}" = verify-images ]; } && [ "$${method}" != GET ]; then
     echo "inspection forbids API writes" >&2
     exit 1
   fi
@@ -32,6 +32,7 @@ harbor_request() {
       --fail \
       --silent \
       --show-error \
+      --connect-timeout 5 --max-time 30 \
       --retry 5 \
       --retry-delay 5 \
       --retry-connrefused \
@@ -47,6 +48,7 @@ harbor_request() {
     --fail \
     --silent \
     --show-error \
+    --connect-timeout 5 --max-time 30 \
     --retry 5 \
     --retry-delay 5 \
     --retry-connrefused \
@@ -61,11 +63,64 @@ if [ "$${mode}" = gc-dry-run ]; then
   exit 0
 fi
 
+if [ "$${mode}" = verify-images ]; then
+  # Use registry token auth inside the pod; never print tokens or passwords.
+  workloads="$$(kubectl get pods,deployments,statefulsets,daemonsets,jobs,cronjobs -A -o json)"
+  images="$$(printf '%s' "$${workloads}" | jq -r --arg host "$${HARBOR_IMAGE_HOST}" '[.. | objects | .image? // empty | select(type=="string") | select(startswith($$host+"/"))] | unique[]')"
+  count=0
+  blobs=0
+  for image in $${images}; do
+    image=$${image#*/}
+    case "$${image}" in
+      *@*) reference=$${image##*@}; repository=$${image%@*}; repository=$${repository%:*} ;;
+      *:*) reference=$${image##*:}; repository=$${image%:*} ;;
+      *) reference=latest; repository=$${image} ;;
+    esac
+    project=$${repository%%/*}
+    repo=$${repository#*/}
+    encoded="$$(printf '%s' "$${repo}" | jq -sRr '@uri | @uri')"
+    digest="$$(harbor_request GET "/projects/$${project}/repositories/$${encoded}/artifacts/$${reference}" | jq -er '.digest')"
+    token="$$(curl --fail --silent --show-error --max-time 30 --user "$${auth}" \
+      --get --data-urlencode 'service=harbor-registry' --data-urlencode "scope=repository:$${repository}:pull" \
+      "$${HARBOR_TOKEN_URL:-$${api_url%/api/v2.0}/service/token}" | jq -er '.token')"
+    queue="$${digest}"
+    seen=' '
+    manifests=0
+    while [ -n "$${queue}" ]; do
+      current=$${queue%% *}
+      if [ "$${queue}" = "$${current}" ]; then queue=''; else queue=$${queue#* }; fi
+      case "$${seen}" in *" $${current} "*) continue ;; esac
+      printf '%s' "$${current}" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo 'invalid manifest digest' >&2; exit 1; }
+      seen="$${seen}$${current} "
+      manifests=$((manifests + 1))
+      [ "$${manifests}" -le 64 ] || { echo 'manifest graph exceeds verification bound' >&2; exit 1; }
+      manifest="$$(curl --fail --silent --show-error --max-time 30 --max-filesize 1048576 \
+        --header "Authorization: Bearer $${token}" \
+        --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
+        "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/manifests/$${current}")"
+      children="$$(printf '%s' "$${manifest}" | jq -er 'if .schemaVersion==2 then [.manifests[]?.digest]|join(" ") else error("invalid manifest") end')"
+      [ -z "$${children}" ] || queue="$${queue:+$${queue} }$${children}"
+      digests="$$(printf '%s' "$${manifest}" | jq -r '[(.config.digest // empty),.layers[]?.digest]|unique[]')"
+      for blob in $${digests}; do
+        printf '%s' "$${blob}" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo 'invalid blob digest' >&2; exit 1; }
+        code="$$(curl --fail --silent --show-error --head --output /dev/null --max-time 30 --write-out '%{http_code}' \
+          --header "Authorization: Bearer $${token}" "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/blobs/$${blob}")"
+        [ "$${code}" = 200 ] || { echo 'blob availability not confirmed' >&2; exit 1; }
+        blobs=$((blobs + 1))
+      done
+    done
+    count=$((count + 1))
+  done
+  jq -n --argjson count "$${count}" --argjson blobs "$${blobs}" '{verified_artifacts:$$count,readable_blobs:$$blobs}'
+  exit 0
+fi
+
 if [ "$${mode}" = inspect ]; then
   # Allowlisted response fields only: never include credentials/configuration.
+  health="$$(harbor_request GET /health | jq '{components:[.components[]|{name,status}]}')"
   # Harbor 2.15 returns GCHistory here: options are JSON in job_parameters.
-  gc="$$(harbor_request GET /system/gc/schedule | jq '(.parameters // (.job_parameters | fromjson)) as $$p | {schedule:{type:.schedule.type,cron:.schedule.cron},parameters:($$p|{dry_run,delete_untagged,workers})}')"
-  history="$$(harbor_request GET '/system/gc?page=1&page_size=20' | jq '[.[] | {id,job_status,creation_time,update_time,job_kind,schedule:(.schedule|{type,cron}),parameters:((.job_parameters | if type == "string" then fromjson else . end) | {dry_run,delete_untagged,workers})}]')"
+  gc="$$(harbor_request GET /system/gc/schedule | jq '(.parameters // (.job_parameters | fromjson)) as $$p | {schedule:{type:.schedule.type,cron:.schedule.cron},parameters:($$p|{dry_run:(.dry_run // false),delete_untagged:(.delete_untagged // false),workers})}')"
+  history="$$(harbor_request GET '/system/gc?page=1&page_size=20' | jq '[.[] | {id,job_status,creation_time,update_time,job_kind,schedule:(.schedule|{type,cron}),parameters:((.job_parameters | if type == "string" then fromjson else . end) | {dry_run:(.dry_run // false),delete_untagged:(.delete_untagged // false),workers})}]')"
   report='[]'
   page=1
   while :; do
@@ -81,7 +136,7 @@ if [ "$${mode}" = inspect ]; then
     [ "$$(printf '%s' "$${projects}" | jq 'length')" -lt 100 ] && break
     page=$((page + 1))
   done
-  jq -n --argjson gc "$${gc}" --argjson history "$${history}" --argjson projects "$${report}" '{gc:$$gc,gc_executions:$$history,projects:$$projects}'
+  jq -n --argjson gc "$${gc}" --argjson history "$${history}" --argjson projects "$${report}" --argjson health "$${health}" '{gc:$$gc,gc_executions:$$history,projects:$$projects,health:$$health}'
   exit 0
 fi
 
@@ -236,9 +291,12 @@ desired_gc="$$(jq -n --arg cron "$${HARBOR_GC_CRON}" \
   '{schedule:{type:"Custom",cron:$$cron},parameters:{delete_untagged:false,dry_run:false,workers:1}}')"
 current_gc="$$(harbor_request GET /system/gc/schedule)"
 normalise_gc() {
-  jq -S '(.parameters // (.job_parameters | fromjson)) as $$p | {schedule:{type:.schedule.type,cron:.schedule.cron},parameters:($$p|{dry_run,delete_untagged,workers})}'
+  # Harbor serializes false dry_run with omitempty; its absent default is false.
+  jq -S '(.parameters // (.job_parameters | fromjson)) as $$p | {schedule:{type:.schedule.type,cron:.schedule.cron},parameters:($$p|{dry_run:(.dry_run // false),delete_untagged:(.delete_untagged // false),workers})}'
 }
-if [ "$$(printf '%s' "$${current_gc}" | normalise_gc)" != "$$(printf '%s' "$${desired_gc}" | normalise_gc)" ]; then
+current_gc_normalised="$$(printf '%s' "$${current_gc}" | normalise_gc)"
+desired_gc_normalised="$$(printf '%s' "$${desired_gc}" | normalise_gc)"
+if [ "$${current_gc_normalised}" != "$${desired_gc_normalised}" ]; then
   harbor_request PUT /system/gc/schedule "$${desired_gc}" >/dev/null
   echo "updated weekly garbage collection schedule"
 fi

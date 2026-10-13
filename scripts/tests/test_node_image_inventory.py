@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.node_image_inventory import classify, gc_eligibility, parse_table, workload_references
+from lib.node_image_inventory import canonical_ref, classify, gc_eligibility, parse_table, workload_references
 
 
 class NodeImages(unittest.TestCase):
@@ -34,3 +34,7 @@ class NodeImages(unittest.TestCase):
         row = parse_table(text, ("NODE", "IMAGE", "DIGEST", "SIZE", "LABELS", "CREATED"))[0]
         self.assertEqual(row["SIZE"], "82 MB")
         self.assertEqual(row["LABELS"], "")
+
+    def test_implicit_latest_and_runtime_prefix(self):
+        self.assertEqual(canonical_ref("busybox"), "docker.io/library/busybox:latest")
+        self.assertEqual(canonical_ref("containerd://sha256:abc"), "sha256:abc")

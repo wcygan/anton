@@ -1,0 +1,40 @@
+# NOT referenced by app/kustomization.yaml. Publish after successful pilot.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harbor-reclamation
+  namespace: storage
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    resourceNames: [seaweedfs-volume-0, seaweedfs-volume-1, seaweedfs-volume-2]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/proxy]
+    resourceNames: [seaweedfs-volume-0, "seaweedfs-volume-0:8444", seaweedfs-volume-1, "seaweedfs-volume-1:8444", seaweedfs-volume-2, "seaweedfs-volume-2:8444"]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    resourceNames: [seaweedfs-master-0]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    resourceNames: [mount0-seaweedfs-volume-0, mount0-seaweedfs-volume-1, mount0-seaweedfs-volume-2]
+    verbs: [get]
+  - apiGroups: [longhorn.io]
+    resources: [volumes]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbor-reclamation
+  namespace: storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harbor-reclamation
+subjects:
+  - kind: ServiceAccount
+    name: harbor-reclamation
+    namespace: registries

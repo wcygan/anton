@@ -1,0 +1,41 @@
+# NOT referenced by app/kustomization.yaml. Publish after measured trim pilot.
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: seaweedfs-weekly-trim
+spec:
+  cron: "30 8 * * 0"
+  task: filesystem-trim
+  concurrency: 1
+  retain: 0
+  groups: []
+---
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: pvc-77d63b24-2ee0-40df-a6d8-0198c4fbee34
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    kustomize.toolkit.fluxcd.io/ssa: Merge
+  labels:
+    recurring-job.longhorn.io/seaweedfs-weekly-trim: enabled
+---
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: pvc-44f30e6f-5840-459d-b697-35d13f3a60a7
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    kustomize.toolkit.fluxcd.io/ssa: Merge
+  labels:
+    recurring-job.longhorn.io/seaweedfs-weekly-trim: enabled
+---
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: pvc-1212109a-c4d2-4442-bdd2-e1a72c82fd02
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    kustomize.toolkit.fluxcd.io/ssa: Merge
+  labels:
+    recurring-job.longhorn.io/seaweedfs-weekly-trim: enabled

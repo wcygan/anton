@@ -48,7 +48,8 @@ class StorageRetentionTests(unittest.TestCase):
                 elif '/artifacts?' in path:
                     body = [{'digest': 'sha256:' + 'b' * 64, 'tags': [{'name': 'in-use-' + 'b' * 64}]}]
                 elif path == '/system/gc/schedule':
-                    body = {'schedule': {'cron': ''}}
+                    body = {'schedule': {'type': 'None', 'cron': ''},
+                            'parameters': {'dry_run': False, 'delete_untagged': False, 'workers': 1}}
                 else:
                     raise AssertionError(path)
                 self.send_response(200)

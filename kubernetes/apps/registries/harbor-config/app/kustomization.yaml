@@ -5,6 +5,8 @@ configMapGenerator:
   - name: harbor-retention-reconciler
     files:
       - reconcile.sh=./reconcile.sh
+      - reclamation.sh=./reclamation.sh
+      - reclamation-gates.jq=./reclamation-gates.jq
     options:
       disableNameSuffixHash: true
 resources:

@@ -46,13 +46,15 @@ def workload_references(items: list[dict]) -> set[str]:
 
 
 def canonical_ref(ref: str) -> str:
-    ref = ref.removeprefix("docker-pullable://")
+    ref = ref.removeprefix("docker-pullable://").removeprefix("containerd://")
     if ref.startswith("sha256:"):
         return ref
     if "/" not in ref:
         ref = "docker.io/library/" + ref
     elif not any(c in ref.split("/", 1)[0] for c in ".:") and not ref.startswith("localhost/"):
         ref = "docker.io/" + ref
+    if "@" not in ref and ":" not in ref.rsplit("/", 1)[-1]:
+        ref += ":latest"
     return ref.replace("index.docker.io/", "docker.io/", 1)
 
 
