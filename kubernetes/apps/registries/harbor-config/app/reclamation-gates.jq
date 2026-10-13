@@ -13,7 +13,7 @@ def ready_gc($$now):
                    parameters:{dry_run:false,delete_untagged:false,workers:1}}
   then error("GC policy does not match approved Git intent") else . end |
   [.harbor.gc_executions[] | select((.creation_time|epoch) >= $$sunday + 19800)
-     | select(.parameters.dry_run == false)] | max_by(.creation_time|epoch) as $$gc |
+     | select(.parameters.dry_run == false)] | max_by(.creation_time|epoch) as $$gc | $$input |
   if $$gc == null or $$gc.job_status != "Success" or
      ($$gc.job_kind|ascii_downcase) != "schedule" or
      $$gc.parameters.delete_untagged != false or $$gc.parameters.workers != 1
@@ -21,6 +21,29 @@ def ready_gc($$now):
   if ($$gc.update_time|epoch) > $$now - 3600 or ($$gc.creation_time|epoch) > $$now
   then error("wait one hour after GC completion") else . end |
   if ($$input.harbor.projects|length) == 0 then error("empty project inventory") else . end |
+  if (.filers|length)!=2 or ([.filers[].pvc_uid]|unique|length)!=2 or
+     any(.filers[]; (.pvc_uid // "")=="" or (.longhorn_volume // "")=="")
+  then error("persistent filer proof missing") else . end |
+  if any(.harbor.projects[]; .policy.algorithm!="or" or .policy.trigger.kind!="Manual" or
+      (.policy.rules|length)!=3 or .policy.rules[0].params.latestPushedK!=2 or
+      .policy.rules[1].template!="always" or .policy.rules[1].tag_selectors[0].pattern!="{in-use-*,rollback}" or
+      .policy.rules[2].template!="always" or .policy.rules[2].tag_selectors[0].pattern!="" or
+      (.policy.rules[2].tag_selectors[0].extras|fromjson|.untagged)!=true or any(.policy.rules[];.disabled==true))
+  then error("retention policy does not preserve protected/untagged images") else . end |
+  .retention_evidence as $$e |
+  if $$e.schema!=1 or $$e.state!="Success" or $$e.dry_run!=false or
+     ($$e.completed_at|type)!="number" or $$e.completed_at < $$sunday+5400 or
+     $$e.completed_at > ($$gc.creation_time|epoch) or
+     ($$e.inventory_sha256|type)!="string" or
+     ($$e.inventory_sha256|test("^[0-9a-f]{64}$")|not) or
+     $$e.inventory_sha256 != .images.inventory_sha256 or $$e.filers != .filers
+  then error("fresh successful protection/retention proof missing or changed") else . end |
+  if ($$e.executions|length)!=($$input.harbor.projects|length) or
+     any($$e.executions[]; .status!="Success" or .dry_run!=false)
+  then error("incomplete real retention proof") else . end |
+  if any($$input.harbor.projects[];
+      [.executions[] as $$history|select(any($$e.executions[];.id==$$history.id and .policy_id==$$history.policy_id))] | length==0)
+  then error("retention proof is not in Harbor history") else . end |
   if any($$input.harbor.projects[];
       ([.executions[] | select((.start_time|epoch) >= $$sunday + 5400)
         | select((.start_time|epoch) < ($$gc.creation_time|epoch))] | max_by(.start_time|epoch)) as $$r |

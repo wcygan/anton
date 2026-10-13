@@ -2,6 +2,7 @@
 
 import json, os, subprocess, tempfile, pathlib, textwrap, threading, http.server, urllib.parse
 import unittest
+from harbor_fixture import write_kubectl, copy_scripts
 R = pathlib.Path(__file__).resolve().parents[2]
 
 class StorageRetentionTests(unittest.TestCase):
@@ -37,6 +38,10 @@ class StorageRetentionTests(unittest.TestCase):
                 path = self.path
                 if '/projects/library/repositories/demo/artifacts/sha256:' in path:
                     body = {'digest': 'sha256:' + 'a' * 64, 'tags': [{'name': 'v1'}]}
+                elif path.startswith('/service/token?'):
+                    body = {'token':'never-print-token'}
+                elif path.startswith('/v2/library/demo/manifests/'):
+                    body = {'schemaVersion':2,'config':{'digest':'sha256:'+'c'*64},'layers':[]}
                 elif path.startswith('/projects?'):
                     body = [{'project_id': 1}]
                 elif path == '/projects/1/metadatas/':
@@ -56,6 +61,9 @@ class StorageRetentionTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(json.dumps(body).encode())
 
+            def do_HEAD(self):
+                self.send_response(200);self.end_headers()
+
             def mutate(self):
                 body = self.rfile.read(int(self.headers.get('content-length', 0))).decode()
                 requests.append((self.command, self.path, json.loads(body) if body else None))
@@ -69,15 +77,18 @@ class StorageRetentionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             p = pathlib.Path(tmp)
             kub = p / 'kubectl'
-            kub.write_text('#!/bin/sh\nprintf \'%s\' \'{"items":[{"spec":{"containers":[{"image":"registry/library/demo:v1@sha256:' + 'a' * 64 + '"}]}}]}\'\n')
-            kub.chmod(493)
+            write_kubectl(p, {"items":[{"spec":{"containers":[{"image":"registry/library/demo:v1@sha256:"+'a'*64}]}}]})
+            copy_scripts(p, R/'kubernetes/apps/registries/harbor-config/app')
             s = (R / 'kubernetes/apps/registries/harbor-config/app/reconcile.sh').read_text().replace('$$', '$')
             (p / 'script').write_text(s)
-            env = {**os.environ, 'PATH': str(p) + ':' + os.environ['PATH'], 'HARBOR_API_URL': f'http://127.0.0.1:{server.server_port}', 'HARBOR_USERNAME': 'fixture', 'HARBOR_PASSWORD': 'fixture', 'HARBOR_RETENTION_CRON': '0 30 1 * * *', 'HARBOR_PROTECTED_TAGS': '{in-use-*,rollback}', 'HARBOR_IMAGE_HOST': 'registry', 'HARBOR_GC_CRON': '0 30 5 * * 0'}
+            env = {**os.environ, 'PATH': str(p) + ':' + os.environ['PATH'], 'HARBOR_API_URL': f'http://127.0.0.1:{server.server_port}', 'HARBOR_USERNAME': 'fixture', 'HARBOR_PASSWORD': 'fixture', 'HARBOR_RETENTION_CRON': '0 30 1 * * *', 'HARBOR_PROTECTED_TAGS': '{in-use-*,rollback}', 'HARBOR_IMAGE_HOST': 'registry', 'HARBOR_GC_CRON': '0 30 5 * * 0', 'HARBOR_REGISTRY_URL':f'http://127.0.0.1:{server.server_port}', 'HARBOR_TOKEN_URL':f'http://127.0.0.1:{server.server_port}/service/token'}
             subprocess.run(['sh', str(p / 'script')], env=env, check=True)
             assert any((m == 'POST' and b.get('name', '') == 'in-use-' + 'a' * 64 for m, u, b in requests if b))
             policy = next((b for m, u, b in requests if u == '/retentions/1'))
             assert policy['rules'][0]['params']['latestPushedK'] == 2
+            assert policy['trigger']['kind']=='Manual'
+            untagged=policy['rules'][2]['tag_selectors'][0]
+            assert untagged['pattern']=='' and json.loads(untagged['extras'])['untagged'] is True
             assert any((m == 'DELETE' and 'in-use-' + 'b' * 64 in u for m, u, b in requests))
             assert any((u == '/system/gc/schedule' and b['parameters']['delete_untagged'] == False for m, u, b in requests if b))
             requests.clear()

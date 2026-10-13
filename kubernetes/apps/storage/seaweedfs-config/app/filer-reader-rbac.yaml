@@ -1,0 +1,30 @@
+# Read exact filer mounts/claims; never grant access to metadata or Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harbor-filer-persistence-reader
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    resourceNames: [seaweedfs-filer-0, seaweedfs-filer-1]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    resourceNames: [seaweedfs-filer-seaweedfs-filer-0, seaweedfs-filer-seaweedfs-filer-1]
+    verbs: [get]
+  - apiGroups: [longhorn.io]
+    resources: [volumes]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbor-filer-persistence-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harbor-filer-persistence-reader
+subjects:
+  - kind: ServiceAccount
+    name: harbor-retention
+    namespace: registries

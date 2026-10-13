@@ -38,3 +38,17 @@ subjects:
   - kind: ServiceAccount
     name: harbor-reclamation
     namespace: registries
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbor-reclamation-filer-persistence
+  namespace: storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harbor-filer-persistence-reader
+subjects:
+  - kind: ServiceAccount
+    name: harbor-reclamation
+    namespace: registries

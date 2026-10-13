@@ -16,6 +16,9 @@ spec:
   # operators in the `databases` namespace (CNPG `Cluster` and DragonflyDB
   # `Dragonfly`). Block reconcile until both operators are Ready.
   dependsOn:
+    # The guarded retention job consumes filer mount/claim reader RBAC.
+    - name: seaweedfs-config
+      namespace: storage
     - name: cloudnative-pg
       namespace: databases
     - name: dragonfly-operator

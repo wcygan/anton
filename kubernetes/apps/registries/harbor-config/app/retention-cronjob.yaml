@@ -9,8 +9,9 @@ metadata:
     app.kubernetes.io/name: harbor-retention
     app.kubernetes.io/part-of: harbor
 spec:
-  schedule: "17 1 * * *"
+  schedule: "30 1 * * *"
   timeZone: Etc/UTC
+  suspend: true # Released after staged migration and retention validation.
   startingDeadlineSeconds: 900
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
@@ -18,7 +19,7 @@ spec:
   jobTemplate:
     spec:
       activeDeadlineSeconds: 900
-      backoffLimit: 3
+      backoffLimit: 0
       ttlSecondsAfterFinished: 86400
       template:
         metadata:
@@ -26,7 +27,7 @@ spec:
             app.kubernetes.io/name: harbor-retention
             app.kubernetes.io/part-of: harbor
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never
           serviceAccountName: harbor-retention
           automountServiceAccountToken: true
           securityContext:
@@ -45,6 +46,8 @@ spec:
               args:
                 - /opt/reconcile.sh
               env:
+                - name: MODE
+                  value: retention
                 - name: HARBOR_API_URL
                   value: http://harbor-core/api/v2.0
                 - name: HARBOR_USERNAME
@@ -62,12 +65,13 @@ spec:
                   value: "{in-use-*,rollback}"
                 - name: HARBOR_IMAGE_HOST
                   value: "192.168.1.106"
+                - name: HARBOR_GC_ENABLED
+                  value: "false" # Released only after live safety validation.
                 - name: HARBOR_GC_CRON
                   value: "0 30 5 * * 0"
               volumeMounts:
                 - name: reconciler
-                  mountPath: /opt/reconcile.sh
-                  subPath: reconcile.sh
+                  mountPath: /opt
                   readOnly: true
               resources:
                 requests:

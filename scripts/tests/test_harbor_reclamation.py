@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
+import copy
 import subprocess
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ NOW = int(dt.datetime(2026, 10, 18, 8, tzinfo=dt.timezone.utc).timestamp())
 
 
 def fixture():
-    return {
+    data = {
         "harbor": {
             "health": {"components": [{"name": "core", "status": "healthy"}]},
             "gc": {"schedule": {"type": "Custom", "cron": "0 30 5 * * 0"},
@@ -30,6 +31,19 @@ def fixture():
             "Volumes": [{"Id": 20+i, "Size": 2*GIB, "DeletedByteCount": GIB//2,
                          "Collection": "harbor", "ReadOnly": False, "CompactRevision": 1}]}}
                     for i in range(3)]}
+    policy={"algorithm":"or","trigger":{"kind":"Manual"},"rules":[
+        {"params":{"latestPushedK":2}},
+        {"template":"always","tag_selectors":[{"pattern":"{in-use-*,rollback}"}]},
+        {"template":"always","tag_selectors":[{"pattern":"","extras":'{"untagged":true}'}]}]}
+    project=data["harbor"]["projects"][0];project["policy"]=policy
+    project["executions"][0]["policy_id"]=1
+    data["filers"]=[{"pvc_uid":f"uid-{i}","longhorn_volume":f"filer-{i}"} for i in range(2)]
+    data["images"]={"inventory_sha256":"a"*64}
+    data["retention_evidence"]={"schema":1,"state":"Success","dry_run":False,
+        "completed_at":int(dt.datetime(2026,10,18,1,31,tzinfo=dt.timezone.utc).timestamp()),
+        "inventory_sha256":"a"*64,"filers":copy.deepcopy(data["filers"]),
+        "executions":copy.deepcopy(project["executions"])}
+    return data
 
 
 class HarborReclamation(unittest.TestCase):
@@ -79,7 +93,7 @@ class HarborReclamation(unittest.TestCase):
             (p / "reclamation-gates.jq").write_text((APP / "reclamation-gates.jq").read_text().replace("$$", "$"))
             script = (APP / "reclamation.sh").read_text().replace("$$", "$" ).replace("/tmp/", str(p)+"/")
             (p / "reclamation.sh").write_text(script)
-            (p / "reconcile.sh").write_text("#!/bin/sh\nif [ \"$MODE\" = verify-images ] && [ \"${MISSING_IMAGES:-0}\" = 1 ]; then exit 1; fi\njq '.harbor' \"$FIXTURE/data.json\"\n")
+            (p / "reconcile.sh").write_text("#!/bin/sh\nif [ \"$MODE\" = verify-images ] && [ \"${MISSING_IMAGES:-0}\" = 1 ]; then exit 1; fi\ncase \"$MODE\" in inspect) key=harbor ;; verify-images) key=images ;; verify-filers) key=filers ;; *) exit 1 ;; esac\njq \".$key\" \"$FIXTURE/data.json\"\n")
             (p / "date").write_text(f"#!/bin/sh\necho {NOW}\n"); (p / "date").chmod(0o755)
             kubectl = p / "kubectl"
             kubectl.write_text('''#!/usr/bin/env python3
@@ -95,6 +109,7 @@ if 'exec' in a:
  (p/'data.json').write_text(json.dumps(d));print('completed');sys.exit(0)
 if '--raw' in a:
  name=a[-1].split('/pods/')[1].split(':')[0];print(json.dumps(next(s['status'] for s in d['seaweed'] if s['pod']==name)))
+elif 'configmap' in a:print(json.dumps({'data':{'evidence':json.dumps(d['retention_evidence'])}}))
 elif 'node' in a:print(json.dumps(d['nodes']['items'][0]))
 elif 'volumes.longhorn.io' in a:print(json.dumps(d['longhorn_volumes']))
 elif 'pod' in a:
@@ -128,6 +143,24 @@ else:sys.exit(1)
         result, actions = self.script("apply-reclamation", missing_images=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(actions, [])
+
+    def test_missing_stale_or_changed_protection_proof_blocks(self):
+        for key,value in [("state","running"),("dry_run",True),("completed_at",0),
+                          ("inventory_sha256","b"*64),("executions",[])]:
+            data=fixture();data["retention_evidence"][key]=value
+            self.assertNotEqual(self.gate(data).returncode,0,key)
+        data=fixture();data.pop("retention_evidence")
+        self.assertNotEqual(self.gate(data).returncode,0)
+        data=fixture();data["filers"][0]["pvc_uid"]="replaced"
+        self.assertNotEqual(self.gate(data).returncode,0)
+        data=fixture();data["retention_evidence"]["executions"][0]["id"]=999
+        self.assertNotEqual(self.gate(data).returncode,0)
+
+    def test_independent_schedule_or_untagged_deletion_blocks(self):
+        data=fixture();data["harbor"]["projects"][0]["policy"]["trigger"]["kind"]="Schedule"
+        self.assertNotEqual(self.gate(data).returncode,0)
+        data=fixture();data["harbor"]["projects"][0]["policy"]["rules"][2]["tag_selectors"][0]["extras"]='{"untagged":false}'
+        self.assertNotEqual(self.gate(data).returncode,0)
 
     def test_automation_is_not_rendered_before_pilot(self):
         manifest = subprocess.check_output(["kustomize", "build", str(APP)], text=True)

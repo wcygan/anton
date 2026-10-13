@@ -14,7 +14,7 @@ api_url="$${HARBOR_API_URL%/}"
 auth="$${HARBOR_USERNAME}:$${HARBOR_PASSWORD}"
 mode="$${MODE:-reconcile}"
 case "$${mode}" in
-  reconcile|gc-dry-run|inspect|verify-images) ;;
+  reconcile|retention|retention-dry-run|gc-dry-run|inspect|verify-images|verify-filers) ;;
   *) echo "unsupported mode" >&2; exit 1 ;;
 esac
 
@@ -22,7 +22,7 @@ harbor_request() {
   method="$${1}"
   path="$${2}"
   payload="$${3:-}"
-  if { [ "$${mode}" = inspect ] || [ "$${mode}" = verify-images ]; } && [ "$${method}" != GET ]; then
+  if { [ "$${mode}" = inspect ] || [ "$${mode}" = verify-images ] || [ "$${mode}" = verify-filers ]; } && [ "$${method}" != GET ]; then
     echo "inspection forbids API writes" >&2
     exit 1
   fi
@@ -33,9 +33,6 @@ harbor_request() {
       --silent \
       --show-error \
       --connect-timeout 5 --max-time 30 \
-      --retry 5 \
-      --retry-delay 5 \
-      --retry-connrefused \
       --user "$${auth}" \
       --request "$${method}" \
       --header "Content-Type: application/json" \
@@ -49,9 +46,6 @@ harbor_request() {
     --silent \
     --show-error \
     --connect-timeout 5 --max-time 30 \
-    --retry 5 \
-    --retry-delay 5 \
-    --retry-connrefused \
     --user "$${auth}" \
     --request "$${method}" \
     "$${api_url}$${path}"
@@ -63,65 +57,15 @@ if [ "$${mode}" = gc-dry-run ]; then
   exit 0
 fi
 
+reconcile_home="$${HARBOR_RECONCILE_HOME:-$$(dirname "$0")}"
+. "$${reconcile_home}/helpers.sh"
 if [ "$${mode}" = verify-images ]; then
-  # Use registry token auth inside the pod; never print tokens or passwords.
-  workloads="$$(kubectl get pods,deployments,statefulsets,daemonsets,jobs,cronjobs -A -o json)"
-  images="$$(printf '%s' "$${workloads}" | jq -r --arg host "$${HARBOR_IMAGE_HOST}" '[.. | objects | .image? // empty | select(type=="string") | select(startswith($$host+"/"))] | unique[]')"
-  count=0
-  blobs=0
-  for image in $${images}; do
-    image=$${image#*/}
-    case "$${image}" in
-      *@*) reference=$${image##*@}; repository=$${image%@*}; repository=$${repository%:*} ;;
-      *:*) reference=$${image##*:}; repository=$${image%:*} ;;
-      *) reference=latest; repository=$${image} ;;
-    esac
-    project=$${repository%%/*}
-    repo=$${repository#*/}
-    encoded="$$(printf '%s' "$${repo}" | jq -sRr '@uri | @uri')"
-    artifact="$$(harbor_request GET "/projects/$${project}/repositories/$${encoded}/artifacts/$${reference}")" || {
-      echo 'artifact metadata verification failed' >&2; exit 1;
-    }
-    digest="$$(printf '%s' "$${artifact}" | jq -er '.digest|select(type=="string" and length>0)')"
-    token_response="$$(curl --fail --silent --show-error --max-time 30 --user "$${auth}" \
-      --get --data-urlencode 'service=harbor-registry' --data-urlencode "scope=repository:$${repository}:pull" \
-      "$${HARBOR_TOKEN_URL:-$${api_url%/api/v2.0}/service/token}")" || {
-      echo 'registry token verification failed' >&2; exit 1;
-    }
-    token="$$(printf '%s' "$${token_response}" | jq -er '.token|select(type=="string" and length>0)')"
-    queue="$${digest}"
-    seen=' '
-    manifests=0
-    while [ -n "$${queue}" ]; do
-      current=$${queue%% *}
-      if [ "$${queue}" = "$${current}" ]; then queue=''; else queue=$${queue#* }; fi
-      case "$${seen}" in *" $${current} "*) continue ;; esac
-      printf '%s' "$${current}" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo 'invalid manifest digest' >&2; exit 1; }
-      seen="$${seen}$${current} "
-      manifests=$((manifests + 1))
-      [ "$${manifests}" -le 64 ] || { echo 'manifest graph exceeds verification bound' >&2; exit 1; }
-      manifest="$$(curl --fail --silent --show-error --max-time 30 --max-filesize 1048576 \
-        --header "Authorization: Bearer $${token}" \
-        --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
-        "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/manifests/$${current}")" || {
-          echo 'registry manifest verification failed' >&2; exit 1;
-        }
-      children="$$(printf '%s' "$${manifest}" | jq -er 'if .schemaVersion==2 then [.manifests[]?.digest]|join(" ") else error("invalid manifest") end')"
-      [ -z "$${children}" ] || queue="$${queue:+$${queue} }$${children}"
-      digests="$$(printf '%s' "$${manifest}" | jq -r '[(.config.digest // empty),.layers[]?.digest]|unique[]')"
-      for blob in $${digests}; do
-        printf '%s' "$${blob}" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo 'invalid blob digest' >&2; exit 1; }
-        code="$$(curl --fail --silent --show-error --head --output /dev/null --max-time 30 --write-out '%{http_code}' \
-          --header "Authorization: Bearer $${token}" "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/blobs/$${blob}")" || {
-            echo 'registry blob verification failed' >&2; exit 1;
-          }
-        [ "$${code}" = 200 ] || { echo 'blob availability not confirmed' >&2; exit 1; }
-        blobs=$((blobs + 1))
-      done
-    done
-    count=$((count + 1))
-  done
-  jq -n --argjson count "$${count}" --argjson blobs "$${blobs}" '{verified_artifacts:$$count,readable_blobs:$$blobs}'
+  verified_inventory="$$(resolve_inventory)"
+  verify_inventory "$${verified_inventory}"
+  exit 0
+fi
+if [ "$${mode}" = verify-filers ]; then
+  verify_filers
   exit 0
 fi
 
@@ -155,7 +99,6 @@ policy_for_project() {
 
   jq -n \
     --argjson project_id "$${project_id}" \
-    --arg cron "$${HARBOR_RETENTION_CRON}" \
     --arg protected_tags "$${HARBOR_PROTECTED_TAGS}" \
     '
       def all_repositories:
@@ -183,13 +126,18 @@ policy_for_project() {
             tag_selectors: [selector($$protected_tags)],
             params: {},
             template: "always"
+          },
+          {
+            disabled: false,
+            action: "retain",
+            scope_selectors: all_repositories,
+            tag_selectors: [{kind:"doublestar",decoration:"matches",pattern:"",extras:({untagged:true}|tojson)}],
+            params: {},
+            template: "always"
           }
         ],
-        trigger: {
-          kind: "Schedule",
-          references: {},
-          settings: {cron: $$cron}
-        },
+        # Deletion is submitted only by the guarded Kubernetes job.
+        trigger: {kind:"Manual",references:{},settings:{}},
         scope: {level: "project", ref: $$project_id}
       }
     '
@@ -199,7 +147,9 @@ normalise_policy() {
   jq -S '
     del(.id)
     | del(.trigger.settings.next_scheduled_time)
-    | .rules |= map(del(.id, .priority))
+    | .trigger.references = (.trigger.references // {})
+    | .trigger.settings = (.trigger.settings // {})
+    | .rules |= map(del(.id, .priority) | .disabled=(.disabled // false))
   '
 }
 
@@ -224,29 +174,24 @@ reconcile_project() {
   echo "updated retention policy $${retention_id} for project $${project_id}"
 }
 
-# Fail closed if the complete workload inventory cannot be read. Include
-# scaled-to-zero controllers and scheduled jobs, not obsolete ReplicaSets.
-workloads="$$(kubectl get pods,deployments,statefulsets,daemonsets,jobs,cronjobs -A -o json)"
-images="$$(printf '%s' "$${workloads}" | jq -r --arg host "$${HARBOR_IMAGE_HOST}" \
-  '[.. | objects | .image? // empty | select(type == "string") | select(startswith($$host + "/"))] | unique[]')"
+# Require durable filers and a complete, readable active/desired/rollback set.
+# Harbor's scheduler stays Manual, so a failed inventory cannot trigger deletion.
+filers="$$(verify_filers)"
+protected_inventory="$$(resolve_inventory)"
+image_verification="$$(verify_inventory "$${protected_inventory}")"
+if [ "$${mode}" = retention ]; then write_evidence '{"state":"running"}'; fi
 protected=""
-for image in $${images}; do
-  image=$${image#*/}
-  case "$${image}" in
-    *@*) reference=$${image##*@}; repository=$${image%@*}; repository=$${repository%:*} ;;
-    *:*) reference=$${image##*:}; repository=$${image%:*} ;;
-    *) reference=latest; repository=$${image} ;;
-  esac
-  project=$${repository%%/*}
-  repository=$${repository#*/}
-  encoded="$$(printf '%s' "$${repository}" | jq -sRr '@uri | @uri')"
-  artifact="$$(harbor_request GET "/projects/$${project}/repositories/$${encoded}/artifacts/$${reference}")"
-  digest="$$(printf '%s' "$${artifact}" | jq -er '.digest')"
+for row in $$(printf '%s' "$${protected_inventory}" | jq -r '.[]|@base64'); do
+  record="$$(printf '%s' "$${row}" | base64 -d)"
+  full="$$(printf '%s' "$${record}" | jq -r '.repository')"
+  digest="$$(printf '%s' "$${record}" | jq -r '.digest')"
+  project=$${full%%/*}; repository=$${full#*/}
+  encoded="$$(printf '%s' "$${repository}" | jq -sRr '@uri|@uri')"
+  artifact="$$(harbor_request GET "/projects/$${project}/repositories/$${encoded}/artifacts/$${digest}")"
   tag="in-use-$${digest#sha256:}"
   protected="$${protected} $${tag}"
-  if ! printf '%s' "$${artifact}" | jq -e --arg tag "$${tag}" 'any(.tags[]?; .name == $$tag)' >/dev/null; then
-    harbor_request POST "/projects/$${project}/repositories/$${encoded}/artifacts/$${digest}/tags" \
-      "$$(jq -n --arg name "$${tag}" '{name:$$name}')" >/dev/null
+  if ! printf '%s' "$${artifact}" | jq -e --arg tag "$${tag}" 'any(.tags[]?;.name==$$tag)' >/dev/null; then
+    harbor_request POST "/projects/$${project}/repositories/$${encoded}/artifacts/$${digest}/tags" "$$(jq -n --arg name "$${tag}" '{name:$$name}')" >/dev/null
   fi
 done
 
@@ -264,6 +209,10 @@ while :; do
   [ "$${project_count}" -lt 100 ] && break
   page=$((page + 1))
 done
+
+# Abort before removing old protection if the workload set changed mid-run.
+latest_inventory="$$(resolve_inventory)"
+[ "$${latest_inventory}" = "$${protected_inventory}" ] || { echo 'protection inventory changed; stop' >&2;exit 1; }
 
 # Remove only this reconciler's obsolete protection tags. Keep artifact
 # deletion in Harbor retention; a failed inventory above prevents this stage.
@@ -297,8 +246,8 @@ done
 # Retention drops references daily; GC frees unreferenced blobs weekly.
 # Keep untagged artifacts: a digest-only deploy outside this inventory must
 # not be removed merely because it lacks a tag.
-desired_gc="$$(jq -n --arg cron "$${HARBOR_GC_CRON}" \
-  '{schedule:{type:"Custom",cron:$$cron},parameters:{delete_untagged:false,dry_run:false,workers:1}}')"
+desired_gc="$$(jq -n --arg cron "$${HARBOR_GC_CRON}" --arg enabled "$${HARBOR_GC_ENABLED:-true}" \
+  '{schedule:(if $$enabled=="true" then {type:"Custom",cron:$$cron} elif $$enabled=="false" then {type:"None"} else error("invalid GC enable flag") end),parameters:{delete_untagged:false,dry_run:false,workers:1}}')"
 current_gc="$$(harbor_request GET /system/gc/schedule)"
 normalise_gc() {
   # Harbor serializes false dry_run with omitempty; its absent default is false.
@@ -309,4 +258,27 @@ desired_gc_normalised="$$(printf '%s' "$${desired_gc}" | normalise_gc)"
 if [ "$${current_gc_normalised}" != "$${desired_gc_normalised}" ]; then
   harbor_request PUT /system/gc/schedule "$${desired_gc}" >/dev/null
   echo "updated weekly garbage collection schedule"
+fi
+
+if [ "$${mode}" = retention ] || [ "$${mode}" = retention-dry-run ]; then
+  dry_run=false
+  [ "$${mode}" != retention-dry-run ] || dry_run=true
+  executions='[]'
+  projects="$$(harbor_request GET '/projects?page=1&page_size=100')"
+  [ "$$(printf '%s' "$${projects}" | jq 'length')" -lt 100 ] || { echo 'project count exceeds execution bound' >&2;exit 1; }
+  for project_id in $$(printf '%s' "$${projects}" | jq -r '.[].project_id'); do
+    latest_inventory="$$(resolve_inventory)"
+    [ "$${latest_inventory}" = "$${protected_inventory}" ] || { echo 'protection inventory changed; stop' >&2;exit 1; }
+    verify_filers >/dev/null
+    policy_id="$$(harbor_request GET "/projects/$${project_id}/metadatas/" | jq -er '.retention_id')"
+    execution="$$(execute_retention "$${policy_id}" "$${dry_run}")"
+    executions="$$(printf '%s' "$${executions}" | jq --argjson execution "$${execution}" '.+[$$execution]')"
+  done
+  latest_inventory="$$(resolve_inventory)"
+  [ "$${latest_inventory}" = "$${protected_inventory}" ] || { echo 'post-retention inventory changed; stop' >&2;exit 1; }
+  verify_inventory "$${protected_inventory}" >/dev/null
+  filers="$$(verify_filers)"
+  evidence="$$(jq -cn --arg hash "$$(inventory_hash "$${protected_inventory}")" --argjson now "$$(date -u +%s)" --argjson filers "$${filers}" --argjson executions "$${executions}" --argjson dry_run "$${dry_run}"     '{schema:1,state:"Success",completed_at:$$now,inventory_sha256:$$hash,filers:$$filers,executions:$$executions,dry_run:$$dry_run}')"
+  if [ "$${dry_run}" = false ]; then write_evidence "$${evidence}"; fi
+  printf '%s\n' "$${evidence}"
 fi

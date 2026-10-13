@@ -1,0 +1,5 @@
+# Job-owned evidence fields are deliberately absent from Git's SSA field set.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harbor-retention-status

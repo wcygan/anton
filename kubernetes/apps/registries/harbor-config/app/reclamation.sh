@@ -10,6 +10,9 @@ collect() {
   # JSON goes to bounded job-local /tmp, never to a persistent dataset.
   MODE=inspect sh "$${RECLAMATION_HOME}/reconcile.sh" > /tmp/harbor.json
   MODE=verify-images sh "$${RECLAMATION_HOME}/reconcile.sh" > /tmp/image-availability.json
+  MODE=verify-filers sh "$${RECLAMATION_HOME}/reconcile.sh" > /tmp/filer-persistence.json
+  kubectl -n registries get configmap harbor-retention-status -o json > /tmp/retention-status.json
+  jq -er '.data.evidence|fromjson' /tmp/retention-status.json > /tmp/retention-evidence.json
   printf '[]' > /tmp/node-items.json
   for node in k8s-1 k8s-2 k8s-3; do
     kubectl get node "$${node}" -o json > /tmp/node.json
@@ -31,7 +34,8 @@ collect() {
   done
   jq -n --slurpfile harbor /tmp/harbor.json --slurpfile nodes /tmp/nodes.json \
     --slurpfile longhorn /tmp/longhorn.json --slurpfile seaweed /tmp/seaweed.json \
-    '{harbor:$$harbor[0],nodes:$$nodes[0],longhorn_volumes:$$longhorn[0],seaweed:$$seaweed[0]}' > /tmp/input.json
+    --slurpfile filers /tmp/filer-persistence.json --slurpfile images /tmp/image-availability.json --slurpfile evidence /tmp/retention-evidence.json \
+    '{harbor:$$harbor[0],nodes:$$nodes[0],longhorn_volumes:$$longhorn[0],seaweed:$$seaweed[0],filers:$$filers[0],images:$$images[0],retention_evidence:$$evidence[0]}' > /tmp/input.json
   jq --argjson now "$$(date -u +%s)" -f "$${RECLAMATION_HOME}/reclamation-gates.jq" /tmp/input.json > /tmp/eligible.json
 }
 

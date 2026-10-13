@@ -11,6 +11,7 @@ configMapGenerator:
 resources:
   - ./seaweed.yaml
   - ./filer-pvcs.yaml
+  - ./filer-reader-rbac.yaml
   - ./externalsecret.yaml
   - ./buckets-cronjob.yaml
   - ./httproute.yaml

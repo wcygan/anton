@@ -7,14 +7,16 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from harbor_fixture import write_kubectl, copy_scripts
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "kubernetes/apps/registries/harbor-config/app"
 
 
 class HarborInspection(unittest.TestCase):
-    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False, missing_manifest=False):
+    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False, missing_manifest=False, execution_status="Success", ambiguous_execution=False):
         requests = []
+        submitted = []
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def log_message(self, *args):
@@ -44,7 +46,9 @@ class HarborInspection(unittest.TestCase):
                 elif path == "/retentions/1":
                     body = {"rules": []}
                 elif path.startswith("/retentions/1/executions?"):
-                    body = [{"id": 2, "status": "Success", "dry_run": False}]
+                    body = [{"id": 2, "policy_id": 1, "start_time":"2026-10-13T22:00:00Z", "end_time":"2026-10-13T22:00:01Z",
+                             "status": execution_status, "dry_run": submitted[-1]["dry_run"]}] if submitted else []
+                    if submitted and ambiguous_execution: body.append({**body[0],"id":3})
                 elif path.startswith("/repositories?"):
                     body = []
                 else:
@@ -63,6 +67,7 @@ class HarborInspection(unittest.TestCase):
             def write(self):
                 body = self.rfile.read(int(self.headers.get("content-length", 0)))
                 requests.append((self.command, self.path, json.loads(body) if body else None))
+                if self.command=="POST" and self.path=="/retentions/1/executions": submitted.append(json.loads(body))
                 self.send_response(200)
                 self.end_headers()
             do_POST = write
@@ -77,9 +82,8 @@ class HarborInspection(unittest.TestCase):
                 p = Path(tmp)
                 script = p / "reconcile.sh"
                 script.write_text((APP / "reconcile.sh").read_text().replace("$$", "$"))
-                kubectl = p / "kubectl"
-                kubectl.write_text("#!/bin/sh\nprintf '%s' '" + json.dumps(workload or {"items": []}) + "'\n")
-                kubectl.chmod(0o755)
+                copy_scripts(p, APP)
+                write_kubectl(p, workload if workload is not None else {"items": []})
                 env = {**os.environ, "PATH": str(p) + ":" + os.environ["PATH"], "MODE": mode,
                        "HARBOR_API_URL": f"http://127.0.0.1:{server.server_port}",
                        "HARBOR_USERNAME": "fixture", "HARBOR_PASSWORD": "never-print-fixture",
@@ -94,6 +98,7 @@ class HarborInspection(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                 else:
                     self.assertNotEqual(result.returncode, 0)
+                self.kube_actions = [json.loads(line) for line in (p / "kube-actions").read_text().splitlines()] if (p / "kube-actions").exists() else []
                 return result.stdout, requests
         finally:
             server.shutdown()
@@ -150,7 +155,10 @@ class HarborInspection(unittest.TestCase):
     def test_registry_manifest_and_blob_verification_is_read_only(self):
         workload = {"items": [{"spec": {"containers": [{"image": "registry/library/demo:v1"}]}}]}
         output, requests = self.run_script("verify-images", self.schedule(), workload=workload)
-        self.assertEqual(json.loads(output), {"verified_artifacts": 1, "readable_blobs": 1})
+        result=json.loads(output)
+        self.assertEqual(result["verified_artifacts"],1)
+        self.assertEqual(result["readable_blobs"],1)
+        self.assertEqual(len(result["inventory_sha256"]),64)
         self.assertTrue(all(method in {"GET", "HEAD"} for method, _, _ in requests))
 
     def test_missing_retained_blob_fails_verification(self):
@@ -164,3 +172,30 @@ class HarborInspection(unittest.TestCase):
         _, requests = self.run_script("verify-images", self.schedule(), workload=workload,
                                       missing_manifest=True, expect_success=False)
         self.assertFalse(any(method == "HEAD" for method, _, _ in requests))
+
+    def test_real_retention_waits_for_success_and_publishes_proof(self):
+        output, requests = self.run_script("retention", self.schedule())
+        proof=json.loads(output.splitlines()[-1])
+        self.assertFalse(proof["dry_run"])
+        self.assertEqual(proof["executions"][0]["status"],"Success")
+        self.assertEqual(len(self.kube_actions),2)
+        saved=json.loads(json.loads(self.kube_actions[-1][-1])["data"]["evidence"])
+        self.assertEqual(saved["state"],"Success")
+        self.assertEqual(saved["executions"][0]["id"],2)
+
+    def test_dryrun_never_publishes_real_success(self):
+        output,_=self.run_script("retention-dry-run",self.schedule())
+        self.assertTrue(json.loads(output.splitlines()[-1])["dry_run"])
+        self.assertEqual(self.kube_actions,[])
+
+    def test_failed_or_ambiguous_retention_leaves_invalid_proof(self):
+        for arguments in [{"execution_status":"Error"},{"ambiguous_execution":True}]:
+            self.run_script("retention",self.schedule(),expect_success=False,**arguments)
+            self.assertEqual(len(self.kube_actions),1)
+            self.assertEqual(json.loads(json.loads(self.kube_actions[0][-1])["data"]["evidence"]),{"state":"running"})
+
+    def test_failed_inventory_or_content_blocks_all_writes(self):
+        for arguments in [{"workload":{}},{"workload":{"items":[{"spec":{"containers":[{"image":"registry/library/demo:v1"}]}}]},"missing_manifest":True}]:
+            _,requests=self.run_script("retention",self.schedule(),expect_success=False,**arguments)
+            self.assertTrue(all(method in {"GET","HEAD"} for method,_,_ in requests))
+            self.assertEqual(self.kube_actions,[])

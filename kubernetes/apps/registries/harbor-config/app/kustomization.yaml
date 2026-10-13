@@ -5,6 +5,9 @@ configMapGenerator:
   - name: harbor-retention-reconciler
     files:
       - reconcile.sh=./reconcile.sh
+      - helpers.sh=./helpers.sh
+      - protected-images.jq=./protected-images.jq
+      - filer-persistence.jq=./filer-persistence.jq
       - reclamation.sh=./reclamation.sh
       - reclamation-gates.jq=./reclamation-gates.jq
     options:
@@ -19,3 +22,4 @@ resources:
   - ./prometheusrule.yaml
   - ./retention-cronjob.yaml
   - ./retention-rbac.yaml
+  - ./retention-status.yaml

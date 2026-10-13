@@ -12,7 +12,7 @@ rules:
     resources: [pods]
     verbs: [list]
   - apiGroups: [apps]
-    resources: [deployments, statefulsets, daemonsets]
+    resources: [deployments, statefulsets, daemonsets, replicasets, controllerrevisions]
     verbs: [list]
   - apiGroups: [batch]
     resources: [jobs, cronjobs]
@@ -26,6 +26,55 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: harbor-retention-workload-reader
+subjects:
+  - kind: ServiceAccount
+    name: harbor-retention
+    namespace: registries
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harbor-retention-evidence
+rules:
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [list]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [harbor-retention-status]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbor-retention-evidence
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harbor-retention-evidence
+subjects:
+  - kind: ServiceAccount
+    name: harbor-retention
+    namespace: registries
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harbor-retention-evidence-writer
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [harbor-retention-status]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harbor-retention-evidence-writer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harbor-retention-evidence-writer
 subjects:
   - kind: ServiceAccount
     name: harbor-retention
