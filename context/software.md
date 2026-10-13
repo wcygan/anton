@@ -6,6 +6,10 @@ High-level "what's running" map for anton. Exact versions live in the manifests 
 
 The secrets rows were reconciled on 2026-08-12. The other rows retain the full inventory date above.
 
+## Retired workloads (2026-10-12)
+
+Airflow, Spark, Trino, Flight Recorder, and Temporal are retired, including their dedicated data. See [ADR 0040](adrs/0040-retire-lakehouse-and-temporal.md). Longhorn, SeaweedFS, Harbor, Prometheus, Loki, Goldilocks, Headlamp, and Hubble remain platform services. Older inventory rows below retain their stated verification dates.
+
 ## Node layer
 
 | Component | Role |

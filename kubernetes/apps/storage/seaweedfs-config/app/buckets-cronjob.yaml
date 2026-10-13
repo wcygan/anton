@@ -41,11 +41,11 @@ spec:
                 - name: S3_ENDPOINT
                   value: http://seaweedfs-s3.storage.svc.cluster.local:8333
                 - name: ORDINARY_BUCKETS
-                  value: harbor loki iceberg-raw spark-events
+                  value: harbor loki
                 - name: ORDINARY_PREFIXES
-                  value: spark-events/events/
+                  value: ""
                 - name: TABLE_BUCKETS
-                  value: iceberg-warehouse iceberg-shadow
+                  value: ""
               command:
                 - /bin/sh
                 - /opt/anton/provision-buckets.sh

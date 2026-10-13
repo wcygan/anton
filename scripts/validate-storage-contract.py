@@ -20,12 +20,8 @@ CRONJOB = APP / "buckets-cronjob.yaml"
 KUSTOMIZATION = APP / "kustomization.yaml"
 S3_CONFIG = APP / "externalsecret.yaml"
 SEAWEED = APP / "seaweed.yaml"
-SPARK_EVENTS = APP / "spark-events-bucket.yaml"
 LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
-TRINO_APP = REPO / "kubernetes" / "apps" / "iceberg-demo" / "trino" / "app"
-TRINO_SECRET = TRINO_APP / "externalsecret.yaml"
-TRINO_RELEASE = TRINO_APP / "helmrelease.yaml"
 
 
 def validate_provisioner_postbuild_substitution() -> str | None:
@@ -80,9 +76,7 @@ def main() -> int:
     cronjob = CRONJOB.read_text(encoding="utf-8")
     required_cronjob = (
         "name: seaweedfs-buckets-ensure",
-        "value: harbor loki iceberg-raw spark-events",
-        "value: spark-events/events/",
-        "value: iceberg-warehouse iceberg-shadow",
+        "value: harbor loki",
         "automountServiceAccountToken: false",
         "readOnlyRootFilesystem: true",
         "name: seaweedfs-bucket-provisioner",
@@ -115,93 +109,13 @@ def main() -> int:
     seaweed = SEAWEED.read_text(encoding="utf-8")
     if "secret.reloader.stakater.com/reload: seaweedfs-s3-config" not in seaweed:
         failures.append("SeaweedFS must reload after its S3 Secret changes")
-    required_shadow_identity = (
-        '"name": "iceberg-shadow"',
-        '"Write:iceberg-shadow"',
-        'key: "seaweedfs-iceberg-shadow/shadow-access-key"',
-        'key: "seaweedfs-iceberg-shadow/shadow-secret-key"',
-    )
-    failures.extend(
-        f"SeaweedFS S3 identity missing {value!r}"
-        for value in required_shadow_identity
-        if value not in s3_config
-    )
-
-    required_reader_identity = (
-        '"name": "iceberg-warehouse-reader"',
-        '"actions": ["Read:iceberg-warehouse", "List:iceberg-warehouse", "s3tables:GetNamespace:iceberg-warehouse", "s3tables:ListNamespaces:iceberg-warehouse", "s3tables:GetTable:iceberg-warehouse", "s3tables:ListTables:iceberg-warehouse"]',
-        '"name": "iceberg-shadow-reader"',
-        '"actions": ["Read:iceberg-shadow", "List:iceberg-shadow", "s3tables:GetNamespace:iceberg-shadow", "s3tables:ListNamespaces:iceberg-shadow", "s3tables:GetTable:iceberg-shadow", "s3tables:ListTables:iceberg-shadow"]',
-        'key: "seaweedfs-iceberg-reader/reader-access-key"',
-        'key: "seaweedfs-iceberg-reader/reader-secret-key"',
-        'key: "seaweedfs-iceberg-shadow-reader/reader-access-key"',
-        'key: "seaweedfs-iceberg-shadow-reader/reader-secret-key"',
-    )
-    failures.extend(
-        f"SeaweedFS reader identity missing {value!r}"
-        for value in required_reader_identity
-        if value not in s3_config
-    )
-
-    trino_secret = TRINO_SECRET.read_text(encoding="utf-8")
-    trino_release = TRINO_RELEASE.read_text(encoding="utf-8")
-    required_trino_secret = (
-        "name: trino-iceberg-credentials",
-        'key: "seaweedfs-iceberg-reader/reader-access-key"',
-        'key: "seaweedfs-iceberg-reader/reader-secret-key"',
-        'key: "seaweedfs-iceberg-shadow-reader/reader-access-key"',
-        'key: "seaweedfs-iceberg-shadow-reader/reader-secret-key"',
-    )
-    failures.extend(
-        f"Trino reader Secret missing {value!r}"
-        for value in required_trino_secret
-        if value not in trino_secret
-    )
-    required_trino_catalog = (
-        "iceberg.rest-catalog.warehouse=s3://iceberg-warehouse",
-        "iceberg_shadow: |",
-        "iceberg.rest-catalog.warehouse=s3://iceberg-shadow",
-        "name: trino-iceberg-credentials",
-    )
-    failures.extend(
-        f"Trino catalog missing {value!r}"
-        for value in required_trino_catalog
-        if value not in trino_release
-    )
-    if trino_release.count("iceberg.security=READ_ONLY") != 2:
-        failures.append("Trino must set READ_ONLY on both Iceberg catalogs")
-
-    required_event_identity = (
-        '"name": "spark-events-reader"',
-        '"actions": ["Read:spark-events", "List:spark-events"]',
-        'key: "seaweedfs-spark-events/reader-access-key"',
-        'key: "seaweedfs-spark-events/reader-secret-key"',
-        '"name": "spark-events-writer"',
-        '"actions": ["Read:spark-events", "Write:spark-events", "List:spark-events"]',
-        'key: "seaweedfs-spark-events/writer-access-key"',
-        'key: "seaweedfs-spark-events/writer-secret-key"',
-    )
-    failures.extend(
-        f"SeaweedFS event-log identity missing {value!r}"
-        for value in required_event_identity
-        if value not in s3_config
-    )
-
-    event_storage = SPARK_EVENTS.read_text(encoding="utf-8")
-    required_event_storage = (
-        "kind: Bucket",
-        "name: spark-events",
-        "adoptExisting: true",
-        "reclaimPolicy: Retain",
-        "kind: BucketLifecyclePolicy",
-        "prefix: events/",
-        "days: 30",
-    )
-    failures.extend(
-        f"Spark event storage missing {value!r}"
-        for value in required_event_storage
-        if value not in event_storage
-    )
+    # Lakehouse consumers are retired. Shared Harbor and Loki storage remains.
+    for bucket in ("iceberg-raw", "iceberg-warehouse", "iceberg-shadow", "spark-events"):
+        if bucket in cronjob:
+            failures.append(f"retired bucket is still provisioned: {bucket}")
+    for filename in ("spark-events-bucket.yaml", "lakehouse-s3-smoke-job.yaml", "iceberg-service.yaml"):
+        if (APP / filename).exists():
+            failures.append(f"retired lakehouse resource still exists: {filename}")
 
     postbuild_substitution_failure = validate_provisioner_postbuild_substitution()
     if postbuild_substitution_failure is not None:

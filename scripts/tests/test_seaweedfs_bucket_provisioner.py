@@ -187,6 +187,15 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
         self.assertIn("created=0 present=5", second.stdout)
         self.assertEqual(unchanged, state)
 
+    def test_platform_only_intent_does_not_recreate_retired_buckets(self) -> None:
+        result, state = self.run_provisioner(
+            {"ordinary": ["harbor", "loki"], "tables": []},
+            ordinary="harbor loki", tables="",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state, {"ordinary": ["harbor", "loki"], "tables": []})
+        self.assertIn("created=0 present=2", result.stdout)
+
     def test_refuses_ordinary_bucket_at_table_intent(self) -> None:
         initial = {"ordinary": ["iceberg-warehouse"], "tables": []}
         result, state = self.run_provisioner(initial)

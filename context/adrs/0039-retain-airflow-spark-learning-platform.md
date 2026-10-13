@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Superseded-by 0040
 date: 2026-08-14
 deciders: ['@wcygan']
 affects: compute

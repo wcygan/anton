@@ -3,7 +3,7 @@ set -eu
 
 : "$${S3_ENDPOINT:?S3_ENDPOINT is required}"
 : "$${ORDINARY_BUCKETS:?ORDINARY_BUCKETS is required}"
-: "$${TABLE_BUCKETS:?TABLE_BUCKETS is required}"
+TABLE_BUCKETS="$${TABLE_BUCKETS:-}"
 ORDINARY_PREFIXES="$${ORDINARY_PREFIXES:-}"
 
 created=0

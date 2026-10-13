@@ -199,24 +199,11 @@ class LakehouseTrinoTests(unittest.TestCase):
             with self.assertRaisesRegex(TrinoReadError, "not read-only"):
                 commands_for(REPO, "unsafe")
 
-    def test_task_surface_owns_trino_checks(self) -> None:
-        result = subprocess.run(
-            ["mise", "exec", "--", "task", "--list"],
-            cwd=REPO,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+    def test_retired_trino_tasks_are_not_advertised(self) -> None:
+        result = subprocess.run(["task", "--list"], cwd=REPO, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("trino:summary:", result.stdout)
-        self.assertIn("trino:contract:", result.stdout)
-        self.assertIn("trino:snapshots:", result.stdout)
-        self.assertIn("trino:flight-recorder-summary:", result.stdout)
-        self.assertIn("trino:flight-recorder-contract:", result.stdout)
-        self.assertIn("trino:flight-recorder-snapshots:", result.stdout)
-        self.assertIn("trino:flight-recorder-namespace-isolation:", result.stdout)
-        self.assertIn("trino:flight-recorder-components:", result.stdout)
-        self.assertNotIn("airflow:trino-summary:", result.stdout)
+        self.assertNotIn("trino:", result.stdout)
+        self.assertNotIn("airflow:", result.stdout)
 
     def test_flight_recorder_queries_cover_counts_contracts_and_snapshots(self) -> None:
         summary = QUERIES["flight-recorder-summary"][0]

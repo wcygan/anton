@@ -74,11 +74,10 @@ resources: []
             )
         return app_root
 
-    def test_generated_configmap_baseline_remains_three_roots(self) -> None:
+    def test_generated_configmap_baseline_remains_two_roots(self) -> None:
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in MODULE.discover_configmap_roots()],
             [
-                "kubernetes/apps/lakehouse/spark-history-server/app",
                 "kubernetes/apps/registries/harbor-config/app",
                 "kubernetes/apps/storage/seaweedfs-config/app",
             ],
@@ -86,13 +85,10 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 51)
+        self.assertEqual(len(MODULE.discover_application_roots()), 42)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [
-                "kubernetes/apps/airflow/airflow/app",
-                "kubernetes/apps/airflow/airflow-database/app",
-                "kubernetes/apps/airflow/flight-recorder/app",
                 "kubernetes/apps/cert-manager/cert-manager/app",
                 "kubernetes/apps/databases/cloudnative-pg/app",
                 "kubernetes/apps/databases/dragonfly-operator/app",
@@ -102,15 +98,11 @@ resources: []
                 "kubernetes/apps/flux-system/auxiliary/app",
                 "kubernetes/apps/flux-system/flux-instance/app",
                 "kubernetes/apps/flux-system/flux-operator/app",
-                "kubernetes/apps/iceberg-demo/trino/app",
                 "kubernetes/apps/kube-system/cilium/app",
                 "kubernetes/apps/kube-system/coredns/app",
                 "kubernetes/apps/kube-system/metrics-server/app",
                 "kubernetes/apps/kube-system/reloader/app",
                 "kubernetes/apps/kube-system/spegel/app",
-                "kubernetes/apps/lakehouse/authoritative-writer/app",
-                "kubernetes/apps/lakehouse/flight-recorder/app",
-                "kubernetes/apps/lakehouse/spark-history-server/app",
                 "kubernetes/apps/network/cloudflare-dns/app",
                 "kubernetes/apps/network/cloudflare-tunnel/app",
                 "kubernetes/apps/network/envoy-gateway/app",
@@ -130,8 +122,6 @@ resources: []
                 "kubernetes/apps/storage/longhorn-config/app",
                 "kubernetes/apps/storage/seaweedfs/app",
                 "kubernetes/apps/storage/seaweedfs-config/app",
-                "kubernetes/apps/temporal/temporal/app",
-                "kubernetes/apps/temporal/temporal-config/app",
             ],
         )
 

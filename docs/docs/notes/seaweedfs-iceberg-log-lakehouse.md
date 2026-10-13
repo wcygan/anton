@@ -4,6 +4,10 @@ title: SeaweedFS Iceberg log lakehouse demo
 
 # SeaweedFS Iceberg log lakehouse demo
 
+:::warning Retired on 2026-10-12
+The operator authorized removal of this learning stack and its dedicated data. This page is historical evidence. SeaweedFS, Harbor, and Loki remain shared platform services. Do not use the procedures below to recreate the retired stack.
+:::
+
 > This page preserves the ADR 0031 baseline. ADR 0033 superseded that design.
 > ADR 0039 retains the current Airflow and Spark learning platform.
 > Commands under `iceberg-demo` describe the legacy writer, except Trino.
