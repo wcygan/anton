@@ -7,7 +7,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 readonly TARGET_RESOLVER="${SCRIPT_DIR}/cluster-targets.py"
 
 check_env TALOSCONFIG KUBECONFIG
-check_cli mise kubectl python3
+check_cli mise kubectl python3 yq
 
 if ! TAILSCALE_NODE_SPEC="$(python3 "${TARGET_RESOLVER}" resolve --format mapping --show-addresses)"; then
     log error "Failed to resolve the Anton Talos target set" "resolver=${TARGET_RESOLVER}"
@@ -92,6 +92,29 @@ function check_tailscale_endpoint() {
 
 validate_node_specs
 
+# Membership discovery includes point-to-point storage addresses. The first
+# address of a peer need not be reachable from every other node (ADR 0009).
+# Health RPCs must use the shared management network, as etcd and kubelet do.
+if ! CONTROL_PLANE_NODES="$(yq -o=json '.nodes' "${SCRIPT_DIR}/../talos/talconfig.yaml" | python3 -c '
+import ipaddress, json, sys
+nodes = json.load(sys.stdin)
+expected = {"k8s-1", "k8s-2", "k8s-3"}
+if len(nodes) != 3 or {n["hostname"] for n in nodes} != expected:
+    raise SystemExit("Expected exactly the three Anton nodes")
+addresses = []
+for node in sorted(nodes, key=lambda n: n["hostname"]):
+    address = ipaddress.ip_address(node["ipAddress"])
+    if node.get("controlPlane") is not True or address not in ipaddress.ip_network("192.168.1.0/24"):
+        raise SystemExit("Expected control plane nodes on the management subnet")
+    addresses.append(str(address))
+if len(set(addresses)) != 3:
+    raise SystemExit("Duplicate management addresses")
+print(",".join(addresses))
+')"; then
+    log error "Failed to resolve Talos health management addresses"
+fi
+readonly CONTROL_PLANE_NODES
+
 for spec in "${node_specs[@]}"; do
     check_tailscale_endpoint "${spec}"
 done
@@ -104,7 +127,7 @@ health_ok=1
 for spec in "${reachable_nodes[@]}"; do
     ip="$(node_ip "${spec}")"
     log info "Running server-side Talos health check" "endpoint=${ip}"
-    if talos health --endpoints "${ip}" --nodes "${ip}" --wait-timeout "${TALOS_HEALTH_TIMEOUT:-20s}"; then
+    if talos health --endpoints "${ip}" --nodes "${ip}" --control-plane-nodes "${CONTROL_PLANE_NODES}" --wait-timeout "${TALOS_HEALTH_TIMEOUT:-20s}"; then
         health_ok=0
         break
     fi
