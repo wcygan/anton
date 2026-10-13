@@ -4,9 +4,20 @@ reconcile_home="$${HARBOR_RECONCILE_HOME:-$$(dirname "$$0")}"
 resolve_inventory() {
   # Keep full Kubernetes JSON out of shell variables/argv (ARG_MAX and RSS).
   scratch="$${HARBOR_SCRATCH_DIR:-/tmp}"
-  kubectl get pods,deployments,statefulsets,daemonsets,replicasets,controllerrevisions,jobs,cronjobs -A -o json > "$$scratch/harbor-workloads.json" || return 1
+  for kind in pods deployments statefulsets daemonsets replicasets controllerrevisions jobs cronjobs; do
+    kubectl get "$$kind" -A --chunk-size=50 -o json > "$$scratch/harbor-kind.json" || return 1
+    jq -c '
+      if (.items|type)!="array" then error("incomplete workload inventory") else . end |
+      {items:[.items[] |
+        if .kind=="ControllerRevision" and (.data|type)!="object" then error("unreadable controller revision") else . end |
+        {kind, data:(if .kind=="ControllerRevision" then {} else null end),
+         images:[..|objects|{image:(.image // null),imageID:(.imageID // null)}|select(.image!=null or .imageID!=null)],
+         status:(if .kind=="Pod" then (.status|{containerStatuses,initContainerStatuses,ephemeralContainerStatuses}) else {} end)}]}
+    ' "$$scratch/harbor-kind.json" > "$$scratch/harbor-projected-$$kind.json" || return 1
+  done
+  jq -s '{items:map(.items)|add}' "$$scratch/harbor-projected-pods.json" "$$scratch/harbor-projected-deployments.json" "$$scratch/harbor-projected-statefulsets.json" "$$scratch/harbor-projected-daemonsets.json" "$$scratch/harbor-projected-replicasets.json" "$$scratch/harbor-projected-controllerrevisions.json" "$$scratch/harbor-projected-jobs.json" "$$scratch/harbor-projected-cronjobs.json" > "$$scratch/harbor-workloads.json" || return 1
   kubectl -n registries get ingresses -o json > "$$scratch/harbor-ingresses.json" || return 1
-  references="$$({ printf '{"workloads":'; cat "$$scratch/harbor-workloads.json"; printf ',"ingresses":'; cat "$$scratch/harbor-ingresses.json"; printf '}'; } | jq --arg host "$$HARBOR_IMAGE_HOST" -f "$$reconcile_home/protected-images.jq")" || return 1
+  references="$$( { printf '{"workloads":'; cat "$$scratch/harbor-workloads.json"; printf ',"ingresses":'; cat "$$scratch/harbor-ingresses.json"; printf '}'; } | jq --arg host "$$HARBOR_IMAGE_HOST" -f "$$reconcile_home/protected-images.jq")" || return 1
   records='[]'
   for row in $$(printf '%s' "$$references" | jq -r '.[]|@base64'); do
     record="$$(printf '%s' "$$row" | base64 -d)"
