@@ -28,7 +28,7 @@ persistent service is authorized.
   active manifests and blobs remain readable.
 - [ ] One healthy Harbor-only compaction/trim pilot demonstrates physical
   reclamation before weekly automation is published through GitOps.
-- [ ] Tests and cluster health pass; weekly read-only review understands aging
+- [x] Tests and cluster health pass; weekly read-only review understands aging
   windows, disabled backups, and each storage layer's measurement semantics.
 
 ## Tasks
@@ -175,6 +175,16 @@ deletion ran in this implementation turn.
 - 2026-10-13: Contract validation passed all 380 tests, including missing manifest/blob failure and prevention of compaction when retained-image verification fails.
 - 2026-10-13: Repaired all three retained images at their original digests. Final reader Job completed: 3 artifacts and 8 referenced blobs readable. All nodes/storage/Flux/services and 72/72 scrapes healthy; no new container restarts in the task window. Volume and replica specs unchanged. The historical content-removal event remains unknown.
 
+- 2026-10-13, 23:01 UTC: Read-only continuation checkpoint passed: three nodes,
+  all 18 Longhorn volumes, 55 Kustomizations, 27 HelmReleases and 72/72 scrapes
+  healthy; Cilium 3/3, operator/CoreDNS 2/2 and persistent filers 2/2 ready.
+  Replicas, limits and Longhorn CPU reservations remain unchanged. Daily
+  guarded retention is enabled for 01:30 UTC (20:30 CDT on October 13 for its
+  next run). Both dated follow-ups and the weekly review are active. QMD's
+  stale context index was rebuilt and the current plan is retrievable.
+  October 18 real GC/pilot and October 20 post-aging comparison remain pending;
+  no cleanup or cluster mutation was performed at this checkpoint.
+
 ## Filer durability and retention repair — October 13
 
 The operator authorized a staged filer metadata migration and retention repair,
@@ -213,7 +223,7 @@ SHA-256-verified Spegel cache bytes through the supported registry API.
 
 The three project retention rules retain latest two pushed tagged artifacts,
 protected `in-use-*`/`rollback` tags, and all untagged artifacts. Native retention
-scheduling is disabled with `trigger.kind: "" (omitted in Harbor responses)`: Harbor 2.15.2 accepts a transition
+scheduling is disabled with `trigger.kind: ""` (omitted in Harbor responses): Harbor 2.15.2 accepts a transition
 to `Manual` but rejects later updates with that kind; the empty kind is its
 supported unscheduled form. Only the Git-managed 01:30 UTC CronJob may submit
 retention after readable inventory and healthy persistent filer checks. It
