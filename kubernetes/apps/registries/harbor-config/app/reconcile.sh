@@ -63,8 +63,9 @@ fi
 
 if [ "$${mode}" = inspect ]; then
   # Allowlisted response fields only: never include credentials/configuration.
-  gc="$$(harbor_request GET /system/gc/schedule | jq '{schedule:{type:.schedule.type,cron:.schedule.cron},parameters:{dry_run:.parameters.dry_run,delete_untagged:.parameters.delete_untagged,workers:.parameters.workers}}')"
-  history="$$(harbor_request GET '/system/gc?page=1&page_size=20' | jq '[.[] | {id,job_status,creation_time,update_time,job_kind,parameters:((.job_parameters | if type == "string" then fromjson else . end) | {dry_run,delete_untagged,workers})}]')"
+  # Harbor 2.15 returns GCHistory here: options are JSON in job_parameters.
+  gc="$$(harbor_request GET /system/gc/schedule | jq '(.parameters // (.job_parameters | fromjson)) as $$p | {schedule:{type:.schedule.type,cron:.schedule.cron},parameters:($$p|{dry_run,delete_untagged,workers})}')"
+  history="$$(harbor_request GET '/system/gc?page=1&page_size=20' | jq '[.[] | {id,job_status,creation_time,update_time,job_kind,schedule:(.schedule|{type,cron}),parameters:((.job_parameters | if type == "string" then fromjson else . end) | {dry_run,delete_untagged,workers})}]')"
   report='[]'
   page=1
   while :; do
@@ -74,7 +75,7 @@ if [ "$${mode}" = inspect ]; then
     for id in $${ids}; do
       retention="$$(harbor_request GET "/projects/$${id}/metadatas/" | jq -er '.retention_id')"
       policy="$$(harbor_request GET "/retentions/$${retention}")"
-      executions="$$(harbor_request GET "/retentions/$${retention}/executions?page=1&page_size=20" | jq '[.[] | {id,policy_id,start_time,end_time,status,trigger,dry_run}]')"
+      executions="$$(harbor_request GET "/retentions/$${retention}/executions?page=1&page_size=20" | jq '[.[] | {id,policy_id,start_time,end_time,status,trigger,dry_run:(.dry_run // false)}]')"
       report="$$(printf '%s' "$${report}" | jq --argjson id "$${id}" --argjson policy "$${policy}" --argjson executions "$${executions}" '. + [{project_id:$$id,policy:($$policy|{algorithm,rules,trigger,scope}),executions:$$executions}]')"
     done
     [ "$$(printf '%s' "$${projects}" | jq 'length')" -lt 100 ] && break
@@ -235,7 +236,7 @@ desired_gc="$$(jq -n --arg cron "$${HARBOR_GC_CRON}" \
   '{schedule:{type:"Custom",cron:$$cron},parameters:{delete_untagged:false,dry_run:false,workers:1}}')"
 current_gc="$$(harbor_request GET /system/gc/schedule)"
 normalise_gc() {
-  jq -S '{schedule:{type:.schedule.type,cron:.schedule.cron},parameters:{dry_run:.parameters.dry_run,delete_untagged:.parameters.delete_untagged,workers:.parameters.workers}}'
+  jq -S '(.parameters // (.job_parameters | fromjson)) as $$p | {schedule:{type:.schedule.type,cron:.schedule.cron},parameters:($$p|{dry_run,delete_untagged,workers})}'
 }
 if [ "$$(printf '%s' "$${current_gc}" | normalise_gc)" != "$$(printf '%s' "$${desired_gc}" | normalise_gc)" ]; then
   harbor_request PUT /system/gc/schedule "$${desired_gc}" >/dev/null

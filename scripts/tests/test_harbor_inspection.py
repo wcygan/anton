@@ -99,3 +99,11 @@ class HarborInspection(unittest.TestCase):
     def test_matching_gc_does_not_write_gc(self):
         _, requests = self.run_script("reconcile", self.schedule())
         self.assertFalse(any(method != "GET" and path == "/system/gc/schedule" for method, path, _ in requests))
+
+    def test_harbor_215_history_shaped_schedule(self):
+        schedule = self.schedule()
+        schedule["job_parameters"] = json.dumps(schedule.pop("parameters"))
+        _, requests = self.run_script("reconcile", schedule)
+        self.assertFalse(any(method != "GET" and path == "/system/gc/schedule" for method, path, _ in requests))
+        output, requests = self.run_script("inspect", schedule)
+        self.assertEqual(json.loads(output)["gc"]["parameters"]["workers"], 1)
