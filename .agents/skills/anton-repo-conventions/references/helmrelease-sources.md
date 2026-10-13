@@ -128,11 +128,15 @@ spec:
 
 ## Inherited defaults
 
-Do not set these per HelmRelease — they are injected globally from `kubernetes/flux/cluster/ks.yaml` patches:
+These defaults are injected through the root from
+`kubernetes/components/flux-child-defaults`; author only deliberate app overrides:
 
-- `install.crds: CreateReplace`
-- `upgrade.cleanupOnFail: true`
-- `install.remediation.retries`, `upgrade.remediation.retries`
-- `upgrade.remediation.strategy: rollback`
+- `install.crds` and `upgrade.crds`: `CreateReplace`
+- `install.strategy.name`: `RetryOnFailure`
+- `rollback.cleanupOnFail` and `rollback.recreate`: `true`
+- `upgrade.cleanupOnFail`: `true`
+- `upgrade.strategy.name`: `RemediateOnFailure`
+- `upgrade.remediation.remediateLastFailure`: `true`
+- `upgrade.remediation.retries`: `2`
 
-If you find yourself adding these explicitly, check the root `ks.yaml` patches first — you are probably duplicating an inherited default.
+Check the shared component before adding a per-release setting.

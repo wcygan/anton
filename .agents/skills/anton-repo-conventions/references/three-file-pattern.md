@@ -39,7 +39,7 @@ Notes:
 - Namespace-level Kustomize transforms determine the rendered child Kustomization namespace. An authored `metadata.namespace: flux-system` is overwritten when the parent sets `namespace: <app-namespace>`. Preserve the rendered identity during ownership transfers. Keep `sourceRef.namespace: flux-system` explicit; `targetNamespace` controls applied resources, not the child Kustomization identity.
 - `spec.path` MUST end in `/app`. The directory layout is enforced by every existing app.
 - `postBuild.substituteFrom` is the ONLY way `${VAR}` references in your manifests get resolved. Omit it and `${SECRET_DOMAIN}` will land literally in the cluster.
-- Do NOT add `decryption.provider: sops`, retry policies, or HelmRelease defaults — they are inherited from `kubernetes/flux/cluster/ks.yaml` patches.
+- Do NOT add `decryption.provider: sops`, retry policies, or HelmRelease defaults — they are inherited through the root from `kubernetes/components/flux-child-defaults`.
 - Use `dependsOn: [{name: other-app}]` to order against another Flux Kustomization.
 
 ## Tier 2 — app/kustomization.yaml

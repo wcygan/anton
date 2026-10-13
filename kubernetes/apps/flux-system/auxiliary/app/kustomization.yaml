@@ -5,3 +5,5 @@ resources:
   - ./externalsecret.yaml
   - ./gitrepository.yaml
   - ./private-root.yaml
+components:
+  - ../../../../components/flux-child-defaults

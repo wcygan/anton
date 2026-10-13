@@ -53,7 +53,7 @@ Full annotated example: see `references/three-file-pattern.md`.
 | `spec.sourceRef` | `GitRepository flux-system/flux-system` |
 | `spec.postBuild.substituteFrom` | `[{name: cluster-secrets, kind: Secret}]` — required if the app uses any `${VAR}` |
 
-Defaults inherited from `kubernetes/flux/cluster/ks.yaml` (do NOT repeat per app): `decryption.provider: sops`, HelmRelease `install.crds: CreateReplace`, retry/remediation policies, `cleanupOnFail`.
+Defaults inherited through the root from `kubernetes/components/flux-child-defaults` (author only deliberate app overrides): `decryption.provider: sops`, HelmRelease `install.crds: CreateReplace`, retry/remediation policies, `cleanupOnFail`.
 
 ## Dependency readiness
 
