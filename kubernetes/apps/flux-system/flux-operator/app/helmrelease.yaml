@@ -15,6 +15,13 @@ spec:
     # manifests). Without this, the operator can be evicted while its
     # children keep running, leaving the cluster un-reconcilable.
     priorityClassName: system-cluster-critical
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 1Gi
     serviceMonitor:
       create: true
     # Disable the chart's web NetworkPolicy — it only opens 8080/9080 and
