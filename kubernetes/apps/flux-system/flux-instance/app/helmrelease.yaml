@@ -63,6 +63,57 @@ spec:
             target:
               kind: Deployment
               name: (kustomize-controller|helm-controller|source-controller)
+          - # Reserve memory against observed controller peaks.
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: all
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: manager
+                        resources:
+                          requests:
+                            memory: 512Mi
+            target:
+              kind: Deployment
+              name: (source-controller|kustomize-controller)
+          - # Reserve memory against observed controller peaks.
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: all
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: manager
+                        resources:
+                          requests:
+                            memory: 256Mi
+            target:
+              kind: Deployment
+              name: helm-controller
+          - # Reserve memory against observed controller peaks.
+            patch: |-
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: all
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: manager
+                        resources:
+                          requests:
+                            memory: 128Mi
+            target:
+              kind: Deployment
+              name: (image-automation-controller|image-reflector-controller|notification-controller)
           - # Enable in-memory kustomize builds
             patch: |
               - op: add
