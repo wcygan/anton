@@ -13,6 +13,18 @@ spec:
         name: longhorn
       interval: 15m
   interval: 1h
+  # Simultaneous manager startup races on shared setting initialization.
+  # Preserve running managers while each replacement starts.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: DaemonSet
+              name: longhorn-manager
+            patch: |-
+              - op: replace
+                path: /spec/updateStrategy/rollingUpdate/maxUnavailable
+                value: 1
   values:
     namespaceOverride: storage
 
