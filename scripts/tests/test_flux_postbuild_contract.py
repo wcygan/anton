@@ -85,7 +85,7 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 42)
+        self.assertEqual(len(MODULE.discover_application_roots()), 41)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [
@@ -117,7 +117,6 @@ resources: []
                 "kubernetes/apps/observability/talos-log-sink/app",
                 "kubernetes/apps/registries/harbor/app",
                 "kubernetes/apps/registries/harbor-config/app",
-                "kubernetes/apps/spark-system/spark-operator/app",
                 "kubernetes/apps/storage/longhorn/app",
                 "kubernetes/apps/storage/longhorn-config/app",
                 "kubernetes/apps/storage/seaweedfs/app",
