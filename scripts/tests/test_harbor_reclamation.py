@@ -31,7 +31,7 @@ def fixture():
             "Volumes": [{"Id": 20+i, "Size": 2*GIB, "DeletedByteCount": GIB//2,
                          "Collection": "harbor", "ReadOnly": False, "CompactRevision": 1}]}}
                     for i in range(3)]}
-    policy={"algorithm":"or","trigger":{"kind":"Manual"},"rules":[
+    policy={"algorithm":"or","trigger":{"kind":""},"rules":[
         {"params":{"latestPushedK":2}},
         {"template":"always","tag_selectors":[{"pattern":"{in-use-*,rollback}"}]},
         {"template":"always","tag_selectors":[{"pattern":"","extras":'{"untagged":true}'}]}]}

@@ -24,7 +24,7 @@ def ready_gc($$now):
   if (.filers|length)!=2 or ([.filers[].pvc_uid]|unique|length)!=2 or
      any(.filers[]; (.pvc_uid // "")=="" or (.longhorn_volume // "")=="")
   then error("persistent filer proof missing") else . end |
-  if any(.harbor.projects[]; .policy.algorithm!="or" or .policy.trigger.kind!="Manual" or
+  if any(.harbor.projects[]; .policy.algorithm!="or" or .policy.trigger.kind!="" or
       (.policy.rules|length)!=3 or .policy.rules[0].params.latestPushedK!=2 or
       .policy.rules[1].template!="always" or .policy.rules[1].tag_selectors[0].pattern!="{in-use-*,rollback}" or
       .policy.rules[2].template!="always" or .policy.rules[2].tag_selectors[0].pattern!="" or

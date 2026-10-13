@@ -137,7 +137,7 @@ policy_for_project() {
           }
         ],
         # Deletion is submitted only by the guarded Kubernetes job.
-        trigger: {kind:"Manual",references:{},settings:{}},
+        trigger: {kind:"",references:{},settings:{}},
         scope: {level: "project", ref: $$project_id}
       }
     '

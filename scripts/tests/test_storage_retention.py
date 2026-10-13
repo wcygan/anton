@@ -81,12 +81,12 @@ class StorageRetentionTests(unittest.TestCase):
             copy_scripts(p, R/'kubernetes/apps/registries/harbor-config/app')
             s = (R / 'kubernetes/apps/registries/harbor-config/app/reconcile.sh').read_text().replace('$$', '$')
             (p / 'script').write_text(s)
-            env = {**os.environ, 'PATH': str(p) + ':' + os.environ['PATH'], 'HARBOR_API_URL': f'http://127.0.0.1:{server.server_port}', 'HARBOR_USERNAME': 'fixture', 'HARBOR_PASSWORD': 'fixture', 'HARBOR_RETENTION_CRON': '0 30 1 * * *', 'HARBOR_PROTECTED_TAGS': '{in-use-*,rollback}', 'HARBOR_IMAGE_HOST': 'registry', 'HARBOR_GC_CRON': '0 30 5 * * 0', 'HARBOR_REGISTRY_URL':f'http://127.0.0.1:{server.server_port}', 'HARBOR_TOKEN_URL':f'http://127.0.0.1:{server.server_port}/service/token'}
+            env = {**os.environ, 'PATH': str(p) + ':' + os.environ['PATH'], 'HARBOR_SCRATCH_DIR': str(p), 'HARBOR_API_URL': f'http://127.0.0.1:{server.server_port}', 'HARBOR_USERNAME': 'fixture', 'HARBOR_PASSWORD': 'fixture', 'HARBOR_RETENTION_CRON': '0 30 1 * * *', 'HARBOR_PROTECTED_TAGS': '{in-use-*,rollback}', 'HARBOR_IMAGE_HOST': 'registry', 'HARBOR_GC_CRON': '0 30 5 * * 0', 'HARBOR_REGISTRY_URL':f'http://127.0.0.1:{server.server_port}', 'HARBOR_TOKEN_URL':f'http://127.0.0.1:{server.server_port}/service/token'}
             subprocess.run(['sh', str(p / 'script')], env=env, check=True)
             assert any((m == 'POST' and b.get('name', '') == 'in-use-' + 'a' * 64 for m, u, b in requests if b))
             policy = next((b for m, u, b in requests if u == '/retentions/1'))
             assert policy['rules'][0]['params']['latestPushedK'] == 2
-            assert policy['trigger']['kind']=='Manual'
+            assert policy['trigger']['kind']==''
             untagged=policy['rules'][2]['tag_selectors'][0]
             assert untagged['pattern']=='' and json.loads(untagged['extras'])['untagged'] is True
             assert any((m == 'DELETE' and 'in-use-' + 'b' * 64 in u for m, u, b in requests))

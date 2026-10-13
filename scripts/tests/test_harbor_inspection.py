@@ -85,6 +85,7 @@ class HarborInspection(unittest.TestCase):
                 copy_scripts(p, APP)
                 write_kubectl(p, workload if workload is not None else {"items": []})
                 env = {**os.environ, "PATH": str(p) + ":" + os.environ["PATH"], "MODE": mode,
+                       "HARBOR_SCRATCH_DIR": str(p),
                        "HARBOR_API_URL": f"http://127.0.0.1:{server.server_port}",
                        "HARBOR_USERNAME": "fixture", "HARBOR_PASSWORD": "never-print-fixture",
                        "HARBOR_RETENTION_CRON": "0 30 1 * * *", "HARBOR_PROTECTED_TAGS": "{in-use-*,rollback}",
@@ -199,3 +200,8 @@ class HarborInspection(unittest.TestCase):
             _,requests=self.run_script("retention",self.schedule(),expect_success=False,**arguments)
             self.assertTrue(all(method in {"GET","HEAD"} for method,_,_ in requests))
             self.assertEqual(self.kube_actions,[])
+
+    def test_large_inventory_stays_out_of_process_arguments(self):
+        workload={"items":[{"metadata":{"annotations":{"large":"x"*300000}},"spec":{"containers":[{"image":"registry/library/demo:v1"}]}}]}
+        output,_=self.run_script("verify-images",self.schedule(),workload=workload)
+        self.assertEqual(json.loads(output)["verified_artifacts"],1)

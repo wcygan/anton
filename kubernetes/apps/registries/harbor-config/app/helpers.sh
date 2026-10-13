@@ -2,9 +2,11 @@
 reconcile_home="$${HARBOR_RECONCILE_HOME:-$$(dirname "$$0")}"
 
 resolve_inventory() {
-  workloads="$$(kubectl get pods,deployments,statefulsets,daemonsets,replicasets,controllerrevisions,jobs,cronjobs -A -o json)"
-  ingresses="$$(kubectl -n registries get ingresses -o json)"
-  references="$$(jq -n --argjson workloads "$$workloads" --argjson ingresses "$$ingresses" '{workloads:$$workloads,ingresses:$$ingresses}' | jq --arg host "$$HARBOR_IMAGE_HOST" -f "$$reconcile_home/protected-images.jq")"
+  # Keep full Kubernetes JSON out of shell variables/argv (ARG_MAX and RSS).
+  scratch="$${HARBOR_SCRATCH_DIR:-/tmp}"
+  kubectl get pods,deployments,statefulsets,daemonsets,replicasets,controllerrevisions,jobs,cronjobs -A -o json > "$$scratch/harbor-workloads.json" || return 1
+  kubectl -n registries get ingresses -o json > "$$scratch/harbor-ingresses.json" || return 1
+  references="$$({ printf '{"workloads":'; cat "$$scratch/harbor-workloads.json"; printf ',"ingresses":'; cat "$$scratch/harbor-ingresses.json"; printf '}'; } | jq --arg host "$$HARBOR_IMAGE_HOST" -f "$$reconcile_home/protected-images.jq")" || return 1
   records='[]'
   for row in $$(printf '%s' "$$references" | jq -r '.[]|@base64'); do
     record="$$(printf '%s' "$$row" | base64 -d)"

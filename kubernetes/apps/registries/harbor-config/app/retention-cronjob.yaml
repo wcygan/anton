@@ -73,6 +73,8 @@ spec:
                 - name: reconciler
                   mountPath: /opt
                   readOnly: true
+                - name: scratch
+                  mountPath: /tmp
               resources:
                 requests:
                   cpu: 10m
@@ -89,3 +91,6 @@ spec:
             - name: reconciler
               configMap:
                 name: harbor-retention-reconciler
+            - name: scratch
+              emptyDir:
+                sizeLimit: 64Mi
