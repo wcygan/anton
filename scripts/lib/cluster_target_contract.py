@@ -854,7 +854,10 @@ def _classify_invocation(tokens: list[str], *, inherited_indirect: bool) -> list
         return []
 
     arguments = tokens[1:]
-    commands = _subcommands(arguments)
+    # Flags after -- belong to the command inside an exec container (or other
+    # positional arguments), not to the cluster CLI's target configuration.
+    target_arguments = arguments[: arguments.index("--")] if "--" in arguments else arguments
+    commands = _subcommands(target_arguments)
     subcommand = commands[0] if commands else None
     if binary in POLICY_BINARIES:
         return [
@@ -897,7 +900,7 @@ def _classify_invocation(tokens: list[str], *, inherited_indirect: bool) -> list
 
     config_variable = "TALOSCONFIG" if binary == "talosctl" else "KUBECONFIG"
     config_flag = "--talosconfig" if binary == "talosctl" else "--kubeconfig"
-    config_path = _option_value(arguments, config_flag) or environment.get(config_variable)
+    config_path = _option_value(target_arguments, config_flag) or environment.get(config_variable)
     environment_unknown = (
         environment_cleared or config_variable in unset
     ) and config_path is None
@@ -928,16 +931,16 @@ def _classify_invocation(tokens: list[str], *, inherited_indirect: bool) -> list
             executable=tokens[0],
             arguments=tuple(arguments),
             positionals=tuple(commands),
-            context=_option_value(arguments, "--context"),
+            context=_option_value(target_arguments, "--context"),
             config_path=config_path,
-            server=_option_value(arguments, "--server", "-s") if binary != "talosctl" else None,
+            server=_option_value(target_arguments, "--server", "-s") if binary != "talosctl" else None,
             cluster=(
-                _option_value(arguments, "--cluster", "-c")
+                _option_value(target_arguments, "--cluster", "-c")
                 if binary == "talosctl"
-                else _option_value(arguments, "--cluster")
+                else _option_value(target_arguments, "--cluster")
             ),
-            endpoints=_option_values(arguments, "--endpoints", "-e") if binary == "talosctl" else (),
-            nodes=_option_values(arguments, "--nodes", "-n") if binary == "talosctl" else (),
+            endpoints=_option_values(target_arguments, "--endpoints", "-e") if binary == "talosctl" else (),
+            nodes=_option_values(target_arguments, "--nodes", "-n") if binary == "talosctl" else (),
             execution_prefix=execution_prefix,
             indirect=indirect,
             ambiguity=ambiguity,

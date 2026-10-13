@@ -634,6 +634,46 @@ class ClusterTargetContractTests(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertEqual(violations[0].actual, "wrong-context")
 
+    def test_exec_child_flags_do_not_override_cluster_target(self) -> None:
+        command = (
+            "mise exec -- kubectl --context anton --kubeconfig /tmp/anton "
+            "--server https://anton.invalid -n storage exec pod -c manager -- "
+            "du -sk --context other --kubeconfig /tmp/other --server https://other.invalid"
+        )
+        operation = classify_command(command)[0]
+        self.assertEqual(operation.classification, "cluster-mutation")
+        self.assertEqual(operation.context, "anton")
+        self.assertEqual(operation.config_path, "/tmp/anton")
+        self.assertEqual(operation.server, "https://anton.invalid")
+        self.assertEqual(operation.positionals, ("exec", "pod"))
+        self.assertIn("-sk", operation.arguments)
+
+    def test_exec_container_flags_pass_preflight_but_wrong_outer_target_fails(self) -> None:
+        endpoint_query = ("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+        runner = Runner({
+            ("kubectl", "config", "current-context"): "anton",
+            ("kubectl", "--context", "anton", *endpoint_query): "https://anton.invalid",
+        })
+        env = {"ANTON_KUBE_CONTEXT": "anton", "ANTON_KUBE_ENDPOINT": "https://anton.invalid"}
+        self.assertEqual(preflight_command(
+            "kubectl exec pod -- du -sk /data", self.root, environ=env, runner=runner,
+        ), [])
+        for outer in ("--server=https://other.invalid", "-shttps://other.invalid", "--context=other"):
+            with self.subTest(outer=outer):
+                self.assertTrue(preflight_command(
+                    f"kubectl {outer} exec pod -- echo --server=https://anton.invalid --context=anton",
+                    self.root, environ=env, runner=runner,
+                ))
+
+    def test_exec_boundary_does_not_hide_another_shell_command(self) -> None:
+        operations = classify_command(
+            "kubectl exec pod -- echo --server ignored; kubectl --context other delete pod victim"
+        )
+        self.assertEqual(len(operations), 2)
+        self.assertIsNone(operations[0].server)
+        self.assertEqual(operations[1].context, "other")
+        self.assertEqual(operations[1].classification, "cluster-mutation")
+
     def test_preflight_rejects_kube_server_override(self) -> None:
         runner = Runner(
             {
