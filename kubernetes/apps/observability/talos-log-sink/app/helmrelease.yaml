@@ -160,7 +160,7 @@ spec:
               .retention_class = "error"
             } else if includes(["warn", "warning"], level) {
               .retention_class = "warning"
-            } else if .source == "kernel" || ."talos-service" == "kernel" || level == "unknown" {
+            } else if .source == "kernel" || ."talos-service" == "kernel" || !includes(["info", "debug", "trace"], level) {
               .retention_class = "diagnostic"
             }
       sinks:
