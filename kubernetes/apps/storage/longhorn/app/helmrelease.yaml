@@ -28,6 +28,13 @@ spec:
   values:
     namespaceOverride: storage
 
+    # Cluster data is disposable. Explicit empty values clear an existing
+    # target; omitted/null values preserve its stale endpoint and credentials.
+    defaultBackupStore:
+      backupTarget: ""
+      backupTargetCredentialSecret: ""
+      pollInterval: 0
+
     # Talos friction: preUpgradeChecker job fails under Talos' read-only rootfs.
     # Disable per Phase 2 plan tasks (ADR 0005 follow-ups).
     preUpgradeChecker:
