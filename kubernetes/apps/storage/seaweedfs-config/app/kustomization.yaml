@@ -10,6 +10,7 @@ configMapGenerator:
       disableNameSuffixHash: true
 resources:
   - ./seaweed.yaml
+  - ./filer-pvcs.yaml
   - ./externalsecret.yaml
   - ./buckets-cronjob.yaml
   - ./httproute.yaml
