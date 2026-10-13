@@ -79,10 +79,16 @@ if [ "$${mode}" = verify-images ]; then
     project=$${repository%%/*}
     repo=$${repository#*/}
     encoded="$$(printf '%s' "$${repo}" | jq -sRr '@uri | @uri')"
-    digest="$$(harbor_request GET "/projects/$${project}/repositories/$${encoded}/artifacts/$${reference}" | jq -er '.digest')"
-    token="$$(curl --fail --silent --show-error --max-time 30 --user "$${auth}" \
+    artifact="$$(harbor_request GET "/projects/$${project}/repositories/$${encoded}/artifacts/$${reference}")" || {
+      echo 'artifact metadata verification failed' >&2; exit 1;
+    }
+    digest="$$(printf '%s' "$${artifact}" | jq -er '.digest|select(type=="string" and length>0)')"
+    token_response="$$(curl --fail --silent --show-error --max-time 30 --user "$${auth}" \
       --get --data-urlencode 'service=harbor-registry' --data-urlencode "scope=repository:$${repository}:pull" \
-      "$${HARBOR_TOKEN_URL:-$${api_url%/api/v2.0}/service/token}" | jq -er '.token')"
+      "$${HARBOR_TOKEN_URL:-$${api_url%/api/v2.0}/service/token}")" || {
+      echo 'registry token verification failed' >&2; exit 1;
+    }
+    token="$$(printf '%s' "$${token_response}" | jq -er '.token|select(type=="string" and length>0)')"
     queue="$${digest}"
     seen=' '
     manifests=0
@@ -97,14 +103,18 @@ if [ "$${mode}" = verify-images ]; then
       manifest="$$(curl --fail --silent --show-error --max-time 30 --max-filesize 1048576 \
         --header "Authorization: Bearer $${token}" \
         --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
-        "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/manifests/$${current}")"
+        "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/manifests/$${current}")" || {
+          echo 'registry manifest verification failed' >&2; exit 1;
+        }
       children="$$(printf '%s' "$${manifest}" | jq -er 'if .schemaVersion==2 then [.manifests[]?.digest]|join(" ") else error("invalid manifest") end')"
       [ -z "$${children}" ] || queue="$${queue:+$${queue} }$${children}"
       digests="$$(printf '%s' "$${manifest}" | jq -r '[(.config.digest // empty),.layers[]?.digest]|unique[]')"
       for blob in $${digests}; do
         printf '%s' "$${blob}" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo 'invalid blob digest' >&2; exit 1; }
         code="$$(curl --fail --silent --show-error --head --output /dev/null --max-time 30 --write-out '%{http_code}' \
-          --header "Authorization: Bearer $${token}" "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/blobs/$${blob}")"
+          --header "Authorization: Bearer $${token}" "$${HARBOR_REGISTRY_URL:-http://harbor}/v2/$${repository}/blobs/$${blob}")" || {
+            echo 'registry blob verification failed' >&2; exit 1;
+          }
         [ "$${code}" = 200 ] || { echo 'blob availability not confirmed' >&2; exit 1; }
         blobs=$((blobs + 1))
       done

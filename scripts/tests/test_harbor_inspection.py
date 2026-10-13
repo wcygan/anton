@@ -13,7 +13,7 @@ APP = ROOT / "kubernetes/apps/registries/harbor-config/app"
 
 
 class HarborInspection(unittest.TestCase):
-    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False):
+    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False, missing_manifest=False):
         requests = []
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -29,6 +29,9 @@ class HarborInspection(unittest.TestCase):
                 elif path.startswith("/projects/library/repositories/demo/artifacts/"):
                     body = {"digest": "sha256:" + "a"*64}
                 elif path.startswith("/v2/library/demo/manifests/"):
+                    if missing_manifest:
+                        self.send_error(404)
+                        return
                     body = {"schemaVersion": 2, "config": {"digest": "sha256:"+"b"*64}, "layers": []}
                 elif path == "/system/gc/schedule":
                     body = schedule
@@ -155,3 +158,9 @@ class HarborInspection(unittest.TestCase):
         _, requests = self.run_script("verify-images", self.schedule(), workload=workload,
                                       missing_blob=True, expect_success=False)
         self.assertTrue(any(method == "HEAD" for method, _, _ in requests))
+
+    def test_missing_manifest_stops_before_blob_checks(self):
+        workload = {"items": [{"spec": {"containers": [{"image": "registry/library/demo:v1"}]}}]}
+        _, requests = self.run_script("verify-images", self.schedule(), workload=workload,
+                                      missing_manifest=True, expect_success=False)
+        self.assertFalse(any(method == "HEAD" for method, _, _ in requests))

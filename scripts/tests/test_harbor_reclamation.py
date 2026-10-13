@@ -72,14 +72,14 @@ class HarborReclamation(unittest.TestCase):
         for data in variants:
             self.assertNotEqual(self.gate(data).returncode, 0)
 
-    def script(self, mode="inspect-reclamation", volume_id=None, uncertain=False):
+    def script(self, mode="inspect-reclamation", volume_id=None, uncertain=False, missing_images=False):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp); data = fixture()
             (p / "data.json").write_text(json.dumps(data))
             (p / "reclamation-gates.jq").write_text((APP / "reclamation-gates.jq").read_text().replace("$$", "$"))
             script = (APP / "reclamation.sh").read_text().replace("$$", "$" ).replace("/tmp/", str(p)+"/")
             (p / "reclamation.sh").write_text(script)
-            (p / "reconcile.sh").write_text("#!/bin/sh\njq '.harbor' \"$FIXTURE/data.json\"\n")
+            (p / "reconcile.sh").write_text("#!/bin/sh\nif [ \"$MODE\" = verify-images ] && [ \"${MISSING_IMAGES:-0}\" = 1 ]; then exit 1; fi\njq '.harbor' \"$FIXTURE/data.json\"\n")
             (p / "date").write_text(f"#!/bin/sh\necho {NOW}\n"); (p / "date").chmod(0o755)
             kubectl = p / "kubectl"
             kubectl.write_text('''#!/usr/bin/env python3
@@ -103,7 +103,8 @@ elif 'pvc' in a:print('v'+a[a.index('pvc')+1][-1])
 else:sys.exit(1)
 '''); kubectl.chmod(0o755)
             env = {**os.environ, "PATH": str(p)+":"+os.environ["PATH"], "FIXTURE": str(p),
-                   "RECLAMATION_HOME": str(p), "MODE": mode, "UNCERTAIN": "1" if uncertain else "0"}
+                   "RECLAMATION_HOME": str(p), "MODE": mode, "UNCERTAIN": "1" if uncertain else "0",
+                   "MISSING_IMAGES": "1" if missing_images else "0"}
             if volume_id is not None:env["VOLUME_ID"] = str(volume_id)
             result = subprocess.run(["sh", str(p / "reclamation.sh")], env=env, capture_output=True, text=True, timeout=20)
             actions = (p / "actions").read_text().splitlines() if (p / "actions").exists() else []
@@ -122,6 +123,11 @@ else:sys.exit(1)
         result, actions = self.script("apply-reclamation", uncertain=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(actions, ["20"])
+
+    def test_missing_retained_images_block_compaction(self):
+        result, actions = self.script("apply-reclamation", missing_images=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(actions, [])
 
     def test_automation_is_not_rendered_before_pilot(self):
         manifest = subprocess.check_output(["kustomize", "build", str(APP)], text=True)

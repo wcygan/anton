@@ -9,6 +9,7 @@ case "$${VOLUME_ID:-}" in *[!0-9]*) echo 'invalid volume ID' >&2; exit 1 ;; esac
 collect() {
   # JSON goes to bounded job-local /tmp, never to a persistent dataset.
   MODE=inspect sh "$${RECLAMATION_HOME}/reconcile.sh" > /tmp/harbor.json
+  MODE=verify-images sh "$${RECLAMATION_HOME}/reconcile.sh" > /tmp/image-availability.json
   printf '[]' > /tmp/node-items.json
   for node in k8s-1 k8s-2 k8s-3; do
     kubectl get node "$${node}" -o json > /tmp/node.json

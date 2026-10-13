@@ -23,7 +23,7 @@ persistent service is authorized.
 
 - [ ] A post-aging node inventory separates references, unique digests, CRI
   usage, and filesystem space without asserting candidate bytes are reclaimable.
-- [ ] Harbor's complete GC policy matches Git; authenticated inspection is GET-only.
+- [x] Harbor's complete GC policy matches Git; authenticated inspection is GET-only.
 - [ ] October 18 scheduled real GC and preceding retention succeed; retained
   active manifests and blobs remain readable.
 - [ ] One healthy Harbor-only compaction/trim pilot demonstrates physical
@@ -34,7 +34,7 @@ persistent service is authorized.
 ## Tasks
 
 - [x] Implement and collect the private node image baseline.
-- [ ] Deploy full GC-policy reconciliation and GET-only inspection; verify live.
+- [x] Deploy full GC-policy reconciliation and GET-only inspection; verify live.
 - [x] Prepare and test gated compaction and unpublished automation templates.
 - [ ] Verify October 18 GC; wait one hour after completion, then pilot eligible
   Harbor volumes serially and trim only their affected SeaweedFS PVCs.
@@ -55,6 +55,11 @@ reference inside the job. Never fetch Secret data into this chat. Use a Job
 derived from the retention CronJob for inspection; capture sanitized JSON,
 then delete that exact temporary Job. Retention/GC writes remain owned by the
 Git-managed reconciler and Harbor scheduler.
+Remove the generated CronJob ownerReferences from manual Jobs: its one-success
+history policy can otherwise delete completed diagnostic evidence before it is
+captured. Keep the explicit TTL and delete each independent Job after capture.
+Use `restartPolicy: Never` as well as `backoffLimit: 0`; inheriting OnFailure
+can restart and delete a failed diagnostic pod before its error is retained.
 
 `MODE=verify-images` resolves active/desired workload artifacts through Harbor's
 API, obtains registry tokens inside the Job, verifies manifest graphs and blob
@@ -117,6 +122,33 @@ seven days so the Monday read-only review can check the recorded GC ID.
 - Existing `weekly-anton-resource-review` remains Mondays 09:00 and read-only;
   it must not flag the October 19 morning image-aging grace window as a failure.
 
+## Retained-image repair
+
+The new reader exposed existing registry content missing behind intact Harbor
+artifact metadata. BusyBox, the NVMe collector and the storage VXLAN helper
+returned `MANIFEST_UNKNOWN`; pull authorization succeeded. S3 reads confirmed
+the BusyBox repository revision link and manifest blob were absent at the
+configured registry path. This is a content inconsistency, not a token or
+frontend routing fault. The event that originally removed the content is not
+established by the retained evidence; do not attribute it to this cleanup.
+
+The operator separately authorized investigation and repair on October 13.
+BusyBox was restored from Docker Hub at exactly its existing manifest digest.
+Both custom images were recovered at their existing digests through Spegel's
+node cache. Every source manifest and config/layer blob was SHA-256 verified
+before registry uploads; restored manifests were read back and digest checked.
+The repairs used the supported registry API, added content without deleting
+artifacts, preserved existing tags and workload references, and required no
+workload restarts. Credentials remained inside short-lived Jobs using the
+existing Secret references.
+
+Physical maintenance still requires the scheduled real GC, readable retained
+images, cooldown, healthy storage and measured pilot savings. Missing retained
+images now fail the compaction script before any storage mutation. Private
+sanitized diagnostic/status evidence is in `.private/reclamation/`; temporary
+Jobs are deleted after capture. No real GC, compaction, trim, or manual image
+deletion ran in this implementation turn.
+
 ## Log
 
 - 2026-10-13: User approved implementation. Sunday GC and Tuesday image-aging
@@ -129,6 +161,16 @@ seven days so the Monday read-only review can check the recorded GC ID.
   tests. Both latest retention runs succeeded; only dry-run GC 673 exists.
 - 2026-10-13: One-time continuation heartbeats created and weekly read-only
   instructions refreshed. Compaction/trim automation remains unpublished.
+- 2026-10-13: Prepared manifest/blob reader, serial fail-closed compaction script,
+  scoped staged RBAC and schedules. All 378 contract tests and strict Flux
+  ConfigMap substitution passed. The deployed GC options normalize to
+  dry_run=false, delete_untagged=false and workers=1 without exposing credentials.
+- 2026-10-13: Independent reconciliation Job completed; matching GC schedule was
+  not rewritten. Manifest verification failed with the BusyBox inconsistency
+  above; the operator subsequently authorized its content repair.
+
+- 2026-10-13: Contract validation passed all 380 tests, including missing manifest/blob failure and prevention of compaction when retained-image verification fails.
+- 2026-10-13: Repaired all three retained images at their original digests. Final reader Job completed: 3 artifacts and 8 referenced blobs readable. All nodes/storage/Flux/services and 72/72 scrapes healthy; no new container restarts in the task window. Volume and replica specs unchanged. The historical content-removal event remains unknown.
 
 ## References
 
