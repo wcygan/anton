@@ -169,3 +169,21 @@ spec:
                 - name: install-multus-binary
                   # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/multus-cni
                   image: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.3.1-thick@sha256:a357a79359b80ddd5f4699117946cacf3b54f5baecf7944535594863e875fc25
+    # Reserve measured working-set headroom while preserving upstream limits.
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+          name: kube-multus-ds
+        spec:
+          template:
+            spec:
+              containers:
+                - name: kube-multus
+                  resources:
+                    requests:
+                      cpu: 50m
+                      memory: 192Mi
