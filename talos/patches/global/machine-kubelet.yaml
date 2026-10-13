@@ -2,6 +2,8 @@ machine:
   kubelet:
     extraConfig:
       serializeImagePulls: false
+      # Reclaim unused cached images even when disk pressure is low.
+      imageMaximumGCAge: 168h
       systemReserved:
         cpu: 500m
         memory: 2Gi

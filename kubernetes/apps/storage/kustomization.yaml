@@ -12,3 +12,4 @@ resources:
   - ./longhorn-config/ks.yaml
   - ./seaweedfs/ks.yaml
   - ./seaweedfs-config/ks.yaml
+  - ./longhorn-maintenance/ks.yaml

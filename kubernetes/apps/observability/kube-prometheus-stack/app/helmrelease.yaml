@@ -38,7 +38,8 @@ spec:
     prometheus:
       prometheusSpec:
         replicas: 1
-        retention: 15d
+        retention: 30d
+        retentionSize: 35GB
 
         # Match-all selectors so ServiceMonitors/PodMonitors/PrometheusRules/Probes
         # from every namespace are discovered without needing per-namespace labels.

@@ -85,7 +85,7 @@ resources: []
 
     def test_discovers_every_current_postbuild_application_root(self) -> None:
         roots = MODULE.discover_postbuild_roots()
-        self.assertEqual(len(MODULE.discover_application_roots()), 41)
+        self.assertEqual(len(MODULE.discover_application_roots()), 42)
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in roots],
             [

@@ -16,3 +16,4 @@ resources:
   - ./ingress-tailscale.yaml
   - ./prometheusrule.yaml
   - ./retention-cronjob.yaml
+  - ./retention-rbac.yaml

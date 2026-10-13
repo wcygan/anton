@@ -10,6 +10,7 @@ metadata:
     app.kubernetes.io/part-of: harbor
 spec:
   schedule: "17 1 * * *"
+  timeZone: Etc/UTC
   startingDeadlineSeconds: 900
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
@@ -26,7 +27,8 @@ spec:
             app.kubernetes.io/part-of: harbor
         spec:
           restartPolicy: OnFailure
-          automountServiceAccountToken: false
+          serviceAccountName: harbor-retention
+          automountServiceAccountToken: true
           securityContext:
             runAsNonRoot: true
             runAsUser: 65534
@@ -57,7 +59,11 @@ spec:
                 - name: HARBOR_RETENTION_CRON
                   value: "0 30 1 * * *"
                 - name: HARBOR_PROTECTED_TAGS
-                  value: "{latest,stable,prod,release-*}"
+                  value: "{in-use-*,rollback}"
+                - name: HARBOR_IMAGE_HOST
+                  value: "192.168.1.106"
+                - name: HARBOR_GC_CRON
+                  value: "0 30 5 * * 0"
               volumeMounts:
                 - name: reconciler
                   mountPath: /opt/reconcile.sh

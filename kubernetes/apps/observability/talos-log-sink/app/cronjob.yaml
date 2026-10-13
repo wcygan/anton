@@ -1,12 +1,5 @@
----
-# Rotates the vector sink's daily log files (talos-sink-YYYY-MM-DD.log on the
-# 5 Gi PVC) by keeping only the newest 10 and deleting the rest. 10 * ~380 MB
-# = ~3.8 GiB, leaves ~1.2 GiB headroom on the PVC.
-#
-# Implementation: the vector container is distroless and has no shell, so the
-# CronJob invokes `kubectl exec` into the busybox `rotator` sidecar defined in
-# helmrelease.yaml (extraContainers). RBAC in rbac.yaml restricts the SA to
-# pods/exec on the one vector pod.
+# Daily retention: routine 1d, warnings/kernel/unknown 14d, errors 30d.
+# Legacy mixed files age out after 30d to preserve historical error evidence.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -51,8 +44,29 @@ spec:
                 - sh
                 - -c
                 - |
-                  cd /vector-data-dir && \
-                  ls -1t talos-sink-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f
+                  set -eu
+                  cd /vector-data-dir
+                  now=$(date -u +%s)
+                  today=$(date -u +%F)
+                  for file in talos-*.log; do
+                    [ -f "$file" ] || continue
+                    case "$file" in
+                      talos-routine-*) days=1 ;;
+                      talos-warning-*|talos-diagnostic-*) days=14 ;;
+                      talos-error-*|talos-sink-*) days=30 ;;
+                      *) continue ;;
+                    esac
+                    # Date in the filename avoids deletion caused by copied mtimes.
+                    day=$${file%.log}
+                    day=$${day##*talos-}
+                    day=$${day#*-}
+                    [ "$day" = "$today" ] && continue
+                    stamp=$(date -u -d "$day 00:00:00" +%s) || exit 1
+                    # Keep complete days plus today's open file.
+                    if [ "$stamp" -lt "$((now / 86400 * 86400 - days * 86400))" ]; then
+                      rm -- "$file"
+                    fi
+                  done
               resources:
                 requests:
                   cpu: 10m

@@ -1,0 +1,21 @@
+# Metadata ownership only; never prune these controller-owned volumes.
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: pvc-b4fbcbc9-b095-46fa-8b0a-ae1e189aae6b
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    kustomize.toolkit.fluxcd.io/ssa: Merge
+  labels:
+    recurring-job.longhorn.io/observability-weekly-trim: enabled
+
+---
+apiVersion: longhorn.io/v1beta2
+kind: Volume
+metadata:
+  name: pvc-4dc3221e-8bab-4f86-b0d6-3160a5e2c01f
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+    kustomize.toolkit.fluxcd.io/ssa: Merge
+  labels:
+    recurring-job.longhorn.io/observability-weekly-trim: enabled

@@ -35,6 +35,10 @@ spec:
     defaultSettings:
       createDefaultDiskLabeledNodes: true
       defaultReplicaCount: 2
+      # Preserve a recovery window for abandoned replica data.
+      orphanResourceAutoDeletion: replica-data
+      orphanResourceAutoDeletionGracePeriod: 604800
+      removeSnapshotsDuringFilesystemTrim: false
       defaultDataLocality: best-effort
       staleReplicaTimeout: 2880
       # Resilience tier 1: when a node goes down hard (kubelet stops reporting),

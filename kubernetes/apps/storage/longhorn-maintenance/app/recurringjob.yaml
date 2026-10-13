@@ -1,0 +1,10 @@
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: observability-weekly-trim
+spec:
+  cron: "30 4 * * 0"
+  task: filesystem-trim
+  concurrency: 1
+  retain: 0
+  groups: []
