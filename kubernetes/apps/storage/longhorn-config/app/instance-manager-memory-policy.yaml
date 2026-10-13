@@ -1,0 +1,55 @@
+# Longhorn v1.12.1 exposes only CPU reservations for v1 instance managers.
+# Reserve memory at admission, without changing any CPU request or limit.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: longhorn-instance-manager-memory
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: storage
+    objectSelector:
+      matchLabels:
+        longhorn.io/component: instance-manager
+        longhorn.io/data-engine: v1
+        longhorn.io/managed-by: longhorn-manager
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods, pods/resize]
+        scope: Namespaced
+  matchConditions:
+    - name: owned-single-container-v1-instance-manager
+      expression: >-
+        object.spec.containers.size() == 1 &&
+        object.spec.containers[0].name == 'instance-manager' &&
+        has(object.spec.containers[0].resources.requests) &&
+        has(object.metadata.ownerReferences) &&
+        object.metadata.ownerReferences.exists(o,
+          o.apiVersion == 'longhorn.io/v1beta2' && o.kind == 'InstanceManager' &&
+          has(o.controller) && o.controller)
+  mutations:
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: >-
+          [JSONPatch{
+            op: 'add',
+            path: '/spec/containers/0/resources/requests/memory',
+            value: '1536Mi'
+          }]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: longhorn-instance-manager-memory
+spec:
+  policyName: longhorn-instance-manager-memory
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: storage

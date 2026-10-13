@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - ./networkattachment.yaml
   - ./metrics-networkpolicy.yaml
+  - ./instance-manager-memory-policy.yaml
