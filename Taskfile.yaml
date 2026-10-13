@@ -26,6 +26,13 @@ tasks:
 
   default: task --list
 
+  storage:image-inventory:
+    desc: Inventory node image references and disk usage without cleanup
+    cmd: python3 scripts/node-image-inventory.py --output .private/reclamation/node-images-latest.json {{.CLI_ARGS}}
+    preconditions:
+      - which python3 kubectl talosctl
+      - test -f {{.KUBECONFIG}}
+
   reconcile:
     desc: Force Flux to pull in changes from your Git repository
     cmd: mise exec -- flux --namespace flux-system reconcile kustomization flux-system --with-source
