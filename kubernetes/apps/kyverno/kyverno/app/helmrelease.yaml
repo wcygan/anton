@@ -36,6 +36,10 @@ spec:
       policyReports:
         enabled: false
     config:
+      # Explicit trust policies cover ReplicaSets as well as Pods and Deployments.
+      resourceFiltersExclude:
+        - "[ReplicaSet,*,*]"
+        - "[ReplicaSet/?*,*,*]"
       excludeKyvernoNamespace: true
       # App trust identities and workload scopes belong to private policies.
       # Do not use an objectSelector opt-out label here.
