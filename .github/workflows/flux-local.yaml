@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Run flux-local test
-        uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
+        uses: docker://ghcr.io/allenporter/flux-local:v8.3.0
         with:
           # `--sources "flux-system"` matches the diff job and restricts the
           # test set to Kustomizations whose `sourceRef` points at the main
@@ -81,7 +81,7 @@ jobs:
           path: default
 
       - name: Run flux-local diff
-        uses: docker://ghcr.io/allenporter/flux-local:v8.2.0
+        uses: docker://ghcr.io/allenporter/flux-local:v8.3.0
         with:
           args: >-
             diff ${{ matrix.resources }}
