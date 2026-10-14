@@ -42,6 +42,7 @@ DEPENDENCY_RULES = {
     rule.kind: rule
     for rule in (
         DependencyRule("HTTPRoute", "network", "envoy-gateway"),
+        DependencyRule("ClusterPolicy", "kyverno", "kyverno"),
         DependencyRule("DNSEndpoint", "network", "cloudflare-dns"),
         DependencyRule("ExternalSecret", "external-secrets", "external-secrets"),
         DependencyRule("NetworkAttachmentDefinition", "network", "multus"),

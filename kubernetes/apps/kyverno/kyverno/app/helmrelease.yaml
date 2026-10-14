@@ -1,0 +1,45 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kyverno
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: kyverno
+  values:
+    # Admission is the only controller needed for image verification.
+    admissionController:
+      replicas: 3
+      container:
+        image:
+          tag: v1.19.1@sha256:b31d8511ae5fd6010e2a01ea72ebae08eb82fa51d91af14a1d9fe989949b4edb
+      initContainer:
+        image:
+          tag: v1.19.1@sha256:c25c47461f06f2845a48c319ae86fbbc1730a7b9ed5b701889c9dc1f9ee94b09
+      podDisruptionBudget:
+        minAvailable: 2
+    backgroundController:
+      enabled: false
+    cleanupController:
+      enabled: false
+    reportsController:
+      enabled: false
+    features:
+      forceFailurePolicyIgnore:
+        enabled: false
+      policyExceptions:
+        enabled: false
+      admissionReports:
+        enabled: false
+      policyReports:
+        enabled: false
+    config:
+      excludeKyvernoNamespace: true
+      # App trust identities and workload scopes belong to private policies.
+      # Do not use an objectSelector opt-out label here.
+      webhooks:
+        namespaceSelector:
+          matchLabels:
+            anton.wcygan.net/image-verification: enabled
