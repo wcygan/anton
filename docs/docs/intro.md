@@ -5,92 +5,44 @@ slug: /
 
 # Anton
 
-Kubernetes homelab cluster. I use this for:
+Anton is a Talos Kubernetes homelab for public applications, private services
+over Tailscale, and learning experiments. Flux applies the committed desired
+state. Manifests under `kubernetes/` and `bootstrap/` are hand-edited; Talos
+machine configs are generated from the sources under `talos/`.
 
-- Exposing applications to the public internet
-- Hosting applications that I can access remotely over VPN
-- Trying new stuff
+## Start here
 
-🔗 **Blog Post**: https://wcygan.net/anton
+The [routine operations guide](runbooks/routine-operations.md) covers checking
+health, deploying a change, and finding the first failing layer. Run commands
+from the repository root with `mise exec --`.
 
-## Cluster Access
-
-```mermaid
-flowchart TD
-    subgraph external[Public Access]
-        direction TB
-        domain1[wcygan.net<br/>Cloudflare]
-        domain2[anotherdomain.com<br/>Cloudflare]
-    end
-
-    subgraph internal[Internal Access - VPN Only]
-        direction TB
-        domain3[my.private.ts.net<br/>Tailscale]
-    end
-
-    subgraph cluster[Anton Cluster]
-        direction TB
-        apps[Applications<br/>& Services]
-    end
-
-    domain1 --> apps
-    domain2 --> apps
-    domain3 -.-> apps
-
-    classDef cloudflare fill:#f4811f,color:#fff
-    classDef tailscale fill:#242526,color:#fff
-    classDef clusterBox fill:#e1f5fe
-
-    class domain1,domain2 cloudflare
-    class domain3 tailscale
-    class apps clusterBox
+```sh
+mise exec -- task --list
 ```
 
-### Hardware
-- **Nodes**: 3x MS-01 mini PCs (Intel N100, 16GB RAM each)
-- **Storage**: 6x 1TB NVMe SSDs
-- **Network**: Gigabit Ethernet
+| Situation | Guide |
+| --- | --- |
+| Remote access or Talos health | [Talos health](runbooks/talos-health.md) |
+| Workload logs or missing log streams | [Kubernetes logs in Loki](runbooks/kubernetes-logs-loki.md) |
+| Helm timeout, rollback, cleanup, or hook failure | [Flux Helm remediation](runbooks/flux-helm-remediation.md) |
+| Storage network attachment failure | [Multus attach failure](runbooks/multus-attach-failure.md) |
+| Push or pull an image through Harbor | [Harbor developer guide](notes/harbor-developer-guide.md) |
 
-### Operating System
-- **OS**: [Talos Linux](https://www.talos.dev/) - API-driven, immutable Kubernetes OS
-- **Management**: Declarative configuration via YAML
-- **Security**: No SSH access, minimal attack surface
+Runbooks describe operator procedures. Notes and Playground pages also contain
+historical experiments; their examples are not a current workload inventory.
+Use committed manifests for desired state and bounded live reads for current health.
 
-## Cluster Topology
+## Hardware and access
 
-```mermaid
-flowchart TD
-    internet[Internet] --> cloudflare[Cloudflare Tunnel]
-    cloudflare --> external[Envoy External<br/>Gateway]
+The hardware inventory last verified April 20, 2026 records three Minisforum
+MS-01 control-plane nodes, each with an Intel Core i9-13900H and 96 GiB RAM.
+Each node has a 500 GB system NVMe and two 1 TB data NVMes. A dedicated 10 Gbit
+SFP+ full mesh carries storage traffic; management uses a separate RJ45 network.
+The repository's `context/hardware.md` retains the dated inventory and topology.
 
-    subgraph cluster[Anton Kubernetes Cluster]
-        external
-        internal[Envoy Internal<br/>Gateway]
+Public applications use Cloudflare Tunnel and the external Envoy gateway.
+Private access uses Tailscale; internal HTTPRoutes use the internal Envoy
+gateway. Public exposure is an explicit operator decision.
 
-        subgraph nodes[Control Plane Nodes]
-            direction LR
-            k8s1[k8s-1<br/>192.168.1.98]
-            k8s2[k8s-2<br/>192.168.1.99]
-            k8s3[k8s-3<br/>192.168.1.100]
-        end
-
-        subgraph apps[Applications]
-            direction LR
-            cloudflared[Cloudflare<br/>Tunnel]
-            metrics[Metrics<br/>Server]
-            echo[Echo<br/>Service]
-        end
-    end
-
-    external --> apps
-    internal -.-> apps
-    nodes -.-> apps
-
-    classDef node fill:#e1f5fe
-    classDef gateway fill:#fff3e0
-    classDef app fill:#f3e5f5
-
-    class k8s1,k8s2,k8s3 node
-    class external,internal,cloudflare gateway
-    class cloudflared,metrics,echo app
-```
+Talos provides API-based node management without SSH. Flux owns application
+configuration; routine deployment changes go through Git rather than live edits.
