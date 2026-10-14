@@ -4,6 +4,12 @@ sidebar_position: 6
 
 # Observability Stack Installation Guide
 
+> Historical installation example: this page uses the retired template pipeline
+> and an Alloy/operator design. Anton's current Kubernetes log path uses an
+> OTel Collector DaemonSet and Loki. Use the [Kubernetes logs runbook](../runbooks/kubernetes-logs-loki.md)
+> for current operation and the [routine operations guide](../runbooks/routine-operations.md)
+> for deployment; do not run this page's `task configure` examples.
+
 Complete guide for deploying a production-grade observability stack (Prometheus, Loki, Alloy, Grafana) on Talos Kubernetes using GitOps.
 
 ## Overview

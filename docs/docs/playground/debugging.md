@@ -5,6 +5,11 @@ sidebar_label: Debugging Deployments
 
 # Debugging Deployments
 
+> Historical playground examples, including Ceph storage classes and database
+> deployments, are not Anton's current inventory. Start with the
+> [routine operations guide](../runbooks/routine-operations.md) for current
+> diagnosis, then verify the owning manifests before using an example below.
+
 This guide documents common issues encountered when deploying databases in the playground environment and their solutions.
 
 ## Architecture Overview
