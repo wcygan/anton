@@ -66,6 +66,7 @@ spec:
                 app.kubernetes.io/component: master
                 app.kubernetes.io/instance: seaweedfs
   volume:
+    version: 4.48@sha256:aba492e2a4e4c90bff795745e8e660affa1f09e7650f5981bd7bccd1a06cd931
     replicas: 3                     # one per node
     metricsPort: 9327
     maxVolumeCounts: 20             # 8 free slots per server at current use
