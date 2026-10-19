@@ -115,6 +115,7 @@ spec:
                 app.kubernetes.io/component: filer
                 app.kubernetes.io/instance: seaweedfs
   s3:
+    version: 4.48@sha256:aba492e2a4e4c90bff795745e8e660affa1f09e7650f5981bd7bccd1a06cd931
     volumes:
       - name: read-probe-code
         configMap:
