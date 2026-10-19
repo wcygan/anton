@@ -51,6 +51,12 @@ class NtfyRouting(unittest.TestCase):
         cases = [
             ('LonghornVolumeDegraded', 'warning', 'storage', 'ntfy'),
             ('OTelCollectorQueueHigh', 'warning', 'observability', 'ntfy'),
+            ('SeaweedFSS3ReadFailures', 'warning', 'storage', 'ntfy'),
+            ('SeaweedFSS3Read5xx', 'warning', 'storage', 'ntfy'),
+            ('SeaweedFSS3MonitoringUnavailable', 'warning', 'storage', 'ntfy'),
+            ('SeaweedFSS3ReadProbeFailed', 'critical', 'storage', 'ntfy'),
+            ('SeaweedFSS3ReadFailures', 'info', 'storage', 'drop'),
+            ('PrefixSeaweedFSS3ReadFailures', 'warning', 'storage', 'drop'),
             ('KubeNodeNotReady', 'warning', 'kube-system', 'ntfy'),
             ('KubeNodeUnreachable', 'warning', 'kube-system', 'ntfy'),
             ('KubeNodeReadinessFlapping', 'warning', 'kube-system', 'ntfy'),

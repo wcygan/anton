@@ -78,6 +78,56 @@ spec:
                 app.kubernetes.io/component: filer
                 app.kubernetes.io/instance: seaweedfs
   s3:
+    volumes:
+      - name: read-probe-code
+        configMap:
+          name: seaweedfs-s3-read-probe
+      - name: read-probe-credentials
+        secret:
+          secretName: seaweedfs-read-probe
+    sidecars:
+      - name: read-probe
+        image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+        command: [python3, -u, /probe/s3-read-probe.py]
+        env:
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        ports:
+          - name: read-probe
+            containerPort: 9328
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: read-probe
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: read-probe
+          initialDelaySeconds: 15
+        resources:
+          requests:
+            cpu: 5m
+            memory: 24Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+          - name: read-probe-code
+            mountPath: /probe
+            readOnly: true
+          - name: read-probe-credentials
+            mountPath: /credentials
+            readOnly: true
     metricsPort: 9327
     replicas: 2                     # standalone Deployment HA per ADR 0019
     iam: false                      # explicit override — operator default is true

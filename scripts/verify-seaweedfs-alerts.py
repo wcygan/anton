@@ -122,6 +122,11 @@ def loki(root: Path) -> None:
             ("storage", "filer", "wrong-container", "volumeDataIntegrityChecking failed", now - 2_000_000_000),
             ("storage", "volume", "stale", "volumeDataIntegrityChecking failed", now - 3_600_000_000_000),
         ]
+        fixtures += [("storage", "s3", "s3-stale", "I1019 read http://old.invalid:8444/20,abc failed, err: dial tcp: i/o timeout", now - i * 1_000_000) for i in range(1, 4)]
+        fixtures += [("storage", "s3", "s3-canceled", "read chunk 20,abc failed: context canceled", now - i * 1_000_000) for i in range(1, 4)]
+        fixtures += [("storage", "s3", "s3-truncated", "GetObjectHandler: failed to stream object from volume servers", now - i * 1_000_000) for i in range(1, 4)]
+        fixtures += [("other", "s3", "s3-foreign", "read chunk 20,abc failed", now - i * 1_000_000) for i in range(1, 4)]
+        fixtures += [("storage", "s3", "s3-normal", "GET complete status=200", now - i * 1_000_000) for i in range(1, 4)]
         for namespace, component, pod, line, stamp in fixtures:
             streams.append({"stream": {"k8s_namespace_name": namespace, "k8s_container_name": component, "severity": "info"},
                             "values": [[str(stamp), line, {"k8s_pod_name": pod}]]})
@@ -132,12 +137,17 @@ def loki(root: Path) -> None:
         actual = {item["metric"]["k8s_pod_name"] for item in result}
         assert actual == {"bad-dat", "bad-idx", "bad-crc"}, result
         print("Loki: INFO-level integrity failures match; healthy, foreign, and stale logs do not")
-        for _ in range(45):
+        read_rule = next(rule for group in rules["groups"] for rule in group["rules"] if rule["alert"] == "SeaweedFSS3ReadFailures")
+        read_query = urllib.parse.urlencode({"query": read_rule["expr"], "time": str(now)})
+        read_result = http(base + "/loki/api/v1/query?" + read_query)["data"]["result"]
+        assert {item["metric"]["k8s_pod_name"] for item in read_result} == {"s3-stale", "s3-truncated"}, read_result
+        print("Loki: S3 retry and truncated-stream failures match; cancellations, successful reads, and foreign logs do not")
+        for _ in range(110):
             groups = http(base + "/prometheus/api/v1/rules")["data"]["groups"]
             alerts = [alert for group in groups for rule in group["rules"] for alert in rule.get("alerts", [])]
             firing = {alert["labels"].get("k8s_pod_name") for alert in alerts if alert["state"] == "firing"}
-            if firing == {"bad-dat", "bad-idx", "bad-crc"}:
-                print("Loki: mounted ruler evaluates the actual integrity rule and fires for all three failing pods")
+            if firing == {"bad-dat", "bad-idx", "bad-crc", "s3-stale", "s3-truncated"}:
+                print("Loki: mounted ruler evaluates the actual integrity rule and fires for integrity and S3 failure fixtures")
                 break
             time.sleep(1)
         else:

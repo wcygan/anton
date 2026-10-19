@@ -48,6 +48,68 @@ retain a failure. A prolonged log collection outage can exceed the alert window.
 
 ## Respond safely
 
+### S3 reads and stale addresses
+
+Volume servers advertise their stable StatefulSet peer DNS names. Explicit
+`spec.volume.ipBind: 0.0.0.0` keeps listener startup independent of stale DNS.
+Do not restore the old `-ip=$(POD_IP)` override: it leaves cached literal IPs
+behind when volume pods move. Existing literal-IP caches need a one-time refresh
+after changing the advertisement. Compare master topology with the attempted
+addresses in gateway logs before considering an approved gateway restart.
+
+The operator creates the S3 ServiceMonitor from `spec.s3.metricsPort`. Verify
+both gateway targets; S3-named metrics exported by volume pods are not gateway
+coverage. A sidecar in each S3 pod performs a signed localhost GET every minute,
+with a 15-second whole-request deadline, exact 65,536-byte length, and SHA-256
+verification. The persistent fixture is `s3-read-probe/fixture-v1`, containing
+65,536 zero bytes. The ordinary bucket provisioner owns it and creates it only
+when missing. S3 uploads in 4.40 create volume chunks instead of inline filer data.
+Do not delete it during cleanup of temporary verification jobs.
+
+The probe mounts only the existing read-only spark-events reader credential
+through a separate ExternalSecret. That identity also has `Read:s3-read-probe`;
+no admin config or write credential is mounted in the sidecar. Its existing
+read/list permission for the retired spark-events bucket remains unchanged.
+Code ConfigMap hashes are wired into the Seaweed CR so code changes roll pods.
+
+| Alert | Trigger | Route |
+| --- | --- | --- |
+| `SeaweedFSS3ReadFailures` | At least three transport/streaming failure log events in five minutes, sustained one minute | Explicit warning route to ntfy |
+| `SeaweedFSS3Read5xx` | At least three GET-family API 5xx responses in five minutes, sustained one minute | Explicit warning route to ntfy |
+| `SeaweedFSS3ReadProbeFailed` | Two consecutive verified GET failures on a gateway | Critical route to ntfy |
+| `SeaweedFSS3MonitoringUnavailable` | Missing gateway scrapes, missing probe output, or completion older than two minutes, sustained two minutes | Explicit warning route to ntfy |
+
+Retry messages can be INFO and several events can describe one request. Client
+cancellations are excluded. SeaweedFS can send HTTP 200/206 headers before a
+stream later fails; the full-body probe complements HTTP status counters. The
+probe's readiness endpoint checks its HTTP server, not storage, so a failed read
+does not remove both gateways from service. Completion freshness detects a
+stalled worker loop independently of its last success result.
+
+One fixture does not cover every historical object, volume, cached mapping, or
+consumer credential. After maintenance, also verify a cold immutable Harbor
+pull and historical Loki reads. SeaweedFS 4.40 refreshes stale locations only
+after retries; stable DNS reduces recurrence but cannot remove DNS propagation
+delay or the downtime of single-copy logical volumes.
+
+Local regression commands:
+
+```sh
+mise exec -- python3 -m unittest scripts.tests.test_s3_read_probe scripts.tests.test_seaweedfs_bucket_provisioner
+mise exec -- python3 scripts/verify-s3-read-alerts.py
+mise exec -- python3 scripts/verify-seaweedfs-alerts.py
+AMTOOL_BIN=/path/to/amtool mise exec -- python3 -m unittest scripts.tests.test_ntfy_routing
+mise exec -- task contracts:validate
+```
+
+For rollout, keep a gateway available, stop active lakehouse writers, observe
+both new pods and their probe results before continuing, and stop on failed
+data verification or readiness. Revert the probe/monitoring commit if it
+destabilizes gateway startup; retain stable volume advertisement. Never modify
+volume files or delete PVCs to clear an address cache.
+
+### Volume integrity
+
 1. Confirm Kubernetes context, namespace `storage`, pod identity, node, PVC, and
    logical volume ID. Record `/status`, master topology, pod restarts/events,
    bounded volume logs, and Longhorn conditions before intervening.
