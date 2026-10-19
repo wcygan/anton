@@ -38,16 +38,16 @@ spec:
       reason: Forbidden
       message: notification-controller cannot update Flux subresources.
     - expression: >-
-        object.all(k, k == 'metadata' || (k in oldObject && object[k] == oldObject[k])) &&
-        oldObject.all(k, k == 'metadata' || k in object)
+        dyn(object).all(k, k == 'metadata' || (k in dyn(oldObject) && dyn(object)[k] == dyn(oldObject)[k])) &&
+        dyn(oldObject).all(k, k == 'metadata' || k in dyn(object))
       reason: Forbidden
       message: notification-controller cannot change Flux configuration, status, or other object fields.
     - expression: >-
-        object.metadata.all(k,
+        dyn(object.metadata).all(k,
           k in ['annotations', 'resourceVersion', 'managedFields'] ||
-          (k in oldObject.metadata && object.metadata[k] == oldObject.metadata[k])) &&
-        oldObject.metadata.all(k,
-          k in ['annotations', 'resourceVersion', 'managedFields'] || k in object.metadata)
+          (k in dyn(oldObject.metadata) && dyn(object.metadata)[k] == dyn(oldObject.metadata)[k])) &&
+        dyn(oldObject.metadata).all(k,
+          k in ['annotations', 'resourceVersion', 'managedFields'] || k in dyn(object.metadata))
       reason: Forbidden
       message: notification-controller cannot change Flux labels, finalizers, owners, or other protected metadata.
     - expression: >-
