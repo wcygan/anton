@@ -1,4 +1,4 @@
-"""Exercise real HTTP bodies and the probe's worker deadline."""
+"""Exercise real HTTP bodies and the probe's whole-request deadline."""
 import contextlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import importlib.util
@@ -90,8 +90,10 @@ class ProbeTests(unittest.TestCase):
             with patch.dict(os.environ, {'CREDENTIALS_DIRECTORY': directory}):
                 with endpoint(delay=.1) as (url, _):
                     self.assertEqual(PROBE.check(url, timeout=.3), {'ok': False, 'reason': 'deadline'})
+                with endpoint() as (url, _):
+                    self.assertEqual(PROBE.check(url), {'ok': True, 'reason': 'verified'})
 
-    def test_worker_success_and_missing_credentials(self):
+    def test_check_success_and_missing_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, {'CREDENTIALS_DIRECTORY': directory}):
                 self.assertEqual(PROBE.check(), {'ok': False, 'reason': 'credentials_unavailable'})

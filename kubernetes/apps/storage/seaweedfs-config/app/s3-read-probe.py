@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
-import subprocess
+import signal
 import sys
 import threading
 import time
@@ -39,6 +39,10 @@ def signed_request(url, access, secret, now=None):
     return urllib.request.Request(url, headers=headers)
 
 
+class ReadDeadline(Exception):
+    pass
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -54,6 +58,8 @@ def verify(url, access, secret):
             if hashlib.sha256(body).hexdigest() != SHA256:
                 return {'ok': False, 'reason': 'checksum'}
         return {'ok': True, 'reason': 'verified'}
+    except ReadDeadline:
+        raise
     except urllib.error.HTTPError as error:
         error.close()
         return {'ok': False, 'reason': 'read_error'}
@@ -62,17 +68,23 @@ def verify(url, access, secret):
 
 
 def check(url=URL, timeout=15):
-    # A separate worker enforces a whole-request deadline even on a trickling body.
+    def expired(signum, frame):
+        raise ReadDeadline()
+
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, timeout)
     try:
-        result = subprocess.run([sys.executable, __file__, '--once', url],
-                                capture_output=True, text=True, timeout=timeout)
-        if result.returncode:
-            return {'ok': False, 'reason': 'worker_error'}
-        return json.loads(result.stdout)
-    except subprocess.TimeoutExpired:
+        directory = Path(os.environ.get('CREDENTIALS_DIRECTORY', '/credentials'))
+        access = (directory / 'access-key').read_text().strip()
+        secret = (directory / 'secret-key').read_text().strip()
+        return verify(url, access, secret)
+    except ReadDeadline:
         return {'ok': False, 'reason': 'deadline'}
-    except (ValueError, OSError):
-        return {'ok': False, 'reason': 'worker_error'}
+    except OSError:
+        return {'ok': False, 'reason': 'credentials_unavailable'}
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 class Ledger:
@@ -125,12 +137,6 @@ def serve():
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--once':
-        try:
-            directory = Path(os.environ.get('CREDENTIALS_DIRECTORY', '/credentials'))
-            result = verify(sys.argv[2], (directory / 'access-key').read_text().strip(),
-                            (directory / 'secret-key').read_text().strip())
-        except OSError:
-            result = {'ok': False, 'reason': 'credentials_unavailable'}
-        print(json.dumps(result))
+        print(json.dumps(check(sys.argv[2])))
     else:
         serve()

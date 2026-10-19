@@ -95,6 +95,12 @@ spec:
         ports:
           - name: read-probe
             containerPort: 9328
+        startupProbe:
+          httpGet:
+            path: /ready
+            port: read-probe
+          periodSeconds: 5
+          failureThreshold: 12
         readinessProbe:
           httpGet:
             path: /ready

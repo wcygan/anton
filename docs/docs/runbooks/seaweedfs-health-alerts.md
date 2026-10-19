@@ -60,7 +60,7 @@ addresses in gateway logs before considering an approved gateway restart.
 The operator creates the S3 ServiceMonitor from `spec.s3.metricsPort`. Verify
 both gateway targets; S3-named metrics exported by volume pods are not gateway
 coverage. A sidecar in each S3 pod performs a signed localhost GET every minute,
-with a 15-second whole-request deadline, exact 65,536-byte length, and SHA-256
+with a 15-second whole-request deadline enforced by a process timer, exact 65,536-byte length, and SHA-256
 verification. The persistent fixture is `s3-read-probe/fixture-v1`, containing
 65,536 zero bytes. The ordinary bucket provisioner owns it and creates it only
 when missing. S3 uploads in 4.40 create volume chunks instead of inline filer data.
@@ -71,6 +71,9 @@ through a separate ExternalSecret. That identity also has `Read:s3-read-probe`;
 no admin config or write credential is mounted in the sidecar. Its existing
 read/list permission for the retired spark-events bucket remains unchanged.
 Code ConfigMap hashes are wired into the Seaweed CR so code changes roll pods.
+The interpreter imports once; its startup probe allows up to 60 seconds. Do not
+spawn a fresh interpreter inside every request deadline: CPU-limited imports
+can consume that deadline before any S3 request is sent.
 
 | Alert | Trigger | Route |
 | --- | --- | --- |
@@ -84,7 +87,7 @@ cancellations are excluded. SeaweedFS can send HTTP 200/206 headers before a
 stream later fails; the full-body probe complements HTTP status counters. The
 probe's readiness endpoint checks its HTTP server, not storage, so a failed read
 does not remove both gateways from service. Completion freshness detects a
-stalled worker loop independently of its last success result.
+stalled probe loop independently of its last success result.
 
 One fixture does not cover every historical object, volume, cached mapping, or
 consumer credential. After maintenance, also verify a cold immutable Harbor
