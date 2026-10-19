@@ -124,6 +124,11 @@ was accepted at 22:07:32 UTC. Its Pod IP changed from `10.42.2.180` to
 `seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444` remained unchanged.
 The fresh pull began about 48 seconds after readiness; its short execution
 does not measure time from volume readiness to successful recovery.
+Read-only filer metadata maps the two pulled layer digests, `eaf99133768c…`
+and `1e810a3886cb…`, to volume IDs 23 and 22 respectively. Master lookup
+returns exactly one location for each: the stable volume-1 address above,
+matching the topology census. The fixture therefore exercises data held by
+the replaced server, rather than only data on an unaffected ordinal.
 
 The final concurrent S3 ReplicaSet was created at 22:09:46, before this pull,
 but its first Pod became Ready only at 22:10:02. The original two gateway
@@ -170,9 +175,12 @@ Separate read-only condition reads reported no endpoints for the ESO
 validation webhook while it was rescheduling; that endpoint and webhook
 were subsequently Ready. The affected source had not changed since the
 failed reconciliation. The root Kustomization has no explicit retry interval
-and a one-hour interval. Normal retry began clearing these conditions;
-seven Kustomizations remained NotReady at 22:20:54. No force reconcile was
-submitted.
+and a one-hour interval. Later reads showed seven Kustomizations still
+NotReady at 22:20:54. Concurrent reconcile-request annotations were recorded
+on `observability/kube-prometheus-stack` at 22:20:32 and
+`storage/seaweedfs-config` at 22:21:19. Root did not submit those requests;
+the partial recovery cannot all be attributed to ordinary retries. The
+remaining conditions still require source/retry reconciliation readback.
 
 At 22:17:15, all four exact test Jobs and their owned Pods plus the test
 Secret were removed. The project-scoped robot was revoked and the exact
