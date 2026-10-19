@@ -9,7 +9,6 @@ metadata:
 spec:
   image: chrislusf/seaweedfs:4.40
   master:
-    version: 4.48@sha256:aba492e2a4e4c90bff795745e8e660affa1f09e7650f5981bd7bccd1a06cd931
     replicas: 3
     # Longhorn replicates blocks; it cannot flush buffered SeaweedFS appends.
     defaultReplication: "000"      # no Seaweed replication (ADR 0005)
