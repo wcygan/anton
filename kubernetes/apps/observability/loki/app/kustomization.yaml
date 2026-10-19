@@ -5,9 +5,11 @@ configMapGenerator:
   - name: loki-seaweedfs-alerts
     files:
       - ./seaweedfs-alerts.yaml
+      - ./log-pipeline-alerts.yaml
     options:
       disableNameSuffixHash: true
 resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
   - ./externalsecret.yaml
+  - ./prometheusrule.yaml

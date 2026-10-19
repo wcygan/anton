@@ -1,0 +1,70 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki-log-durability
+  labels:
+    app.kubernetes.io/name: loki
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: loki-log-durability
+      interval: 30s
+      rules:
+        - alert: LokiWALRecoveryFailure
+          expr: |
+            max by (namespace,pod) (
+              {__name__=~"loki_ingester_wal_corruptions_total|loki_ingester_wal_discarded_samples_total|loki_ingester_wal_discarded_bytes_total",namespace="observability",job="observability/loki",reason!="duplicate"}
+            ) > 0
+          labels:
+            severity: critical
+            component: loki
+          annotations:
+            summary: Loki WAL recovery failed on {{ $labels.pod }}
+            description: |
+              A replay-error or discarded-data counter is nonzero in this Loki process. This
+              includes errors before the first scrape; the counter is not a count of lost
+              logs. Preserve WAL/PVC evidence and compare source logs before any repair.
+              Normal checkpoint duplicate entries do not trigger this alert.
+            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+        - alert: LokiWALPersistenceFailure
+          expr: |
+            max by (namespace,pod) (
+              (increase(loki_ingester_wal_disk_full_failures_total{namespace="observability",job="observability/loki"}[15m]) > 0)
+              or
+              (loki_ingester_wal_disk_full_failures_total{namespace="observability",job="observability/loki"} > 0 unless loki_ingester_wal_disk_full_failures_total{namespace="observability",job="observability/loki"} offset 15m)
+            ) > 0
+            or
+            max by (namespace,pod) (
+              (increase(loki_ingester_checkpoint_creations_failed_total{namespace="observability",job="observability/loki"}[15m]) > 0)
+              or
+              (loki_ingester_checkpoint_creations_failed_total{namespace="observability",job="observability/loki"} > 0 unless loki_ingester_checkpoint_creations_failed_total{namespace="observability",job="observability/loki"} offset 15m)
+            ) > 0
+          labels:
+            severity: critical
+            component: loki
+          annotations:
+            summary: Loki could not persist WAL or checkpoints on {{ $labels.pod }}
+            description: |
+              A disk-full WAL write or checkpoint creation failed within the detection
+              window, including a newly exposed nonzero counter. Inspect the Loki PVC, free
+              space, Longhorn and write errors. Do not delete WAL data or restart just to
+              reset counters.
+            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+        - alert: LokiLogMetricsUnavailable
+          expr: |
+            absent(
+              (up{namespace="observability",job="observability/loki"} == 1)
+              and on(namespace,pod) loki_ingester_wal_replay_active{namespace="observability",job="observability/loki"}
+            )
+          for: 5m
+          labels:
+            severity: critical
+            component: loki
+            namespace: observability
+          annotations:
+            summary: Loki log durability metrics are unavailable
+            description: |
+              No healthy Loki scrape with the WAL replay gauge has existed for five minutes.
+              WAL failure detection is blind. Inspect the Loki pod, ServiceMonitor and
+              Prometheus target.
+            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts

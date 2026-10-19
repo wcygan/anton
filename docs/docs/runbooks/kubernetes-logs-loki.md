@@ -124,6 +124,100 @@ Run `mise exec -- task contracts:validate` before committing a change to OTel, L
 Grafana's Loki datasource, or the query catalog. The validator checks those
 adapters against golden log records and the accepted contract.
 
+## Log-loss risk alerts
+
+Prometheus monitors Loki WAL counters and each collector's durable queue. The
+Loki ruler evaluates collector checkpoint and dropped-data messages. Rules live
+beside Loki and OTel, using their existing ServiceMonitor, PodMonitor, and local
+ruler ConfigMap; no new component is needed.
+
+| Alert | Trigger | Severity |
+| --- | --- | --- |
+| `LokiWALRecoveryFailure` | Any replay-error or discarded WAL sample/byte counter in the current process | critical |
+| `LokiWALPersistenceFailure` | Recent disk-full WAL write or checkpoint creation failure | critical |
+| `LokiLogMetricsUnavailable` | No healthy Loki target with its WAL replay gauge for 5 minutes | critical |
+| `OTelCollectorQueueHigh` | Queue above 80% for 2 minutes | warning |
+| `OTelCollectorQueueSaturated` | Queue above 95% for 1 minute | critical |
+| `OTelCollectorEnqueueFailure` | Recent failure to add records to the persistent queue | critical |
+| `OTelCollectorExportFailure` | Recent final export failure counter or dropped-data message | critical |
+| `OTelCollectorLogMetricsUnavailable` | Healthy targets with queue metrics fewer than desired DaemonSet pods for 5 minutes | critical |
+| `OTelCollectorCheckpointFailure` | Reader checkpoint load/save or storage-client failure logged within 15 minutes | critical |
+
+Critical alerts use the existing Alertmanager-to-ntfy route. The queue warning
+is visible in Prometheus/Grafana; the current ntfy route does not send arbitrary
+warnings. Metrics and the log fallback share `OTelCollectorExportFailure` and
+normalized pod labels, with `signal="metrics"` or `signal="logs"` identifying
+the evidence. Alertmanager groups them under the same alert name and namespace
+so one failure does not create two unrelated notification groups. This change
+does not alter notification destinations or credentials.
+
+**Counter semantics matter.** A WAL recovery failure often happens before the
+first scrape. Its rule tests the current counter directly, remaining active
+for that process after investigation; it does not use `increase()` alone. The
+counter is a replay-error indicator, not a count of lost logs or proof of
+physical corruption. Normal `loki_ingester_wal_duplicate_entries_total` replay
+and discarded samples/bytes with `reason="duplicate"` are excluded. Never restart Loki merely to clear this alert; preserve evidence
+and use an incident-scoped silence after assessing the impact.
+
+Other failure-counter rules use a 15-minute increase and also catch a newly
+exposed nonzero series with no sample 15 minutes earlier. This detects the
+first failure of lazily created exporter metrics; it resolves after a quiet
+window rather than requiring a restart. In the pinned collector, retryable
+connection failures remain queued without incrementing final send failures;
+a permanent HTTP rejection increments that counter and logs dropped data.
+Enqueue failures may be recovered by reader retries: alerting indicates risk,
+not proof that records were lost.
+
+Queue ratios use the actual `otelcol_exporter_queue_size` and
+`otelcol_exporter_queue_capacity` gauges. With `sizer: bytes`, these values are
+bytes despite the pinned version's generic HELP text saying batches. Missing
+queue metrics or targets trigger separate coverage alerts, rather than silently
+looking like empty queues.
+
+**Checkpoint errors need logs.** The pinned `file_storage` extension has no
+checkpoint-failure metric. The log rule matches actual `save offsets`,
+`load offsets`, and storage-client errors without relying on normalized
+severity. A completely broken collector cannot export its own error logs, and
+an unavailable Loki cannot evaluate log rules. Independent Prometheus coverage,
+queue, and exporter alerts provide complementary signals; they cannot prove
+end-to-end delivery or replace source-to-Loki comparisons.
+
+When an alert fires:
+
+1. Record the affected pod/node, time window, image version, queue occupancy,
+   retry/rejection reason and current readiness. Use bounded pod logs and
+   read-only metrics queries; keep credentials out of evidence.
+2. For WAL failures, retain the WAL/PVC identity and startup logs, inspect free
+   space and Longhorn health, then compare surviving source records with Loki.
+   Avoid deleting/truncating WAL files or restarting as a diagnostic shortcut.
+3. For queue/export failures, restore the failed backend or storage dependency.
+   Check HTTP status and permanent rejections. Preserve `/var/lib/otelcol` and
+   allow backlog to drain while source logs remain available.
+4. For checkpoint failures, inspect node-local directory ownership, available
+   disk space, the per-database size cap, and bbolt/storage errors. Export can
+   remain healthy while offsets fail to persist; repeated restarts can replay
+   data. Do not delete databases to suppress the symptom.
+5. Verify all collectors and Loki are Ready, scrape coverage is complete,
+   failures have stopped, queues recover, and affected source records are
+   queryable. Confirm both Prometheus and Loki rule evaluation health.
+
+Run the behavior checks before committing changes to these alerts:
+
+```sh
+mise exec -- python3 scripts/verify-log-loss-alerts.py
+```
+
+The local-only suite uses pinned Prometheus, Loki and collector binaries. It
+checks healthy and failing PromQL scenarios (including pre-first-scrape errors,
+counter resets, threshold delays, and missing scrapes), forces real queue and
+checkpoint failures, and verifies that mounted Loki rules fire on actual error
+messages. Normal retries, duplicate replay, foreign and stale logs stay quiet.
+No live failure or test notification is generated. For an approved rollout,
+verify the new rules load and evaluate, healthy live expressions stay quiet,
+and the existing ntfy route still selects critical alerts. Adding the ruler
+file to the existing volume items changes Loki's pod template; observe that
+rollout and collector delivery before declaring the alerts active.
+
 ## Labels and structured metadata
 
 Use `scripts/validate-log-contract.py --show` for the intentional indexed

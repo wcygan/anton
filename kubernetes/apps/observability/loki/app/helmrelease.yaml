@@ -146,6 +146,8 @@ spec:
             items:
               - key: seaweedfs-alerts.yaml
                 path: fake/seaweedfs-alerts.yaml
+              - key: log-pipeline-alerts.yaml
+                path: fake/log-pipeline-alerts.yaml
       extraVolumeMounts:
         - name: seaweedfs-alert-rules
           mountPath: /etc/loki/alert-rules
