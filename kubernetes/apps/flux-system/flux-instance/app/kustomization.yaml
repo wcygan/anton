@@ -12,3 +12,4 @@ resources:
   - ./receiver.yaml
   - ./podmonitor.yaml
   - ./networkpolicy.yaml
+  - ./notification-rbac.yaml
