@@ -49,8 +49,12 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 - [x] Resolve the stale-address and proxy-drain findings with approved controlled recovery checks; retain the earlier failed exercise and the node-loss continuity limit.
 - [x] Restore stable Seaweed volume DNS with explicit wildcard bind and verify the real operator rollout, master locations, PVCs and unchanged S3 processes (PR 513).
 - [x] Deliver the proxy-aware two-phase drain command with bounded identity/eviction semantics and behavioral fixtures (PR 514).
-- [x] Complete legacy S3 cache migration, prove fresh authenticated bytes after a controlled volume replacement, and complete the proxy-host drain/runtime recovery/cleanup gate; see `context/notes/2026-10-19-harbor-recovery-hardening.md`.
+- [x] Complete legacy S3 cache migration, prove client-visible fresh authenticated bytes after a controlled volume replacement, and complete the proxy-host drain/runtime recovery/cleanup gate; see `context/notes/2026-10-19-harbor-recovery-hardening.md` for its gateway body-cache limit.
 - [x] Observe post-drain Flux recovery from transient ESO validation-webhook failures; all 86 reconcilers passed after the evidence source revision, with concurrent reconcile requests separately attributed.
+- [x] Deliver the bounded SeaweedFS placement audit; baseline finds all 20 native volumes at `000` with one active copy. Independent review and 16 focused tests pass.
+- [ ] Complete the pinned local cold-read and existing-data migration proof, including gateway cache behavior and a safe writer fence.
+- [ ] Publish the reviewed availability policy, migration/rollback plan and successor ADR; obtain exact live approval before changing replication or replacing/draining resources.
+- [ ] Verify existing and new S3 data during the approved one-node hold, full recovery and temporary-resource cleanup; do not infer this from the earlier warm gateway fixture.
 - [x] Verify normal workload recovery after the approved private verifier mirror repair and ESO sync; desired replicas, enforcing admission and user-facing HTTP/TLS checks passed.
 - [ ] Complete independent bootstrap-image origin/cache-seeding evidence and approve an isolated rebuild drill; source audit remains incomplete.
 - [ ] Gather ten comparable ordinary release samples with explicit timestamp coverage before any polling experiment; the current private tool distinguishes its proxy from push timing.
@@ -91,6 +95,8 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 | Private release timing | Outcome-aware CLI and 133 passing private tests; actual push/scan times remain unknown and polling stays unchanged. | Revert its private merge; no application or polling configuration changed. |
 
 ## References
+
+- SeaweedFS maintenance availability: `context/notes/2026-10-19-seaweedfs-maintenance-availability.md`.
 
 - Recovery hardening: `context/notes/2026-10-19-harbor-recovery-hardening.md`.
 
