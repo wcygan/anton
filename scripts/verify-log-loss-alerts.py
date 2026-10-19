@@ -6,6 +6,7 @@ Requires Docker and yq. No live failures or notifications are generated.
 """
 from __future__ import annotations
 
+import argparse
 import copy
 import datetime
 import json
@@ -169,6 +170,10 @@ def collector(root):
             failed = [l for l in metrics.splitlines() if l.startswith("otelcol_exporter_send_failed_log_records{")]
             if case == "retry":
                 assert not failed, failed
+                run("docker", "stop", "--time", "10", cid)
+                logs["shutdown"] = run("docker", "logs", cid)
+                assert "interrupted due to shutdown" in logs["shutdown"]
+                assert "Exporting failed. Dropping data." in logs["shutdown"]
             if case == "enqueue":
                 assert any(l.startswith("otelcol_exporter_enqueue_failed_log_records{") and float(l.rsplit(" ", 1)[1]) > 0 for l in metrics.splitlines())
             if case == "permanent":
@@ -200,6 +205,23 @@ def loki(root, logs):
         checkpoint = next(l for l in logs["checkpoint"].splitlines() if "save offsets" in l)
         dropped = next(l for l in logs["permanent"].splitlines() if "Dropping data" in l)
         retry = next(l for l in logs["retry"].splitlines() if "Will retry" in l)
+        shutdown = next(l for l in logs["shutdown"].splitlines() if "Dropping data" in l)
+        def drop(error=None, **fields):
+            if error is not None:
+                fields["error"] = error
+            return '2026-10-19T00:00:00Z\terror\tqueue_sender.go:62\tExporting failed. Dropping data.\t' + json.dumps(fields)
+        export_cases = [
+            ("shutdown", shutdown),
+            ("json-shutdown", json.dumps({"msg": "Exporting failed. Dropping data.", "error": "interrupted due to shutdown: HTTP 503"})),
+            ("multiline-shutdown", drop("interrupted due to shutdown: HTTP 503\nretry pending")),
+            ("shutdown-missing-type-prefix", drop("interrupted due to shutdown without typed prefix")),
+            ("permanent-mentions-shutdown", drop("Permanent error: HTTP 400; payload mentions interrupted due to shutdown: retry")),
+            ("nested-shutdown", drop("Permanent error: HTTP 400", resource={"error": "interrupted due to shutdown: unrelated"})),
+            ("missing-error", drop(message="interrupted due to shutdown: not the error field")),
+            ("malformed", 'Exporting failed. Dropping data. {"error": invalid}'),
+            ("unstructured", "Exporting failed. Dropping data. unknown format"),
+            ("json-permanent", json.dumps({"msg": "Exporting failed. Dropping data.", "error": "Permanent error: HTTP 400"})),
+        ]
         fixtures = [
             ("checkpoint", checkpoint, "observability", "opentelemetry-collector", now - 1_000_000_000),
             ("load", "load offsets: corrupt checkpoint database", "observability", "opentelemetry-collector", now - 1_000_000_000),
@@ -210,10 +232,12 @@ def loki(root, logs):
             ("stale", checkpoint, "observability", "opentelemetry-collector", now - 3_600_000_000_000),
             ("foreign", checkpoint, "other", "opentelemetry-collector", now - 1_000_000_000),
             ("wrong-container", checkpoint, "observability", "application", now - 1_000_000_000)]
+        fixtures += [(name, line, "observability", "opentelemetry-collector", now - 1_000_000_000)
+                     for name, line in export_cases]
         streams = [{"stream": {"k8s_namespace_name": ns, "k8s_container_name": container, "severity": "info"},
                     "values": [[str(stamp), line, {"k8s_pod_name": name}]]} for name, line, ns, container, stamp in fixtures]
         http(base + "/loki/api/v1/push", {"streams": streams})
-        expected = {"OTelCollectorCheckpointFailure": {"checkpoint", "load", "storage"}, "OTelCollectorExportFailure": {"dropped"}}
+        expected = {"OTelCollectorCheckpointFailure": {"checkpoint", "load", "storage"}, "OTelCollectorExportFailure": {"dropped", "permanent-mentions-shutdown", "nested-shutdown", "missing-error", "malformed", "unstructured", "json-permanent", "shutdown-missing-type-prefix"}}
         for rule in rules["groups"][0]["rules"]:
             result = http(base + "/loki/api/v1/query?" + urllib.parse.urlencode({"query": rule["expr"], "time": str(now)}))["data"]["result"]
             assert {x["metric"].get("pod", x["metric"].get("k8s_pod_name")) for x in result} == expected[rule["alert"]], result
@@ -222,18 +246,24 @@ def loki(root, logs):
             actual = {r["name"]: {a["labels"].get("pod", a["labels"].get("k8s_pod_name")) for a in r.get("alerts", []) if a["state"] == "firing"} for g in groups for r in g["rules"]}
             return actual == expected
         eventually(firing, timeout=60)
-        print("Loki: actual native checkpoint/drop messages fire both mounted rules; retry, healthy, stale and foreign logs stay quiet", flush=True)
+        print("Loki: real permanent drops and unknown formats fire; structured shutdown interruptions stay quiet; nested/message shutdown mentions cannot suppress a permanent error", flush=True)
     finally:
         run("docker", "rm", "-f", cid)
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, help="Save real collector messages for bounded delivery verification")
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="anton-log-alerts-") as directory:
         root = Path(directory)
         root.chmod(0o755)
         prometheus(root)
         logs = collector(root)
         loki(root, logs)
+        if args.output:
+            save(args.output, {"permanent": next(line for line in logs["permanent"].splitlines() if "Dropping data" in line),
+                               "shutdown": next(line for line in logs["shutdown"].splitlines() if "Dropping data" in line)})
     print("Log-loss alert checks passed; local fixture containers removed")
 
 

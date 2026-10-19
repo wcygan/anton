@@ -252,7 +252,7 @@ def validate_otel(path: Path) -> list[ContractViolation]:
         violations.append(ContractViolation("otel", path, "file storage must fsync and cap each database at 256 MiB"))
     queue = re.search(r"(?ms)^          sending_queue:\n(.*?)(?=^      service:)", text)
     if queue is None or any(fragment not in queue.group(1) for fragment in (
-        "storage: file_storage", "sizer: bytes", "queue_size: 67108864",
+        "enabled: true", "storage: file_storage", "sizer: bytes", "queue_size: 67108864",
         "batch:", "sizer: items", "min_size: 256", "max_size: 512", "flush_timeout: 2s",
     )):
         violations.append(ContractViolation("otel", path, "logs require a 64 MiB persistent queue with exporter-side batching"))
@@ -393,8 +393,24 @@ def validate_runbook(path: Path) -> list[ContractViolation]:
     return violations
 
 
+def validate_shutdown_alert(rule_path: Path, collector_path: Path) -> list[ContractViolation]:
+    if "otel_alert_error !~" not in rule_path.read_text():
+        return []
+    image = re.search(r"(?ms)^    image:\n(.*?)(?=^    command:)", collector_path.read_text())
+    expected = (
+        "repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s",
+        "tag: 0.161.0",
+    )
+    if image is None or any(line not in {part.strip() for part in image.group(1).splitlines()} for line in expected):
+        return [ContractViolation("shutdown-alert", rule_path,
+                "shutdown exception requires the tested collector 0.161.0 image; reverify queue replay before changing it")]
+    return []
+
+
 def validate_repository(root: Path) -> list[ContractViolation]:
     return [
+        *validate_shutdown_alert(root / "kubernetes/apps/observability/loki/app/log-pipeline-alerts.yaml",
+                                 root / "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"),
         *validate_fixtures(root / "scripts" / "tests" / "fixtures" / "kubernetes-log-records.json"),
         *validate_otel(root / "kubernetes" / "apps" / "observability" / "otel-collector" / "app" / "helmrelease.yaml"),
         *validate_loki(root / "kubernetes" / "apps" / "observability" / "loki" / "app" / "helmrelease.yaml"),

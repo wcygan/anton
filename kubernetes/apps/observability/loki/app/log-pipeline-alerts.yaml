@@ -29,6 +29,12 @@ groups:
             count_over_time(
               {k8s_namespace_name="observability",k8s_container_name="opentelemetry-collector"}
                 |~ "Exporting failed[.] Dropping data[.]"
+                | regexp `(?P<otel_alert_fields>\{.*\})$`
+                | line_format `{{ .otel_alert_fields }}`
+                | json otel_alert_error="error"
+                | drop __error__, __error_details__
+                | otel_alert_error !~ `(?s)^interrupted due to shutdown:.*`
+                | drop otel_alert_fields, otel_alert_error
                 | label_format pod=k8s_pod_name
               [15m]
             )
@@ -43,5 +49,7 @@ groups:
           description: |
             The exporter logged a final dropped-data error in the last 15 minutes. Inspect
             the rejection reason and compare retained source records with Loki. Ordinary
-            retry messages do not match this alert.
+            retry messages and typed shutdown interruptions retained by the pinned
+            persistent queue do not match this alert. Unknown/malformed dropped-data
+            messages still alert. The logging contract enforces the queue prerequisite.
           runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts

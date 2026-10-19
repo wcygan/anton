@@ -24,6 +24,7 @@ import uuid
 REPO = Path(__file__).resolve().parents[1]
 MANIFEST = "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"
 LOKI = "grafana/loki:3.7.8"
+PYTHON = "docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72"
 
 
 def run(*args: str) -> str:
@@ -116,7 +117,7 @@ def seed_manifest(values: dict) -> dict:
     ]}
 
 
-def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
+def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="disconnect") -> dict:
     nonce = uuid.uuid4().hex
     network, loki_name = f"anton-logs-{nonce}", f"loki-{nonce}"
     image = values["image"]["repository"] + ":" + values["image"]["tag"]
@@ -223,6 +224,14 @@ def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
             run("docker", "stop", "--time", "30", lid)
             assert run("docker", "inspect", "-f", "{{.State.ExitCode}}", lid) == "0", "Loki did not stop gracefully"
             print(f"{label}: Loki stopped, written={len(ledger)}", flush=True)
+            unavailable = None
+            if backend_failure == "http503":
+                server = "from http.server import HTTPServer,BaseHTTPRequestHandler\nclass Handler(BaseHTTPRequestHandler):\n def do_POST(self):\n  self.rfile.read(int(self.headers.get('Content-Length',0)))\n  self.send_response(503);self.end_headers();self.wfile.write(b'at least 1 live replicas required, could only find 0')\n def log_message(self,*args):pass\nHTTPServer(('0.0.0.0',3100),Handler).serve_forever()"
+                unavailable = run("docker", "run", "-d", "--network", network, "--network-alias", loki_name,
+                                  PYTHON, "python3", "-u", "-c", server).splitlines()[-1]
+                containers.append(unavailable)
+                time.sleep(1)
+
             eventually(lambda: any(
                 line.startswith("otelcol_exporter_queue_size{") and float(line.rsplit(" ", 1)[1]) > 0
                 for line in get(metrics_url).splitlines()))
@@ -242,6 +251,8 @@ def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
             run("docker", "stop", "--time", "30", cid)
             assert run("docker", "inspect", "-f", "{{.State.ExitCode}}", cid) == "0", "Collector did not stop gracefully"
             cid, metrics_url = start_collector()
+            if unavailable:
+                run("docker", "stop", "--time", "5", unavailable)
             run("docker", "start", lid)
             port = run("docker", "port", lid, "3100/tcp").rsplit(":", 1)[1]
             loki_url = f"http://127.0.0.1:{port}"
@@ -260,6 +271,16 @@ def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
                     print(get(metrics_url), flush=True)
                     raise
             actual = collected()
+            shutdown_reports = []
+            for ident in containers:
+                for line in run("docker", "logs", ident).splitlines():
+                    if "Exporting failed. Dropping data." in line:
+                        fields = json.loads(line[line.find("{"):])
+                        shutdown_reports.append({"error": fields.get("error"), "dropped_items": fields.get("dropped_items")})
+            if backend_failure == "http503" and not expect_loss:
+                assert shutdown_reports, "HTTP503 shutdown reproduction emitted no drop messages"
+                assert all("interrupted due to shutdown" in item["error"] and "503" in item["error"]
+                           for item in shutdown_reports), shutdown_reports
             missing = sorted(expected - actual)
             if expect_loss:
                 assert missing, "Baseline unexpectedly preserved everything; reproduction is not discriminating"
@@ -268,7 +289,7 @@ def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
             result = {"case": label, "written_records": len(expected), "queryable_records": len(expected & actual),
                       "missing_records": len(missing), "missing_record_ids": missing,
                       "collector_sigkills": 2, "collector_graceful_restarts": 1, "loki_graceful_restarts": 1,
-                      "new_file_during_outage": True, "bootstrap_offsets_seeded": not expect_loss, "stale_bootstrap_rehearsed": not expect_loss}
+                      "backend_failure": backend_failure, "shutdown_reports": shutdown_reports, "new_file_during_outage": True, "bootstrap_offsets_seeded": not expect_loss, "stale_bootstrap_rehearsed": not expect_loss}
             print(json.dumps({k: v for k, v in result.items() if k != "missing_record_ids"}), flush=True)
             return result
         except Exception:
@@ -287,6 +308,7 @@ def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-ref")
+    parser.add_argument("--backend-failure", choices=["disconnect", "http503"], default="disconnect")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--render-seed", type=Path, help="Only render the temporary first-rollout seed manifest; never apply it")
     args = parser.parse_args()
@@ -299,8 +321,8 @@ def main():
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "baseline.yaml"
             path.write_text(baseline)
-            results.append(exercise(document(path)["spec"]["values"], label="baseline", expect_loss=True))
-    results.append(exercise(document(REPO / MANIFEST)["spec"]["values"], label="persistent", expect_loss=False))
+            results.append(exercise(document(path)["spec"]["values"], label="baseline", expect_loss=True, backend_failure=args.backend_failure))
+    results.append(exercise(document(REPO / MANIFEST)["spec"]["values"], label="persistent", expect_loss=False, backend_failure=args.backend_failure))
     if args.output:
         args.output.write_text(json.dumps(results, indent=2) + "\n")
     print("Log durability checks passed; local containers and network removed")

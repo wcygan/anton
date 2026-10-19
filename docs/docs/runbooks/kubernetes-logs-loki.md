@@ -168,6 +168,26 @@ a permanent HTTP rejection increments that counter and logs dropped data.
 Enqueue failures may be recovered by reader retries: alerting indicates risk,
 not proof that records were lost.
 
+The log fallback parses the structured exporter `error` field. In collector
+0.161.0, `interrupted due to shutdown:` leaves requests in the persistent queue
+for replay even though the queue sender logs “Dropping data.” Only that typed
+shutdown prefix is excluded; a permanent error mentioning shutdown, a nested
+resource field, missing fields and malformed log formats still alert. The
+contract requires an enabled, fsynced persistent queue and the verified image;
+an image upgrade requires replay verification and a deliberate contract update.
+The metrics-based permanent-failure rule remains unchanged.
+
+The isolated HTTP503 regression reproduced three drop messages while recovering
+every known source record. Re-run it with:
+
+```sh
+mise exec -- python3 scripts/verify-log-durability.py --backend-failure http503 --output /tmp/otel-shutdown-replay.json
+```
+
+For WAL evidence capture and isolated replay, follow
+[plan 0026](https://github.com/wcygan/anton/blob/main/context/plans/0026-investigate-loki-wal-replay.md).
+Its snapshot, clone and diagnostic execution stages require their own approval.
+
 Queue ratios use the actual `otelcol_exporter_queue_size` and
 `otelcol_exporter_queue_capacity` gauges. With `sizer: bytes`, these values are
 bytes despite the pinned version's generic HELP text saying batches. Missing
