@@ -5,4 +5,5 @@ resources:
   - ./dnsendpoint.yaml
   - ./secret.sops.yaml
   - ./helmrelease.yaml
+  - ./networkpolicy.yaml
   - ./ocirepository.yaml
