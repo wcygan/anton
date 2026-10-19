@@ -289,8 +289,9 @@ acceptance; do not silently reset one to obtain a passing read.
 
 Immediately uncordon on a read/write failure or hold deadline, then verify full
 Seaweed/Harbor/Loki, node/etcd, Longhorn and Flux recovery. Drain exit alone is
-not recovery. Remove only exact temporary Jobs/Pods and exact S3 fixture keys;
-confirm absence and restore every controller, suspension state, replica count
+not recovery. Remove only exact temporary Jobs/Pods, the temporary egress
+NetworkPolicy and exact S3 fixture keys; confirm each is absent and restore
+every controller, suspension state, replica count
 and the approved vacuum state. Keep source data, PVCs, normal credentials and the execution
 ledger. Observe stable readiness and the known retry window before closing.
 
