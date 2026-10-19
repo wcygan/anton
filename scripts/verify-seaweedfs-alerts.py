@@ -127,6 +127,8 @@ def loki(root: Path) -> None:
         fixtures += [("storage", "s3", "s3-truncated", "GetObjectHandler: failed to stream object from volume servers", now - i * 1_000_000) for i in range(1, 4)]
         fixtures += [("other", "s3", "s3-foreign", "read chunk 20,abc failed", now - i * 1_000_000) for i in range(1, 4)]
         fixtures += [("storage", "s3", "s3-normal", "GET complete status=200", now - i * 1_000_000) for i in range(1, 4)]
+        fixtures += [("storage", "s3", "s3-below-threshold", "read chunk 20,abc failed", now - i * 1_000_000) for i in range(1, 3)]
+        fixtures += [("storage", "s3", "s3-old", "read chunk 20,abc failed", now - 360_000_000_000 - i * 1_000_000) for i in range(1, 4)]
         for namespace, component, pod, line, stamp in fixtures:
             streams.append({"stream": {"k8s_namespace_name": namespace, "k8s_container_name": component, "severity": "info"},
                             "values": [[str(stamp), line, {"k8s_pod_name": pod}]]})

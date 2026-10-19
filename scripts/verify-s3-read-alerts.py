@@ -37,6 +37,10 @@ def scenarios():
     case('one-failed-read', change('seaweedfs_s3_read_probe_consecutive_failures', '1+0x20'), {})
     case('probe-recovery', change('seaweedfs_s3_read_probe_consecutive_failures', '2+0x3 0+0x16'), {})
     case('repeated-5xx', change('SeaweedFS_s3_request_total', '0+1x20'), {'SeaweedFSS3Read5xx': 1})
+    successful = [dict(x, series=x['series'].replace('code="503"', 'code="200"')) for x in change('SeaweedFS_s3_request_total', '0+1x20')]
+    case('successful-GETs-do-not-fire', successful, {})
+    writes = [dict(x, series=x['series'].replace('type="GET"', 'type="PUT"')) for x in change('SeaweedFS_s3_request_total', '0+1x20')]
+    case('write-5xx-is-not-counted-as-read', writes, {})
     case('5xx-pending', change('SeaweedFS_s3_request_total', '0+1x20'), {}, '1m')
     for labels in ['endpoint="s3-metrics"', 'container="read-probe"']:
         case('target-down-' + labels, change('up', '0+0x20', labels), {'SeaweedFSS3MonitoringUnavailable': 1})
