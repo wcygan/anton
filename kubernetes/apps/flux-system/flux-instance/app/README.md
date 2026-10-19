@@ -68,7 +68,8 @@ There are two important remaining powers:
   attacker-chosen configuration. This proposal removes broad direct access but
   does **not** fully contain a compromised webhook process. Enforcing
   annotation-only changes would require a separate admission rule or controller
-  change, with its own tests.
+  change, with its own tests. The prepared guard and staged test plan are in
+  [ADMISSION.md](ADMISSION.md); they are not yet deployed.
 
 Secret watchers are disabled so the controller does not need collection access
 to Secrets. The controller already reads the token directly when handling a

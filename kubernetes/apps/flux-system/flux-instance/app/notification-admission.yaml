@@ -64,3 +64,11 @@ spec:
         size(variables.newAnnotations['reconcile.fluxcd.io/requestedAt']) <= 128
       reason: Forbidden
       message: The reconciliation request must contain a non-empty value of at most 128 characters.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: notification-controller-reconcile-only
+spec:
+  policyName: notification-controller-reconcile-only
+  validationActions: [Deny]
