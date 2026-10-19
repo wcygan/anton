@@ -69,9 +69,15 @@ debug exporter. They do not send application logs to another backend. Confirm
 the applied general reader still has no `storage` setting before running the
 seeder; never run two processes against the same receiver database.
 
-Observe one seeder per node, allow complete discovery/polling, then stop and
-remove the seeder before publishing the collector change. Verify its general
-reader database exists on every node. Publishing after seeding leaves a small
+Observe one seeder per node. Its debug telemetry must show at least three
+`matched files` messages from the general reader on **each node**, proving two
+complete discovery polls. Pod readiness or the presence of a database alone is
+insufficient. A stale database can already exist even while the current reader
+is stateless; the seeder must finish reading those old offsets into its local
+debug exporter before it has caught up. This can take minutes on large files.
+Do not publish while a first poll is still running or storage errors occur.
+Then stop and remove the seeder before publishing the collector change. Verify
+its general reader database exists on every node. Publishing after seeding leaves a small
 overlap of already-delivered records, which is preferable to skipping unread
 records. New records written after seeding and new files are read by the durable
 collector from their saved offset or beginning. Existing workflow and SeaweedFS
@@ -95,7 +101,7 @@ collector SIGKILLs and a graceful collector restart, retains queue/checkpoint
 files, and creates a new log file
 while the reader is down. The baseline must lose records; the fixed configuration
 must make every ledger record queryable. It also checks first-bootstrap offsets
-without replaying old history. No Kubernetes access or live notification occurs.
+without replaying old history, including a pre-existing stale checkpoint. No Kubernetes access or live notification occurs.
 Loki is stopped gracefully with its existing flush-on-shutdown policy; this does
 not claim to fix upstream Loki crash-replay bugs.
 

@@ -84,7 +84,7 @@ def seed_config(values: dict, directory="/state", pods="/fixture/pods") -> dict:
         "extensions": {"file_storage": {"directory": directory, "fsync": True}},
         "receivers": {"file_log": general},
         "exporters": {"debug": {"verbosity": "basic"}},
-        "service": {"extensions": ["file_storage"], "pipelines": {"logs": {
+        "service": {"telemetry": {"logs": {"level": "debug"}}, "extensions": ["file_storage"], "pipelines": {"logs": {
             "receivers": ["file_log"], "exporters": ["debug"]}}},
     }
 
@@ -200,12 +200,19 @@ def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
             loki_url = f"http://127.0.0.1:{port}"
             eventually(lambda: get(loki_url + "/ready"))
             if not expect_loss:
-                seed = run("docker", "run", "-d", "--user", "0", "-v", f"{root}:/fixture:ro",
-                           "-v", f"{root / 'state'}:/state", image, "--config=/fixture/seed.json", *values.get("command", {}).get("extraArgs", []))
-                containers.append(seed)
-                eventually(lambda: list((root / "state").glob("receiver*")))
-                time.sleep(1)
-                run("docker", "stop", "--time", "10", seed)
+                # Rehearse both a fresh checkpoint and resuming a stale database.
+                # Ready alone does not prove the first discovery poll has finished.
+                for bootstrap in range(2):
+                    if bootstrap:
+                        with log.open("a") as stream:
+                            stream.writelines(
+                                f"{datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')} stdout F historical stale {n}\n"
+                                for n in range(500))
+                    seed = run("docker", "run", "-d", "--user", "0", "-v", f"{root}:/fixture:ro",
+                               "-v", f"{root / 'state'}:/state", image, "--config=/fixture/seed.json", *values.get("command", {}).get("extraArgs", []))
+                    containers.append(seed)
+                    eventually(lambda: run("docker", "logs", seed).count('\tmatched files\t') >= 3)
+                    run("docker", "stop", "--time", "10", seed)
             writer = threading.Thread(target=write)
             writer.start()
             cid, metrics_url = start_collector()
@@ -261,7 +268,7 @@ def exercise(values: dict, *, label: str, expect_loss: bool) -> dict:
             result = {"case": label, "written_records": len(expected), "queryable_records": len(expected & actual),
                       "missing_records": len(missing), "missing_record_ids": missing,
                       "collector_sigkills": 2, "collector_graceful_restarts": 1, "loki_graceful_restarts": 1,
-                      "new_file_during_outage": True, "bootstrap_offsets_seeded": not expect_loss}
+                      "new_file_during_outage": True, "bootstrap_offsets_seeded": not expect_loss, "stale_bootstrap_rehearsed": not expect_loss}
             print(json.dumps({k: v for k, v in result.items() if k != "missing_record_ids"}), flush=True)
             return result
         except Exception:
