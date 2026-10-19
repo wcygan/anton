@@ -13,9 +13,9 @@
 # Route shape: top-level `route` has receiver=drop, so anything that does
 # not match a sub-route is silently dropped (we cannot reuse the chart's
 # global "null" receiver from inside an AC CR — receivers are scoped).
-# The two sub-routes broaden ADR 0026's initial severity=critical-only
-# design to also page on hard node-state alerts, which kps ships at
-# severity=warning. Add explicit warning-level alertnames here as the
+# The sub-routes broaden ADR 0026's initial severity=critical-only
+# design to also page on hard node-state alerts, degraded Longhorn volumes,
+# and collector queue pressure. Add explicit warning-level alertnames here as the
 # allowlist grows; do NOT match all warnings broadly.
 #
 # Webhook URL contains the secret topic — sourced from the ntfy-topic
@@ -45,6 +45,14 @@ spec:
         matchers:
           - name: alertname
             value: "KubeNodeNotReady|KubeNodeUnreachable|KubeNodeReadinessFlapping"
+            matchType: "=~"
+      - receiver: ntfy
+        matchers:
+          - name: severity
+            value: warning
+            matchType: "="
+          - name: alertname
+            value: "LonghornVolumeDegraded|OTelCollectorQueueHigh"
             matchType: "=~"
   receivers:
     - name: drop
