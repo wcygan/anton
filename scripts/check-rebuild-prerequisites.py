@@ -31,7 +31,7 @@ def audit(root: Path, contract: dict) -> tuple[list[dict[str, str]], bool]:
     for name in stages:
         detail = contract["stage_details"][name]
         findings.append({
-            "status": "PASS",
+            "status": "INFO",
             "subject": f"stage {name}",
             "detail": f"order={detail['order']} owner={detail['owner']} origin={detail['origin']}",
         })
@@ -45,7 +45,7 @@ def audit(root: Path, contract: dict) -> tuple[list[dict[str, str]], bool]:
             relative = manifest.relative_to(root).as_posix()
             stage = next((name for name in stages if any(
                 relative.startswith(prefix) for prefix in contract["stage_paths"].get(name, [])
-            )), "private-apps")
+            )), None)
             try:
                 lines = manifest.read_text(encoding="utf-8").splitlines()
             except OSError:
@@ -57,12 +57,15 @@ def audit(root: Path, contract: dict) -> tuple[list[dict[str, str]], bool]:
                 if not match or contract["private_registry_host"] not in match.group(1):
                     continue
                 image = match.group(1)
-                before_harbor = stage_index[stage] < harbor_index
-                pre_harbor_image_unresolved |= before_harbor
-                detail = (f"potential cold-start cycle: {stage} references {image} at Harbor; "
-                          "Spegel can serve existing node cache, but cache survival/seeding for a rebuild is unverified"
-                          if before_harbor else
-                          f"private image {image} availability is not independently verified")
+                if stage is None:
+                    detail = f"stage assignment is undeclared for private image {image}; rebuild order is unknown"
+                else:
+                    before_harbor = stage_index[stage] < harbor_index
+                    pre_harbor_image_unresolved |= before_harbor
+                    detail = (f"potential cold-start cycle: {stage} references {image} at Harbor; "
+                              "Spegel can serve existing node cache, but cache survival/seeding for a rebuild is unverified"
+                              if before_harbor else
+                              f"private image {image} availability is not independently verified")
                 findings.append({"status": "UNKNOWN", "subject": f"{relative}:{number}", "detail": detail})
 
     for item in contract["unverified_inputs"]:
@@ -81,7 +84,8 @@ def main() -> int:
     try:
         contract = json.loads(args.contract.read_text(encoding="utf-8"))
         ordered_stages = [contract["stage_details"][stage]["order"] for stage in contract["stages"]]
-        if contract.get("schema") != 1 or contract["harbor_stage"] not in contract["stages"] or \
+        if contract.get("schema") != 1 or not contract["required_paths"] or \
+                contract["harbor_stage"] not in contract["stages"] or \
                 any(stage not in contract["stage_details"] for stage in contract["stages"]) or \
                 ordered_stages != sorted(ordered_stages):
             raise ValueError("unsupported or inconsistent rebuild contract")

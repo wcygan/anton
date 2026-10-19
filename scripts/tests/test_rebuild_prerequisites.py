@@ -71,10 +71,26 @@ class RebuildPrerequisitesCli(unittest.TestCase):
         self.assertIn("potential cold-start cycle", result.stdout)
         self.assertIn("cache survival/seeding for a rebuild is unverified", result.stdout)
 
+    def test_stage_metadata_alone_is_not_verified_source_evidence(self):
+        self.contract["required_paths"] = []
+        self.write_contract()
+        result = self.run_audit()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("FAIL: invalid rebuild audit input", result.stderr)
+
+    def test_unmapped_private_image_stage_is_unknown(self):
+        manifest = self.root / "source/unmapped/bootstrap.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text("image: registry.lan/library/bootstrap:1\n")
+        result = self.run_audit()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("stage assignment is undeclared", result.stdout)
+        self.assertIn("rebuild order is unknown", result.stdout)
+
     def test_complete_source_contract_passes(self):
         result = self.run_audit()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("Totals: PASS=4, UNKNOWN=0, FAIL=0", result.stdout)
+        self.assertIn("Totals: PASS=1, UNKNOWN=0, FAIL=0", result.stdout)
 
 
 if __name__ == "__main__":
