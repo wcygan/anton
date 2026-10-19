@@ -74,7 +74,45 @@ verify_inventory() {
 }
 
 write_evidence() {
-  kubectl -n registries patch configmap harbor-retention-status --type=merge -p "$$(jq -n --arg content "$$1" '{data:{evidence:$$content}}')" >/dev/null
+  if [ "$${mode}" = retention-dry-run ]; then
+    patch="$$(jq -n --arg content "$$1" '{data:{last_dry_run:$$content}}')"
+  else
+    previous="$$(kubectl -n registries get configmap harbor-retention-status -o json)" || return 1
+    patch="$$(printf '%s' "$${previous}" | jq --arg content "$$1" '
+      (try (.data.evidence|fromjson) catch null) as $$prior |
+      ($$content|fromjson) as $$current |
+      {data:({evidence:$$content,last_attempt:$$content} +
+        (if $$current.state=="Success" then {last_success:$$content}
+         elif $$prior.state=="Success" then {last_success:($$prior|tojson)} else {} end))}')" || return 1
+  fi
+  kubectl -n registries patch configmap harbor-retention-status --type=merge \
+    --field-manager=harbor-retention-evidence -p "$${patch}" >/dev/null
+}
+
+set_phase() {
+  phase="$$1"
+  printf 'retention phase=%s\n' "$${phase}" >&2
+}
+
+attempt_evidence() {
+  jq -cn --arg state "$$1" --arg phase "$${phase}" --arg run_id "$${HOSTNAME:-unknown}" \
+    --argjson started_at "$${attempt_started_at}" --argjson finished_at "$$(date -u +%s)" \
+    --argjson exit_code "$$2" --argjson executions "$${executions}" \
+    --arg project_id "$${project_id:-}" --arg policy_id "$${policy_id:-}" --arg mode "$${mode}" \
+    '{schema:1,state:$$state,phase:$$phase,run_id:$$run_id,started_at:$$started_at,
+      updated_at:$$finished_at,exit_code:$$exit_code,executions:$$executions,
+      project_id:$$project_id,policy_id:$$policy_id,dry_run:($$mode=="retention-dry-run")}'
+}
+
+finish_attempt() {
+  result="$$1"
+  trap - 0
+  if [ "$${result}" -ne 0 ]; then
+    failure="$$(attempt_evidence Failed "$${result}")"
+    printf '%s\n' "$${failure}" >&2
+    write_evidence "$${failure}" || echo 'failed to persist retention failure evidence' >&2
+  fi
+  exit "$${result}"
 }
 
 execute_retention() {

@@ -13,8 +13,9 @@ def filer_data():
     return {'pods':{'items':pods},'claims':{'items':claims},'volumes':{'items':volumes}}
 
 
-def write_kubectl(directory, workload):
+def write_kubectl(directory, workload, evidence=None):
     p=Path(directory)
+    p.joinpath('evidence.json').write_text(json.dumps({'data': evidence or {}}))
     p.joinpath('kube-fixture.json').write_text(json.dumps({'workload':workload,**filer_data()}))
     script=p/'kubectl'
     script.write_text('''#!/usr/bin/env python3
@@ -25,7 +26,9 @@ elif 'ingresses' in a:print('{"items":[]}')
 elif 'pods' in a:print(json.dumps(d['pods']))
 elif 'pvc' in a:print(json.dumps(d['claims']))
 elif 'volumes.longhorn.io' in a:print(json.dumps(d['volumes']))
+elif 'configmap' in a and 'get' in a:print((p/'evidence.json').read_text())
 elif 'patch' in a:
+ saved=json.loads((p/'evidence.json').read_text());saved['data'].update(json.loads(a[-1])['data']);(p/'evidence.json').write_text(json.dumps(saved))
  with (p/'kube-actions').open('a') as f:f.write(json.dumps(a)+'\\n')
 else:sys.exit(1)
 ''')

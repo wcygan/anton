@@ -181,12 +181,25 @@ reconcile_project() {
   echo "updated retention policy $${retention_id} for project $${project_id}"
 }
 
+phase=preflight
+executions='[]'
+if [ "$${mode}" = retention ] || [ "$${mode}" = retention-dry-run ]; then
+  attempt_started_at="$$(date -u +%s)"
+  trap 'finish_attempt $$?' 0
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
+  write_evidence "$$(attempt_evidence Running 0)"
+fi
+
 # Require durable filers and a complete, readable active/desired/rollback set.
 # Harbor's scheduler stays Manual, so a failed inventory cannot trigger deletion.
+set_phase verify-filers
 filers="$$(verify_filers)"
+set_phase inventory
 protected_inventory="$$(resolve_inventory)"
+set_phase verify-images
 image_verification="$$(verify_inventory "$${protected_inventory}")"
-if [ "$${mode}" = retention ]; then write_evidence '{"state":"running"}'; fi
+set_phase protect-images
 protected=""
 for row in $$(printf '%s' "$${protected_inventory}" | jq -r '.[]|@base64'); do
   record="$$(printf '%s' "$${row}" | base64 -d)"
@@ -202,6 +215,7 @@ for row in $$(printf '%s' "$${protected_inventory}" | jq -r '.[]|@base64'); do
   fi
 done
 
+set_phase reconcile-policies
 page=1
 while :; do
   projects="$$(harbor_request GET "/projects?page=$${page}&page_size=100")"
@@ -217,10 +231,12 @@ while :; do
   page=$((page + 1))
 done
 
+set_phase recheck-inventory
 # Abort before removing old protection if the workload set changed mid-run.
 latest_inventory="$$(resolve_inventory)"
 [ "$${latest_inventory}" = "$${protected_inventory}" ] || { echo 'protection inventory changed; stop' >&2;exit 1; }
 
+set_phase remove-obsolete-protection
 # Remove only this reconciler's obsolete protection tags. Keep artifact
 # deletion in Harbor retention; a failed inventory above prevents this stage.
 page=1
@@ -250,6 +266,7 @@ while :; do
   page=$((page + 1))
 done
 
+set_phase reconcile-gc
 # Retention drops references daily; GC frees unreferenced blobs weekly.
 # Keep untagged artifacts: a digest-only deploy outside this inventory must
 # not be removed merely because it lacks a tag.
@@ -270,22 +287,28 @@ fi
 if [ "$${mode}" = retention ] || [ "$${mode}" = retention-dry-run ]; then
   dry_run=false
   [ "$${mode}" != retention-dry-run ] || dry_run=true
-  executions='[]'
   projects="$$(harbor_request GET '/projects?page=1&page_size=100')"
   [ "$$(printf '%s' "$${projects}" | jq 'length')" -lt 100 ] || { echo 'project count exceeds execution bound' >&2;exit 1; }
   for project_id in $$(printf '%s' "$${projects}" | jq -r '.[].project_id'); do
+    set_phase pre-execution-inventory
     latest_inventory="$$(resolve_inventory)"
     [ "$${latest_inventory}" = "$${protected_inventory}" ] || { echo 'protection inventory changed; stop' >&2;exit 1; }
     verify_filers >/dev/null
     policy_id="$$(harbor_request GET "/projects/$${project_id}/metadatas/" | jq -er '.retention_id')"
+    set_phase execute-retention
     execution="$$(execute_retention "$${policy_id}" "$${dry_run}")"
     executions="$$(printf '%s' "$${executions}" | jq --argjson execution "$${execution}" '.+[$$execution]')"
   done
+  set_phase post-retention-inventory
   latest_inventory="$$(resolve_inventory)"
   [ "$${latest_inventory}" = "$${protected_inventory}" ] || { echo 'post-retention inventory changed; stop' >&2;exit 1; }
+  set_phase post-retention-images
   verify_inventory "$${protected_inventory}" >/dev/null
+  set_phase post-retention-filers
   filers="$$(verify_filers)"
   evidence="$$(jq -cn --arg hash "$$(inventory_hash "$${protected_inventory}")" --argjson now "$$(date -u +%s)" --argjson filers "$${filers}" --argjson executions "$${executions}" --argjson dry_run "$${dry_run}"     '{schema:1,state:"Success",completed_at:$$now,inventory_sha256:$$hash,filers:$$filers,executions:$$executions,dry_run:$$dry_run}')"
-  if [ "$${dry_run}" = false ]; then write_evidence "$${evidence}"; fi
+  set_phase publish-success
+  evidence="$$(printf '%s' "$${evidence}" | jq -c --arg run_id "$${HOSTNAME:-unknown}" --argjson started_at "$${attempt_started_at}" '. + {run_id:$$run_id,started_at:$$started_at,phase:"complete"}')"
+  write_evidence "$${evidence}"
   printf '%s\n' "$${evidence}"
 fi
