@@ -33,11 +33,12 @@ def docker(*args, check=True):
 
 
 class Lab:
-    def __init__(self, directory, version, address, ha=False):
+    def __init__(self, directory, version, address, ha=False, ephemeral_masters=False):
         self.directory = directory
         self.version = version
         self.address = address
         self.ha = ha
+        self.ephemeral_masters = ephemeral_masters
         self.roles = (['master', 'master-b', 'master-c', 'volume', 'volume-b', 'volume-c',
                        'filer', 'filer-b', 's3', 's3-b'] if ha else ['master', 'volume', 'filer', 's3'])
         self.urls = {}
@@ -87,7 +88,7 @@ class Lab:
         masters = ','.join(r + ':9333' for r in self.roles if r.startswith('master'))
         if component == 'master':
             command += ['-p', '127.0.0.1::9333', '-e', 'WEED_MASTER_VOLUME_GROWTH_COPY_1=1']
-            args = ['master', '-ip=' + role, '-ip.bind=0.0.0.0', '-mdir=/data', '-volumeSizeLimitMB=64', '-defaultReplication=000']
+            args = ['master', '-ip=' + role, '-ip.bind=0.0.0.0', '-mdir=/data', '-volumeSizeLimitMB=64', '-defaultReplication=000', '-telemetry=false']
             if self.ha:
                 args += ['-peers=' + masters]
         elif component == 'volume':
@@ -203,6 +204,9 @@ class Lab:
             for role in masters:
                 with urllib.request.urlopen(self.urls[role] + '/cluster/status', timeout=3) as response:
                     states[role] = json.load(response)
+                with urllib.request.urlopen(self.urls[role] + '/cluster/healthz', timeout=3) as response:
+                    if response.status != 200:
+                        return False
             leaders = {state.get('Leader', '').split(':')[0] for state in states.values()}
             return len(leaders) == 1 and next(iter(leaders)) in masters and sum(
                 state.get('IsLeader', False) for state in states.values()) == 1 and all(
@@ -344,6 +348,12 @@ class Lab:
             for role in self.roles:
                 self.record('version_transition', role=role, target=target)
                 self.stop(role)
+                if self.ephemeral_masters and role.startswith('master'):
+                    retired = self.directory / 'retired'
+                    retired.mkdir(exist_ok=True)
+                    (self.directory / role).rename(retired / f'{len(self.events):03d}-{role}')
+                    (self.directory / role).mkdir()
+                    self.record('master_state_recreated', role=role, target=target)
                 self.versions[role] = target
                 self.launch(role)
                 self.wait(lambda: self.request('GET', '/qualification/numbered-000')[1] == self.expected['numbered-000'])
@@ -381,6 +391,7 @@ def main():
     parser.add_argument('--address', choices=['ip', 'dns'], default='dns')
     parser.add_argument('--scenario', choices=['stale', 'restarts', 'upgrade'], required=True)
     parser.add_argument('--cycles', type=int, default=6)
+    parser.add_argument('--ephemeral-masters', action='store_true', help='recreate master storage on every version transition')
     parser.add_argument('--ha', action='store_true', help='3 masters, 3 volumes, 2 persistent filers, 2 gateways')
     args = parser.parse_args()
     if args.output.exists():
@@ -388,7 +399,8 @@ def main():
     assert 1 <= args.cycles <= 20
     assert args.scenario != 'upgrade' or args.version == '4.40', 'upgrade must start on baseline'
     assert not args.ha or args.scenario != 'stale', 'use the four-component fixture for deterministic address moves'
-    lab = Lab(args.output.resolve(), args.version, args.address, args.ha)
+    assert not args.ephemeral_masters or (args.ha and args.scenario == 'upgrade')
+    lab = Lab(args.output.resolve(), args.version, args.address, args.ha, args.ephemeral_masters)
     try:
         lab.start()
         lab.seed()

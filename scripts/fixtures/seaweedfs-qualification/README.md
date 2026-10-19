@@ -21,6 +21,7 @@ Run from the repository root, giving each run a **new absolute output path**:
 
 ```sh
 python3 scripts/fixtures/seaweedfs-qualification/test_guard.py
+python3 scripts/fixtures/seaweedfs-qualification/verify_master_readiness.py
 
 python3 scripts/fixtures/seaweedfs-qualification/run.py \
   --output /tmp/anton-sw448-restarts --version 4.48 \
@@ -29,6 +30,10 @@ python3 scripts/fixtures/seaweedfs-qualification/run.py \
 python3 scripts/fixtures/seaweedfs-qualification/run.py \
   --output /tmp/anton-sw448-upgrade --version 4.40 \
   --address dns --scenario upgrade --ha
+
+python3 scripts/fixtures/seaweedfs-qualification/run.py \
+  --output /tmp/anton-sw448-ephemeral-upgrade --version 4.40 \
+  --address dns --scenario upgrade --ha --ephemeral-masters
 
 python3 scripts/fixtures/seaweedfs-qualification/run.py \
   --output /tmp/anton-sw448-address --version 4.48 \
@@ -64,6 +69,20 @@ datasets, logs, manifests, and the offline copy remain in the output directory.
 The last `cleaned` event asserts that no run-owned container or network remains.
 Review `*-exit.json` to distinguish an orderly exit from Docker escalating to
 SIGKILL. A failed run is retained, never silently reused or deleted.
+
+Production master Raft files are ephemeral. `--ephemeral-masters` retains each
+retired master directory as evidence and starts every version transition with
+an empty replacement directory. Each step requires all three masters to agree
+on their leader and pass `/cluster/healthz` before advancing. Keep both this
+case and the persistent-master case: they prove different restart behavior.
+
+The readiness negative control uses the actual configured sidecar HTTP probe
+from `seaweed.yaml` (read with the repository's `mise exec -- yq`). An isolated
+4.48 master without quorum returns HTTP 200 from `/cluster/status`, while the
+configured `/cluster/healthz` check fails with HTTP 503. It also launches the
+declared idle sidecar command under its non-root/read-only constraints. This
+prevents an always-successful status endpoint from approving another master
+replacement before Raft admission completes.
 
 ## Deterministic source tests
 

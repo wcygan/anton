@@ -10,6 +10,40 @@ spec:
   image: chrislusf/seaweedfs:4.40
   master:
     replicas: 3
+    extraArgs:
+      - -telemetry=false
+    # The operator fixes its probe path to /cluster/status, which can return
+    # 200 without a Raft leader. Gate rolling updates on Raft health as well.
+    sidecars:
+      - name: raft-readiness
+        image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+        command: [/bin/sh, -ec, exec sleep 2147483647]
+        readinessProbe:
+          httpGet:
+            path: /cluster/healthz
+            port: 9333
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 2
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 1m
+            memory: 8Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+          seccompProfile:
+            type: RuntimeDefault
     # Longhorn replicates blocks; it cannot flush buffered SeaweedFS appends.
     defaultReplication: "000"      # no Seaweed replication (ADR 0005)
     # Allocate one logical volume per growth event. The default batch of seven
