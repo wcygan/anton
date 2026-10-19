@@ -13,3 +13,4 @@ resources:
   - ./podmonitor.yaml
   - ./networkpolicy.yaml
   - ./notification-rbac.yaml
+  - ./notification-admission.yaml
