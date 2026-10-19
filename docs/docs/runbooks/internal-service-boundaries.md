@@ -34,28 +34,85 @@ controller path remains healthy.
 
 ### Activation gate
 
-Before adding the candidate to `app/kustomization.yaml`, the operator must
-confirm the exact change in a review and collect before/after evidence during an
-approved maintenance window:
+The candidate commit and any future activation commit are separate. Candidate
+commit `b7b7e2c861236958f0eae542adbbe3aff6aebee6` only adds this staged file,
+its source contract, and this runbook; it does not change the active policy set
+or provide an active isolation benefit. An operator reviewing activation must
+make a new commit that adds exactly
+`./staged/networkpolicy-harbor-postgres.yaml` to
+`kubernetes/apps/registries/harbor-config/app/kustomization.yaml`. The resource
+identity is `NetworkPolicy/harbor-postgres-ingress-candidate` in namespace
+`registries`, selecting `cnpg.io/cluster=harbor-postgres` and
+`cnpg.io/podRole=instance`.
 
-1. Record the current Flux source revision, `harbor-config` and `harbor`
-   Kustomization/HelmRelease readiness, the three CNPG instance roles, the
-   Harbor API health result, and Prometheus targets for the CNPG PodMonitor.
-2. Confirm the live selectors and version still match the table above. Check
-   whether any policy already isolates the target pods and whether any client
-   is outside the named service owners.
-3. Add only `./staged/networkpolicy-harbor-postgres.yaml` to the app
-   Kustomization, reconcile through the normal GitOps path, and observe CNPG
-   primary/replica readiness, Harbor API health and registry push/pull, the
-   CNPG scrape target, and operator-managed backup/maintenance behavior through
-   at least one known operation window. Do not infer completeness from a quiet
-   flow capture.
-4. Accept only if all positive paths succeed and an unauthorized in-cluster
-   client cannot connect to port 5432. Retain timestamps, identities, resource
-   generations, and the user-visible checks with the change review.
+Before that separate activation commit is approved, run these read-only
+preflight checks from the intended repository revision and operator context:
 
-The manifest is ingress-only. If a required client or port is missing, remove
-the policy from the active app Kustomization and let Flux prune it; do not
-broaden selectors or ports without new owner evidence. If the candidate has not
-been activated, rollback is simply to leave it staged. The source-level test
-renders the active Kustomize tree and enforces that boundary.
+```sh
+git rev-parse HEAD
+mise exec -- kubectl config current-context
+mise exec -- kubectl get namespaces registries databases observability
+mise exec -- kubectl -n flux-system get gitrepository flux-system -o jsonpath='{.status.artifact.revision}{"\n"}'
+mise exec -- flux get ks -n flux-system harbor-config harbor
+mise exec -- flux get hr -n registries harbor
+mise exec -- kubectl -n registries get cluster harbor-postgres
+mise exec -- kubectl -n registries get pods -l cnpg.io/cluster=harbor-postgres --show-labels
+mise exec -- kubectl -n registries get networkpolicy
+mise exec -- kubectl -n registries get podmonitor harbor-postgres -o yaml
+mise exec -- kubectl -n observability get pods -l app.kubernetes.io/name=prometheus --show-labels
+mise exec -- kubectl -n databases get pods -l app.kubernetes.io/name=cloudnative-pg --show-labels
+```
+
+The current context must be the Tailscale operator proxy for Anton. Stop if the
+context, source revision, namespace, owner resources, selectors, three CNPG
+instance roles, or baseline readiness differs from the recorded evidence.
+Confirm no new policy selects the PostgreSQL pods and ask each named owner
+whether an additional client exists. Do not activate based on a quiet traffic
+capture.
+
+During an approved maintenance window, apply the activation commit through the
+normal GitOps publication path. Do not force a reconcile. Start the 15-minute
+convergence timer only after the source artifact contains the activation
+revision; if the source or `harbor-config` `lastAppliedRevision` has not reached
+that commit within 15 minutes, stop and return to Flux diagnosis without
+continuing traffic checks. After apply, allow at most 15 minutes for the
+acceptance observation and one prearranged operator operation. Stop immediately
+if any CNPG instance is not Ready, Harbor API/HelmRelease readiness regresses,
+the CNPG scrape target goes down, the operator operation fails, or the observed
+source identity/port differs from the matrix. Record each condition's
+timestamp, reason, message, and generation.
+
+Positive checks for Harbor registry push/pull, operator backup/maintenance,
+and negative connection attempts are traffic-producing actions. They require
+separate approval naming the exact client and operation. If a temporary Job or
+other diagnostic workload is proposed, obtain approval for its image,
+namespace, service account, command, timeout, and cleanup command before
+creating it. This runbook does not authorize or perform those checks. Accept
+only after the approved positive operations succeed and a separately approved
+unauthorized client cannot connect to TCP 5432; keep the evidence with the
+activation review.
+
+If a stop trigger fires, create a rollback commit by reverting the **activation
+commit hash**, never the staged-candidate commit:
+
+```sh
+git revert --no-edit <activation-commit>
+```
+
+Publish that revert through the normal GitOps path. Confirm the source artifact
+and `harbor-config` `lastAppliedRevision` include the revert, then verify the
+ready condition and prune result:
+
+```sh
+mise exec -- kubectl -n flux-system get gitrepository flux-system -o jsonpath='{.status.artifact.revision}{"\n"}'
+mise exec -- kubectl -n flux-system get kustomization harbor-config -o jsonpath='{range .status.conditions[*]}{.type}={.status} reason={.reason} message={.message}{"\n"}{end}'
+mise exec -- kubectl -n flux-system get kustomization harbor-config -o jsonpath='{.status.lastAppliedRevision}{"\n"}'
+mise exec -- kubectl -n registries get networkpolicy harbor-postgres-ingress-candidate
+```
+
+The last command must report `NotFound`; if it returns an object, or the
+Kustomization is not Ready at the revert revision, stop and continue Flux
+diagnosis. Recheck CNPG, Harbor, and Prometheus readiness before closing the
+rollback. If activation never occurred, leave the policy staged; the candidate
+commit itself has no cluster rollback to perform. The source-level test renders
+the active Kustomize tree and enforces this inactive boundary.
