@@ -34,10 +34,9 @@ spec:
     replicas: 3                     # one per node
     metricsPort: 9327
     maxVolumeCounts: 20             # 8 free slots per server at current use
-    # Bind to the injected pod IP. The headless Service DNS record can retain
-    # the old pod IP during a restart, which prevents the volume gRPC listener.
-    extraArgs:
-      - -ip=$(POD_IP)
+    # Advertise the stable StatefulSet peer DNS while keeping startup independent
+    # of headless-Service DNS resolution.
+    ipBind: 0.0.0.0
     requests:
       storage: 120Gi
     storageClassName: longhorn      # default Longhorn SC; no NAD attachment here
