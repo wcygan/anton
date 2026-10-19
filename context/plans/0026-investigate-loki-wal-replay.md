@@ -433,7 +433,7 @@ fresh Loki snapshot and original WAL; do not start Loki maintenance until S3
 health and exact-digest image publication/pull are verified. Private evidence:
 `.private/loki-wal-replay/rollout/s3-cache-failure.json` and `publication.json`.
 
-A separate preflight alert affects bakery-site/bakery-server: one of two desired
+A separate preflight alert affects a private workload: one of two desired
 replicas is ready. The deployment reports Kyverno rejecting replacement creation
 because its image-verification auth field cannot be decoded as base64. It is
 outside this Loki rollout and was not changed.
