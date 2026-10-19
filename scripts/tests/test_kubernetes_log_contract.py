@@ -110,6 +110,23 @@ class KubernetesLogContractTests(unittest.TestCase):
             path.write_text('{k8s_pod_name="loki-0"}\n', encoding="utf-8")
             self.assertTrue(validate_query_catalog(path))
 
+    def test_rejects_volatile_log_delivery(self) -> None:
+        source = REPO / "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"
+        for before, after in (
+            ("        - --feature-gates=stanza.synchronousLogEmitter", ""),
+            ("          start_at: beginning\n          storage: file_storage", "          start_at: end"),
+            ("            storage: file_storage\n            sizer: bytes", "            sizer: bytes"),
+            ("          fsync: true", "          fsync: false"),
+            ("          max_size: 268435456", "          max_size: 0"),
+            ("              - groupbyattrs/severity", "              - groupbyattrs/severity\n              - batch"),
+            ("            queue_size: 67108864", "            queue_size: 0"),
+        ):
+            with self.subTest(before=before), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "otel.yaml"
+                self.assertIn(before, source.read_text())
+                path.write_text(source.read_text().replace(before, after, 1))
+                self.assertTrue(validate_otel(path))
+
     def test_rejects_missing_seaweed_startup_capture(self) -> None:
         source = REPO / "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"
         for before, after in (

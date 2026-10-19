@@ -200,7 +200,6 @@ def validate_otel(path: Path) -> list[ContractViolation]:
         )
     for fragment in (
         "groupbyattrs/severity:",
-        "start_at: end",
         "file_log/workflows:",
         "file_log/seaweedfs_volumes:",
         "start_at: beginning",
@@ -238,14 +237,35 @@ def validate_otel(path: Path) -> list[ContractViolation]:
     if text.count("              - file_log/seaweedfs_volumes") != 1:
         violations.append(ContractViolation("otel", path, "SeaweedFS receiver must appear exactly once in the logs pipeline"))
 
+    if "--feature-gates=stanza.synchronousLogEmitter" not in text:
+        violations.append(ContractViolation("otel", path, "file readers must emit synchronously before checkpointing"))
+    general = re.search(r"(?ms)^        file_log:\n(.*?)(?=^        file_log/)", text)
+    if general is None or any(fragment not in general.group(1) for fragment in (
+        "start_at: beginning", "storage: file_storage", "retry_on_failure:",
+        "enabled: true", "max_elapsed_time: 0s",
+    )):
+        violations.append(ContractViolation("otel", path, "general logs require checkpointed beginning/resume and downstream retries"))
+    storage = re.search(r"(?ms)^        file_storage:\n(.*?)(?=^        health_check:)", text)
+    if storage is None or any(fragment not in storage.group(1) for fragment in (
+        "fsync: true", "max_size: 268435456",
+    )):
+        violations.append(ContractViolation("otel", path, "file storage must fsync and cap each database at 256 MiB"))
+    queue = re.search(r"(?ms)^          sending_queue:\n(.*?)(?=^      service:)", text)
+    if queue is None or any(fragment not in queue.group(1) for fragment in (
+        "storage: file_storage", "sizer: bytes", "queue_size: 67108864",
+        "batch:", "sizer: items", "min_size: 256", "max_size: 512", "flush_timeout: 2s",
+    )):
+        violations.append(ContractViolation("otel", path, "logs require a 64 MiB persistent queue with exporter-side batching"))
+    if re.search(r"(?m)^        batch(?:/[^:]+)?:|^              - batch(?:/\S+)?$", text):
+        violations.append(ContractViolation("otel", path, "asynchronous batch processors must not acknowledge logs before persistence"))
+
     pipeline_order = [
         text.rfind("              - transform/severity"),
         text.rfind("              - groupbyattrs/severity"),
-        text.rfind("              - batch"),
     ]
     if any(position < 0 for position in pipeline_order) or pipeline_order != sorted(pipeline_order):
         violations.append(
-            ContractViolation("otel", path, "logs pipeline must normalize, group by severity, then batch")
+            ContractViolation("otel", path, "logs pipeline must normalize then group by severity before the durable exporter")
         )
     return violations
 

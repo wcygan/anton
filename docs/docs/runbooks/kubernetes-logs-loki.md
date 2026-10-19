@@ -14,15 +14,97 @@ node /var/log/pods (read-only)
   -> kube-prometheus-stack Grafana Explore
 ```
 
-The collector uses the official OpenTelemetry chart `0.165.0` and collector
-image `0.156.0`. The general receiver starts files at the end. A separate
-receiver starts Airflow and lakehouse files at the beginning. The receivers
-use non-overlapping paths. The workflow receiver stores checkpoints on a
-bounded node-local host path. Both receivers use the Kubernetes container-log
-parser. Loki uses chart `18.7.1` with Loki `3.7.4` in monolithic mode. The
+The collector uses the official OpenTelemetry chart `0.173.1` and collector
+image `0.161.0`. Every reader resumes known files from persistent checkpoints
+and starts unseen files at the beginning. General, workflow, and SeaweedFS
+volume receivers use non-overlapping paths and the Kubernetes container-log
+parser. State lives on the existing node-local `/var/lib/otelcol` host path.
+Loki uses chart `18.13.5` with Loki `3.7.8` in monolithic mode. The
 separate Talos log sink is not this backend and must remain separate.
 
 ## Executable contract
+
+### Reader and exporter durability
+
+File offsets and the OTLP export queue share the existing `file_storage`
+extension. Its writes use fsync, and each component database is capped at
+256 MiB. The export queue admits at most 64 MiB of serialized requests. Online
+capacity also includes in-flight requests, storage overhead, and file offsets;
+the queue limit is not a total process-memory or filesystem quota. Storage is
+compacted on collector startup. Never delete its databases to clear a backlog.
+
+The pinned collector enables `stanza.synchronousLogEmitter` (an alpha feature
+gate in 0.161.0) to remove the reader adapter's in-memory batching gap. Without
+it, a hard kill can lose already-checkpointed records before they reach the
+disk queue. The restart check reproduced that loss with checkpoints and a
+persistent queue alone. Revalidate this gate when upgrading the collector.
+
+The pipeline normalizes and groups severity synchronously, then persists the
+export request. Batching happens inside the exporter queue (256 to 512 records,
+two-second flush), after persistence. An asynchronous batch processor before
+the queue would acknowledge records before they were durable and is prohibited
+by the logging contract.
+
+Receiver and exporter retries do not expire on a timer. A full queue or storage
+error backpressures the reader instead of intentionally skipping a batch.
+Delivery is at least once: after a crash, duplicates can occur between queue
+persistence and checkpoint persistence. Source-log rotation/deletion, node/disk
+loss, permanent backend rejection, and Loki's independent WAL behavior remain
+limits. The SeaweedFS reader's existing one-hour timestamp filter is unchanged.
+General and workflow readers have no age filter.
+
+### First checkpoint bootstrap
+
+Before the first deployment of the durable general reader, keep the old
+collector and Loki healthy and render the temporary offset seeder:
+
+```sh
+mise exec -- python3 scripts/verify-log-durability.py --render-seed /tmp/otel-log-seed.json
+```
+
+The rendered ConfigMap and `observability/otel-log-checkpoint-seed` DaemonSet
+require approved live creation and cleanup. They use the same general receiver
+ID and storage directory, but start at file end and export only counts to the
+debug exporter. They do not send application logs to another backend. Confirm
+the applied general reader still has no `storage` setting before running the
+seeder; never run two processes against the same receiver database.
+
+Observe one seeder per node, allow complete discovery/polling, then stop and
+remove the seeder before publishing the collector change. Verify its general
+reader database exists on every node. Publishing after seeding leaves a small
+overlap of already-delivered records, which is preferable to skipping unread
+records. New records written after seeding and new files are read by the durable
+collector from their saved offset or beginning. Existing workflow and SeaweedFS
+receiver IDs and state remain intact. After this one-time migration, ordinary
+collector rollouts need no seeder.
+
+Rollback through Git while preserving node-local databases. Reverting to a
+memory queue or stateless reader reintroduces restart loss; first let the durable
+queue drain while Loki is healthy. Do not restart Loki solely to clear its WAL
+recovery counter or delete its WAL/PVC for this migration.
+
+### Repeatable restart check
+
+```sh
+mise exec -- python3 scripts/verify-log-durability.py --baseline-ref d6ffc31b --output /tmp/log-durability.json
+```
+
+This local Docker check runs the pinned collector and Loki with a continuously
+written, fsynced record ledger. It overlaps a graceful Loki restart with two
+collector SIGKILLs and a graceful collector restart, retains queue/checkpoint
+files, and creates a new log file
+while the reader is down. The baseline must lose records; the fixed configuration
+must make every ledger record queryable. It also checks first-bootstrap offsets
+without replaying old history. No Kubernetes access or live notification occurs.
+Loki is stopped gracefully with its existing flush-on-shutdown policy; this does
+not claim to fix upstream Loki crash-replay bugs.
+
+For an approved live check, use a temporary per-node stdout ledger, restart only
+`observability/statefulset/loki` and
+`observability/daemonset/otel-collector-opentelemetry-collector-agent`, then
+compare every emitted ledger ID with Loki after all queues drain. Record the
+source/Flux/Helm revisions, pod UIDs, queue metrics, WAL counters, and missing or
+duplicate IDs. Remove the temporary ledger workload after saving evidence.
 
 ADR 0032's severity vocabulary, indexed-label allowlist, and retention policy
 live in one executable contract. Display the current values instead of copying
@@ -156,9 +238,9 @@ and stop the process immediately after collecting bounded evidence.
    `http://loki.observability.svc.cluster.local:3100`, and is not being
    overridden by manual state. Test the same query in Explore and inspect
    Grafana datasource/proxy errors.
-4. If only new logs are absent, identify the owning receiver. General streams
-   do not replay old files. Airflow and lakehouse streams start new files at
-   the beginning and resume known files from checkpoints. Check file discovery
+4. If only new logs are absent, identify the owning receiver. All readers start
+   new files at the beginning and resume known files from persistent checkpoints.
+   Check file discovery, queue/backpressure, and storage errors
    before changing retention or storage.
 
 ## Rollout and ClickStack teardown

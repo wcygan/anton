@@ -67,10 +67,12 @@ Important names and behavior:
 - Loki service: `loki.observability.svc.cluster.local:3100`.
 - Grafana datasource: `Loki`, UID `loki`.
 - OTel DaemonSet: `otel-collector-opentelemetry-collector-agent`.
-- The general receiver tails pod files outside `airflow` and `lakehouse`. It
-  starts at file end.
-- The workflow receiver tails `airflow` and `lakehouse` pod files. It starts
-  unseen files at the beginning and stores checkpoints on the node.
+- General, workflow, and SeaweedFS volume receivers have non-overlapping paths.
+  All start unseen files at the beginning and resume persistent node-local
+  checkpoints. The SeaweedFS reader retains its existing one-hour age filter.
+- `stanza.synchronousLogEmitter` removes the reader adapter memory buffer.
+- The OTLP exporter persists its bounded queue through `file_storage`; batching
+  happens after persistence in the exporter rather than an asynchronous processor.
 - Indexed labels and normalized severities come from
   `scripts/validate-log-contract.py --show`; use that output rather than a
   copied list.
@@ -180,13 +182,14 @@ If a query is empty, follow this order:
 2. Confirm the OTel DaemonSet has one Ready pod per eligible node.
 3. Inspect recent collector logs for file discovery, parser failures,
    checkpoint, queue, retry, export, or HTTP 5xx errors.
-4. Inspect the rendered collector ConfigMap for two non-overlapping `file_log`
+4. Inspect the rendered collector ConfigMap for non-overlapping `file_log`
    receivers, a read-only pod-log mount, checkpoint storage, and severity
-   grouping before batching.
+   grouping before the persistent export queue and its batching.
 5. Query indexed labels first. Then use structured metadata for pod name or
    a line filter for content.
-6. Apply `start_at: end` only to the general receiver. Airflow and lakehouse
-   files start at the beginning and resume from persistent checkpoints.
+6. All production readers start unseen files at the beginning and resume known
+   offsets. `start_at: end` is reserved for the approved one-time offset seeder
+   before the initial general-reader migration; see the logging runbook.
 7. If Loki reports object-store or writable-volume errors, inspect SeaweedFS
    S3 health and free capacity without printing credentials:
 
