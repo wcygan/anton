@@ -46,7 +46,11 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 
 - [ ] Inspect physical cooling/tach wiring on k8s-2 with the operator; retain the before/after 24-hour evidence in `docs/docs/runbooks/cooling-wal-followup.md`.
 - [x] Execute the approved bounded Harbor maintenance/digest-pull exercise and record its failed acceptance and recovery in `context/notes/2026-10-19-harbor-maintenance.md`.
-- [ ] Resolve the failed during-maintenance cold pull and proxy drain exit before repeating the exercise in a newly approved window; node-loss continuity is not established.
+- [x] Resolve the stale-address and proxy-drain findings with approved controlled recovery checks; retain the earlier failed exercise and the node-loss continuity limit.
+- [x] Restore stable Seaweed volume DNS with explicit wildcard bind and verify the real operator rollout, master locations, PVCs and unchanged S3 processes (PR 513).
+- [x] Deliver the proxy-aware two-phase drain command with bounded identity/eviction semantics and behavioral fixtures (PR 514).
+- [x] Complete legacy S3 cache migration, prove fresh authenticated bytes after a controlled volume replacement, and complete the proxy-host drain/runtime recovery/cleanup gate; see `context/notes/2026-10-19-harbor-recovery-hardening.md`.
+- [ ] Observe post-drain Flux recovery from transient ESO validation-webhook failures after normal source/retry reconciliation; workload and storage readiness alone do not close this gate.
 - [x] Verify normal workload recovery after the approved private verifier mirror repair and ESO sync; desired replicas, enforcing admission and user-facing HTTP/TLS checks passed.
 - [ ] Complete independent bootstrap-image origin/cache-seeding evidence and approve an isolated rebuild drill; source audit remains incomplete.
 - [ ] Gather ten comparable ordinary release samples with explicit timestamp coverage before any polling experiment; the current private tool distinguishes its proxy from push timing.
@@ -71,6 +75,10 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 
 - 2026-10-19: Normal controller retry restored the affected private workload to two Ready replicas with zero restarts after the mirror/ESO repair; the image rule remains enforcing and original pull Secret metadata is unchanged. At 21:21 UTC all three nodes were Ready/schedulable, all 72 Deployments/StatefulSets and 86 reconcilers were Ready, and all 18 Longhorn volumes/36 replicas were healthy/running. Both standard HTTP/TLS checks passed again and a fresh browser loaded the storefront. The maintenance exercise remains failed because its during-pull and complete drain acceptance were unmet.
 
+- 2026-10-19: Operator requested S3 stale-address and drain-proxy fixes. Five GPT-6 Luna high-effort agents used separate worktrees for reproduction, volume identity, drain tooling, operational acceptance and independent review. Preserved concurrent main and merged PR 513 (`c040a67c`) and PR 514 (`20842500`); 466 tests (one skipped), the real upstream stream comparison, exact operator generator checks and production docs build passed. Normal Flux rolled all three volumes to stable peer DNS with unchanged PVCs and S3 Pod UIDs. Legacy per-process/per-volume caches then caused two fixture-copy timeouts; backend terminal failures and partial natural invalidations were retained. Both gateways still had other old-address entries. Kept live acceptance open pending an explicit active-Loki writer exception for serial gateway refresh and exact k8s-3/emptyDir drain approval. Cleaned that failed fixture after both backend attempts became terminal.
+
+- 2026-10-19: Operator approved the remaining live plan. Concurrent GitOps S3 metrics/probe changes replaced the exact old gateway UIDs first, so root's guarded Eviction stopped before submission; preserved those changes through `1bf42c06`. A new private fixture and fresh clients verified four OCI blobs/9,200,696 bytes before and after an exact volume-1 replacement, with its PVC/stable DNS retained and the same service-eligible S3 gateway pair during the verification request. The proxy-aware k8s-3 drain exited zero at 22:14:19 UTC, honoring PDB refusals, and uncordon was verified at 22:14:21. The final fresh pull passed at 22:16:37; at 22:16:38 all workloads, 18 Longhorn volumes and 36 replicas were ready/healthy/running. Exact Jobs/Pods, Secret, robot and fixture cleanup was verified at 22:17:51 with the source retained. Combined validation passed 477 tests (one skipped) and the production docs build. Fifteen Flux conditions still reflected the earlier brief ESO webhook absence; its serving endpoint had recovered. Normal reconciliation remains an explicit follow-through gate. See the recovery-hardening note for chronology, limits and rollback.
+
 | Increment | Delivered benefit and evidence | Rollback |
 | --- | --- | --- |
 | Registry resources, PR 505 | Four generated containers now have effective reservations; actual two-replica Deployment matches the chart render. | Revert merge `e56410d6` through GitOps and observe Deployment resources/readiness. |
@@ -81,6 +89,8 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 | Private release timing | Outcome-aware CLI and 133 passing private tests; actual push/scan times remain unknown and polling stays unchanged. | Revert its private merge; no application or polling configuration changed. |
 
 ## References
+
+- Recovery hardening: `context/notes/2026-10-19-harbor-recovery-hardening.md`.
 
 - Recovery constraint: `context/notes/2026-10-13-disable-longhorn-backups.md`.
 - Cooling evidence: `context/notes/k8s-2-instability/evidence-2026-05-06-k8s-2-fan1-intermittent-failure.md`.
