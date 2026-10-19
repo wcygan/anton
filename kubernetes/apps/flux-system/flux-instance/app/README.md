@@ -1,14 +1,15 @@
 # GitHub webhook permissions
 
 This document describes the restricted identity and its rollout acceptance checks.
+The outbound restriction and its verification are described in [EGRESS.md](EGRESS.md).
 Keep `network/cloudflare-tunnel-egress` and `network/envoy-external-egress`
 applied throughout preparation, rollout, verification, and rollback.
 
-The public webhook receiver currently runs as `notification-controller`, which
-inherits the shared `crd-controller-flux-system` ClusterRole. That role can read
-Secrets across the cluster and broadly modify Flux resources. The proposal gives
-only this Deployment a separate identity and a namespaced Role. The shared role,
-its bindings, and the other Flux controllers stay unchanged.
+The public webhook receiver runs as `notification-controller-restricted`, with
+its own namespaced Role. It no longer inherits the broad shared
+`crd-controller-flux-system` ClusterRole. The shared role, its bindings, and the
+other Flux controllers remain unchanged. The deployed admission guard further
+limits its two permitted target patches to reconciliation requests.
 
 ## Exact source changes
 
