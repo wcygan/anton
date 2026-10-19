@@ -14,5 +14,6 @@ resources:
   - ./filer-pvcs.yaml
   - ./filer-reader-rbac.yaml
   - ./externalsecret.yaml
+  - ./externalsecret-read-probe.yaml
   - ./buckets-cronjob.yaml
   - ./httproute.yaml

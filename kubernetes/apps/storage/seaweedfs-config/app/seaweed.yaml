@@ -78,6 +78,7 @@ spec:
                 app.kubernetes.io/component: filer
                 app.kubernetes.io/instance: seaweedfs
   s3:
+    metricsPort: 9327
     replicas: 2                     # standalone Deployment HA per ADR 0019
     iam: false                      # explicit override — operator default is true
     # SeaweedFS 4.40's built-in Iceberg REST catalog is disabled unless this
