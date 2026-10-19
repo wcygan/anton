@@ -216,3 +216,15 @@ does not guarantee completion of an already interrupted read, zero downtime,
 or survival of persistent data loss. The fresh-pull 30-second Job
 deadline is a bounded acceptance budget for this fixture, not a general
 service SLO.
+
+## Subsequent cache limitation — 22:54 UTC
+
+The node-maintenance follow-up reproduced a distinction in SeaweedFS 4.40:
+a fresh S3 client can receive correct bytes from a warm gateway body cache
+while an unread object on the same absent single-copy server fails. R3 warmed
+its fixture before replacing volume-1. The retained metadata proves fixture
+placement, but does not prove that the post-replacement request fetched bytes
+from the replacement process. The recorded client-visible recovery and drain
+results stand; the volume-layer inference has this limit. See
+`context/notes/2026-10-19-seaweedfs-maintenance-availability.md` for the separate
+cold-read availability work.
