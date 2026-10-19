@@ -93,7 +93,11 @@ class LogCanary(unittest.TestCase):
         self.assertEqual(query['start'], ['100000000000'])
 
     def test_negative_control_withholds_exactly_one_json_record(self):
-        pod = HARNESS.negative_control('canary-control')
+        job = HARNESS.negative_control('canary-control')
+        self.assertEqual(job['kind'], 'Job')
+        self.assertEqual(job['spec']['backoffLimit'], 0)
+        self.assertNotIn('name', job['spec']['template']['metadata'])
+        pod = job['spec']['template']
         script = pod['spec']['containers'][0]['args'][0]
         awk_script = script.split("awk '", 1)[1][:-1]
         lines = [self.ledger.emit(now) for now in [110, 120, 130]]

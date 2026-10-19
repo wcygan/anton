@@ -429,9 +429,9 @@ mise exec -- python3 scripts/verify-log-canary.py \
   --render-negative-control /tmp/canary-control.json --name loki-canary-missing-test
 ```
 
-The unowned test pod shares the canary metrics Service labels and discards exactly
+The Job-owned test pod shares the canary metrics Service labels and discards exactly
 its first stdout record while retaining the expected ID. Later records must arrive
 normally. Capture the withheld `seq` and `emitted_at`, Prometheus firing time and
-matching ntfy receipt; verify receipt within 300 seconds. Delete that exact pod,
+matching ntfy receipt; verify receipt within 300 seconds. Delete that exact Job,
 wait for alert resolution and the resolved notification, and remove the observer
 Job. Never drop real workload logs to manufacture the test.

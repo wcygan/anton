@@ -36,7 +36,7 @@ def canary_document():
 
 
 def negative_control(name):
-    """Render an unowned, bounded probe that withholds exactly its first record."""
+    """Render a Job-owned, bounded probe that withholds exactly its first record."""
     rendered = run('kustomize', 'build', str(ROOT / 'kubernetes/apps/observability/loki/app'))
     result = subprocess.run(['yq', '-o=json', 'select(.kind == "DaemonSet" and .metadata.name == "loki-canary")'],
                             input=rendered, text=True, capture_output=True, check=True)
@@ -46,7 +46,10 @@ def negative_control(name):
     pod['spec'].update(restartPolicy='Never', activeDeadlineSeconds=420)
     pod['spec']['containers'][0].update(command=['/bin/sh', '-ec'], args=[
         "set -o pipefail; python3 -u /canary/canary.py | awk 'NR == 1 {print \"negative-control withheld log=\" $0 > \"/dev/stderr\"; next} {print; fflush()}'"])
-    return pod
+    return {'apiVersion': 'batch/v1', 'kind': 'Job',
+            'metadata': {'name': name, 'namespace': 'observability'},
+            'spec': {'backoffLimit': 0, 'activeDeadlineSeconds': 420, 'ttlSecondsAfterFinished': 300,
+                     'template': {'metadata': {'labels': template['metadata']['labels']}, 'spec': pod['spec']}}}
 
 
 def exercise(output):
