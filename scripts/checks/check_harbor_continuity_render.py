@@ -1,5 +1,6 @@
 """Render Harbor's pinned chart and check its nginx continuity resources."""
 from pathlib import Path
+import json
 import os
 import subprocess
 import sys
@@ -8,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "kubernetes/apps/registries/harbor/app/helmrelease.yaml"
+REPOSITORY = RELEASE.with_name("helmrepository.yaml")
 
 
 def run(command, *, timeout, **kwargs):
@@ -15,11 +17,19 @@ def run(command, *, timeout, **kwargs):
 
 
 def main():
-    version = subprocess.check_output(
-        ["yq", ".spec.chart.spec.version", str(RELEASE)],
+    chart = json.loads(subprocess.check_output(
+        ["yq", "-o=json", ".spec.chart.spec", str(RELEASE)],
         text=True,
         timeout=20,
-    ).strip()
+    ))
+    repository = json.loads(subprocess.check_output(
+        ["yq", "-o=json", ".", str(REPOSITORY)], text=True, timeout=20,
+    ))
+    if (chart["sourceRef"]["kind"] != "HelmRepository"
+            or chart["sourceRef"]["name"] != repository["metadata"]["name"]):
+        raise SystemExit("Harbor sourceRef does not match the adjacent HelmRepository")
+    version = chart["version"]
+    chart_name = chart["chart"]
     if not version or any(char not in "0123456789." for char in version):
         raise SystemExit(f"unexpected Harbor chart version: {version!r}")
 
@@ -34,10 +44,10 @@ def main():
             helm_env[key] = str(temp / dirname)
         archive_dir = temp / "chart"
         archive_dir.mkdir()
-        archive = archive_dir / f"harbor-{version}.tgz"
+        archive = archive_dir / f"{chart_name}-{version}.tgz"
         values = temp / "values.yaml"
         rendered = temp / "rendered.yaml"
-        chart_url = f"https://helm.goharbor.io/harbor-{version}.tgz"
+        chart_url = f"{repository['spec']['url'].rstrip('/')}/{chart_name}-{version}.tgz"
 
         run(["helm", "pull", chart_url, "--destination", str(archive_dir)],
             timeout=120, env=helm_env, capture_output=True, text=True)
