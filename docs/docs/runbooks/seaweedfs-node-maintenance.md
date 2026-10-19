@@ -130,9 +130,14 @@ to the exact ledger keys and print only status/digests, never error bodies or
 authentication headers. Keep client code and the non-secret ledger in one
 temporary ConfigMap. Remove both exact policies and that ConfigMap with the Jobs.
 Use at most eight 1 MiB seed objects, and no more than twelve ledger keys total
-including the later write/recovery checks, to select distinct never-read objects whose
-chunk metadata maps to an existing `000` VID served on the exact `k8s-2`
-node UID. Map the serving Pod to that node rather than assuming an ordinal.
+including the later write/recovery checks, to select distinct never-read objects
+whose existing `000` VID is in the copy table below and whose planned source/
+destination pair includes the exact `k8s-2` node UID. Join both current volume
+Pods to nodes; an ordinal can move between nodes during an upgrade. Before the
+drain, repeat this join using the actual completed copies. Record whether the
+withdrawn copy is the original or the new copy; either tests availability while
+one owner is absent, but only original-owner loss can exercise serving from the
+new copy.
 Record each key,
 file ID, VID and digest. Delete only these exact keys during cleanup, not the
 bucket or a recursively selected prefix. Require exact-key HEAD 404 before a
