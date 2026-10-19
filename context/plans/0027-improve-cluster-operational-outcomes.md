@@ -4,7 +4,7 @@ opened: 2026-10-19
 closed: null
 affects: all
 intent: concrete-need
-related-adrs: []
+related-adrs: [0043]
 review-by: null
 ---
 
@@ -53,6 +53,7 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 - [x] Observe post-drain Flux recovery from transient ESO validation-webhook failures; all 86 reconcilers passed after the evidence source revision, with concurrent reconcile requests separately attributed.
 - [x] Deliver the bounded SeaweedFS placement audit; baseline finds all 20 native volumes at `000` with one active copy. Independent review and 16 focused tests pass.
 - [ ] Complete the pinned local cold-read and existing-data migration proof, including gateway cache behavior and a safe writer fence.
+- [ ] Serialize the availability rollout with the separate 4.48 upgrade/restore owner; qualify the final homogeneous runtime version and preserve its readiness/telemetry controls and restore resources.
 - [ ] Publish the reviewed availability policy, migration/rollback plan and successor ADR; obtain exact live approval before changing replication or replacing/draining resources.
 - [ ] Verify existing and new S3 data during the approved one-node hold, full recovery and temporary-resource cleanup; do not infer this from the earlier warm gateway fixture.
 - [x] Verify normal workload recovery after the approved private verifier mirror repair and ESO sync; desired replicas, enforcing admission and user-facing HTTP/TLS checks passed.

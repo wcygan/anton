@@ -47,8 +47,8 @@ spec:
     # ADR 0043 selects two native serving copies for new volumes.
     # Existing 000 volumes need migration; validate cache behavior before drain.
     defaultReplication: "001"
-    # Allocate one logical volume per growth event. The default batch of seven
-    # exhausts sparse collection slots before the PVCs approach capacity.
+    # Allocate one logical volume per growth event for either copy count, so
+    # sparse collections do not exhaust slots before the PVCs approach capacity.
     env:
       - name: WEED_MASTER_VOLUME_GROWTH_COPY_1
         value: "1"
@@ -70,7 +70,7 @@ spec:
   volume:
     replicas: 3                     # one per node
     metricsPort: 9327
-    maxVolumeCounts: 20             # 8 free slots per server at current use
+    maxVolumeCounts: 20
     # Advertise the stable StatefulSet peer DNS while keeping startup independent
     # of headless-Service DNS resolution.
     ipBind: 0.0.0.0
