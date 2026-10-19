@@ -104,7 +104,15 @@ Final review additionally requires distinct permitted volume-server hosts
 instead of counting duplicate location entries as copies, and rejects a corrupt
 HTTP 200 cold response instead of classifying it as an expected outage. Mocked
 duplicate/foreign-owner, multi-chunk and corrupt-response cases reject as
-expected. Final guarded 4.40/4.48 runs remain a publication gate.
+expected. The final guarded 4.40 worker run and independent root 4.48 run both
+exited zero, each with five same-volume controls and four successful two-copy
+withdrawals. Root separately inspected returned hashes and distinct surviving
+owners in the final log and queried Docker labels to confirm cleanup. Evidence
+is retained in the proof worktree's ignored
+`.private/seaweed-maintenance-availability/4.40-guarded-final.log` and integration
+checkout's `.private/seaweed-maintenance/proof-root-4.48-guarded.log`.
+The reusable proof is delivered separately in
+[PR 518](https://github.com/wcygan/anton/pull/518); it changes no runtime state.
 
 An earlier sequential local experiment failed its second cold GET after a
 server returned and a one-location lookup was reused. That failed run did not

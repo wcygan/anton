@@ -104,7 +104,7 @@ It does not reintroduce the retired lakehouse workloads.
 
 ## Follow-ups
 
-- [ ] Finish the pinned local existing-data migration and independent review.
+- [x] Finish the pinned local existing-data migration and independent review on 4.40 and 4.48.
 - [ ] Approve the precise live rollout, writer outage, migration and drill.
 - [ ] After approval, accept this ADR and update only ADR 0019's status line.
 - [ ] Verify the applied master configuration and actual new allocations.
