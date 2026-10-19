@@ -45,6 +45,13 @@ identity is `NetworkPolicy/harbor-postgres-ingress-candidate` in namespace
 `registries`, selecting `cnpg.io/cluster=harbor-postgres` and
 `cnpg.io/podRole=instance`.
 
+The activation commit must also update
+`test_candidate_remains_outside_active_flux_tree` in
+`scripts/tests/test_harbor_postgres_networkpolicy.py` to require the policy in
+the active render while preserving the client-matrix rejection checks. Run the
+focused tests and all contracts before publication. Reverting that activation
+commit restores both the inactive registration and its matching test.
+
 Before that separate activation commit is approved, run these read-only
 preflight checks from the intended repository revision and operator context:
 
@@ -53,7 +60,8 @@ git rev-parse HEAD
 mise exec -- kubectl config current-context
 mise exec -- kubectl get namespaces registries databases observability
 mise exec -- kubectl -n flux-system get gitrepository flux-system -o jsonpath='{.status.artifact.revision}{"\n"}'
-mise exec -- flux get ks -n flux-system harbor-config harbor
+mise exec -- flux get ks -n registries harbor-config
+mise exec -- flux get ks -n registries harbor
 mise exec -- flux get hr -n registries harbor
 mise exec -- kubectl -n registries get cluster harbor-postgres
 mise exec -- kubectl -n registries get pods -l cnpg.io/cluster=harbor-postgres --show-labels
@@ -105,8 +113,8 @@ ready condition and prune result:
 
 ```sh
 mise exec -- kubectl -n flux-system get gitrepository flux-system -o jsonpath='{.status.artifact.revision}{"\n"}'
-mise exec -- kubectl -n flux-system get kustomization harbor-config -o jsonpath='{range .status.conditions[*]}{.type}={.status} reason={.reason} message={.message}{"\n"}{end}'
-mise exec -- kubectl -n flux-system get kustomization harbor-config -o jsonpath='{.status.lastAppliedRevision}{"\n"}'
+mise exec -- kubectl -n registries get kustomization harbor-config -o jsonpath='{range .status.conditions[*]}{.type}={.status} reason={.reason} message={.message}{"\n"}{end}'
+mise exec -- kubectl -n registries get kustomization harbor-config -o jsonpath='{.status.lastAppliedRevision}{"\n"}'
 mise exec -- kubectl -n registries get networkpolicy harbor-postgres-ingress-candidate
 ```
 
