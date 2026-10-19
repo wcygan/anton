@@ -1,0 +1,49 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: seaweedfs-volumes
+  labels:
+    app.kubernetes.io/name: seaweedfs
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: seaweedfs-volumes
+      interval: 30s
+      rules:
+        - alert: SeaweedFSReadOnlyVolumes
+          expr: |
+            SeaweedFS_volumeServer_read_only_volumes{namespace="storage",type="IsReadOnly"} > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: seaweedfs
+          annotations:
+            summary: "SeaweedFS {{ $labels.pod }} has read-only volumes"
+            description: |
+              {{ $value }} volumes in collection '{{ $labels.collection }}' are
+              read-only on {{ $labels.instance }}. Inspect the volume /status
+              endpoint and retained startup logs before changing writability.
+              IsReadOnly is the total; summing its cause series double-counts volumes.
+            runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+        - alert: SeaweedFSVolumeMetricsUnavailable
+          expr: |
+            (count(
+              (up{namespace="storage",endpoint="volume-metrics"} == 1)
+              and on(namespace,pod)
+              SeaweedFS_volumeServer_read_only_volumes{namespace="storage",type="IsReadOnly"}
+            ) or vector(0))
+              < scalar(kube_statefulset_replicas{namespace="storage",statefulset="seaweedfs-volume"})
+          for: 10m
+          labels:
+            severity: critical
+            component: seaweedfs
+            namespace: storage
+          annotations:
+            summary: SeaweedFS volume metrics coverage is incomplete
+            description: |
+              Fewer healthy volume-metrics targets with the read-only gauge exist
+              than desired volume replicas, or the scrape pool is missing. Read-only alert coverage
+              is incomplete. Check the operator-managed seaweedfs-volume
+              ServiceMonitor, its volume-metrics endpoints, and Prometheus targets.
+            runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts

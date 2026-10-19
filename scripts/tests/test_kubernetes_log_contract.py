@@ -110,6 +110,18 @@ class KubernetesLogContractTests(unittest.TestCase):
             path.write_text('{k8s_pod_name="loki-0"}\n', encoding="utf-8")
             self.assertTrue(validate_query_catalog(path))
 
+    def test_rejects_missing_seaweed_startup_capture(self) -> None:
+        source = REPO / "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"
+        for before, after in (
+            ("              - file_log/seaweedfs_volumes\n", ""),
+            ('expr: \'timestamp < now() - duration("1h")\'', "expr: 'false'"),
+            ("            - /var/log/pods/storage_seaweedfs-volume-*/*/*.log\n", ""),
+        ):
+            with self.subTest(before=before), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "otel.yaml"
+                path.write_text(source.read_text().replace(before, after, 1))
+                self.assertTrue(validate_otel(path))
+
     def test_rejects_loki_before_storage_rollout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "runbook.md"

@@ -10,6 +10,7 @@ configMapGenerator:
       disableNameSuffixHash: true
 resources:
   - ./seaweed.yaml
+  - ./prometheusrule.yaml
   - ./filer-pvcs.yaml
   - ./filer-reader-rbac.yaml
   - ./externalsecret.yaml

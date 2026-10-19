@@ -11,6 +11,9 @@ spec:
   # Ready=True; without that, Flux would race the CRD install and fail.
   dependsOn:
     - name: seaweedfs
+    # PrometheusRule and the operator-created ServiceMonitor need these CRDs.
+    - name: kube-prometheus-stack
+      namespace: observability
     # `envoy-gateway` gates the `envoy-internal/https` HTTPRoute at
     # `s3.${SECRET_DOMAIN}` authored under `app/`; `external-secrets` gates
     # the ExternalSecret pulling admin S3 creds from 1Password. Both block

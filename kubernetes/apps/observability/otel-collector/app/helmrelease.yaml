@@ -73,6 +73,7 @@ spec:
           exclude:
             - /var/log/pods/airflow_*/*/*.log
             - /var/log/pods/lakehouse_*/*/*.log
+            - /var/log/pods/storage_seaweedfs-volume-*/*/*.log
           start_at: end
           include_file_name: false
           include_file_path: true
@@ -102,6 +103,20 @@ spec:
               parse_from: body
               parse_to: attributes
               if: 'body matches "^\\s*\\{"'
+        file_log/seaweedfs_volumes:
+          include:
+            - /var/log/pods/storage_seaweedfs-volume-*/*/*.log
+          start_at: beginning
+          storage: file_storage
+          include_file_name: false
+          include_file_path: true
+          operators:
+            - type: container
+              id: seaweedfs-container-parser
+              max_log_size: 256KiB
+            - type: filter
+              id: skip-old-seaweedfs-logs
+              expr: 'timestamp < now() - duration("1h")'
       processors:
         batch:
           timeout: 2s
@@ -170,6 +185,7 @@ spec:
             receivers:
               - file_log
               - file_log/workflows
+              - file_log/seaweedfs_volumes
             processors:
               - memory_limiter
               - transform/severity

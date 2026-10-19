@@ -202,6 +202,7 @@ def validate_otel(path: Path) -> list[ContractViolation]:
         "groupbyattrs/severity:",
         "start_at: end",
         "file_log/workflows:",
+        "file_log/seaweedfs_volumes:",
         "start_at: beginning",
         "storage: file_storage",
         "- /var/log/pods/airflow_*/*/*.log",
@@ -213,6 +214,7 @@ def validate_otel(path: Path) -> list[ContractViolation]:
     for path_glob in (
         "/var/log/pods/airflow_*/*/*.log",
         "/var/log/pods/lakehouse_*/*/*.log",
+        "/var/log/pods/storage_seaweedfs-volume-*/*/*.log",
     ):
         if text.count(f"- {path_glob}") != 2:
             violations.append(
@@ -227,6 +229,14 @@ def validate_otel(path: Path) -> list[ContractViolation]:
         violations.append(
             ContractViolation("otel", path, "workflow receiver must appear exactly once in the logs pipeline")
         )
+
+    seaweed = re.search(r"(?ms)^        file_log/seaweedfs_volumes:\n(.*?)(?=^      processors:)", text)
+    required = ('start_at: beginning', 'storage: file_storage',
+                'expr: \'timestamp < now() - duration("1h")\'')
+    if seaweed is None or any(fragment not in seaweed.group(1) for fragment in required):
+        violations.append(ContractViolation("otel", path, "SeaweedFS startup logs require checkpointed replay and an old-log filter"))
+    if text.count("              - file_log/seaweedfs_volumes") != 1:
+        violations.append(ContractViolation("otel", path, "SeaweedFS receiver must appear exactly once in the logs pipeline"))
 
     pipeline_order = [
         text.rfind("              - transform/severity"),
