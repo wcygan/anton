@@ -362,6 +362,46 @@ admin accounts. An authentication-path question is pending with the operator;
 publication and production rollout must wait for that answer. Repository
 validation and the commit can proceed independently.
 
+## Publication checkpoint, 2026-10-19 20:52 UTC
+
+The fix and reproducible rehearsal tooling are committed and pushed as
+`58533d7c09cff80622dfa8f1b4f2f80834824d02`; the privacy workflow passed.
+The prepared deployment values pass all 449 contract tests and render the exact
+candidate OCI digest. They remain uncommitted pending verified publication and
+the drain/clean-shutdown gate. A rendered maintenance post-renderer scales only
+the Loki StatefulSet to zero while retaining its PVC; the chart's replica helper
+otherwise forces at least one replica, so setting replicas to zero alone is
+insufficient. This maintenance change has not been applied.
+
+Fresh pre-upgrade snapshot `observability/loki-wal-preupgrade-20261019-a`
+was created at 20:45:53 UTC, is ready, and retains the original 20 GiB volume.
+Snapshot UID is `2bed0ae8-39d0-4154-80b9-21b59757ee6a`, content is
+`snapcontent-2bed0ae8-39d0-4154-80b9-21b59757ee6a`, and the backend handle is
+`snap://pvc-359371d0-80ba-4208-a125-c17127538585/snapshot-2bed0ae8-39d0-4154-80b9-21b59757ee6a`.
+Original Loki pod UID, image, PVC and WAL remain unchanged. At 20:49 UTC,
+18/18 Longhorn volumes were healthy, SeaweedFS had no read-only volumes,
+collectors/canaries were ready, and no additional storage or log-delivery
+failure was firing. The historical WAL recovery alert remains active.
+
+The operator selected the path of finding an existing scoped Harbor robot in
+1Password and unlocked the app. CLI session setup still failed after the authorization prompts were
+accepted; an operator-side `op whoami` check is pending. Do not substitute cached
+admin credentials or create another robot without authorization.
+
+The installed Crane 0.21.5 also rejected Harbor's same-host private-IP token
+realm. An isolated client was built from upstream's merged same-host fix,
+commit `bf87c3bfe4cc3218ac0baa364545d72729d2906d`, without replacing the installed
+binary. It successfully reached Harbor and confirmed the target repository/tag
+is absent. The OCI layout was extracted after verifying the archive checksum;
+its manifest digest remains unchanged. Publication has not occurred.
+
+Private evidence is under `.private/loki-wal-replay/rollout/`, including the
+fresh snapshot identities, contract output, OCI layout and downgrade results.
+The original snapshot and encrypted archive remain retained. Resume with scoped
+robot authentication, exact-digest publication and anonymous-pull verification,
+then the approved drain, clean stop and fresh WAL epoch cutover. Never switch
+WAL directories after an unclean stop without recovering unflushed records.
+
 ## References
 
 - Related ADRs: 0005, 0032, 0042.
