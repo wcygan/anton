@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "stages": [
+    "talos-bootstrap",
+    "bootstrap-cni",
+    "bootstrap-dns",
+    "flux-secrets",
+    "storage-network",
+    "storage-services",
+    "harbor",
+    "private-apps"
+  ],
+  "required_paths": [
+    "bootstrap/helmfile.d/01-apps.yaml",
+    "bootstrap/helmfile.d/templates/values.yaml.gotmpl",
+    "bootstrap/sops-age.sops.yaml",
+    "kubernetes/apps/external-secrets/onepassword-store/app/clustersecretstore.yaml",
+    "kubernetes/apps/kube-system/spegel/app/helmrelease.yaml",
+    "kubernetes/apps/network/multus/app",
+    "kubernetes/apps/network/storage-vxlan/app",
+    "kubernetes/apps/registries/harbor-config/app",
+    "kubernetes/apps/registries/harbor-config/ks.yaml",
+    "kubernetes/apps/registries/harbor/app",
+    "kubernetes/apps/storage/longhorn-config/app",
+    "kubernetes/apps/storage/longhorn/app",
+    "kubernetes/apps/storage/longhorn/ks.yaml",
+    "kubernetes/apps/storage/seaweedfs-config/app",
+    "kubernetes/apps/storage/seaweedfs/app",
+    "talos/patches/global/machine-registries.yaml",
+    "talos/talconfig.yaml",
+    "talos/talenv.yaml"
+  ],
+  "stage_paths": {
+    "talos-bootstrap": [
+      "talos/"
+    ],
+    "bootstrap-cni": [
+      "bootstrap/helmfile.d/"
+    ],
+    "bootstrap-dns": [
+      "bootstrap/helmfile.d/"
+    ],
+    "flux-secrets": [
+      "kubernetes/apps/external-secrets/"
+    ],
+    "storage-network": [
+      "kubernetes/apps/network/storage-vxlan/"
+    ],
+    "storage-services": [
+      "kubernetes/apps/storage/"
+    ],
+    "harbor": [
+      "kubernetes/apps/registries/harbor"
+    ],
+    "private-apps": [
+      "kubernetes/apps/"
+    ]
+  },
+  "private_registry_host": "192.168.1.106",
+  "harbor_stage": "harbor",
+  "unverified_inputs": [
+    "operator-held Talos secrets, age identity, and machine access",
+    "1Password identity and current secret availability (metadata only; secret values are never read)",
+    "external OCI image and Helm chart availability at rebuild time",
+    "fresh-node firmware, disk inventory, and hardware readiness",
+    "runtime reconciliation and end-user outcomes on a rebuilt cluster"
+  ],
+  "scan_roots": [
+    "kubernetes/apps"
+  ],
+  "stage_details": {
+    "talos-bootstrap": {
+      "owner": "repository plus operator",
+      "origin": "Talos sources in Git; hardware and access are operator-held",
+      "order": 10
+    },
+    "bootstrap-cni": {
+      "owner": "repository plus public OCI registries",
+      "origin": "Bootstrap Helmfile and pinned charts/images",
+      "order": 20
+    },
+    "bootstrap-dns": {
+      "owner": "repository plus public OCI registries",
+      "origin": "CoreDNS release in the bootstrap Helmfile",
+      "order": 30
+    },
+    "flux-secrets": {
+      "owner": "repository plus operator and 1Password",
+      "origin": "SOPS ciphertext in Git; age identity and vault access are external",
+      "order": 40
+    },
+    "storage-network": {
+      "owner": "repository, image publisher, and existing node image cache",
+      "origin": "Manifest points to Harbor; Talos HTTP mirror plus Spegel node cache can serve existing images, but no cold-start source is proven",
+      "order": 50
+    },
+    "storage-services": {
+      "owner": "repository plus public OCI registries",
+      "origin": "Longhorn and SeaweedFS manifests and upstream images/charts",
+      "order": 60
+    },
+    "harbor": {
+      "owner": "repository plus platform dependencies",
+      "origin": "Harbor manifests depend on CNPG, Dragonfly, SeaweedFS, ESO-delivered secrets",
+      "order": 70
+    },
+    "private-apps": {
+      "owner": "repository plus image publishers",
+      "origin": "Application manifests and upstream or Harbor-hosted images",
+      "order": 80
+    }
+  }
+}
