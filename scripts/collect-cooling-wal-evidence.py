@@ -45,7 +45,7 @@ def summarize_series(response: object, start: datetime, end: datetime, step_seco
     if not isinstance(results, list):
         return {"state": "invalid_response", "coverage": None, "series": []}
     if not results:
-        return {"state": "no_data", "coverage": {"expected_samples_per_series": expected_samples(start, end, step_seconds)}, "series": []}
+        return {"state": "no_data", "coverage": {"expected_query_evaluation_points_per_series": expected_samples(start, end, step_seconds), "basis": "Prometheus range-query evaluation points; lookback can fill points and does not prove raw scrape continuity"}, "series": []}
     summaries = []
     expected = expected_samples(start, end, step_seconds)
     for item in results:
@@ -64,11 +64,11 @@ def summarize_series(response: object, start: datetime, end: datetime, step_seco
         points = min(len(numbers), len(pairs))
         record: dict[str, object] = {
             "labels": labels,
-            "samples": points,
-            "expected_samples": expected,
-            "coverage_fraction": round(points / expected, 4) if expected else None,
-            "first_sample_utc": datetime.fromtimestamp(float(pairs[0][0]), UTC).isoformat().replace("+00:00", "Z") if pairs else None,
-            "last_sample_utc": datetime.fromtimestamp(float(pairs[-1][0]), UTC).isoformat().replace("+00:00", "Z") if pairs else None,
+            "query_evaluation_points": points,
+            "expected_query_evaluation_points": expected,
+            "evaluation_point_fraction": round(points / expected, 4) if expected else None,
+            "first_evaluation_utc": datetime.fromtimestamp(float(pairs[0][0]), UTC).isoformat().replace("+00:00", "Z") if pairs else None,
+            "last_evaluation_utc": datetime.fromtimestamp(float(pairs[-1][0]), UTC).isoformat().replace("+00:00", "Z") if pairs else None,
             "min": min(numbers) if numbers else None,
             "max": max(numbers) if numbers else None,
         }
@@ -79,7 +79,7 @@ def summarize_series(response: object, start: datetime, end: datetime, step_seco
             record["counter_reset_observed"] = reset
             record["counter_delta"] = None if reset else numbers[-1] - numbers[0]
         summaries.append(record)
-    return {"state": "observed", "coverage": {"expected_samples_per_series": expected}, "series": summaries}
+    return {"state": "observed", "coverage": {"expected_query_evaluation_points_per_series": expected, "basis": "Prometheus range-query evaluation points; lookback can fill points and does not prove raw scrape continuity"}, "series": summaries}
 
 
 def expected_samples(start: datetime, end: datetime, step_seconds: int) -> int:
@@ -114,7 +114,7 @@ def collect(start: datetime, end: datetime, step_seconds: int, *, prefix: tuple[
         state, response = _raw(prefix, _query_path(query, start, end, step_seconds), runner)
         metrics[name] = summarize_series(response, start, end, step_seconds, metric_name=name) if state == "observed" else {"state": state, "coverage": None, "series": []}
 
-    return {"schema_version": 1, "observed_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"), "window": {"start_utc": start.isoformat().replace("+00:00", "Z"), "end_utc": end.isoformat().replace("+00:00", "Z"), "step_seconds": step_seconds}, "interpretation": {"nvme_temp2_threshold": "unknown; do not classify as a breach", "nvme_temp2_sensor_mapping": "unknown", "fan1_zero_fraction_contract": "PrometheusRule alerts when >= 0.25 of 30s samples are zero over 10m, then for 5m", "source_is_read_only": True}, "metrics": metrics, "loki_wal_followup": {"plan": "context/plans/0026-investigate-loki-wal-replay.md", "local_checks": ["scripts/verify-log-durability.py", "scripts/verify-log-loss-alerts.py"], "historical_loss_quantity": "unknown"}}
+    return {"schema_version": 1, "observed_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"), "window": {"start_utc": start.isoformat().replace("+00:00", "Z"), "end_utc": end.isoformat().replace("+00:00", "Z"), "step_seconds": step_seconds}, "interpretation": {"coverage_basis": "Prometheus range-query evaluation points; lookback can fill points and does not prove raw scrape continuity", "nvme_temp2_threshold": "unknown; do not classify as a breach", "nvme_temp2_sensor_mapping": "unknown", "fan1_zero_fraction_contract": "PrometheusRule alerts when >= 0.25 of 30s samples are zero over 10m, then for 5m", "source_is_read_only": True}, "metrics": metrics, "loki_wal_followup": {"plan": "context/plans/0026-investigate-loki-wal-replay.md", "local_checks": ["scripts/verify-log-durability.py", "scripts/verify-log-loss-alerts.py"], "historical_loss_quantity": "unknown"}}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

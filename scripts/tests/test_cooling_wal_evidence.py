@@ -21,14 +21,15 @@ def response(labels: dict[str, str], values: list[list[object]]) -> str:
 
 
 class CoolingWalEvidenceTests(unittest.TestCase):
-    def test_series_summary_reports_real_coverage_zero_fraction_and_delta(self) -> None:
+    def test_series_summary_reports_evaluation_points_zero_fraction_and_delta(self) -> None:
         start = datetime(2026, 10, 19, 0, 0, tzinfo=UTC)
         end = datetime(2026, 10, 19, 0, 1, tzinfo=UTC)
         fan = MODULE.summarize_series({"status": "success", "data": {"resultType": "matrix", "result": [{"metric": {"nodename": "k8s-2", "sensor": "fan1"}, "values": [[179, "0"], [209, "1200"]]}]}}, start, end, 30, metric_name="fan1_rpm")
         self.assertEqual("observed", fan["state"])
-        self.assertEqual(3, fan["coverage"]["expected_samples_per_series"])
-        self.assertEqual(2, fan["series"][0]["samples"])
-        self.assertEqual(0.6667, fan["series"][0]["coverage_fraction"])
+        self.assertEqual(3, fan["coverage"]["expected_query_evaluation_points_per_series"])
+        self.assertIn("does not prove raw scrape continuity", fan["coverage"]["basis"])
+        self.assertEqual(2, fan["series"][0]["query_evaluation_points"])
+        self.assertEqual(0.6667, fan["series"][0]["evaluation_point_fraction"])
         self.assertEqual(0.5, fan["series"][0]["zero_fraction"])
         throttle = MODULE.summarize_series({"status": "success", "data": {"resultType": "matrix", "result": [{"metric": {"nodename": "k8s-2"}, "values": [[179, "4"], [209, "9"]]}]}}, start, end, 30, metric_name="package_throttles")
         self.assertEqual(5.0, throttle["series"][0]["counter_delta"])
@@ -55,6 +56,7 @@ class CoolingWalEvidenceTests(unittest.TestCase):
 
         report = MODULE.collect(start, end, 30, prefix=("kubectl",), runner=runner)
         self.assertEqual(1.0, report["metrics"]["fan1_rpm"]["series"][0]["zero_fraction"])
+        self.assertIn("does not prove raw scrape continuity", report["interpretation"]["coverage_basis"])
         self.assertEqual("context/plans/0026-investigate-loki-wal-replay.md", report["loki_wal_followup"]["plan"])
         self.assertEqual("unknown", report["loki_wal_followup"]["historical_loss_quantity"])
 
