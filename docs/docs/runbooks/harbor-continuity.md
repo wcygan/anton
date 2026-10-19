@@ -61,7 +61,7 @@ Start by confirming the context and cluster state from the canonical checkout:
 cd /Users/wcygan/Development/anton
 mise exec -- kubectl config current-context
 mise exec -- flux get sources git -n flux-system
-mise exec -- flux get kustomization harbor -n flux-system
+mise exec -- flux get kustomization harbor -n registries
 mise exec -- flux get helmrelease harbor -n registries
 mise exec -- kubectl -n registries get deployment harbor-nginx -o wide
 mise exec -- kubectl -n registries get pods -l app=harbor,component=nginx -o wide
