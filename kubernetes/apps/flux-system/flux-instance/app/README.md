@@ -61,15 +61,12 @@ There are two important remaining powers:
 
 - The controller can read **all** GitRepositories and Kustomizations in
   `flux-system`, because the existing cache lists and watches those types.
-- Kubernetes RBAC allows a patch to the **whole** permitted object; it cannot
-  restrict a patch to the reconciliation annotation. A compromised controller
-  could still change the specifications of the two allowed `flux-system`
-  targets, potentially directing the privileged Flux controllers to apply
-  attacker-chosen configuration. This proposal removes broad direct access but
-  does **not** fully contain a compromised webhook process. Enforcing
-  annotation-only changes would require a separate admission rule or controller
-  change, with its own tests. The prepared guard and staged test plan are in
-  [ADMISSION.md](ADMISSION.md); they are not yet deployed.
+- The controller can still request repeated reconciliation of its two targets.
+  RBAC permits whole-object patches, but the deployed admission guard rejects
+  changes beyond the reconciliation annotation and Kubernetes bookkeeping.
+  Configuration, status, other annotations, labels, finalizers, and owners are
+  protected. See [ADMISSION.md](ADMISSION.md) for the exact boundary, live tests,
+  and rollback procedure.
 
 Secret watchers are disabled so the controller does not need collection access
 to Secrets. The controller already reads the token directly when handling a
