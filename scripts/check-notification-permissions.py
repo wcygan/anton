@@ -1,4 +1,4 @@
-"""Check the proposed webhook identity without contacting Kubernetes."""
+"""Check webhook policy/rendering; --live queries API-server authorization."""
 
 import argparse
 import concurrent.futures

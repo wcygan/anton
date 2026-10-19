@@ -18,7 +18,7 @@ its bindings, and the other Flux controllers stay unchanged.
 | `kustomization.yaml` | Include those three objects in the existing Flux app. |
 | `helmrelease.yaml` | Patch only the notification-controller Deployment to use the new identity, watch its own namespace, reject cross-namespace references, disable Secret caching, and disable Secret change watchers. |
 | `receiver.yaml` | Set a one-minute reconciliation interval for checking the existing webhook token. Keep type, accepted events, token reference, and both targets unchanged. |
-| `scripts/check-notification-permissions.py` | Check the allow/deny matrix and optionally compare the complete before/after controller renders. No Kubernetes calls. |
+| `scripts/check-notification-permissions.py` | Check the allow/deny matrix and optionally compare the complete before/after controller renders. Kubernetes authorization queries only when explicitly run with `--live`. |
 | `scripts/tests/test_notification_permissions.py` | Test the boundary and reject accidental permission broadening. |
 
 JSON Patch tests guard the existing service account and argument positions. If a
