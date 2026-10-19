@@ -1,7 +1,7 @@
 ---
-status: In-progress
+status: Done
 opened: 2026-10-19
-closed: null
+closed: 2026-10-19
 affects: observability
 intent: concrete-need
 related-adrs: ['0005', '0032', '0042']
@@ -107,15 +107,17 @@ spec:
 ### Approval unit C: repair, rollback and cleanup
 
 - [x] Select the smallest repair from the reproduced error. Keep WAL enabled and `flush_on_shutdown: true`; do not truncate/delete the WAL or run filesystem repair as a diagnostic step. Require evidence of a constrained corruption and preserved originals before proposing any destructive repair. Test a candidate version/fix offline before production rollout; upstream PR 25162 is currently open/unmerged and is a separate replay-loss risk.
-- [ ] Present exact files/commands, expected transition, timeout and rollback for any production change. The original volume remains authoritative; there is no restore-in-place or diagnostic-clone cutover in this plan. A diagnostic failure is handled by stopping the diagnostic workload, not by changing production data.
+- [x] Present exact files/commands, expected transition, timeout and rollback for any production change. The original volume remains authoritative; there is no restore-in-place or diagnostic-clone cutover in this plan. A diagnostic failure is handled by stopping the diagnostic workload, not by changing production data.
 - [x] After evidence is retained and the operator approves cleanup, remove only Job `loki-wal-reader-20261019-a`, NetworkPolicy `loki-wal-isolate-20261019-a` and clone PVC `loki-wal-replay-20261019-a`; keep the retained snapshot/content and encrypted evidence through review. Obtain a separate exact-target decision for final snapshot/backend-artifact deletion. `Retain` can leave backend artifacts intentionally; inventory them rather than using wildcard cleanup.
-- [ ] Close this plan with the supported cause, proven data impact, actual repair validation and residual uncertainty. Keep the existing WAL recovery alert truthful; never restart merely to clear its lifetime counter.
+- [x] Close this plan with the supported cause, proven data impact, actual repair validation and residual uncertainty. Keep the existing WAL recovery alert truthful; never restart merely to clear its lifetime counter.
 
 ## Log
 
 - 2026-10-19: Prepared at the operator's request after one generic segment-recovery error during an overlapping restart. The process recovered its checkpoint, kernel checks found no storage-error signatures, and the durable collector replayed shutdown-interrupted requests. No snapshot, clone, replay workload or Loki restart was performed for this plan.
 
 - 2026-10-19: Executed authorized capture and isolated replay; reproduced missing references, verified all captured records in Loki and a candidate checkpoint fix. Production repair remains a review/approval handoff; the diagnostic clone is retained pending storage-deletion approval.
+
+- 2026-10-19: Done after the approved pinned-image rollout, clean old-process exit, 1,800/1,800 timestamp/body comparisons through stored chunks and a completed production checkpoint; original WAL, snapshots and encrypted evidence retained.
 
 ## 2026-10-19 snapshot and offline replay result
 
@@ -437,6 +439,103 @@ A separate preflight alert affects a private workload: one of two desired
 replicas is ready. The deployment reports Kyverno rejecting replacement creation
 because its image-verification auth field cannot be decoded as base64. It is
 outside this Loki rollout and was not changed.
+
+## Verified production cutover, 2026-10-19
+
+The approved S3 gateway rolling restart restored the blocked Harbor read path.
+Both replacement gateways became Ready and stopped logging reads to the removed
+volume-pod address. The scoped Harbor-bucket smoke Job wrote/read exactly
+638,976 bytes (SHA256 `94f43e498bdccf42fabcaab4880053e6b00486d70ff3f3354f7649a981fce05a`),
+deleted its unique temporary object, and verified HEAD returned 404 afterward.
+The source of the historical stale-address failure remains a separate SeaweedFS
+limitation; a gateway restart clears this occurrence but does not prevent future
+cache stalls after another volume address change.
+
+The candidate was published to `192.168.1.106/library/loki-wal:3.7.8-anton.wal.1`.
+Authenticated and anonymous reads verified manifest digest
+`sha256:c8aebc49d956fe2457c10d5acdce3810ea87cbeea3e9fd8d58cb0fd7d6c53347`
+and linux/amd64. Temporary robots 53 and 54 were revoked; server request logs
+confirm HTTP 200 for both exact deletions. Their temporary 1Password items were
+deleted and isolated authentication directories removed. No admin credential
+was used for an image push.
+
+A second fresh pre-upgrade snapshot, `observability/loki-wal-preupgrade-20261019-b`,
+UID `afdcc383-b4de-4d6c-aa38-b39193936b0d`, is Ready and Retain. It was taken
+before the Loki drain after the publication delay. The earlier pre-upgrade and
+forensic snapshots remain Ready. The encrypted forensic archive hash is
+unchanged, and its key remains retained with mode 0600.
+
+The final source sequence is:
+
+- `58533d7c`: checkpoint/counter fix, fixtures and reproducible build/restart tools.
+- `87d031b8`: temporary Helm post-renderer scales only Loki to zero, preserving PVC.
+- `241a1cdd`: restore one replica with the immutable Harbor digest, explicit
+  `/var/loki/wal-anton-20261019-a`, WAL enabled, shutdown flushing and 120-second
+  termination grace. The temporary post-renderer is removed.
+
+Before maintenance, 85/85 frozen numbered records were queried from stored
+chunks with zero matching memory chunks. `/ingester/shutdown?flush=true&terminate=false`
+returned HTTP 204 at 21:26:33 UTC. The original Loki container then exited 0 at
+21:27:02 UTC; no forced termination or WAL truncation was used. Helm release v16,
+generation 11, became Ready at 21:28:40 UTC. The replacement pod's imageID and
+build-info version `3.7.8-anton.wal.1`, revision `09e6ce2f-92e9f628ece3`, Go 1.26.6
+and amd64 match the tested artifact. Both containers have zero restarts.
+The original PVC UID and Longhorn handle are unchanged. Talos read-only listings
+on the replacement node verify both the original `wal` directory and the new
+WAL directory remain present.
+
+The production collector-to-Loki ledger verified **1,800/1,800** source-emitted
+numbered records across the planned backend outage, with no missing, unexpected
+or duplicate query results. After the new instance flushed, all 1,800 were read
+from four stored chunks with zero matching memory chunks. All three production
+canaries caught up. Collectors retained their original pod UIDs and zero restarts;
+each logged 18 retryable exports during downtime and none logged dropped-data or
+checkpoint/storage failure messages. This is bounded evidence for the numbered
+fixture and canaries, not a proof about every arbitrary historical log.
+
+The first scheduled production checkpoint started at 21:32:56 UTC and completed
+its atomic rename at 21:37:26 UTC, taking 4m30.031781376s with the checkpoint
+creation-failure counter at zero. A fresh query after completion again matched
+all 1,800 exact source timestamp/body-hash pairs, served from four stored chunks
+with no matching memory chunks. This observes one normal checkpoint cycle; the
+crash/recreation/downgrade cases remain the isolated actual-image rehearsals.
+
+Final acceptance at 21:37:38 UTC found all seven Loki/collector/canary pods Ready
+with zero restarts, 18/18 Longhorn volumes healthy, zero SeaweedFS read-only
+volumes, maximum oldest unconfirmed canary age 4.1 seconds, and maximum collector
+queue 6,008 bytes out of 64 MiB per collector. Prometheus and Alertmanager had no
+active storage or log-loss alert; the original WAL recovery alert resolved.
+Only the known physical-fan alert and Watchdog remained active in Alertmanager.
+All 16 relevant Prometheus rules were healthy. No new storage or delivery alert
+fired in the observed rollout window. Initial singleton memberlist/query errors
+during cold start resolved before readiness, with no later Loki runtime errors
+in the verification window.
+
+The final source passed all 449 contract tests and the GitHub public-privacy
+workflow. An incident-note privacy failure was corrected by the concurrent
+redaction commit `f06e8855`; the newer main commits were integrated before the
+rollout. The current public source passes the privacy gate. The earlier Git
+history retains the corrected private identifiers; no credentials were present.
+
+Temporary S3 and ledger Jobs and their owned Pods are confirmed absent. Their
+synthetic source/query evidence, startup/clean-stop evidence, OCI provenance,
+S3 cache comparison and cleanup receipts remain under ignored
+`.private/loki-wal-replay/rollout/`. No temporary listener or test alert was
+created. The snapshot backend artifacts and original evidence remain retained.
+
+Rollback remains the rehearsed drain, complete flush and clean shutdown, then
+the exact upstream image with another fresh WAL directory on the same PVC.
+Do not perform a plain image revert against the new counter history, switch WAL
+directories after an unclean stop without recovery, or delete old WAL directories.
+The custom patch remains a maintained pinned image until an upstream release
+containing the reviewed fixes is separately qualified.
+
+Principles: **Fix Root Causes** addressed the checkpoint and replay-counter
+interaction rather than suppressing its warning; **Test Behavior, Not
+Implementation** required exact numbered contents across crashes, downgrade and
+production cutover; **Build the Lever** retained reproducible build and restart
+harnesses; **Prove It Works** gated cutover on the actual image digest, durable
+stored-chunk queries, clean exit, applied generations and live alert health.
 
 ## References
 
