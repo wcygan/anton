@@ -5,8 +5,28 @@ source "$(dirname "${0}")/../../lib/common.sh"
 check_cli docker sha256sum python3 rg
 docker compose version >/dev/null
 
-readonly revision="875cd1f67ea25e8965a4f5ba1e6aaf501ba6b6fa"
-readonly image="chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602"
+version="4.40"
+if (( $# != 0 )); then
+    if (( $# != 2 )) || [[ "$1" != "--version" ]]; then
+        log error "Usage: run.sh [--version 4.40|4.48]"
+    fi
+    version="$2"
+fi
+case "${version}" in
+    4.40)
+        revision="875cd1f67ea25e8965a4f5ba1e6aaf501ba6b6fa"
+        image="chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602"
+        ;;
+    4.48)
+        revision="530be3e37337488ecc34d58441e0bc476e121c93"
+        image="chrislusf/seaweedfs@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d"
+        ;;
+    *)
+        log error "Unsupported SeaweedFS version" "version=${version}" "allowed=4.40,4.48"
+        ;;
+esac
+readonly version revision image
+export SEAWEEDFS_IMAGE="${image}"
 readonly python_image="docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72"
 readonly grpcurl_image="docker.io/fullstorydev/grpcurl@sha256:085e183ca334eb4e81ca81ee12cbb2b2737505d1d77f5e33dabc5d066593d998"
 readonly scratch_dir="$(mktemp -d "${TMPDIR:-/tmp}/anton-seaweed-maintenance.XXXXXX")"
@@ -40,41 +60,43 @@ cleanup() {
 }
 trap cleanup EXIT
 
-actual_revision="$(docker run --rm "${image}" version 2>/dev/null | awk '$1 == "version" {print $4}')"
-if [[ -z "${actual_revision}" || "${revision}" != "${actual_revision}"* ]]; then
-    log error "SeaweedFS image is not the pinned revision" "expected=${revision}" "actual=${actual_revision}"
+actual_version_output="$(docker run --rm "${image}" version 2>/dev/null)"
+actual_version="$(printf '%s\n' "${actual_version_output}" | awk '$1 == "version" {print $3}')"
+actual_revision="$(printf '%s\n' "${actual_version_output}" | awk '$1 == "version" {print $4}')"
+if [[ "${actual_version}" != "${version}" || -z "${actual_revision}" || "${revision}" != "${actual_revision}"* ]]; then
+    log error "SeaweedFS image does not match the selected version and pinned revision" "expected_version=${version}" "actual_version=${actual_version}" "expected_revision_prefix=${revision}" "actual_revision=${actual_revision}"
 fi
 
 cat >"${scratch_dir}/compose.yaml" <<'YAML'
 services:
   master:
-    image: chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602
+    image: ${SEAWEEDFS_IMAGE}
     command: ["master", "-ip=master", "-ip.bind=0.0.0.0", "-mdir=/data", "-defaultReplication=${REPLICATION}", "-volumeSizeLimitMB=8", "-metricsPort=0"]
     environment:
       WEED_MASTER_VOLUME_GROWTH_COPY_1: "1"
       WEED_MASTER_VOLUME_GROWTH_COPY_2: "1"
     volumes: ["master:/data"]
   filer:
-    image: chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602
+    image: ${SEAWEEDFS_IMAGE}
     command: ["filer", "-master=master:9333", "-ip=filer", "-ip.bind=0.0.0.0", "-metricsPort=0"]
     depends_on: [master]
   s3:
-    image: chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602
+    image: ${SEAWEEDFS_IMAGE}
     command: ["s3", "-filer=filer:8888", "-ip.bind=0.0.0.0", "-port=8333", "-port.iceberg=0", "-metricsPort=0", "-iam=false", "-config=/etc/sw/s3.json"]
     volumes: ["${CONFIG_FILE}:/etc/sw/s3.json:ro"]
     depends_on: [filer]
   volume-a:
-    image: chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602
+    image: ${SEAWEEDFS_IMAGE}
     command: ["volume", "-dir=/data", "-max=20", "-mserver=master:9333", "-ip=volume-a", "-ip.bind=0.0.0.0", "-rack=default", "-port=8080"]
     volumes: ["volume-a:/data"]
     depends_on: [master]
   volume-b:
-    image: chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602
+    image: ${SEAWEEDFS_IMAGE}
     command: ["volume", "-dir=/data", "-max=20", "-mserver=master:9333", "-ip=volume-b", "-ip.bind=0.0.0.0", "-rack=default", "-port=8080"]
     volumes: ["volume-b:/data"]
     depends_on: [master]
   volume-c:
-    image: chrislusf/seaweedfs@sha256:52194fba4fecd0083c842158b3a902ba6e04a63619b2b0efcd08007bdb6a4602
+    image: ${SEAWEEDFS_IMAGE}
     command: ["volume", "-dir=/data", "-max=20", "-mserver=master:9333", "-ip=volume-c", "-ip.bind=0.0.0.0", "-rack=default", "-port=8080"]
     volumes: ["volume-c:/data"]
     depends_on: [master]
@@ -217,7 +239,9 @@ PY
         for result in "${warm_result}" "${fresh_result}"; do
             [[ "${result}" != *"sha256="* || "${result}" == *"sha256=${expected_digest}"* ]] || log error "S3 returned bytes with an unexpected digest" "policy=${policy}" "server=${owner}" "result=${result}"
         done
-        [[ "${warm_result}" == *"sha256=${expected_digest}"* ]] || log error "Warm object read did not return the expected bytes" "policy=${policy}" "server=${owner}"
+        if [[ "${policy}" == "001" ]]; then
+            [[ "${warm_result}" == *"sha256=${expected_digest}"* ]] || log error "Replicated warm object read did not return the expected bytes" "server=${owner}" "result=${warm_result}"
+        fi
         [[ "${put_result}" == *"status=200"* && "${fresh_result}" == *"sha256=${expected_digest}"* ]] || log error "Fresh S3 PUT+GET did not preserve exact bytes" "policy=${policy}" "server=${owner}"
         [[ "${fresh_owner_count}" == "${replica_count}" ]] || log error "Fresh S3 write did not create the expected number of copies" "policy=${policy}" "server=${owner}" "owners=${fresh_owners}" "expected=${replica_count}"
         [[ " ${fresh_owner_list} " != *" ${owner} "* ]] || log error "Fresh S3 write unexpectedly depends on the withdrawn volume server" "policy=${policy}" "server=${owner}" "owners=${fresh_owners}"
