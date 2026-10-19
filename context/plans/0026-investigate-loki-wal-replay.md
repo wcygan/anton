@@ -108,7 +108,7 @@ spec:
 
 - [x] Select the smallest repair from the reproduced error. Keep WAL enabled and `flush_on_shutdown: true`; do not truncate/delete the WAL or run filesystem repair as a diagnostic step. Require evidence of a constrained corruption and preserved originals before proposing any destructive repair. Test a candidate version/fix offline before production rollout; upstream PR 25162 is currently open/unmerged and is a separate replay-loss risk.
 - [ ] Present exact files/commands, expected transition, timeout and rollback for any production change. The original volume remains authoritative; there is no restore-in-place or diagnostic-clone cutover in this plan. A diagnostic failure is handled by stopping the diagnostic workload, not by changing production data.
-- [ ] After evidence is retained and the operator approves cleanup, remove only Job `loki-wal-reader-20261019-a`, NetworkPolicy `loki-wal-isolate-20261019-a` and clone PVC `loki-wal-replay-20261019-a`; keep the retained snapshot/content and encrypted evidence through review. Obtain a separate exact-target decision for final snapshot/backend-artifact deletion. `Retain` can leave backend artifacts intentionally; inventory them rather than using wildcard cleanup.
+- [x] After evidence is retained and the operator approves cleanup, remove only Job `loki-wal-reader-20261019-a`, NetworkPolicy `loki-wal-isolate-20261019-a` and clone PVC `loki-wal-replay-20261019-a`; keep the retained snapshot/content and encrypted evidence through review. Obtain a separate exact-target decision for final snapshot/backend-artifact deletion. `Retain` can leave backend artifacts intentionally; inventory them rather than using wildcard cleanup.
 - [ ] Close this plan with the supported cause, proven data impact, actual repair validation and residual uncertainty. Keep the existing WAL recovery alert truthful; never restart merely to clear its lifetime counter.
 
 ## Log
@@ -213,8 +213,8 @@ original PVC and all snapshots. A first boot may still report the existing
 incomplete checkpoint: the prevention patch cannot invent missing historical
 metadata. Do not use another restart just to clear the latched alert.
 
-Remaining work is production-candidate review/approval and explicit deletion
-approval for the detached diagnostic clone. Keep the snapshot/content and
+At this snapshot-investigation checkpoint, remaining work was candidate review
+and clone cleanup. See the subsequent review/build execution below. Keep the snapshot/content and
 private encrypted evidence until that review is complete.
 
 Final verification at 19:51 UTC: all seven production Loki/collector/canary pods
@@ -234,6 +234,133 @@ Principles applied: **Fix Root Causes** selected the returned missing-reference
 error instead of a corruption repair; **Build the Lever** produced the offline
 replay runner and fixtures; **Prove It Works** required baseline hashes, two
 replays, exact record comparisons and failing-before/passing-after regression.
+
+- 2026-10-19: Operator authorized candidate review/build/restart tests and clone deletion. Review rejected the checkpoint-only image after 128/256 control records were lost; combined checkpoint/counter image passed 640/640 records through six restarts, 1,118/1,118 collector replay records and a real missing-reference error control. Clone deleted; retained snapshot/evidence and original production resources preserved.
+
+## Subsequent review and pinned image, 2026-10-19
+
+The operator authorized review, a pinned image build, checkpoint/flush overlap
+and repeated-restart loss checks, plus deletion of the detached clone. This does
+not authorize production rollout or publication to a registry.
+
+**Review supersedes the checkpoint-only recommendation above.** Independent
+review found that serializing an empty stream with its old `EntryCt` interacts
+with same-label stream recreation. The old counter can discard newly
+acknowledged entries whose counters restarted from zero. The checkpoint-only
+image lost **128/256 numbered logs** in the actual amd64 overlap/crash negative
+control. The strengthened Go regression also failed on the missing recreated
+entry. That candidate is rejected.
+
+The reviewed combined patch is `scripts/fixtures/loki-wal/checkpoint-and-counter.patch`:
+reference retention, a bounded per-tenant removed-stream counter floor adapted
+from upstream PR 25162 commit `9cf0657212438f968facc96a34202f992b23ac49`, preservation
+of persisted counter gaps during replay, and actual returned recovery errors in
+startup logs. The upstream proposal remains unmerged at review time. Independent
+review found no further code blocker. The test now covers an iterator holding
+an old stream before flush/removal, two entries after recreation, a write after
+restart, and another removal/recreation followed by replay. These changes prevent
+new failures; they cannot heal references or counters already missing/reused in
+historical WAL.
+
+The local linux/amd64 OCI candidate is version `3.7.8-anton.wal.1`:
+
+- Manifest: `sha256:c8aebc49d956fe2457c10d5acdce3810ea87cbeea3e9fd8d58cb0fd7d6c53347`.
+- Loaded image config: `sha256:e08b7f504501aada07bd6d4b79c4468f6480393740c483d1c3785cafaf1f2370`.
+- Binary SHA256: `a1e3d8e7213a775016b48852d4d659c94e6e81665bcd8671f624fff16cbc5f39`.
+- Patch SHA256: `92e9f628ece3a02306579ebd0e8b3b22b54d4b384bfbd5c3daa7057b520f99f4`.
+- Source: v3.7.8 revision `09e6ce2ff1bdc19763a10265b870c86f51c98655`.
+- Pinned Go 1.26.6 toolchain and original pinned amd64 Loki runtime base;
+  generated binary version output verifies revision, patch hash, Go version and platform.
+- Local archive: `.private/loki-wal-replay/image/candidate/loki-wal-candidate.oci.tar`;
+  provenance: sibling `image.json`. It is not pushed or production-deployed.
+
+`scripts/build-loki-wal-image.py` verifies the entire tracked source diff, builds
+without network access, and exports OCI plus a loaded image. Exported config
+and loaded config digests must match. Temporary packaging builder is removed.
+The daemon's default driver could not export OCI; the reproducible command uses
+a temporary docker-container builder instead.
+
+Actual-image verification with `scripts/verify-loki-checkpoint-restarts.py` ran
+on the amd64 artifact under local emulation. Two overlap cycles exercised six
+restarts (SIGKILL, graceful restart, then another completed checkpoint/SIGKILL
+per cycle). **640/640 acknowledged numbered logs** remained queryable with no
+extra or duplicate results. Runtime overlap required checkpoint start/end and
+all old chunks removed before completion. The Go fixture establishes the precise
+iterator-capture ordering; the runtime integration alone does not. All recoveries
+reported checkpoint/segment `errors=false`. Focused upstream checkpoint,
+recovery, recreation and WAL tests passed with `-race` on native arm64 Go 1.26.6.
+
+The existing collector durability fixture now accepts an immutable `--loki-image`.
+With this candidate, an HTTP503 backend outage, two collector SIGKILLs, a graceful
+collector restart and a Loki restart recovered **1,118/1,118** records. Shutdown
+messages reported 588 items dropped, but all numbered records replayed from the
+durable queue. This remains the verified shutdown interruption behavior, not an
+observed loss count.
+
+The synthetic missing-reference image control also passed: the real runtime
+reported failure counter one and logged `stream (999) not set during WAL replay
+for user (fake)`, while 64 newly acknowledged logs remained queryable. Required
+WAL metrics and checkpoint/segment startup evidence were asserted; missing
+metrics cannot silently skip recovery coverage. The error vector is normally
+absent until a failure, so clean recovery is also required explicitly in logs.
+
+Final artifact verification checked all 21 OCI blobs. Archive SHA256 is
+`e608c9aea839d8b3c18a14dcef23176accd5909297de5651aacafa84a38b0764`.
+Contract validation passed 449 tests. All test containers, internal networks and
+the temporary packaging builder were removed. Final read-only cluster evidence
+shows original Loki pod UID unchanged, all seven Loki/collector/canary pods Ready,
+18/18 Longhorn volumes healthy, no SeaweedFS read-only volumes, no new storage or
+log-delivery alert, and the existing historical WAL counter still latched.
+
+Cleanup: approved PVC `observability/loki-wal-replay-20261019-a`, its PV and
+Longhorn volume `pvc-3d4e071c-0234-4a05-8fab-a0d377c8b16b` are absent. The original
+Loki volume and pod were preserved. Snapshot/content and encrypted original
+archive remain retained. No production configuration or image was changed.
+
+Production handoff still needs a separately authorized registry publication and
+rollout. Before upgrading, retain a fresh snapshot and drain/verify old accepted
+records in object storage, because old aliased counters are not repaired by this
+patch. **A plain image revert is not a verified downgrade:** older replay code
+does not preserve the newer counter gaps. Rehearse the exact flush/checkpoint and
+downgrade procedure before approving rollback, or select a forward fix. Do not
+truncate/delete the original WAL, restore the diagnostic clone in place, or
+restart production simply to clear the historical alert counter.
+
+Principles: **Fix Root Causes** rejected the narrower patch after exposing its
+counter interaction; **Test Behavior, Not Implementation** required exact
+numbered log contents across crashes and stream recreation; **Prove It Works**
+required the actual pinned amd64 image, failing control, race tests and retained
+OCI provenance.
+
+## Downgrade rehearsal and rollout authorization, 2026-10-19
+
+The operator authorized downgrade rehearsal, committing/pushing the fix,
+publishing the pinned image to Harbor, fresh snapshot capture and safe Flux
+rollout with delivery/storage/alert verification. The original volume and WAL
+remain preserved.
+
+The downgrade rehearsal passed **448/448** numbered records: three candidate
+restarts, a drained switch to the exact upstream amd64 3.7.8 image, a crash after
+64 new writes, and a graceful restart after another 64 writes. The old process
+uses `/data/wal-downgrade` on the same filesystem fixture. All original WAL file
+hashes remain unchanged. Before cutover, 320/320 records were served from stored
+chunks with no matching memory chunks, and the candidate exited cleanly.
+
+The safe rollback is therefore **drain, clean shutdown, old image with a new WAL
+directory**. It is not a plain image revert against newer counter history. In
+production, preserve `/var/loki/wal` and each later WAL directory, use a new
+explicit WAL directory for each image-compatibility cutover, and retain snapshots.
+Do not switch WAL directories after a forced/unclean shutdown without recovering
+and verifying the unflushed records first. Check numbered logs and stored-chunk
+coverage, require clean shutdown and no S3/flush failures, then verify new writes
+through another restart in the rehearsal. No WAL truncation/deletion is involved.
+
+Harbor publication uses `192.168.1.106/library/loki-wal` and must preserve the
+verified OCI manifest digest. The registry guide requires a scoped robot token;
+1Password CLI metadata access timed out and available cached credentials were
+admin accounts. An authentication-path question is pending with the operator;
+publication and production rollout must wait for that answer. Repository
+validation and the commit can proceed independently.
 
 ## References
 

@@ -11,6 +11,7 @@ import copy
 import datetime
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -117,7 +118,7 @@ def seed_manifest(values: dict) -> dict:
     ]}
 
 
-def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="disconnect") -> dict:
+def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="disconnect", loki_image=LOKI) -> dict:
     nonce = uuid.uuid4().hex
     network, loki_name = f"anton-logs-{nonce}", f"loki-{nonce}"
     image = values["image"]["repository"] + ":" + values["image"]["tag"]
@@ -193,9 +194,10 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
 
         try:
             run("docker", "network", "create", network)
+            platform = ["--platform", "linux/" + run("docker", "image", "inspect", loki_image, "--format", "{{.Architecture}}") ] if loki_image != LOKI else []
             lid = run("docker", "run", "-d", "--name", loki_name, "--network", network,
                       "-v", f"{root}:/fixture:ro", "-v", f"{root / 'loki-data'}:/data",
-                      "-p", "127.0.0.1::3100", LOKI, "-config.file=/fixture/loki.json")
+                      "-p", "127.0.0.1::3100", *platform, loki_image, "-config.file=/fixture/loki.json")
             containers.append(lid)
             port = run("docker", "port", lid, "3100/tcp").rsplit(":", 1)[1]
             loki_url = f"http://127.0.0.1:{port}"
@@ -289,7 +291,7 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
             result = {"case": label, "written_records": len(expected), "queryable_records": len(expected & actual),
                       "missing_records": len(missing), "missing_record_ids": missing,
                       "collector_sigkills": 2, "collector_graceful_restarts": 1, "loki_graceful_restarts": 1,
-                      "backend_failure": backend_failure, "shutdown_reports": shutdown_reports, "new_file_during_outage": True, "bootstrap_offsets_seeded": not expect_loss, "stale_bootstrap_rehearsed": not expect_loss}
+                      "loki_image": loki_image, "backend_failure": backend_failure, "shutdown_reports": shutdown_reports, "new_file_during_outage": True, "bootstrap_offsets_seeded": not expect_loss, "stale_bootstrap_rehearsed": not expect_loss}
             print(json.dumps({k: v for k, v in result.items() if k != "missing_record_ids"}), flush=True)
             return result
         except Exception:
@@ -308,10 +310,13 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-ref")
+    parser.add_argument("--loki-image", help="Immutable local candidate image ID or published digest")
     parser.add_argument("--backend-failure", choices=["disconnect", "http503"], default="disconnect")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--render-seed", type=Path, help="Only render the temporary first-rollout seed manifest; never apply it")
     args = parser.parse_args()
+    if args.loki_image and not re.fullmatch(r"(?:sha256:[0-9a-f]{64}|[^\s]+@sha256:[0-9a-f]{64})", args.loki_image):
+        parser.error("--loki-image requires an immutable image ID or digest")
     if args.render_seed:
         args.render_seed.write_text(json.dumps(seed_manifest(document(REPO / MANIFEST)["spec"]["values"]), indent=2) + "\n")
         return
@@ -321,8 +326,8 @@ def main():
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "baseline.yaml"
             path.write_text(baseline)
-            results.append(exercise(document(path)["spec"]["values"], label="baseline", expect_loss=True, backend_failure=args.backend_failure))
-    results.append(exercise(document(REPO / MANIFEST)["spec"]["values"], label="persistent", expect_loss=False, backend_failure=args.backend_failure))
+            results.append(exercise(document(path)["spec"]["values"], label="baseline", expect_loss=True, backend_failure=args.backend_failure, loki_image=args.loki_image or LOKI))
+    results.append(exercise(document(REPO / MANIFEST)["spec"]["values"], label="persistent", expect_loss=False, backend_failure=args.backend_failure, loki_image=args.loki_image or LOKI))
     if args.output:
         args.output.write_text(json.dumps(results, indent=2) + "\n")
     print("Log durability checks passed; local containers and network removed")
