@@ -235,3 +235,28 @@ spec:
             target:
               kind: Deployment
               name: notification-controller
+          - patch: |-
+              - op: test
+                path: /spec/template/spec/serviceAccountName
+                value: notification-controller
+              - op: replace
+                path: /spec/template/spec/serviceAccountName
+                value: notification-controller-restricted
+              - op: test
+                path: /spec/template/spec/containers/0/args/0
+                value: --watch-all-namespaces=true
+              - op: replace
+                path: /spec/template/spec/containers/0/args/0
+                value: --watch-all-namespaces=false
+              - op: test
+                path: /spec/template/spec/containers/0/args/4
+                value: --feature-gates=ObjectLevelWorkloadIdentity=false
+              - op: replace
+                path: /spec/template/spec/containers/0/args/4
+                value: --feature-gates=ObjectLevelWorkloadIdentity=false,CacheSecretsAndConfigMaps=false,DisableConfigWatchers=true
+              - op: add
+                path: /spec/template/spec/containers/0/args/-
+                value: --no-cross-namespace-refs=true
+            target:
+              kind: Deployment
+              name: notification-controller
