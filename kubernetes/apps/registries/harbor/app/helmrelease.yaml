@@ -76,6 +76,19 @@ spec:
     # registry.<tailnet>.ts.net separately — Harbor tolerates the mismatch.
     externalURL: http://192.168.1.106
 
+    nginx:
+      replicas: 2
+      # Spread the front door across nodes when possible; ScheduleAnyway keeps
+      # Harbor schedulable during maintenance or reduced node capacity.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+      # The chart owns this PDB and fills in Harbor nginx's deployment labels.
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 1
+
     internalTLS:
       enabled: false
 
