@@ -196,6 +196,26 @@ The guard does not authenticate GitHub by itself, grant API rights, stop repeate
 reconciliation requests, or protect other workloads after an unrelated compromise.
 Existing signature validation, narrow RBAC, and network restrictions remain needed.
 
+## Deployment verification, 2026-10-19 UTC
+
+The policy was installed without enforcement first. Schema checking caught
+typed-object map iteration; explicit `dyn` comparisons corrected it before the
+binding was added. The corrected policy reported its current generation with
+zero expression warnings. A typed-compilation regression test now catches the
+original mistake alongside the runtime admission tests.
+
+With the Deny binding active, the native restricted-account probe allowed both
+annotation-only dry runs and rejected all fourteen forbidden dry runs with
+HTTP 403 naming this policy. Neither target's configuration or annotations
+changed during the probe. Operator annotation dry runs succeeded. The exact
+temporary test pod was deleted and its absence verified.
+
+A signed GitHub push redelivery returned HTTP 200 and both targets handled fresh
+reconciliation requests. An invalid signature returned HTTP 400 with a matching
+Flux validation error and no target changes. The network restrictions retained
+their existing UIDs and specifications. Continued workload observation and a
+subsequent Git revision are separate acceptance checks for this rollout.
+
 Boundary Discipline put validation at the API that accepts the write. Build the
 Lever produced rerunnable CEL tests and a dry-run probe. Prove It Works required
 the actual Kubernetes CEL engine, typed compilation, current object shapes,
