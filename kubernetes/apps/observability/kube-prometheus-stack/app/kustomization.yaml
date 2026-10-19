@@ -6,6 +6,7 @@ resources:
   - ./helmrelease.yaml
   - ./externalsecret.yaml
   - ./httproute.yaml
+  - ./podmonitor-envoy-external.yaml
   - ./dashboard-cluster-health.yaml
   - ./prometheusrule-cilium-memory.yaml
   - ./prometheusrule-cni-plumbing.yaml
