@@ -94,9 +94,41 @@ this maintenance window:
 
 ```sh
 NODE='<one-ready-node-name>'
-mise exec -- kubectl cordon "$NODE"
-mise exec -- kubectl drain "$NODE" --ignore-daemonsets --timeout=10m
+CONTEXT="$(mise exec -- kubectl config current-context)"
+case "$CONTEXT" in
+  tailscale-operator.*.ts.net) ;;
+  *) printf 'Expected the active Tailscale operator proxy context\n' >&2; exit 1 ;;
+esac
+CLUSTER_UID="$(mise exec -- kubectl --context "$CONTEXT" get namespace kube-system -o jsonpath='{.metadata.uid}')"
+NODE_UID="$(mise exec -- kubectl --context "$CONTEXT" get node "$NODE" -o jsonpath='{.metadata.uid}')"
+OPERATOR_UID="$(mise exec -- kubectl --context "$CONTEXT" get deployment operator -n tailscale -o jsonpath='{.metadata.uid}')"
+mise exec -- kubectl --context "$CONTEXT" cordon "$NODE"
+mise exec -- task drain:node \
+  NODE="$NODE" CONTEXT="$CONTEXT" CLUSTER_UID="$CLUSTER_UID" \
+  NODE_UID="$NODE_UID" OPERATOR_UID="$OPERATOR_UID" TIMEOUT=600
 ```
+
+`task drain:node` requires the node to be Ready and already cordoned. It checks
+the exact operator Deployment UID and Pod → ReplicaSet → Deployment owner chain.
+It also confirms the Deployment still has `APISERVER_PROXY=true` and the selected
+operator Pod is Ready and not terminating.
+If the singleton operator pod is on the target, it sends one UID-preconditioned
+Eviction request, which honors PodDisruptionBudgets. If the response is lost,
+the helper observes the old pod UID and waits for the same Deployment to have a
+Ready replacement off the target and for fresh API reads to pass before it
+starts the ordinary drain. It never repeats an ambiguous eviction request.
+If the proxy already runs elsewhere, it skips that eviction and proceeds after
+the same identity checks.
+
+The helper has one overall deadline covering proxy relocation and the bulk
+drain. An identity change, explicit PDB refusal, proxy replacement that remains
+on the target, or timeout stops the operation. The node remains cordoned; the
+helper never uncordons it. Inspect the node and workloads before rerunning the
+task. Set `DELETE_EMPTYDIR_DATA=true` only when the maintenance plan explicitly
+allows removing local `emptyDir` contents. The two-replica Tailscale
+`ProxyGroup` API proxy is a separate architecture change with operator RBAC,
+tailnet ACL, and kubeconfig implications; this runbook continues to use the
+existing in-process proxy.
 
 While the node is cordoned/drained, run the first pull of an approved private
 image digest from the clean dedicated client. Replace both placeholders before
