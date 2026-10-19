@@ -379,3 +379,59 @@ commit log samples containing secrets.
 
 Future extensions may add a gateway collector or trace backend, but neither is
 part of this first-cut contract.
+
+## Log-delivery canary
+
+The `loki-canary` DaemonSet emits JSON records containing a unique process run ID,
+node, emission time and consecutive `seq` every ten seconds. Each probe polls Loki
+HTTP for its own stdout records through the real OTel pipeline. Matching tolerates
+duplicates and out-of-order delivery; IDs stay in log bodies and pod identity stays
+in structured metadata. The standard-library implementation is in
+`kubernetes/apps/observability/loki/app/log-canary.py` ([ADR 0042](https://github.com/wcygan/anton/blob/main/context/adrs/0042-bound-numbered-log-confirmation-deadlines.md)).
+
+Three critical alerts route to ntfy:
+
+- `LokiCanaryMissingLogs`: an emitted record remains unconfirmed for 180 seconds.
+- `LokiCanaryDeliveryStalled`: no emission or successful HTTP query for 180 seconds.
+- `LokiCanaryCoverageMissing`: fewer healthy DaemonSet-owned probes than scheduled
+  nodes, or a missing DaemonSet. An unowned test probe cannot mask a node gap.
+
+The oldest-record clock is independent of the query thread, so HTTP errors and
+five-second query timeouts cannot suppress the deadline. The budget is 180 seconds
+plus scrape (30s), evaluation (15s), pending duration (15s) and initial Alertmanager
+grouping (30s): at most 270 seconds with healthy monitoring and notification systems.
+This detects visibility failures, including delayed delivery or query outages;
+it does not prove permanent loss. Preserve collector checkpoints, queues and WAL.
+
+Expected IDs live in a bounded 512-record in-memory ledger. Overflow latches the
+oldest missing deadline. A probe restart loses comparisons; preserve probe pods
+during collector/Loki restart tests. These probes verify their own records, not
+all application logs or long-term retention. Inspect `log_canary_query_failures_total`,
+`log_canary_overflow_total`, `log_canary_pending_records` and per-pod written/confirmed
+counters when investigating. A healthy query can return no matching records and
+still leave the expected record pending.
+
+Local verification requires Docker, yq and kustomize and never accesses Kubernetes:
+
+```sh
+mise exec -- python3 scripts/verify-log-canary-alerts.py
+mise exec -- python3 scripts/verify-log-canary.py --output /tmp/canary-evidence.json
+```
+
+The second command exercises the committed pipeline across a Loki stop and two
+collector SIGKILLs, then withholds one numbered record, measures the deadline and
+checks every remaining emitted ID. It removes its own containers/network afterward.
+
+Render a bounded negative control for an operator-approved live test:
+
+```sh
+mise exec -- python3 scripts/verify-log-canary.py \
+  --render-negative-control /tmp/canary-control.json --name loki-canary-missing-test
+```
+
+The unowned test pod shares the canary metrics Service labels and discards exactly
+its first stdout record while retaining the expected ID. Later records must arrive
+normally. Capture the withheld `seq` and `emitted_at`, Prometheus firing time and
+matching ntfy receipt; verify receipt within 300 seconds. Delete that exact pod,
+wait for alert resolution and the resolved notification, and remove the observer
+Job. Never drop real workload logs to manufacture the test.

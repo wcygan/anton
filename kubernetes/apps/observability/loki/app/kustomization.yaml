@@ -8,8 +8,13 @@ configMapGenerator:
       - ./log-pipeline-alerts.yaml
     options:
       disableNameSuffixHash: true
+  - name: loki-log-canary
+    files:
+      - canary.py=./log-canary.py
 resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
   - ./externalsecret.yaml
   - ./prometheusrule.yaml
+  - ./canary-prometheusrule.yaml
+  - ./canary.yaml
