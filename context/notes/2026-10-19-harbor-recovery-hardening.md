@@ -182,6 +182,15 @@ on `observability/kube-prometheus-stack` at 22:20:32 and
 the partial recovery cannot all be attributed to ordinary retries. The
 remaining conditions still require source/retry reconciliation readback.
 
+[PR 515](https://github.com/wcygan/anton/pull/515) merged the evidence record
+at 22:24:47 UTC as `50b547be`. The normal Git source path stored that exact
+revision at 22:24:50. At 22:25:36, all 86 Kustomizations/HelmReleases were
+Ready, with public Kustomizations applied at `50b547be`; all 72 workloads,
+three schedulable nodes, 18 healthy Longhorn volumes and 36 running replicas
+also passed again. Volume PVC UIDs and stable master addresses were retained.
+This readback closes the remaining reconciliation gate. Root submitted no
+force reconcile; the concurrent requests above remain separately attributed.
+
 At 22:17:15, all four exact test Jobs and their owned Pods plus the test
 Secret were removed. The project-scoped robot was revoked and the exact
 fixture artifact, repository and private project removed at 22:17:45.
