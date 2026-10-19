@@ -89,6 +89,23 @@ passed. Source and runbook review closed the stale-location, size-consistency,
 warm/cold volume, writer fence, bucket CronJob, node-owner, credential-exposure,
 budget, restore-state and filer-before-S3 sequencing findings.
 
+The same pinned fixture now supports 4.48 without changing its cache settings.
+The worker and root independently executed it successfully: the single-copy
+cold GET failed, while all four two-copy cold GETs and fresh PUT/GET checks
+passed. The exact migration retained FID/VID, matched all three file hashes,
+persisted read-only state and restored the `001` write layout. Unlike the 4.40
+observation, the worker's 4.48 warm baseline timed out too; the cause of that
+warm-read difference remains unassessed. The required baseline is cold-read
+unavailability, not the presence of a warm body-cache hit. Every successful
+response must have the expected digest. Root's first 4.48 evidence is retained
+in `.private/seaweed-maintenance/proof-root-4.48.log`.
+
+Final review additionally requires distinct permitted volume-server hosts
+instead of counting duplicate location entries as copies, and rejects a corrupt
+HTTP 200 cold response instead of classifying it as an expected outage. Mocked
+duplicate/foreign-owner, multi-chunk and corrupt-response cases reject as
+expected. Final guarded 4.40/4.48 runs remain a publication gate.
+
 An earlier sequential local experiment failed its second cold GET after a
 server returned and a one-location lookup was reused. That failed run did not
 capture every process's map. Direct filer `LookupVolume` observations and fresh
@@ -104,15 +121,16 @@ production inventory remains the same 20 single-copy `000` volumes. All three
 masters were back on 4.40 at that observation, after main's staged master pin
 `e00c4ee7` and revert `3f182a85`; that owner is still working on its readiness
 gate. Preserve its evidence and resources, and serialize all live storage
-changes. The availability proposal is being qualified against pinned 4.48 as
-well, and cannot begin during that mixed-version rollout or without a fresh
+changes. Main subsequently added Raft-gated 4.48 masters and began staged volume
+server upgrades. This proposal preserves those source changes. Its local
+qualification cannot authorize work during that rollout or replace the fresh
 owner/version check. The [qualification record](2026-10-19-seaweedfs-4.48-qualification.md)
 belongs to that separate workstream.
 
 The candidate is native placement `001` while retaining one volume server per
-node, existing PVCs and Longhorn replication. Local fresh-`001` tests support
-the intended cold-read behavior. Existing data still needs a safe copy
-procedure, byte verification and gateway lookup-cache refresh testing.
+node, existing PVCs and Longhorn replication. Local fresh and migrated `001`
+tests support the intended cold-read behavior. Production still needs the
+approved copy procedure, byte verification and gateway lookup-cache checks.
 No production availability improvement is claimed before those gates pass
 and the separately approved live exercise succeeds.
 
