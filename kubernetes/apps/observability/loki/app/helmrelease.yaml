@@ -15,18 +15,6 @@ spec:
         name: grafana-community
       interval: 15m
   interval: 1h
-  postRenderers:
-    - kustomize:
-        patches:
-          - target:
-              group: apps
-              version: v1
-              kind: StatefulSet
-              name: loki
-            patch: |
-              - op: replace
-                path: /spec/replicas
-                value: 0
   values:
     deploymentMode: Monolithic
 
@@ -54,6 +42,16 @@ spec:
             name: loki-s3-credentials
 
     loki:
+      image:
+        registry: 192.168.1.106
+        repository: library/loki-wal
+        tag: 3.7.8-anton.wal.1
+        digest: sha256:c8aebc49d956fe2457c10d5acdce3810ea87cbeea3e9fd8d58cb0fd7d6c53347
+      ingester:
+        wal:
+          enabled: true
+          dir: /var/loki/wal-anton-20261019-a
+          flush_on_shutdown: true
       auth_enabled: false
       server:
         http_listen_port: 3100
@@ -151,6 +149,7 @@ spec:
       enabled: true
       kind: StatefulSet
       replicas: 1
+      terminationGracePeriodSeconds: 120
       extraVolumes:
         - name: seaweedfs-alert-rules
           configMap:
