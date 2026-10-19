@@ -88,7 +88,8 @@ Require a stable homogeneous runtime version with the matching immutable local
 proof, and preserve the latest readiness/telemetry controls when rebasing.
 The 4.40 proof does not authorize this migration during a mixed-version 4.48
 rollout. Repeat exact version/digest and ownership checks after that owner
-finishes, before seeking or executing the live approval.
+finishes, before executing an approved live window. Approval may be conditional
+on that owner closing its work; it does not waive this execution gate.
 
 The planned outage budget is 30 minutes from stopping S3 to restoring S3/filer
 service. Stop starting copies at 20 minutes and reserve the remainder for

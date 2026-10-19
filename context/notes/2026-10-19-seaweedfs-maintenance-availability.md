@@ -142,6 +142,38 @@ approved copy procedure, byte verification and gateway lookup-cache checks.
 No production availability improvement is claimed before those gates pass
 and the separately approved live exercise succeeds.
 
+## Prepared runtime unit
+
+[Draft PR 519](https://github.com/wcygan/anton/pull/519) contains only the
+`001`/growth setting, proposed ADR and migration/verification records. The
+integrated semantic YAML comparison confirms that the upstream image pins,
+Raft readiness and telemetry controls remain intact. PR 518 merged at
+23:43:53 UTC as `507af404`. The final combined suite passed 493 tests with
+one skip, and the documentation build passed.
+
+The root-owned ignored `.private/seaweed-maintenance-verification/` bundle
+contains the exact-key client, ledger schema, hardened Job templates and two
+role-specific egress policies. Nineteen offline tests passed independently.
+An isolated 4.48 integration used synthetic credentials to verify pre-seed
+HEAD 404, existing-key rejection, exact GET and fresh PUT/GET, and DELETE
+followed by HEAD 404. Two additional exact HEAD checks also returned 404.
+Source hashes match the root copy, and the local Docker resources were removed.
+The integration ran under local emulation and makes no production timing claim.
+The client-source hash is
+`5ed05442deba7e01cd9ae1bb76002fd99a272ab68a364935fce0c783313e6af9`;
+the renderer-source hash is
+`2b1d996f7f09c2d6dc91b89cdc5ada2a3ca9377ac87419f8adde38d79770a718`.
+The exact harness and raw log remain in the proof worktree's ignored
+`.private/seaweed-maintenance-verification-local/` directory.
+
+At 23:50:14 UTC, GET-only checks found all ten Seaweed Pods Ready on the pinned
+4.48 image. Volume ordinals had moved: 0 was on `k8s-3`, 1 on `k8s-1` and 2 on
+`k8s-2`. Fixture selection now uses actual source/destination Pod-to-node UID
+joins. It records whether the withdrawn owner is original/new; absent-owner
+availability alone does not establish that the new copy served. The separate
+upgrade owner is completing its health observation and cleanup. Our new live
+migration remains unapproved and cannot overlap that work.
+
 The earlier R3 recovery drill used a fresh OCI client after warming the same
 fixture through S3. Its metadata mapped the fixture to the replaced server,
 but a gateway body cache could serve that request. It proves the recorded
