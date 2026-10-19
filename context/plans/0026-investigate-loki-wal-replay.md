@@ -402,6 +402,42 @@ robot authentication, exact-digest publication and anonymous-pull verification,
 then the approved drain, clean stop and fresh WAL epoch cutover. Never switch
 WAL directories after an unclean stop without recovering unflushed records.
 
+## Harbor publication and S3 cache gate, 2026-10-19
+
+1Password CLI access recovered after the operator signed in. Matching Harbor
+items in anton and Personal contained admin credentials; no matching scoped
+robot credential was found. The operator explicitly approved a one-day robot
+scoped to library pull/push, token storage in anton, and revocation/credential
+cleanup after the publication attempt.
+
+Temporary robot 53 (`robot$library+loki-wal-publish-20261019-a`) was created,
+its permissions read back, and its token stored in the temporary 1Password item.
+The exact OCI layout push then encountered repeated Harbor HTTP500 responses:
+`s3aws: unexpected EOF`. The attempt was stopped, robot 53 revoked, its temporary
+credential item deleted, and the isolated client auth directory removed.
+Publication has not succeeded; production Loki remains unchanged.
+
+Both SeaweedFS S3 gateways logged read timeouts to `10.42.2.214:8444` for volumes
+22 and 23, while master lookups returned `10.42.2.162:8444`, the current healthy
+seaweedfs-volume-1 address. This matches the documented stale volume-address
+cache failure. Longhorn health and read-only volume gauges do not prove this S3
+read path is healthy. Current S3 Deployment has two ready replicas. Airflow,
+lakehouse and spark-system namespaces, writer pods and writer leases are absent;
+the SparkApplication CRD is also absent, so do not apply the historical writer
+workflow as though it were still deployed.
+
+The operator has been asked to approve a rolling restart of only
+`storage/deployment/seaweedfs-s3`, temporary S3 write/read/delete verification,
+and publication retry. That storage mutation has not been performed. Retain the
+fresh Loki snapshot and original WAL; do not start Loki maintenance until S3
+health and exact-digest image publication/pull are verified. Private evidence:
+`.private/loki-wal-replay/rollout/s3-cache-failure.json` and `publication.json`.
+
+A separate preflight alert affects bakery-site/bakery-server: one of two desired
+replicas is ready. The deployment reports Kyverno rejecting replacement creation
+because its image-verification auth field cannot be decoded as base64. It is
+outside this Loki rollout and was not changed.
+
 ## References
 
 - Related ADRs: 0005, 0032, 0042.
