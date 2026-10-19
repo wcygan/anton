@@ -20,7 +20,8 @@ network, including after errors.
 Every request goes through the signed S3 API with a 10-second client deadline.
 The runner reads Filer object metadata to recover each test key's exact FID and
 VID, then asks the master for its actual volume-server owners. Each outage
-uses a different never-read key. For `001`, before each owner stop the runner
+uses a different never-read key. The warm and cold controls must each have one
+chunk, share a VID, and have different FIDs. For `001`, before each owner stop the runner
 restarts Filer, waits up to 15 seconds for Filer's gRPC `LookupVolume` response
 for the exact VID to show both owners, restarts S3, and verifies a warm GET's
 bytes. It performs no cache refresh after stopping the owner. After restart,
@@ -68,3 +69,11 @@ HA, simultaneous loss of every process on a drained Kubernetes node, CSI
 reattachment behavior, network convergence, or maintenance duration. The copy
 rehearsal is quiesced; it does not test migration with active writers. The
 measured latencies apply only to this local Docker runtime and 1 MiB payload.
+
+An earlier sequential migration experiment failed its second cold GET when
+processes reused a one-location lookup after a server returned. That run did
+not capture each cache layer's state. The final preparation observes each
+Filer response and refreshes S3 before each independent hold. S3's own map
+contents/completeness remain unassessed; the actual owner-absent cold GET is
+the outcome evidence. This fixture does not establish that every later
+maintenance window can skip those preparation gates.

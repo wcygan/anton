@@ -173,6 +173,19 @@ exercise_outages() {
         outage_index=$((outage_index + 1))
         cold_key="cold-$((first_cold_index + outage_index - 1)).bin"
         cold_owners="$(client "${case_project}" OWNERS "${cold_key}")"
+        local warm_owners
+        warm_owners="$(client "${case_project}" OWNERS warm.bin)"
+        python3 - "${warm_owners}" "${cold_owners}" <<'PY'
+import json, sys
+warm, cold = (json.loads(value) for value in sys.argv[1:])
+if len(warm) != 1 or len(cold) != 1:
+    raise SystemExit("Warm and cold controls must each have exactly one chunk")
+if warm[0]["volume_id"] != cold[0]["volume_id"]:
+    raise SystemExit("Warm and cold controls must exercise the same volume")
+if warm[0]["file_id"] == cold[0]["file_id"]:
+    raise SystemExit("Warm and cold controls must have different file IDs")
+print(f'same_volume_controls=true vid={cold[0]["volume_id"]} warm_fid={warm[0]["file_id"]} cold_fid={cold[0]["file_id"]}')
+PY
         printf 'withdrawal_object=%s chunk_owners=%s\n' "${cold_key}" "${cold_owners}"
         chunk_count="$(printf '%s' "${cold_owners}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
         [[ "${chunk_count}" == "1" ]] || log error "Expected one chunk for the withdrawal object" "object=${cold_key}" "chunks=${chunk_count}"
