@@ -141,12 +141,24 @@ if operation == "OWNERS":
     metadata_url = "http://filer:8888/buckets/maintenance-proof/" + key + "?metadata=true"
     with urllib.request.urlopen(metadata_url, timeout=5) as response:
         metadata = json.load(response)
+    chunks = metadata.get("chunks", [])
+    if len(chunks) != 1:
+        raise SystemExit(f"Expected exactly one chunk for the 1 MiB fixture object, got {len(chunks)}")
     owners = []
-    for chunk in metadata.get("chunks", []):
+    for chunk in chunks:
         volume_id = chunk["file_id"].split(",", 1)[0]
         with urllib.request.urlopen(f"http://master:9333/dir/lookup?volumeId={volume_id}", timeout=5) as response:
             lookup = json.load(response)
-        owners.append({"file_id": chunk["file_id"], "volume_id": volume_id, "locations": lookup.get("locations", [])})
+        locations = lookup.get("locations", [])
+        hosts = []
+        for location in locations:
+            host, separator, port = location.get("url", "").partition(":")
+            if host not in {"volume-a", "volume-b", "volume-c"} or not separator or port != "8080":
+                raise SystemExit(f"Invalid volume owner for volume {volume_id}: {location!r}")
+            hosts.append(host)
+        if not hosts or len(hosts) != len(set(hosts)):
+            raise SystemExit(f"Volume {volume_id} has no owners or duplicate owner hosts: {locations!r}")
+        owners.append({"file_id": chunk["file_id"], "volume_id": volume_id, "locations": locations})
     print(json.dumps(owners, sort_keys=True))
     sys.exit(0)
 path = "/maintenance-proof/" + key
@@ -236,8 +248,10 @@ PY
             fresh_owner_list=""
         fi
         printf 'policy=%s after_withdrawal=%s warm_GET={%s} cold_GET={%s} fresh_PUT={%s} fresh_GET={%s} fresh_chunk_owners=%s\n' "${policy}" "${owner}" "${warm_result}" "${cold_result}" "${put_result}" "${fresh_result}" "${fresh_owners}"
-        for result in "${warm_result}" "${fresh_result}"; do
-            [[ "${result}" != *"sha256="* || "${result}" == *"sha256=${expected_digest}"* ]] || log error "S3 returned bytes with an unexpected digest" "policy=${policy}" "server=${owner}" "result=${result}"
+        for result in "${warm_result}" "${cold_result}" "${fresh_result}"; do
+            if [[ "${result}" == *"status=200"* || "${result}" == *"sha256="* ]]; then
+                [[ "${result}" == *"sha256=${expected_digest}"* ]] || log error "Successful S3 GET did not return the expected bytes" "policy=${policy}" "server=${owner}" "result=${result}"
+            fi
         done
         if [[ "${policy}" == "001" ]]; then
             [[ "${warm_result}" == *"sha256=${expected_digest}"* ]] || log error "Replicated warm object read did not return the expected bytes" "server=${owner}" "result=${warm_result}"
