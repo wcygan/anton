@@ -61,7 +61,8 @@ The measured baseline and migration investigation are recorded in
 ## Prepared two-copy rollout
 
 This procedure is a reviewable proposal. Obtain explicit operator approval for
-the source rollout, one-time S3 outage, exact copying, temporary test Jobs and
+the source rollout, one-time S3 outage, exact copying, temporary test Jobs,
+their client/ledger ConfigMap and two egress policies, and
 node drill before executing it. The existing-data migration retains every
 source file and PVC. It is not an automatic rollback to `000`.
 
@@ -120,17 +121,24 @@ values or copy the Secret. This exposes the existing broad S3 credential to
 the temporary test Pod and requires explicit acceptance. A code allowlist is
 not a server-side prefix permission boundary. Pin the reviewed client image,
 disable API-token automount, use a non-root container with a read-only root
-filesystem/no added capabilities, and apply a temporary egress policy allowing
-only DNS and the Seaweed S3 Pods. The test program must restrict its operations
+filesystem/no added capabilities, and apply a role-specific egress policy allowing
+only DNS and the Seaweed S3 Pods. The credential-free observer has a separate
+policy allowing only DNS and filer RPC. Inspect applicable namespace and
+cluster-wide policies before claiming isolation; allowed egress combines across
+policies. The test program must restrict its operations
 to the exact ledger keys and print only status/digests, never error bodies or
-authentication headers. Remove that exact policy with the test Jobs.
+authentication headers. Keep client code and the non-secret ledger in one
+temporary ConfigMap. Remove both exact policies and that ConfigMap with the Jobs.
 Use at most eight 1 MiB seed objects, and no more than twelve ledger keys total
 including the later write/recovery checks, to select distinct never-read objects whose
 chunk metadata maps to an existing `000` VID served on the exact `k8s-2`
 node UID. Map the serving Pod to that node rather than assuming an ordinal.
 Record each key,
 file ID, VID and digest. Delete only these exact keys during cleanup, not the
-bucket or a recursively selected prefix. No credential rotation is involved.
+bucket or a recursively selected prefix. Require exact-key HEAD 404 before a
+seed PUT and after deletion; a HEAD does not fetch the object body. The run ID
+and keys still require exclusive ownership because this is not an atomic
+conditional create. No credential rotation is involved.
 
 Merge the approved CR default `001` and growth `COPY_2=1` through GitOps.
 Observe exact Flux source/apply revision, Seaweed generation and all three
@@ -245,6 +253,8 @@ grpcurl -plaintext -d '{"volumeIds":["<VID>"]}' \
 Use the actual TLS settings if configured. A temporary pinned observer Job can
 make this call in-cluster; it needs no S3 credentials or Kubernetes API token.
 Record each filer Pod UID and returned map, rather than using a balanced Service.
+Bind the observer to its concrete Pod IP, verify the IP-to-UID join immediately
+before and after the Job, and invalidate output if that identity changed.
 Only after every map passes, restore S3 replicas to 2 and verify fresh Pod UIDs
 and actual S3 reads. These are fresh processes after the approved outage; no
 additional gateway reset is needed. Then restore operator replicas to 1, the
@@ -286,11 +296,14 @@ verify its native allocation is `001` on two Ready surviving nodes. Record
 request timing relative to the actual hold, per-chunk file IDs/locations and
 S3/filer Pod UIDs. A gateway refresh during this test invalidates the intended
 acceptance; do not silently reset one to obtain a passing read.
+Require the GET and fresh-write client to use the reviewed concrete S3 Pod
+IP/UID endpoint, with the IP-to-UID join verified before and after each Job.
+A balanced Service response does not establish which backend served the bytes.
 
 Immediately uncordon on a read/write failure or hold deadline, then verify full
 Seaweed/Harbor/Loki, node/etcd, Longhorn and Flux recovery. Drain exit alone is
-not recovery. Remove only exact temporary Jobs/Pods, the temporary egress
-NetworkPolicy and exact S3 fixture keys; confirm each is absent and restore
+not recovery. Remove only exact temporary Jobs/Pods, the client/ledger ConfigMap,
+both egress NetworkPolicies and exact S3 fixture keys; confirm each is absent and restore
 every controller, suspension state, replica count
 and the approved vacuum state. Keep source data, PVCs, normal credentials and the execution
 ledger. Observe stable readiness and the known retry window before closing.
