@@ -1,0 +1,11 @@
+diff --git a/pkg/ingester/checkpoint.go b/pkg/ingester/checkpoint.go
+index 2df7b08a..b5fd8e41 100644
+--- a/pkg/ingester/checkpoint.go
++++ b/pkg/ingester/checkpoint.go
+@@ -245,6 +244,0 @@ func (s *streamIterator) Next() bool {
+-	if len(stream.chunks) < 1 {
+-		// it's possible the stream has been flushed to storage
+-		// in between starting the checkpointing process and
+-		// checkpointing this stream.
+-		return s.Next()
+-	}
