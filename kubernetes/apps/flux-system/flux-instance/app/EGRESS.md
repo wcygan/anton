@@ -75,5 +75,21 @@ even if notification-controller cannot reconnect. Do not broaden other protectio
 Basis: [Cilium entity policies](https://docs.cilium.io/en/stable/security/policy/layer3/).
 Verification uses the installed Cilium 1.20.2 implementation.
 
+## Live verification, 2026-10-19 UTC
+
+Before enforcement, all thirteen checks passed: four API connections, two DNS
+transports, and seven unrelated destinations. After enforcement, API and DNS
+still passed; all seven unwanted connections timed out. Hubble recorded 42
+outbound `POLICY_DENIED` events across those seven distinct connection attempts.
+The actual controller and probe both had the new rules realized by Cilium.
+
+A controlled replacement of the controller recovered readiness, leadership, and
+monitoring with zero restarts. Signed GitHub delivery succeeded both before and
+after replacement, and both Flux targets handled fresh requests. Invalid
+signatures were rejected. The temporary probe was deleted and absence verified.
+Application health, the original FACEIT matchroom, and LAN checks passed.
+The ten-minute observation and subsequent Git revision are separate rollout
+acceptance checks recorded with the private operational evidence.
+
 Build the Lever supplied the reusable probe and source checks. Prove It Works
 requires observed packet denials and production delivery after reconnection.
