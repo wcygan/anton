@@ -1,0 +1,13 @@
+--- a/weed/server/master_server_handlers_admin.go
++++ b/weed/server/master_server_handlers_admin.go
+@@ -66,6 +66,10 @@
+ }
+ 
+ func (ms *MasterServer) volumeGrowHandler(w http.ResponseWriter, r *http.Request) {
++	if ms.option.VolumeGrowthDisabled {
++		writeJsonError(w, r, http.StatusServiceUnavailable, fmt.Errorf("volume growth disabled"))
++		return
++	}
+ 	count := uint64(0)
+ 	option, err := ms.getVolumeGrowOption(r)
+ 	if err != nil {
