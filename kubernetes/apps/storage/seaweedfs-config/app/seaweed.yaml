@@ -71,7 +71,7 @@ spec:
   volume:
     replicas: 3                     # one per node
     metricsPort: 9327
-    maxVolumeCounts: 20
+    maxVolumeCounts: 24
     # Advertise the stable StatefulSet peer DNS while keeping startup independent
     # of headless-Service DNS resolution.
     ipBind: 0.0.0.0
