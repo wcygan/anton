@@ -94,38 +94,56 @@ The later sync-guard rollout at `886fbd6a` retained that topology. Four transien
 read timeouts recovered during replacements; uninterrupted maintenance is still
 unproved. Do not mistake completed replication for that stronger guarantee.
 
-### Current owner and execution hold
+### Completed coordination and remaining gates
 
-The active chat is **Check cluster health**, thread
-`01a15287-1d2f-7180-a4a6-ea5808cf1ef8`. On the user's explicit instruction, this
-planning chat introduced itself and shared the draft, accepted downtime preference,
-and intent to commit locally and wait. The active owner should finish its existing
-authorized work; this plan does not redirect it or grant it new production authority.
-All execution units below remain pending until that owner reaches its checkpoint,
-restores any temporary controls, and hands over final evidence and remaining gates.
+**Check cluster health**, thread `01a15287-1d2f-7180-a4a6-ea5808cf1ef8`,
+completed its authorized qualification on October 20 and is idle. Its final
+report is dated 15:56 CDT. The wait-for-session hold is released; execution units
+below remain pending, and this planning request authorizes no rollout or cleanup.
+Refresh current operation ownership before any later live work.
 
-Its current request is isolated qualification and read-only production checks for
-four old test-record exceptions on volumes 50, 58, 60 and 61, followed by a report
-before changing production. Both filer censuses found no references, but those
-live scans are not a frozen deletion proof. Strict audit remains failed; retain
-the exceptions rather than asserting healthy readiness means complete integrity.
-The owner's subsequent handoff reports the isolated four-volume repair and backup
-trials passed, including interruption, wrong-cookie, sync-error, scoped rollback,
-and full decrypt/hash/size/gzip-integrity checks. This is attributed isolated
-qualification, not completed production cleanup or authorization to perform it.
+The final report and retained result files establish:
 
-Eight encrypted archives and ten retained snapshots were rechecked by that owner.
-The five newest rollout snapshots are crash-consistent only. Fresh consistent
-pre-cleanup backups are still an execution gate; no absence-of-references result
-authorizes deleting records. The current custom sync-guard image remains deployed
-until a separately qualified replacement exists. Do not change it while this
-qualification is bound to its exact image/source identity.
+- Production remained unchanged at `886fbd6a`: 32 volumes / 64 writable copies,
+  original five PVC identities, unchanged serving Pod identities/restart counts,
+  and 18 healthy Longhorn volumes. Normal Flux/operator ownership is restored.
+- Both whole-root filer censuses found zero references to the four old test
+  records on volumes 50, 58, 60 and 61. Live sequential scans do not establish
+  a transactionally frozen deletion proof or cover arbitrary external raw FIDs.
+- All 16 interruption scenarios and 17 exact pair rollback exercises passed.
+  Additional mixed-progress and native restore checks preserved earlier completed
+  work and neighboring volumes. Wrong-cookie, persisted read-only fence and
+  failed-flush controls passed. The three runtime labs report passing results
+  and removal of their owned containers and networks.
+- Injected sync/close failures reached callers safely across three source-test
+  repetitions. These are modeled backend failures, not physical power-cut tests.
+- Eight encrypted production archives remain intact and ten retained snapshots
+  are Ready. Synthetic encrypted export trials passed full decrypt/hash/size and
+  gzip-integrity checks; interrupted/truncated or wrong-hash exports were rejected.
+- Harbor/Loki artifact checks, relevant probes and alert checks passed, with no
+  monitored storage/log-loss alerts during qualification. Strict production audit
+  still fails on the same four old test-record differences; nothing was deleted.
 
-Before starting this plan, read the owner's final report. Carry forward completed
-cleanup and its evidence if performed with separate approval; otherwise record the
-four exceptions and decide whether their cleanup is necessary for the selected
-operating contract. Do not automatically launch another deletion window just to
-make physical-size counters agree, and do not weaken logical integrity checks.
+The optional cleanup proposal reserves **60 minutes**, with no new repair after
+minute 45 and 15 minutes reserved for recovery. This is a conservative planning
+estimate from local trials and historical operations, not a certified production
+outage duration and not approval under the user's brief-downtime preference.
+It applies to this cleanup only, not the separate stock-image transition.
+
+Fresh consistent pre-cleanup backups, writer/growth fencing, exact current
+identities and a repeated fenced reference/live-index check remain mandatory
+before any separately approved deletion. The five newest retained snapshots are
+crash-consistent; older archives predate subsequent writes. Neither replaces the
+fresh rollback point. The qualified cleanup is bound to the deployed custom image;
+stock replacement must independently pass its necessary integrity checks.
+
+**Next planning step:** proceed to the contract and stock-qualification units.
+Treat the four synthetic leftovers as documented exceptions, not an automatic
+prerequisite for patch retirement or a reason to reopen a 60-minute outage.
+Choose cleanup only if it is necessary for the accepted operating contract or
+separately requested. Preserve logical integrity checks and do not hide the strict
+failure by comparing total sizes alone. Retain the completed replica placement,
+PVCs, snapshots and encrypted evidence regardless of that decision.
 
 The latest published upstream SeaweedFS release returned by GitHub on October 20
 is 4.48. Inspection of upstream master `610346ae8c84fb4cc62bb947a516417637009548`
@@ -296,6 +314,14 @@ Evidence: pending
   Prove It Works keeps stock qualification and real maintenance/restore acceptance
   mandatory; planned downtime is not a waiver of write-integrity requirements.
 
+- 2026-10-20: Confirmed the other chat completed and is idle; read its final
+  four-record qualification report/plan and checked retained runtime/fault/final
+  result files. Released the coordination hold, recorded 16 interruption cases,
+  17 pair rollbacks, unchanged production, retained backup limits and the optional
+  60-minute cleanup reservation. Prove It Works kept isolated qualification
+  distinct from production repair; Laziness Protocol made stock qualification
+  the next step rather than automatically scheduling synthetic-record cleanup.
+
 ## References
 
 - [ADR 0043 and its accepted continuity goal](https://github.com/wcygan/anton/blob/886fbd6a/context/adrs/0043-keep-two-seaweedfs-copies-for-maintenance.md).
@@ -312,5 +338,9 @@ Evidence: pending
 - Private local evidence (not committed): `.private/seaweedfs-two-replica-production/REPORT.md`,
   `.private/seaweedfs-sync-guard-rollout/REPORT.md`,
   `.private/seaweedfs-sync-guard-rollout/ORPHAN-CLEANUP-ADDENDUM.md`, and
-  `.private/seaweedfs-four-orphan-qualification/CHECKPOINT.md`. Read the final
-  qualification report when the current owner publishes its completion checkpoint.
+  `.private/seaweedfs-four-orphan-qualification/REPORT.md` and `PLAN.md`.
+  Checked result files in that directory: `final-readonly.json`,
+  `runtime-lab-02/result.json`, `runtime-lab-partial-progress-02/result.json`,
+  `runtime-lab-fenced/result.json`, `fault-result.json`, and
+  `backup-gate-controls.json`. Private evidence remains local; the summary above
+  is the durable public-safe handoff.
