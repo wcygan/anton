@@ -219,39 +219,71 @@ restart or lost admin ownership stops copying and requires a fresh fence check.
 
 ### 3. Copy existing data in exact, checked units
 
-The approved baseline is IDs 9–15, 20–31 and 49. Abort for an unexpected `000`
-ID or source; separately record any normal new `001` allocations. All three
-volume servers must be Ready again before copying. This placement plan balances
-logical-volume slots to approximately 14/13/13 before new allocations:
+The old fixed 20-volume table is obsolete. Capture every current native VID,
+including empty volumes, after the writer and growth fences are established.
+Prepare a new exact source/destination plan using current Pod/PVC/node UIDs,
+per-server free bytes and slots. The October 20 post-capacity baseline contains
+32 logical volumes: 24 singletons and eight two-copy volumes. Migrating these
+requires 64 of 72 slots, with projected per-server use 22/21/21. This fits the
+copy but no longer guarantees four fresh two-copy allocations with any server
+absent. Do not infer maintenance allocation headroom from the earlier 28-volume
+rehearsal. Recalculate for any pre-fence allocation; a new VID after the fence
+is an abort condition.
 
-| Source ordinal | Destination ordinal | Existing VIDs |
-| --- | --- | --- |
-| 1 | 0 | 9, 22, 24, 26, 49 |
-| 0 | 2 | 10, 13, 15, 28 |
-| 2 | 1 | 11, 14, 25 |
-| 2 | 0 | 12, 20, 27 |
-| 1 | 2 | 21, 23, 29 |
-| 0 | 1 | 30, 31 |
+Use the qualified durable1 growth-fence image. While the operator and Flux
+owners are held, roll all three masters with the temporary startup setting
+`WEED_MASTER_VOLUME_GROWTH_DISABLE=true`, preserving Raft quorum. Require each
+master's exact image/arguments and HTTP503 for a count-zero `/vol/grow` check.
+That check must leave the VID set unchanged. The complete isolated rehearsal
+also covered two background sweep periods, a leader replacement and recovery.
+The original durable1 image does not fence the HTTP administrative grow path.
 
-Ordinal N means `seaweedfs-volume-N.seaweedfs-volume-peer.storage:8444`.
-Verify the destination has neither a mounted copy nor any files/partial marker
-for that exact collection/VID before copying. Configure each original VID while
-read-only; its per-volume remount also waits for active compaction. Finish
-configuration before copying. Do not copy from a writable source.
+Stop S3/filer writers, both provisioning/durability CronJobs and vacuum. Mark
+all captured copies persistently read-only, then UID-evict each volume process
+serially under OnDelete/PDB control to drain already-admitted writes. Preserve
+source PVCs and require the captured native inventory and RO state after every
+replacement. Capture final Pod UID/IP/PVC/node bindings only after replacement.
 
-```text
-volume.configure.replication -volumeId=<VID> -replication=001
-volume.copy -volumeId=<VID> -source=<source-peer>:8444 -target=<destination-peer>:8444
+The shell replication command previously dialed a retired address. Use the
+qualified direct-RPC path from a pinned, credential-free in-cluster client.
+Verify target Pod UID, IP, Bound PVC UID/PV and Ready node before and after each
+call. Reject stale bindings. Preserve stable advertised peer DNS.
+
+Configure only the exact read-only source, using its current Pod IP:
+
+```sh
+grpcurl -plaintext -max-time 15 \
+  -d '{"volumeId":24,"replication":"001"}' \
+  <current-source-pod-ip>:18444 volume_server_pb.VolumeServer/VolumeConfigure
 ```
 
-Run one copy at a time under admin ownership. Capture SHA-256 for source and
-destination `.dat`, `.idx` and `.vif` after configuration/copy, while both remain
-read-only. Require identical files, unchanged fixture file IDs, native `001`
-metadata and two active locations on distinct Ready nodes. Source-before versus
-source-after `.vif` differs because replication metadata changed; compare the
-post-configuration source to its destination. Do not use reported sizes as a
-substitute for byte checks. Retain every original file and all prior volume-9
-recovery evidence. Do not use a global replication repair with default deletion.
+The example VID is illustrative; use the generated current ledger. Require a
+successful structured response, native001 and persisted read-only `.vif` state.
+Before copying, prove the destination neither serves the VID nor contains any
+matching collection/VID files, including `.note` or `.copying` remnants.
+
+Copy to the exact current destination IP. `sourceDataNode` must also use the
+current UID-bound source IP, because the destination itself dials that address:
+
+```sh
+grpcurl -plaintext -max-time 120 \
+  -d '{"volumeId":24,"sourceDataNode":"<current-source-pod-ip>:8444"}' \
+  <current-destination-pod-ip>:18444 volume_server_pb.VolumeServer/VolumeCopy
+```
+
+Parse every streamed response and reject reported errors. A timeout is
+ambiguous: stop and retain all destination files; never retry automatically.
+Use the largest current volume as a pilot and measure copy, full hashing and
+control time. Apply a twofold margin to the remaining work and retain ten
+minutes for restoration inside the agreed outage budget. Finish in checked
+windows if the measured work does not fit; retain completed verified pairs.
+
+Compare exact source/destination `.dat`, `.idx`, `.vif` SHA-256 while both remain
+read-only. Source `.vif` changes at configuration time; compare the configured
+source with the copied destination. Require unchanged source data/index hashes,
+preserved FIDs, two active native001 locations and distinct Ready nodes before
+advancing. Do not use global repair, delete sources or downgrade a completed
+pair to000. Abort by preserving original data and completed verified pairs.
 
 ### 4. Restore writes, owners and caches
 
