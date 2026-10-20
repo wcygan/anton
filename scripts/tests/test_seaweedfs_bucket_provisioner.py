@@ -133,6 +133,7 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
         ordinary: str = "harbor loki iceberg-raw",
         tables: str = "iceberg-warehouse iceberg-shadow",
         probe: str = "",
+        auxiliary: str = "",
     ) -> tuple[subprocess.CompletedProcess[str], dict]:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -150,6 +151,7 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
                     "ORDINARY_BUCKETS": ordinary,
                     "TABLE_BUCKETS": tables,
                     "READ_PROBE_BUCKET": probe,
+                    "AUXILIARY_ORDINARY_BUCKETS": auxiliary,
                 }
             )
             result = subprocess.run(
@@ -173,6 +175,22 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
             state, ordinary="s3-read-probe", tables="", probe="s3-read-probe")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(unchanged, state)
+
+    def test_auxiliary_ordinary_buckets_use_the_same_idempotent_provisioner(self):
+        initial = {"ordinary": ["harbor", "loki"], "tables": []}
+        result, state = self.run_provisioner(initial, ordinary="harbor loki", tables="", auxiliary="private-fixture")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state["ordinary"], ["harbor", "loki", "private-fixture"])
+        again, repeated = self.run_provisioner(state, ordinary="harbor loki", tables="", auxiliary="private-fixture")
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertEqual(repeated, state)
+
+    def test_auxiliary_kind_collision_creates_nothing(self):
+        initial = {"ordinary": ["harbor", "loki"], "tables": ["private-fixture"]}
+        result, state = self.run_provisioner(initial, ordinary="harbor loki", tables="", auxiliary="new-fixture private-fixture")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bucket kind collision", result.stderr)
+        self.assertEqual(state, initial)
 
     def test_flux_strict_substitution_rejects_unescaped_shell_expansion(self) -> None:
         result = self.strict_flux_substitution(
