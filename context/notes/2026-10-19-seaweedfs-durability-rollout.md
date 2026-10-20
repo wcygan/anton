@@ -2,17 +2,16 @@
 
 ## Current state
 
-The initial amd64 candidate passed its stated fault/rehearsal checks, but a later
-independent review found a blocking rollback-boundary bug. That image is
-superseded and must not be published. The revised boundary fix passed fault and
-HA qualification and was committed/pushed as `13649abb` on top of the initial
-source/fixture/policy-helper commit `f7f629a0`, on
-`codex/qualify-seaweedfs-durability`. All 502 repository contract tests passed
-(one skipped). PR #522 deployed the pinned source at `080ae85e`; all ten
-production components now run the reviewed binary. Fresh encrypted exports passed
-every file hash and complete gzip CRC/end-of-stream checks. Runtime rollout and
-restoration of controller ownership passed; bucket policy activation and final
-production acceptance are in progress.
+All ten production components run the reviewed amd64 binary. PR #522 deployed
+the pinned source at `080ae85e`. Fresh encrypted exports passed
+every file hash and complete gzip CRC/end-of-stream checks. Runtime rollout,
+bucket policy activation, final production acceptance and cleanup passed. The
+copy-budget correction in PR #524 passed all 506 contract tests (one skipped).
+
+The source/fixture helper first landed as `f7f629a0`; independent review found a
+blocking rollback-boundary bug in the initial candidate. The revised fix in
+`13649abb` passed fault and HA qualification before publication. Superseded
+candidate identities below remain ineligible for deployment.
 
 The operator authorized review, amd64 build, upgrade/rollback rehearsal, commit,
 push, fresh backups and staged deployment. Another active cluster-maintenance
@@ -149,8 +148,8 @@ exact binary successfully and completed native RPC readbacks from both filers
 under the unchanged 128 MiB main-container limit. The source budget is corrected;
 the builder now checks actual binary size against copy RAM and volume capacity.
 Regression cases cover the original insufficient memory and volume limits.
-Failure and passing Job evidence are retained privately. A successful policy
-execution and final acceptance remain required.
+Failure and passing Job evidence are retained privately. The corrected policy
+execution and final acceptance subsequently passed as recorded below.
 
 At 2026-10-20 03:21:03 UTC all ten patched Pods and all 18 original Longhorn
 volumes were healthy, with no active storage/log-loss alert and Loki flush queue
@@ -162,14 +161,67 @@ different nodes (volumes 52 and 50); both test keys were deleted and confirmed
 absent. A new anonymous Harbor cold pull verified all 13 OCI objects and
 315,235,750 bytes. Loki returned all 4,981 numbered records across the S3 outage,
 with no missing, unexpected or duplicate records. All 1,800 historical records
-also remained queryable before runtime replacement. Final policy, post-rollout
-log and alert checks remain required.
+also remained queryable before runtime replacement. Final checks extended these
+results through policy activation and cleanup, as recorded below.
 
 Two private-helper assertions were corrected during rollout: Kubernetes omits a
 false `paused` value and may omit default `maxUnavailable: 1`. The API's documented
 default was checked before comparing strategies semantically. Both pauses were
 fail-closed; evidence and recovery are retained, and no extra image replacement
 or data-file repair was performed.
+
+## Final production acceptance
+
+Runtime source landed in [PR #522](https://github.com/wcygan/anton/pull/522), policy
+activation in [PR #523](https://github.com/wcygan/anton/pull/523), and the qualified
+copy budget/build guard in [PR #524](https://github.com/wcygan/anton/pull/524).
+Flux applied the corrected code revision `5fec6992`. The successful
+`sw-dur-policy-apply-20261020` Job used that CronJob template; independent native
+readbacks from both filers confirmed exactly the two intended bucket rules with
+`fsync=true` and replication `001`. Serving Pod UIDs remained unchanged.
+
+At 03:50 UTC, all ten SeaweedFS Pods were Ready without a new restart; all 18
+Longhorn volumes and 36 replicas were healthy. Original PVC UIDs were preserved.
+All update strategies and controller replicas were restored; the original absent
+suspension fields were restored as absent. The three masters agreed on their
+leader, and both filer mounts retained `/data/filerldb2` with `sync=true`.
+
+After policy activation, fresh Harbor and Loki objects passed exact GETs through
+the service and both individual S3 gateways. Both native copies were read and
+hash-verified directly on different nodes. Both test objects were deleted and
+confirmed absent through every gateway. A final empty-workspace Harbor pull
+verified all 13 OCI objects and 315,235,750 bytes.
+
+All 8,838 numbered production-test records and all 1,800 historical records were
+queryable, with no missing, unexpected or duplicate records. A final Loki flush
+persisted 77 additional chunks without a new flush failure and drained to queue
+zero. Fourteen retry failures occurred during the planned backup service outage
+and its recovery at 02:32–02:39 UTC; the counter stayed unchanged afterward.
+This is bounded test-record evidence, not a census of every application log.
+
+All 19 matching Prometheus alert rules were healthy and inactive; all three Loki
+log-rule groups evaluated freshly without errors. No storage or log-loss alert
+fired from the runtime-rollout gate at 03:01:51 UTC through post-cleanup
+verification. Current storage/log-loss alerts were empty.
+
+Cleanup completed at 03:52:16 UTC. Nine run-owned Jobs, including the resolved
+first failed policy run, their Pods and the pre-pull DaemonSet were absent.
+Failure evidence and successful replacement proof were saved before removal.
+The five temporary clone PVCs and their readers were absent; five retained CSI
+snapshots and eight verified encrypted archives remained. Publishing robot 56
+was revoked; its temporary 1Password item, local auth files and tunnel were gone.
+
+The daily Harbor check independently verified the scheduled 01:30 UTC run:
+policy 1/execution 708 and policy 2/execution 709 succeeded with `dry_run=false`;
+the exact proof survived the 03:02:46 UTC Flux reconciliation. Its wider alert
+window was classified failed because historical read-only alerts fired during
+the [01:50–02:15 maintenance and recovery](2026-10-20-seaweedfs-migration-abort.md).
+The alerts cleared before this runtime rollout. Dated evidence and the outcome
+fingerprint are retained under `.private/harbor-retention-fix/daily/`.
+
+Legacy singleton data was not migrated. In-flight overwrite crash atomicity,
+torn sectors, directory ordering, hardware sync honesty, non-fsync deletes and
+asynchronous filer peers retain the qualification limits described above.
 
 The independent pass covered source, lock ordering, capability inheritance,
 boundary fault execution and six Python policy tests. It did not independently
@@ -266,3 +318,6 @@ update controls and remove temporary credentials, listeners and diagnostic objec
   recovery case, and defer production until the other storage owner releases it.
 - **Prove It Works:** test the actual amd64 image through upgrade and downgrade,
   and require exact object/record readback rather than container readiness alone.
+- **Encode Lessons in Structure:** reject a built binary that exceeds the
+  policy Job's copy-memory or tool-volume budgets before creating an image;
+  retain the full successful resource-constrained Job as runtime proof.
