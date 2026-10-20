@@ -55,7 +55,9 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 - [x] Complete the pinned local cold-read and existing-data migration proof on 4.40/4.48, including gateway preparation, a safe writer fence and independent review.
 - [x] Serialize the availability rollout with the separate 4.48 upgrade/restore owner; qualify the final homogeneous runtime version and preserve its readiness/telemetry controls and restore resources.
 - [x] Publish the reviewed availability policy, migration/rollback plan and successor ADR; obtain exact live approval before changing replication or replacing/draining resources.
-- [ ] Observe the approved default through GitOps and verify an actual new two-copy allocation before the writer fence.
+- [x] Observe the approved default through GitOps and verify an actual new two-copy allocation before the writer fence (PR 519; VID 52, exact fixture bytes verified).
+- [x] Execute the approved existing-data attempt, stop on the first stale-address failure before configuration/copy, and verify restoration and cleanup; see `context/notes/2026-10-20-seaweedfs-migration-abort.md`.
+- [ ] Qualify the native-command address path and legacy-layout growth fence; refresh the inventory and execution budget before another existing-data window.
 - [ ] Verify existing and new S3 data during the approved one-node hold, full recovery and temporary-resource cleanup; do not infer this from the earlier warm gateway fixture.
 - [x] Verify normal workload recovery after the approved private verifier mirror repair and ESO sync; desired replicas, enforcing admission and user-facing HTTP/TLS checks passed.
 - [ ] Complete independent bootstrap-image origin/cache-seeding evidence and approve an isolated rebuild drill; source audit remains incomplete.
@@ -64,6 +66,8 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 - [ ] Continue existing Loki WAL plan 0026; do not infer historical log loss or repair the production WAL from these telemetry counters.
 
 ## Log
+
+- 2026-10-20: PR 519 applied native default `001` and growth `COPY_2=1` after the separate 4.48 qualification. New VID 52 had two active copies and passed exact-byte S3 verification. The approved outage began at 01:50:17 UTC. After all 20 original `000` volumes were fenced and their processes serially replaced with PVCs retained, the first configuration RPC dialed a retired address and failed without changing the VIF or native replication. No copy was attempted. The abort restored all originals writable and re-enabled vacuum. Both filers and gateways/read probes were Ready by 02:15:30 UTC (25m13s); all seven owner fields were restored at 02:17:45 UTC. Fresh UID-bound S3 reads/writes passed, and global workload/Flux/Longhorn health passed at 02:21 UTC. Four empty legacy-layout `000` volumes were retained. The node hold was skipped; existing-data maintenance availability remains unverified. The follow-up record retains exact cleanup and health evidence, and the runbook now requires address and background-growth qualification before another window.
 
 - 2026-10-19: Opened after read-only discovery and operator request for GPT-6 Luna high-effort agents in isolated worktrees. Public base `dc04d509`; private base `fead45b1`. Original public checkout remains dirty and untouched. Root owns integration and this record; worker branches own individual artifacts. Shared delegate contract is retained in the integration checkout's ignored `.private/cluster-improvements/SKILL.md`.
 - 2026-10-19: Separate Before Serializing Shared State selected one checkout and branch per worker; only root may publish or integrate. Sequence Work into Verifiable Units requires a passing focused check per commit and renewed combined validation. Build the Lever requires reusable checks for operational claims, not another unmeasured dashboard.

@@ -60,6 +60,14 @@ The measured baseline and migration investigation are recorded in
 
 ## Prepared two-copy rollout
 
+The first approved production run on 2026-10-20 stopped before any replication
+configuration or copy completed. A native command dialed a retired volume Pod
+address after process replacement. All original volumes and service were
+restored; the node drain was skipped. See the
+[abort and recovery record](https://github.com/wcygan/anton/blob/main/context/notes/2026-10-20-seaweedfs-migration-abort.md).
+The existing-data steps below require a revised, verified execution plan before
+another maintenance window.
+
 This procedure is a reviewable proposal. Obtain explicit operator approval for
 the source rollout, one-time S3 outage, exact copying, temporary test Jobs,
 their client/ledger ConfigMap and two egress policies, and
@@ -155,10 +163,28 @@ infer this solely from YAML. Re-audit the entire corpus before quiescence.
 
 ### 2. Establish a writer and process fence
 
+Before repeating this fence, resolve both production findings:
+
+- Prove the address actually used by each native command matches the current
+  volume Pod UID/IP and EndpointSlice after replacement. Capture the exact
+  caller's topology response and DNS answer; a stable DNS string in
+  `/dir/status` does not prove its resolved target. The abort restored original
+  writability through current Pod IPs bound to verified Pod/PVC identities.
+  That recovery result does not qualify the replication/copy path.
+- Quiescing S3 and filers does not stop master background growth. Existing
+  `000` layouts created four additional empty `000` volumes during the fence,
+  despite the new `001` default. Qualify a growth fence or a bounded inventory
+  strategy, recalculate capacity, and stop on an unapproved VID. Do not silently
+  add it to the copy plan. The pinned master growth-disable setting is read at
+  startup; changing it would require a separately reviewed master rollout and
+  allocation-recovery check.
+
 In namespace `storage`, suspend Kustomizations `seaweedfs` and
 `seaweedfs-config`, then HelmRelease `seaweedfs-operator`. These are temporary
-explicit exceptions to GitOps ownership and must be resumed. Record their
-prior suspension state and restore it, rather than overriding another operator.
+explicit exceptions to GitOps ownership and must be resumed. Apply the
+suspension with `--field-manager=flux-client-side-apply`, then verify it remains
+held through parent reconciliation before stopping writers. Record the prior
+suspension state, including an absent field, and restore that exact state.
 Suspend CronJob `storage/seaweedfs-buckets-ensure`, record its prior
 `spec.suspend`, and wait for any existing provisioner Job to finish before
 stopping S3. Suspending Flux does not stop the CronJob controller.
@@ -313,6 +339,14 @@ both egress NetworkPolicies and exact S3 fixture keys; confirm each is absent an
 every controller, suspension state, replica count
 and the approved vacuum state. Keep source data, PVCs, normal credentials and the execution
 ledger. Observe stable readiness and the known retry window before closing.
+
+For raw Job deletion, set `DeleteOptions.propagationPolicy` to `Background`
+and include exact UID/resourceVersion preconditions. Verify the Job and its
+recorded Pods are absent; a successful Job DELETE alone is insufficient.
+If completed Pods were orphaned, join their run label and controller UID to
+the recorded Job before deleting those exact Pods with UID/resourceVersion
+preconditions. Keep the ConfigMap and
+egress policies until no test Pod remains.
 
 ## Stop and rollback
 
