@@ -7,7 +7,8 @@ metadata:
   annotations:
     secret.reloader.stakater.com/reload: seaweedfs-s3-config
 spec:
-  image: chrislusf/seaweedfs:4.48@sha256:aba492e2a4e4c90bff795745e8e660affa1f09e7650f5981bd7bccd1a06cd931
+  image: 192.168.1.106/library/seaweedfs-durable:4.48-durable1@sha256:5ecf8cd3027e48c530ac360514fa21e4d02f00f37294b7238f8e64d3aaf50fcb
+  imagePullPolicy: IfNotPresent
   master:
     replicas: 3
     extraArgs:
@@ -95,6 +96,11 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   filer:
     replicas: 2                     # Phase 1 verdict: 2 holds under pod-kill
+    config: |
+      [leveldb2]
+      enabled = true
+      dir = "/data/filerldb2"
+      sync = true
     # Embedded LevelDB is the S3 object index, not disposable runtime state.
     persistence:
       enabled: true

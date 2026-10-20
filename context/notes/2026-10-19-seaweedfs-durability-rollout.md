@@ -4,16 +4,20 @@
 
 The initial amd64 candidate passed its stated fault/rehearsal checks, but a later
 independent review found a blocking rollback-boundary bug. That image is
-superseded and must not be published. The revised boundary fix is undergoing
-qualification. Source, fixtures and the policy helper were committed as `f7f629a0` and pushed to
+superseded and must not be published. The revised boundary fix passed fault and
+HA qualification and was committed/pushed as `13649abb` on top of the initial
+source/fixture/policy-helper commit `f7f629a0`, on
 `codex/qualify-seaweedfs-durability`. All 502 repository contract tests passed
-(one skipped). Publication, fresh production backups, GitOps rollout and
-production acceptance remain pending. Main has not been advanced by this task.
+(one skipped). The revised image is published and verified; fresh encrypted data
+exports, GitOps rollout and final production acceptance remain pending. Main has
+not been advanced by this task.
 
 The operator authorized review, amd64 build, upgrade/rollback rehearsal, commit,
 push, fresh backups and staged deployment. Another active cluster-maintenance
-task currently owns SeaweedFS's Flux/operator pauses and S3 outage; this task has
-made no production mutation and must wait for those controls to be restored.
+task finished its recovery and cleanup before this task acquired its own backup
+holds. Production still uses stock 4.48; the image cache and read probes are
+temporary run-owned diagnostics, and the staged durability policy CronJob is
+suspended until every component is verified on the patched runtime.
 
 ## Review findings and disposition
 
@@ -76,7 +80,42 @@ non-fsync deletes, and asynchronous filer metadata peers.
 - Independent review reproduced the old destructive rollback in both paths,
   found no remaining blocker in the revised boundary fix, and independently
   passed its three new cases three times (nine checks).
-- The exact revised image's HA upgrade/rollback/re-upgrade rehearsal is running.
+- The exact revised image passed the ten-component HA stock → patched → stock →
+  patched rehearsal. Four stages verified 8,000 exact Loki records each, with
+  hot and empty-local-filesystem cold reads; Harbor blob/manifest digests, both
+  S3 gateways, fresh writes, Raft quorum and two-copy placement all passed.
+  Qualification completed at 2026-10-20 02:22:41 UTC; lab cleanup completed at
+  02:23:01 UTC with no owned containers or networks remaining.
+- Revised archive: 752,218,112 bytes, SHA-256
+  `ba4dc80c04808590a92d2d75e457651e93236a34a49902473dfe708b1f94b97c`.
+  Account verification preceded archive creation; tar listing, amd64
+  configuration and patch label matched.
+- Expected archive manifest digest:
+  `sha256:5ecf8cd3027e48c530ac360514fa21e4d02f00f37294b7238f8e64d3aaf50fcb`.
+  This exact digest was published to
+  `192.168.1.106/library/seaweedfs-durable:4.48-durable1` and its remote amd64
+  configuration/patch label verified. Temporary library pull/push robot 56 was
+  revoked; the temporary 1Password item, auth files and localhost tunnel were
+  removed. The two run-owned image archives were removed after retaining their
+  identities. All three nodes independently verified the embedded binary hash.
+- A cold anonymous Harbor pull verified all 13 OCI objects (315,235,750 bytes).
+
+## Fresh backup progress
+
+Five original PVC identities were captured and preserved. With S3 and both filer
+writers stopped and vacuum disabled, five retained CSI snapshots became ready.
+All 241 files across the five restored clones matched the source-before and
+source-after manifests (about 31.45 GB). Three encrypted master archives also
+decrypted and matched all file hashes. Source reader Pods were removed by UID
+before filers restarted, preserving normal volume attachment.
+
+The original replica counts, vacuum, HelmRelease and Flux controls were restored;
+the backup service outage lasted 439 seconds. All ten SeaweedFS Pods, all 23
+Longhorn volumes including temporary clones, and controller ownership were
+healthy afterward, with no active storage/log-loss alert. Loki had two queued
+flushes immediately after restoration; require that backlog to drain before
+another planned interruption. Encrypted clone export and decrypted file-hash
+verification are in progress; snapshots alone do not complete the backup gate.
 
 The independent pass covered source, lock ordering, capability inheritance,
 boundary fault execution and six Python policy tests. It did not independently
@@ -112,9 +151,9 @@ run the full suites, race checks, Docker or production acceptance.
 Private evidence remains under `.private/seaweedfs-durability-qualification/` and
 `.private/seaweedfs-durability-rollout/` in the primary checkout. Failed review
 attempts and superseded local builds are retained. The build above is the
-superseded v3 candidate. None is currently eligible for publication; the
-revised patch must pass fault, amd64 and rehearsal checks with a new identity.
-No image has yet been published by this task.
+superseded v3 candidate. These builds are ineligible for publication; only the
+revised identity above passed the expanded checks.
+These superseded images were never published by this task.
 
 The earlier performance table belongs to the initial candidate and its recorded
 image IDs. It is historical evidence, not a latency guarantee for this revised

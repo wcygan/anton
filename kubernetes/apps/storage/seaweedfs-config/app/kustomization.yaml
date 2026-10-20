@@ -5,6 +5,9 @@ namespace: storage
 configurations:
   - ./name-references.yaml
 configMapGenerator:
+  - name: seaweedfs-durability-policy
+    files:
+      - ./ensure-durability.py
   - name: seaweedfs-s3-read-probe
     files:
       - ./s3-read-probe.py
@@ -15,6 +18,7 @@ configMapGenerator:
     options:
       disableNameSuffixHash: true
 resources:
+  - ./durability-cronjob.yaml
   - ./seaweed.yaml
   - ./prometheusrule.yaml
   - ./s3-read-alerts.yaml
