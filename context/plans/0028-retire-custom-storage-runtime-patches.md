@@ -1,5 +1,5 @@
 ---
-status: Draft
+status: In-progress
 opened: 2026-10-20
 closed: null
 affects: storage
@@ -180,18 +180,18 @@ Evidence: pending
   successor ADR; never mark the unperformed availability drill passed.
 
 ### Unit qualify
-Status: pending
-Depends on: contract
+Status: blocked
+Depends on: none
 Write scope: Existing SeaweedFS/Loki qualification fixtures and a compact evidence table linked from this plan.
 Acceptance: Each patch has a verified stock-release replacement, a proved procedural alternative, or an explicitly unresolved integrity gap; the chosen route requires no new downstream runtime patch.
 Verification: Pin upstream release/source/image identities, run the existing failing-before cases on unmodified candidates, test data-format upgrade/downgrade, and check real Harbor registry plus Loki/S3 behavior in isolation. Retain failure output and exact bytes, not only process exit status.
-Evidence: pending
+Evidence: [2026-10-20 stock qualification](../notes/2026-10-20-stock-storage-qualification.md). Current releases fail retained integrity gates; passing patched controls confirm test discrimination. Local qualification was explicitly authorized before completion of the service contract. Production preparation remains gated on that contract and a qualified candidate.
 
 - [ ] Timebox the first stock-release comparison to two focused engineering
   sessions. Do not keep extending it with more production patches. If blocked,
   return the exact failed guarantees and compare the external-S3 route before
   another migration window. Do not wait indefinitely for upstream to merge fixes.
-- [ ] Reuse the existing fixtures for sync failures, rollback-boundary errors,
+- [x] Reuse the existing fixtures for sync failures, rollback-boundary errors,
   compaction failures, metadata persistence, and Loki checkpoint/replay. Preserve
   tests that express necessary behavior; retire tests tied only to an abandoned
   internal procedure once the replacement behavior is covered.
@@ -321,6 +321,19 @@ Evidence: pending
   60-minute cleanup reservation. Prove It Works kept isolated qualification
   distinct from production repair; Laziness Protocol made stock qualification
   the next step rather than automatically scheduling synthetic-record cleanup.
+
+- 2026-10-20: Operator authorized isolated stock qualification before production
+  changes. Clean SeaweedFS 4.48 fails volume/index, metadata and compaction failure
+  cases; clean Loki 3.7.8 fails checkpoint/recreation replay. All selected Go cases
+  pass three times with existing patches in separate control trees. The official
+  Loki image lost 8 of 256 acknowledged synthetic entries after forced restart.
+  Recorded identities, setup limitations and results in the linked qualification
+  note. Stock promotion is blocked; no new patches or production changes made.
+  The contract is no longer a prerequisite to isolated qualification, but remains
+  required before production preparation. Next: select a released upstream fix
+  when available, or evaluate external S3 plus a separate logging replacement;
+  external S3 alone cannot fix Loki. No further migration test against these
+  failing candidates is warranted.
 
 ## References
 
