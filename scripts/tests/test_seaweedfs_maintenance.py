@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "seaweedfs-maintenance"
 SPEC = importlib.util.spec_from_file_location(
     "seaweed_maintenance", ROOT / "scripts/verify-seaweedfs-maintenance.py"
 )
@@ -19,7 +20,7 @@ CONTEXT = "tailscale-operator.synthetic.ts.net"
 
 
 def placement(code):
-    fields = ("DiffDataCenterCount", "DiffRackCount", "SameRackCount")
+    fields = ("dc", "rack", "node")
     return {field: int(digit) for field, digit in zip(fields, code) if digit != "0"}
 
 
@@ -73,6 +74,45 @@ def audit(**changes):
 
 
 class SeaweedMaintenanceAudit(unittest.TestCase):
+    def test_native_replica_placement_fields_decode_xyz_order(self):
+        self.assertEqual(AUDIT.parse_replica_placement({}), "000")
+        self.assertEqual(AUDIT.parse_replica_placement({"node": 1}), "001")
+        self.assertEqual(AUDIT.parse_replica_placement({"rack": 2, "node": 3}), "023")
+        self.assertEqual(AUDIT.parse_replica_placement({"dc": 1, "rack": 2, "node": 3}), "123")
+
+    def test_native_replica_placement_rejects_malformed_or_unknown_fields(self):
+        for placement in (
+            None,
+            {"node": True},
+            {"node": "1"},
+            {"node": -1},
+            {"node": 10},
+            {"unknown": 1},
+            {"DiffDataCenterCount": 1},
+        ):
+            with self.subTest(placement=placement):
+                with self.assertRaises(AUDIT.AuditError):
+                    AUDIT.parse_replica_placement(placement)
+
+    def test_actual_448_master_vol_status_two_copy_001_passes_full_audit(self):
+        values = evidence(copies=("seaweedfs-volume-0", "seaweedfs-volume-1"), replication="001")
+        values["vol_status"] = json.loads(
+            (FIXTURES / "master-vol-status-4.48.json").read_text()
+        )
+        values["dir_status"]["Topology"]["Layouts"] = [
+            {"collection": "harbor", "replication": "001", "writables": [52]}
+        ]
+
+        result = AUDIT.analyze(**values)
+
+        volume = result["volumes"][0]
+        self.assertEqual(volume["id"], 52)
+        self.assertEqual(volume["currentReplication"], "001")
+        self.assertEqual(volume["copyCount"], 2)
+        self.assertEqual(volume["distinctReadyNodeCount"], 2)
+        self.assertTrue(volume["hasCopiesSurvivingAnyOneNode"])
+        self.assertTrue(result["auditPass"])
+
     def test_existing_zero_replication_copy_fails(self):
         result = audit()
         self.assertEqual(result["volumes"][0]["currentReplication"], "000")
