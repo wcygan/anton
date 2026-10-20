@@ -217,14 +217,20 @@ Depends on: none
 Write scope: Existing SeaweedFS/Loki qualification fixtures and a compact evidence table linked from this plan.
 Acceptance: Stock images pass normal S3/Harbor/Loki behavior and clean cutover/rollback checks. Each removed patch has either a procedural replacement or an explicit risk disposition under the revised data contract; no new runtime patch is required.
 Verification: Pin upstream release/source/image identities, run the existing failing-before cases on unmodified candidates, test data-format upgrade/downgrade, and check real Harbor registry plus Loki/S3 behavior in isolation. Retain failure output and exact bytes, not only process exit status.
-Evidence: [2026-10-20 stock qualification](../notes/2026-10-20-stock-storage-qualification.md) records the completed strict-contract experiment, including passing patched controls. Its stock-promotion blocker was conditional on the former no-regression contract; the revised decision above permits proceeding with normal-operation and transition qualification. The failures remain valid. Production preparation requires the contract and remaining checks; no new passing result is claimed.
+Evidence: [Strict fault qualification](../notes/2026-10-20-stock-storage-qualification.md) remains historical evidence of known risks. [Revised-contract qualification](../notes/2026-10-20-stock-storage-revised-qualification.md) records stock app S3 behavior, scoped credentials, presigned access, synthetic cold restore and Loki clean transition results. Production preparation still needs the contract, production-shaped restore, remaining lifecycle checks and a reviewed runbook; isolated success is not rollout approval.
 
 - [x] Complete the first bounded stock-release fault comparison and retain its
   failures and passing controls. Do not repeat it solely to pursue zero log loss.
-- [ ] Test stock S3 PUT/GET/hash, multipart completion/abort, listing/deletion,
-  scoped auth and presigned access needed by apps, plus Harbor digest push/pull
-  and Loki ingestion/query/retention. Exercise clean restart with exact object
-  readback; distinguish expected crash-loss limits from normal-operation defects.
+- [x] Test stock S3 PUT/GET/hash, multipart completion/abort, listing/deletion,
+  scoped auth and presigned access, plus synthetic cold restore and Loki's clean
+  patched-to-stock transition with preserved old WAL.
+- [x] Complete the multi-component patched → stock → patched rollback → stock
+  rehearsal with both-gateway object checks, native two-copy checks, Harbor registry
+  blob/manifest checks and 8,000 exact Loki records per hot/cold application stage.
+- [ ] Finish lifecycle coverage and production preparation. Harbor's registry
+  protocol checks do not cover its database/UI/GC; Loki ingestion/cold-query checks
+  do not prove timed retention deletion. Use ordered shutdown: the lab's final
+  parallel cleanup timed out filers, despite clean component-transition exits.
 - [x] Reuse the existing fixtures for sync failures, rollback-boundary errors,
   compaction failures, metadata persistence, and Loki checkpoint/replay. Preserve
   tests that express necessary behavior; retire tests tied only to an abandoned
@@ -374,6 +380,18 @@ Evidence: pending
   Redesign From First Principles retained S3 as an application capability and
   shifted qualification to the accepted operating contract. No production work
   was authorized or performed by this update.
+
+- 2026-10-20: Committed the revised contract as `fc2e73d2`, then ran isolated
+  qualification. Stock S3 presigned access, bucket isolation, multipart abort and
+  synthetic cold restore passed. Four SeaweedFS cutover/rollback application
+  stages passed, each with 68 MiB registry blobs and 8,000 hot/cold Loki records;
+  historical registry digests survived the final stock return. Loki's separate
+  clean patched-to-stock transition preserved old WAL and all 448 final records.
+  No new ordinary-operation blocker found. Recorded test/setup/parallel-teardown
+  limits and remaining production-shaped restore, retention, upload-contract and
+  runbook gates in the revised qualification note. All owned lab resources were
+  removed. Prove It Works kept local protocol success distinct from deployment
+  readiness; no production action or new runtime patch was performed.
 
 ## References
 
