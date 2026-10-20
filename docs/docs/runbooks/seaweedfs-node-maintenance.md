@@ -161,97 +161,108 @@ Confirm the volume StatefulSet template and PVC UIDs did not change. Repeat
 the filer path-rule check and verify actual new assignments use `001`; do not
 infer this solely from YAML. Re-audit the entire corpus before quiescence.
 
-### 2. Establish a writer and process fence
+### 2. Establish owner controls and the master growth fence
 
-Before repeating this fence, resolve both production findings:
+Serialize the window with every other storage/retention owner and verify the
+fresh independent backup set before replacing any process. Retain exact current
+Pod/PVC/node UIDs, source revision, controls and image identities in an ignored
+execution ledger. A retired address is never an acceptable RPC target.
 
-- Prove the address actually used by each native command matches the current
-  volume Pod UID/IP and EndpointSlice after replacement. Capture the exact
-  caller's topology response and DNS answer; a stable DNS string in
-  `/dir/status` does not prove its resolved target. The abort restored original
-  writability through current Pod IPs bound to verified Pod/PVC identities.
-  That recovery result does not qualify the replication/copy path.
-- Quiescing S3 and filers does not stop master background growth. Existing
-  `000` layouts created four additional empty `000` volumes during the fence,
-  despite the new `001` default. Qualify a growth fence or a bounded inventory
-  strategy, recalculate capacity, and stop on an unapproved VID. Do not silently
-  add it to the copy plan. The pinned master growth-disable setting is read at
-  startup; changing it would require a separately reviewed master rollout and
-  allocation-recovery check.
+Hold `storage/seaweedfs` and `storage/seaweedfs-config` Kustomizations, the
+`seaweedfs-operator` HelmRelease and operator Deployment. Record original fields,
+including absent suspension flags, then stop the operator and verify its old
+process is gone. Apply holds with `--field-manager=flux-client-side-apply` and
+check that parent reconciliation does not remove them. Pause both
+`seaweedfs-buckets-ensure` and `seaweedfs-durability-ensure`; wait for existing
+Jobs to finish. Retain the StatefulSets and all PVCs.
 
-In namespace `storage`, suspend Kustomizations `seaweedfs` and
-`seaweedfs-config`, then HelmRelease `seaweedfs-operator`. These are temporary
-explicit exceptions to GitOps ownership and must be resumed. Apply the
-suspension with `--field-manager=flux-client-side-apply`, then verify it remains
-held through parent reconciliation before stopping writers. Record the prior
-suspension state, including an absent field, and restore that exact state.
-Suspend CronJob `storage/seaweedfs-buckets-ensure`, record its prior
-`spec.suspend`, and wait for any existing provisioner Job to finish before
-stopping S3. Suspending Flux does not stop the CronJob controller.
-Scale Deployment `seaweedfs-operator` from 1 to 0 and wait for its exact Pod UID
-to disappear. Then scale Deployment `seaweedfs-s3` from 2 to 0, followed by
-StatefulSet `seaweedfs-filer` from 2 to 0; wait for every old process to exit.
-Keep all StatefulSets and PVCs. Stop on forced termination or an unknown writer.
+Hold master, volume and filer StatefulSets OnDelete before publishing a changed
+Pod template. Use the qualified growth-fence image and temporary startup setting
+`WEED_MASTER_VOLUME_GROWTH_DISABLE=true` for every master. Replace one master
+at a time, choosing a current nonleader before the leader and requiring Raft
+health between replacements. Verify image/binary, startup environment and
+count-zero HTTP `/vol/grow`503 without a VID-set change. The old durable1 image
+fences background/assignment growth but leaves this HTTP path open.
 
-Use the existing `master` container of `storage/seaweedfs-master-0` for native
-commands; no debug Pod or port-forward is needed. Acquire the Seaweed admin
-lock. The approved window includes `volume.vacuum.disable` during copying and
-`volume.vacuum.enable` on recovery. There is no vacuum-state read command at
-this pin; do not claim to have captured its prior in-memory state. Establish
-that no other operator's vacuum hold is active before changing it; otherwise
-stop for a revised plan. Disable prevents future automatic runs, not an active
-compaction or a manual vacuum. Mark
-every approved original copy persistently read-only. For example, with VID
-and source taken from the exact ledger:
+Where current writable `001` layouts have capacity, this master preparation can
+precede the S3 outage. Require actual existing-object reads and fresh writes
+after each master; the fence prevents new allocation, so stop if existing
+layouts cannot serve traffic. No native replication change occurs in this
+phase. A source pin applied under these holds is a recorded temporary owner
+exception; final CR, templates and controls must match Git before completion.
 
-```text
-lock
-volume.mark -node=<source-peer>:8444 -volumeId=<VID> -readonly
-```
-
-Read-only marking blocks subsequent mutations but does not drain already
-admitted operations. UID-evict volume Pods 0, 1 and 2 serially, with all writers
-still stopped, retaining each PVC. Require clean Seaweed shutdown, old UID gone,
-new UID Ready, unchanged PVC UID and native/file metadata still read-only before
-the next eviction. The new process cannot retain the old request queue. Use
-normal eviction and PDB semantics; never force-delete a process. A master
-restart or lost admin ownership stops copying and requires a fresh fence check.
+After the master fence is verified, stop S3 and then both filers, recording the
+outage start and waiting for every old writer process to disappear. Disable
+vacuum with the current UID/IP-bound master and the admin lock. There is no
+vacuum-state read command at this pin; confirm no other owner holds it and do not
+claim a captured in-memory state. Do not treat a readonly flag alone as draining
+already-admitted writes. Section 3 establishes the final inventory and process
+boundary before copying.
 
 ### 3. Copy existing data in exact, checked units
 
-The approved baseline is IDs 9–15, 20–31 and 49. Abort for an unexpected `000`
-ID or source; separately record any normal new `001` allocations. All three
-volume servers must be Ready again before copying. This placement plan balances
-logical-volume slots to approximately 14/13/13 before new allocations:
+The old fixed 20-volume table is obsolete. Capture every current native VID,
+including empty volumes, after the writer and growth fences are established.
+Prepare a new exact source/destination plan using current Pod/PVC/node UIDs,
+per-server free bytes and slots. The October 20 post-capacity baseline contains
+32 logical volumes: 24 singletons and eight two-copy volumes. Migrating these
+requires 64 of 72 slots, with projected per-server use 22/21/21. This fits the
+copy but no longer guarantees four fresh two-copy allocations with any server
+absent. Do not infer maintenance allocation headroom from the earlier 28-volume
+rehearsal. Recalculate for any pre-fence allocation; a new VID after the fence
+is an abort condition.
 
-| Source ordinal | Destination ordinal | Existing VIDs |
-| --- | --- | --- |
-| 1 | 0 | 9, 22, 24, 26, 49 |
-| 0 | 2 | 10, 13, 15, 28 |
-| 2 | 1 | 11, 14, 25 |
-| 2 | 0 | 12, 20, 27 |
-| 1 | 2 | 21, 23, 29 |
-| 0 | 1 | 30, 31 |
+Reverify every master's exact qualified image/environment and HTTP503 for the
+count-zero growth check. The complete isolated rehearsal covered two background
+sweep periods, leader replacement and recovery. Stop if any master or writer
+fence has changed since section 2.
 
-Ordinal N means `seaweedfs-volume-N.seaweedfs-volume-peer.storage:8444`.
-Verify the destination has neither a mounted copy nor any files/partial marker
-for that exact collection/VID before copying. Configure each original VID while
-read-only; its per-volume remount also waits for active compaction. Finish
-configuration before copying. Do not copy from a writable source.
+Stop S3/filer writers, both provisioning/durability CronJobs and vacuum. Mark
+all captured copies persistently read-only, then UID-evict each volume process
+serially under OnDelete/PDB control to drain already-admitted writes. Preserve
+source PVCs and require the captured native inventory and RO state after every
+replacement. Capture final Pod UID/IP/PVC/node bindings only after replacement.
 
-```text
-volume.configure.replication -volumeId=<VID> -replication=001
-volume.copy -volumeId=<VID> -source=<source-peer>:8444 -target=<destination-peer>:8444
+The shell replication command previously dialed a retired address. Use the
+qualified direct-RPC path from a pinned, credential-free in-cluster client.
+Verify target Pod UID, IP, Bound PVC UID/PV and Ready node before and after each
+call. Reject stale bindings. Preserve stable advertised peer DNS.
+
+Configure only the exact read-only source, using its current Pod IP:
+
+```sh
+grpcurl -plaintext -max-time 15 \
+  -d '{"volumeId":24,"replication":"001"}' \
+  <current-source-pod-ip>:18444 volume_server_pb.VolumeServer/VolumeConfigure
 ```
 
-Run one copy at a time under admin ownership. Capture SHA-256 for source and
-destination `.dat`, `.idx` and `.vif` after configuration/copy, while both remain
-read-only. Require identical files, unchanged fixture file IDs, native `001`
-metadata and two active locations on distinct Ready nodes. Source-before versus
-source-after `.vif` differs because replication metadata changed; compare the
-post-configuration source to its destination. Do not use reported sizes as a
-substitute for byte checks. Retain every original file and all prior volume-9
-recovery evidence. Do not use a global replication repair with default deletion.
+The example VID is illustrative; use the generated current ledger. Require a
+successful structured response, native `001` and persisted read-only `.vif` state.
+Before copying, prove the destination neither serves the VID nor contains any
+matching collection/VID files, including `.note` or `.copying` remnants.
+
+Copy to the exact current destination IP. `sourceDataNode` must also use the
+current UID-bound source IP, because the destination itself dials that address:
+
+```sh
+grpcurl -plaintext -max-time 120 \
+  -d '{"volumeId":24,"sourceDataNode":"<current-source-pod-ip>:8444"}' \
+  <current-destination-pod-ip>:18444 volume_server_pb.VolumeServer/VolumeCopy
+```
+
+Parse every streamed response and reject reported errors. A timeout is
+ambiguous: stop and retain all destination files; never retry automatically.
+Use the largest current volume as a pilot and measure copy, full hashing and
+control time. Apply a twofold margin to the remaining work and retain ten
+minutes for restoration inside the agreed outage budget. Finish in checked
+windows if the measured work does not fit; retain completed verified pairs.
+
+Compare exact source/destination `.dat`, `.idx`, `.vif` SHA-256 while both remain
+read-only. Source `.vif` changes at configuration time; compare the configured
+source with the copied destination. Require unchanged source data/index hashes,
+preserved FIDs, two active native `001` locations and distinct Ready nodes before
+advancing. Do not use global repair, delete sources or downgrade a completed
+pair to `000`. Abort by preserving original data and completed verified pairs.
 
 ### 4. Restore writes, owners and caches
 
@@ -268,7 +279,11 @@ volume.mark -node=<destination-peer>:8444 -volumeId=<VID> -writable
 Verify both native per-copy states and persisted `.vif` flags, and require the
 master's writable layout to contain each originally writable `001` VID before
 starting clients. A single writable member is insufficient for assignment.
-Enable automatic vacuum as approved and restore filer replicas to 2. Keep S3
+Rebuild all three master processes one at a time while growth remains fenced,
+preserving quorum. Require the rebuilt topology to contain only the verified
+current placements before reenabling growth; old empty layout objects must not
+resurrect `000` allocations. Enable automatic vacuum as approved and restore
+filer replicas to 2. Keep S3
 and the operator at zero, Flux suspended and the CronJob paused while checking
 the filer maps below. Do not recreate a workload or Secret to bypass recovery
 errors.
@@ -289,8 +304,11 @@ Bind the observer to its concrete Pod IP, verify the IP-to-UID join immediately
 before and after the Job, and invalidate output if that identity changed.
 Only after every map passes, restore S3 replicas to 2 and verify fresh Pod UIDs
 and actual S3 reads. These are fresh processes after the approved outage; no
-additional gateway reset is needed. Then restore operator replicas to 1, the
-CronJob's prior suspension state and the prior Flux suspension states. Verify
+additional gateway reset is needed. Restore the original growth setting with a quorum-safe master rollout after
+existing-layout reads/writes pass. Restore the original update strategies only
+when all current Pod revisions match the intended templates. Then restore
+operator replicas to 1, both CronJobs' original suspension fields and the exact
+prior Flux/HelmRelease suspension fields. Verify
 desired/applied source, controller generations, readiness and every PVC UID.
 A gateway reset clears its own lookup/body caches but does not clear a filer's
 map. Readiness, master `/dir/lookup`, and a warm GET do not guarantee either

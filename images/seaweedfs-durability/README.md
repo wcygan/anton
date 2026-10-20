@@ -60,3 +60,20 @@ Publication follows the scoped-robot and archive/platform gates in
 `docs/docs/notes/harbor-developer-guide.md`. Stage Kubernetes changes only after
 fresh consistent backups and isolation checks; preserve the current replication
 policy and original PVC identities. Do not overwrite another operation's pauses.
+
+## Qualified growth fence
+
+Add `--growth-fence --tag localhost/anton/seaweedfs:4.48-durable1-growth1`
+to include the four-line HTTP `/vol/grow` guard. The startup growth-disable
+setting already fences assignment/background growth; this patch makes HTTP
+administrative growth reject with 503 too. The retained regression and isolated
+RPC/address, interrupted-copy and availability fixtures live in
+`scripts/fixtures/seaweedfs-singleton-migration/`.
+
+The qualified candidate preserves durable1 and upstream 4.48 commit 530be3e.
+Its binary SHA-256 is
+`e51c35daa6989efd4956dddb8431161bfe76b09c41b3da4607e22c426b7fa27e`.
+The native stale-address remedy is a procedure, rather than another image patch:
+configure and copy through current Pod UID/PVC/IP-bound direct RPC targets,
+reject identity changes and never retry a partial/ambiguous copy. Stable
+advertised DNS remains unchanged.

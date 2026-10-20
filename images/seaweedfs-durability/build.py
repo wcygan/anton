@@ -43,7 +43,11 @@ def main():
     parser.add_argument("--source-repo", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--tag", default="localhost/anton/seaweedfs:4.48-durable1")
+    parser.add_argument("--growth-fence", action="store_true",
+                        help="include the qualified HTTP volume-growth fence")
     args = parser.parse_args()
+    if args.growth_fence and args.tag == "localhost/anton/seaweedfs:4.48-durable1":
+        args.tag += "-growth1"
     out = args.output.resolve()
     assert not out.exists(), "refuse to overwrite build evidence"
     version = subprocess.check_output(["go", "version"], text=True).strip()
@@ -51,6 +55,11 @@ def main():
     fixture = ROOT / "scripts/fixtures/seaweedfs-durability"
     run([sys.executable, str(fixture / "prepare.py"), "--source-repo",
          str(args.source_repo.resolve()), "--output", str(out / "source")])
+    growth_patch = ROOT / "scripts/fixtures/seaweedfs-singleton-migration/growth-http-fence.patch"
+    growth_hash = None
+    if args.growth_fence:
+        run(["git", "apply", str(growth_patch)], cwd=out / "source/candidate")
+        growth_hash = hashlib.sha256(growth_patch.read_bytes()).hexdigest()
     context = out / "image"
     context.mkdir()
     shutil.copyfile(Path(__file__).with_name("Dockerfile"), context / "Dockerfile")
@@ -71,7 +80,7 @@ def main():
     identity = dict(source_commit=UPSTREAM, go_version=version, patch_sha256=patch_hash,
                     binary_sha256=hashlib.sha256((context / "weed").read_bytes()).hexdigest(),
                     image_id=info["Id"], platform="linux/amd64", tag=args.tag,
-                    policy_copy_budget=budget)
+                    policy_copy_budget=budget, growth_fence_patch_sha256=growth_hash)
     (out / "build-identity.json").write_text(json.dumps(identity, indent=2) + "\n")
     print(json.dumps(identity, indent=2))
 
