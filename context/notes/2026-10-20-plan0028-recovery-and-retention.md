@@ -1,5 +1,10 @@
 # Plan 0028 recovery, retention and cutover preparation — 2026-10-20
 
+**Preparation checkpoint:** the subsequent approved backup-only window and full
+Harbor restore are recorded in the [execution results](2026-10-20-plan0028-backup-window.md).
+The missing-fresh-backup statements below describe the state before that window;
+recurring backups and the stock production cutover remain unimplemented.
+
 The remaining offline checks support the stock-software route. Retention, a
 historical SeaweedFS archive restore and draft cutover configuration checks pass.
 A fresh coordinated Harbor database plus S3 recovery point remains a production

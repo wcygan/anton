@@ -258,14 +258,16 @@ Depends on: contract, qualify
 Write scope: Selected stock image pins/configuration, one cutover runbook, existing backup/recovery tooling and any separately approved migration manifest.
 Acceptance: The exact candidate, consistent restore rehearsal, writer fences, rollback and measured maintenance budget are reviewable before live approval; bootstrap access does not depend solely on the Harbor instance backed by this storage.
 Verification: Restore the selected backup into isolated storage and read real object/log contents; rehearse cutover and rollback on copies using the actual image architecture. Verify images are obtainable through a tested independent source/cache and current credentials remain scoped.
-Evidence: [Recovery/retention evidence](../notes/2026-10-20-plan0028-recovery-and-retention.md) and [prepared runbook](../../docs/docs/runbooks/seaweedfs-stock-cutover.md). Historical archives restore under stock and ciphertext hashes match, but current Harbor has no configured database backup; a fresh coordinated DB/S3 capture and full Harbor restore need a separately approved backup-only operation. Draft image/configuration patches and split capture manifests are local and unapplied.
+Evidence: [Recovery/retention preparation](../notes/2026-10-20-plan0028-recovery-and-retention.md), [completed backup-only window and full Harbor restore](../notes/2026-10-20-plan0028-backup-window.md), and [prepared runbook](../../docs/docs/runbooks/seaweedfs-stock-cutover.md). Fresh coordinated encrypted DB/S3/Loki exports and an isolated Harbor restore on stock SeaweedFS pass. Preparation remains blocked on publishing the contract/ADR decision, release-revision validation and disposition of three currently missing Harbor manifests; no stock cutover is approved. Draft deployment changes remain local and unapplied. Daily backup/freshness monitoring is still unimplemented.
 
 - [x] Verify retained encrypted archive identities and a stock isolated restore
   of historical volume/filer data: 271 file hashes, expected buckets and exact
   seeded object bytes. This is not the current coordinated Harbor recovery point.
-- [ ] Use an independent consistent backup of data, filer metadata and required
-  master state; include Harbor database/registry consistency and Loki WAL state
-  in the recovery boundary. Snapshot availability alone is insufficient.
+- [x] Use an independent consistent backup of data, filer metadata and required
+  master state, Harbor database/roles/recovery configuration and Loki WAL state:
+  six exports / 414 file hashes verified, full isolated Harbor restore on stock
+  SeaweedFS passed. This does not recover already-missing manifests or implement
+  daily backups; refresh the checkpoint before a later cutover.
 - [ ] For stock SeaweedFS, keep current PVC identities, metadata paths and
   placement. Remove patch-only configuration only when the stock replacement's
   semantics are verified. Keep supported fsync settings where applicable.
@@ -276,10 +278,18 @@ Evidence: [Recovery/retention evidence](../notes/2026-10-20-plan0028-recovery-an
   and named capture inventory; validate local application/rendering and inspect
   the actual operator. Use temporary StatefulSet holds with the operator frozen;
   its accepted CR strategy field is ignored by version 1.0.39. Do not apply the 508Gi clone inventory wholesale.
-- [ ] Refresh exact identities, finish chart/contracts validation on the release
-  revision, and obtain approval for backup capture, one clone/reader at a time,
-  PostgreSQL dump/roles/credential recovery and the maintenance budget. No old
-  approval or recorded Pod/PVC binding carries into the new window.
+- [x] Complete the approved backup-only capture, sequential clone export and
+  isolated full Harbor restore. Production recovery/cleanup finished at minute
+  53.42 of the 60-minute reservation; conservative service interruption totaled
+  13m24s across three attempts. Original images/PVCs/owners remain in place.
+- [ ] Record whether three currently missing Harbor manifests must be rebuilt
+  or may remain known gaps; no pre-window manifest baseline dates their loss.
+  None of their digest strings occurs in current Kubernetes/image source, but
+  this is not an exhaustive consumer audit. Do not add a fork to repair old data.
+- [ ] Refresh identities, independent image availability and chart/contracts
+  validation on the eventual release revision; publish the contract/ADR decision,
+  refresh the recovery point and obtain approval for the exact stock cutover.
+  Backup authorization and old Pod/PVC bindings do not authorize image rollout.
 
 ### Unit execute
 Status: pending
@@ -436,6 +446,27 @@ Evidence: pending
   since the recovery point explicit and restore time still to be measured.
   Backup infrastructure and the live maintenance window remain unapproved and
   unimplemented; this resolves the policy choice, not its implementation gate.
+
+- 2026-10-20: Operator approved and started the backup-only window (at most 60
+  minutes); preparation committed as `b572c38b`. Six coordinated snapshots and
+  encrypted Harbor database/roles/recovery captures completed. Original patched
+  service, templates, PVC UIDs and automation were restored at 23:14:09 UTC;
+  Harbor health/admin/three-project checks and Loki readiness passed. Snapshot
+  exports and full isolated Harbor restore remain in progress; no stock cutover
+  is authorized. [Window evidence](../notes/2026-10-20-plan0028-backup-window.md).
+
+- 2026-10-20: Backup-only operation completed within its 60-minute reservation;
+  independent encrypted exports cover 414 files / 62,211,982,066 bytes. All file
+  hashes and gzip integrity checks passed, all temporary cluster resources were
+  removed and original service/ownership/PVC identity checks passed. Full Harbor
+  restore on pinned stock SeaweedFS 4.48 passed database/roles/catalogue, login,
+  portal, a live-verified manifest plus seven blobs (68,298,243 bytes), and new
+  robot-authorized push/pull. Repeat lab recovery took 122.4 seconds with cached
+  images, not a production RTO. Three earlier-selected manifests are also missing
+  in current production; their pre-window status is unknown. Retain that data gap
+  and its separate disposition gate. Prove It Works required actual Harbor reads
+  and writes; Attack the Premise corrected the observer; Laziness Protocol kept
+  the existing export/topology model. No production stock cutover occurred.
 
 ## References
 
