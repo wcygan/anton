@@ -141,6 +141,17 @@ was never accepted as backup completion.
 
 ## Production runtime checkpoint
 
+The first controller-owned policy Job, `seaweedfs-durability-ensure-29874443`,
+failed before its main container started: both init attempts were OOM-killed while
+copying the 212 MiB binary under a 32 MiB memory limit. No bucket policy command
+ran. An isolated Job with a 384 MiB init limit and 256 MiB request copied the
+exact binary successfully and completed native RPC readbacks from both filers
+under the unchanged 128 MiB main-container limit. The source budget is corrected;
+the builder now checks actual binary size against copy RAM and volume capacity.
+Regression cases cover the original insufficient memory and volume limits.
+Failure and passing Job evidence are retained privately. A successful policy
+execution and final acceptance remain required.
+
 At 2026-10-20 03:21:03 UTC all ten patched Pods and all 18 original Longhorn
 volumes were healthy, with no active storage/log-loss alert and Loki flush queue
 zero. Original update strategies, S3 deployment state, operator replicas and

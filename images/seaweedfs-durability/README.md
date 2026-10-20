@@ -5,7 +5,7 @@ The runtime keeps the pinned upstream 4.48 amd64 base and replaces only its Go
 `scripts/fixtures/seaweedfs-durability/durable-ack.patch`. Production uses the Go
 server roles; inherited Rust binaries are unchanged and are not qualified here.
 
-Build with the repository environment (Go 1.26.7 and Python 3.12+):
+Build with the repository environment (Go 1.26.7, Python 3.12+ and yq):
 
 ```sh
 mise exec -- python3 images/seaweedfs-durability/build.py \
@@ -18,6 +18,9 @@ exports immutable source, applies the retained patch, cross-compiles a static
 Linux/amd64 binary with trimmed paths and explicit revision identity, builds a
 local image, verifies its platform, and retains source/patch/binary/image hashes.
 It refuses existing output and performs no publication or cluster operation.
+Before creating the image, it checks the actual binary size against the policy
+Job's init-copy memory limit and tool-volume capacity, and records those budgets
+in the build identity.
 
 Run fault tests in the exported candidate tree and retain their output:
 
