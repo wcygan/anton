@@ -89,7 +89,10 @@ def main():
     patch_hash = hashlib.sha256((fixture / "durable-ack.patch").read_bytes()).hexdigest()
     run(["docker", "build", "--platform", "linux/amd64", "--tag", args.tag,
          "--label", "org.opencontainers.image.revision=" + UPSTREAM,
-         "--label", "io.anton.durability-patch.sha256=" + patch_hash, str(context)])
+         "--label", "io.anton.durability-patch.sha256=" + patch_hash,
+         "--label", "io.anton.growth-fence-patch.sha256=" + (growth_hash or "none"),
+         "--label", "io.anton.compaction-sync-patch.sha256=" + (sync_hash or "none"),
+         str(context)])
     info = json.loads(subprocess.check_output(["docker", "image", "inspect", args.tag]))[0]
     assert info["Architecture"] == "amd64" and info["Os"] == "linux"
     identity = dict(source_commit=UPSTREAM, go_version=version, patch_sha256=patch_hash,
