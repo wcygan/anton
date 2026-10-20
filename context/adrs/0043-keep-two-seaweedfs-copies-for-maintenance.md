@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Accepted
 date: 2026-10-19
 deciders: ['@wcygan']
 affects: storage
@@ -15,9 +15,10 @@ retrospective: false
 
 ## Status
 
-Proposed. ADR 0019 remains accepted until the operator approves this decision
-and the runtime rollout. This proposal changes its native-replication choice;
-the canonical standalone S3 path, filers and Longhorn-backed PVCs remain.
+Accepted by the operator with the exact conditional rollout, migration and
+drill in PR 519. This supersedes ADR 0019's native-replication choice; the
+canonical standalone S3 path, filers and Longhorn-backed PVCs remain.
+Execution and acceptance evidence are maintained in the linked plan and record.
 
 ## Context
 
@@ -42,7 +43,7 @@ safety and convergence requirements.
 
 ## Decision
 
-Propose native placement `001`: two copies on distinct volume servers in the
+Use native placement `001`: two copies on distinct volume servers in the
 current single rack. Retain hard hostname anti-affinity and one volume server
 per Kubernetes node, so those servers occupy distinct nodes. Set the master
 default for future allocations and `WEED_MASTER_VOLUME_GROWTH_COPY_2=1` to
@@ -104,13 +105,12 @@ It does not reintroduce the retired lakehouse workloads.
 
 ## Follow-ups
 
-- [x] Finish the pinned local existing-data migration and independent review on 4.40 and 4.48.
-- [ ] Approve the precise live rollout, writer outage, migration and drill.
-- [ ] After approval, accept this ADR and update only ADR 0019's status line.
-- [ ] Verify the applied master configuration and actual new allocations.
-- [ ] Verify all existing native volumes, exact copied bytes and cache preparation.
-- [ ] Pass never-read GET and fresh PUT/GET while one approved node stays drained;
-  recover full topology and clean up test resources.
+Pinned local migration and availability tests passed on 4.40 and 4.48 with
+independent review. Track the applied configuration, actual allocations,
+existing-volume hashes, cache preparation, approved node hold, recovery and
+temporary-resource cleanup in [plan 0027](../plans/0027-improve-cluster-operational-outcomes.md)
+and the maintenance record. This decision does not itself mark those live
+acceptance gates complete.
 
 ## Evidence
 

@@ -53,8 +53,9 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 - [x] Observe post-drain Flux recovery from transient ESO validation-webhook failures; all 86 reconcilers passed after the evidence source revision, with concurrent reconcile requests separately attributed.
 - [x] Deliver the bounded SeaweedFS placement audit; baseline finds all 20 native volumes at `000` with one active copy. Independent review and 16 focused tests pass.
 - [x] Complete the pinned local cold-read and existing-data migration proof on 4.40/4.48, including gateway preparation, a safe writer fence and independent review.
-- [ ] Serialize the availability rollout with the separate 4.48 upgrade/restore owner; qualify the final homogeneous runtime version and preserve its readiness/telemetry controls and restore resources.
-- [ ] Publish the reviewed availability policy, migration/rollback plan and successor ADR; obtain exact live approval before changing replication or replacing/draining resources.
+- [x] Serialize the availability rollout with the separate 4.48 upgrade/restore owner; qualify the final homogeneous runtime version and preserve its readiness/telemetry controls and restore resources.
+- [x] Publish the reviewed availability policy, migration/rollback plan and successor ADR; obtain exact live approval before changing replication or replacing/draining resources.
+- [ ] Observe the approved default through GitOps and verify an actual new two-copy allocation before the writer fence.
 - [ ] Verify existing and new S3 data during the approved one-node hold, full recovery and temporary-resource cleanup; do not infer this from the earlier warm gateway fixture.
 - [x] Verify normal workload recovery after the approved private verifier mirror repair and ESO sync; desired replicas, enforcing admission and user-facing HTTP/TLS checks passed.
 - [ ] Complete independent bootstrap-image origin/cache-seeding evidence and approve an isolated rebuild drill; source audit remains incomplete.
