@@ -47,6 +47,10 @@ def main():
                 "weed/storage/qualification_eager_index_test.go",
             ),
             (
+                "index_boundary_test.go",
+                "weed/storage/qualification_index_boundary_test.go",
+            ),
+            (
                 "metadata_durability_test.go",
                 "weed/filer/leveldb2/qualification_durability_test.go",
             ),

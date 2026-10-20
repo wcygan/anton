@@ -47,7 +47,11 @@ truncated index before truncating data and fencing failed recovery. LevelDB2
 requires `sync=true` in its existing store configuration. The data format and
 existing LevelDB2 path/partition count are unchanged. The patch does not establish
 a metadata quorum, strengthen ordinary non-fsync deletes, or certify physical
-power-loss behavior. An old-image rollback restores the old acknowledgment gaps.
+power-loss behavior. A crash after an in-flight overwrite's index persists but
+before its data barrier or recovery completes can still require offline index
+repair. An old-image rollback restores the old acknowledgment gaps. Both patched
+write paths refuse to mutate data/index files when their rollback boundary cannot
+be established; a Stat error must never masquerade as an empty index.
 
 Publication follows the scoped-robot and archive/platform gates in
 `docs/docs/notes/harbor-developer-guide.md`. Stage Kubernetes changes only after

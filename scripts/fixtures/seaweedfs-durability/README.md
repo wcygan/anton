@@ -102,7 +102,16 @@ non-fsync volume deletes, or solve every directory-entry and torn-write hazard.
 The deployment review expanded the model to independently persisted index appends.
 `independent_index_test.go` adds eight cases. The current patch shares batch and
 inline rollback, persisting a truncated index before truncating data and fencing
-failed recovery. There are now 40 fault cases; earlier benchmark results remain
+failed recovery. Independent review then reproduced destructive rollback when
+the legacy index-size API returned zero after a Stat error. `index_boundary_test.go`
+adds three cases that require a fallible boundary, reject the write before any
+physical append/truncate, and retain prior acknowledged data. There are now 43
+fault cases; earlier benchmark results remain
 bound to their original patch/image identities. Use
 `images/seaweedfs-durability/build.py` and `rehearse.py` for the production amd64
 runtime and HA upgrade/rollback/re-upgrade proof.
+
+The model does not prove crash atomicity for an overwrite interrupted after its
+index append independently persists but before its data barrier or rollback runs.
+That preexisting window can require offline index repair to recover an earlier
+mapping. Do not describe completed rollback tests as an arbitrary power-cut test.

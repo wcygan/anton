@@ -1,14 +1,20 @@
 --- a/weed/storage/volume_write.go
 +++ b/weed/storage/volume_write.go
-@@ -281,65 +281,44 @@
+@@ -281,65 +281,51 @@
  	if statErr != nil {
  		return 0, 0, false, fmt.Errorf("cannot read current volume position: %v", statErr)
  	}
 -	priorOffset, priorSize, hasPrior := Offset{}, Size(0), false
 -	if nv, found := v.nm.Get(n.Id); found {
 -		priorOffset, priorSize, hasPrior = nv.Offset, nv.Size, true
--	}
-+	indexEnd := int64(v.nm.IndexFileSize())
++	rollbacker, ok := v.nm.(batchIndexRollbacker)
++	if !ok {
++		return 0, 0, false, fmt.Errorf("mapper %T cannot establish rollback position", v.nm)
+ 	}
++	indexEnd, indexErr := rollbacker.rollbackIndexPosition()
++	if indexErr != nil {
++		return 0, 0, false, fmt.Errorf("cannot read current index position: %w", indexErr)
++	}
 +	snapshot := newBatchNeedleSnapshot(v, n.Id)
 +	metricRollbacker, _ := v.nm.(batchMetricRollbacker)
 +	var metrics batchMapMetricSnapshot
@@ -42,8 +48,8 @@
  		return 0, 0, false, syncErr
  	}
  	return
--}
--
+ }
+ 
 -// rollbackUnflushedWrite undoes an append whose fsync failed: the bytes are not
 -// data we can vouch for, so they come back off the .dat and the needle map goes
 -// back to what it pointed at before, rather than at an offset past the new end.
@@ -78,8 +84,8 @@
 -	if recoveryErr != nil {
 -		v.markIoUnavailable(recoveryErr)
 -	}
- }
- 
+-}
+-
  // writeNeedle2 appends a needle. A durable write normally goes through the
  // async batch worker, which fsyncs once for the whole batch; while the server
  // is stopping the worker is winding down, so it is flushed inline instead. Both
@@ -88,7 +94,29 @@
  func (v *Volume) writeNeedle2(n *needle.Needle, checkCookie bool, fsync bool, isStopping bool) (offset uint64, size Size, isUnchanged bool, err error) {
  	// glog.V(4).Infof("writing needle %s", needle.NewFileIdFromNeedle(v.Id, n).String())
  	if err := v.UnavailableError(); err != nil {
-@@ -531,7 +510,11 @@
+@@ -508,7 +494,20 @@
+ 	if metricRollbacker != nil {
+ 		batchMetrics = metricRollbacker.snapshotBatchMetrics()
+ 	}
+-	indexEnd := int64(v.nm.IndexFileSize())
++	rollbacker, ok := v.nm.(batchIndexRollbacker)
++	var indexEnd int64
++	var indexErr error
++	if !ok {
++		indexErr = fmt.Errorf("mapper %T cannot establish rollback position", v.nm)
++	} else {
++		indexEnd, indexErr = rollbacker.rollbackIndexPosition()
++	}
++	if indexErr != nil {
++		for _, request := range currentRequests {
++			request.Complete(0, 0, false, fmt.Errorf("cannot read current index position: %w", indexErr))
++		}
++		return
++	}
+ 	batchLastAppendAtNs := v.lastAppendAtNs
+ 	batchLastModifiedTsSeconds := v.lastModifiedTsSeconds
+ 	for i := 0; i < len(currentRequests); i++ {
+@@ -531,7 +530,11 @@
  
  	// if sync error the batch is not durable; restore it before another
  	// operation observes the volume
@@ -111,6 +139,57 @@
  	_, _, _, err = v.writeNeedle2(fixedNeedle(1, "second-copy"), true, true, true)
  	require.Error(t, err, "a write whose fsync failed must not be acked")
  
+--- a/weed/storage/needle_map.go
++++ b/weed/storage/needle_map.go
+@@ -38,6 +38,7 @@
+ }
+ 
+ type batchIndexRollbacker interface {
++	rollbackIndexPosition() (int64, error)
+ 	truncateIndex(offset int64) error
+ }
+ 
+@@ -68,6 +69,16 @@
+ 	UpdateNeedleMap(v *Volume, indexFile *os.File, opts *opt.Options, ldbTimeout int64) error
+ }
+ 
++func (nm *baseNeedleMapper) rollbackIndexPosition() (int64, error) {
++	nm.indexFileAccessLock.Lock()
++	defer nm.indexFileAccessLock.Unlock()
++	stat, err := nm.indexFile.Stat()
++	if err != nil {
++		return 0, err
++	}
++	return stat.Size(), nil
++}
++
+ func (nm *baseNeedleMapper) IndexFileSize() uint64 {
+ 	stat, err := nm.indexFile.Stat()
+ 	if err == nil {
+--- a/weed/storage/needle_map_sorted_file.go
++++ b/weed/storage/needle_map_sorted_file.go
+@@ -188,6 +188,21 @@
+ 	return nil
+ }
+ 
++func (m *SortedFileNeedleMap) rollbackIndexPosition() (int64, error) {
++	f, err := pooledIndexFiles.borrow(m.indexFileName, true)
++	if err != nil {
++		return 0, err
++	}
++	defer pooledIndexFiles.release(f)
++	m.indexFileAccessLock.Lock()
++	defer m.indexFileAccessLock.Unlock()
++	stat, err := f.file.Stat()
++	if err != nil {
++		return 0, err
++	}
++	return stat.Size(), nil
++}
++
+ // truncateIndex drops .idx tombstones a failed batch appended. The .sdx is
+ // untouched: a delete already marked there cannot be unmarked, so callers
+ // treat the batch as unrecoverable before reaching this.
 --- a/weed/filer/leveldb2/leveldb2_store.go
 +++ b/weed/filer/leveldb2/leveldb2_store.go
 @@ -25,9 +25,10 @@
