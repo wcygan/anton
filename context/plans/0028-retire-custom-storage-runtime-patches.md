@@ -89,6 +89,17 @@ Planned downtime also means failed or delayed uploads, downloads and presigned-U
 requests; applications need visible failure/retry behavior and upload completion
 verification. Clients must not silently present an interrupted upload as saved.
 
+**Operator-delegated default (2026-10-20):** treat app uploads as potentially unique;
+never assume users retain originals. Before treating the cluster as the only copy,
+require an independent encrypted backup and demonstrated restore. Target at least
+daily backups with the newest usable recovery point no more than 24 hours old.
+A restore may lose uploads since that point; this is a recovery objective, not a
+guaranteed 24-hour loss bound or protection against every corruption scenario.
+Until backup coverage is working and monitored, require a retained independent
+original/copy or keep unique-upload onboarding gated. Measure restore time in the
+actual rehearsal before promising an RTO. No recurring job, destination or live
+maintenance approval is created by selecting this default.
+
 Before enabling unique user uploads or cutting over an existing upload consumer,
 record whether users retain originals, what can be regenerated, independent backup
 coverage/freshness, tested restore time and the owner-approved loss expectation.
@@ -180,8 +191,9 @@ HTTP growth handler without the local growth-disabled check. This is source
 evidence for two unresolved paths, not qualification of all current upstream code.
 The isolated stock comparison is complete: see the qualification note below.
 Neither candidate passed the former strict fault contract. Transition qualification
-under the revised best-effort contract is still pending; no production eligibility
-is implied merely by accepting the known risks.
+under the revised best-effort contract passed the bounded local checks described
+below; production preparation still needs a fresh coordinated recovery point and
+full Harbor restoration. Accepting known risks alone is not production eligibility.
 
 | Local change | What it buys | Exit condition |
 | --- | --- | --- |
@@ -212,7 +224,7 @@ Evidence: pending
   successor ADR; never mark the unperformed availability drill passed.
 
 ### Unit qualify
-Status: pending
+Status: complete
 Depends on: none
 Write scope: Existing SeaweedFS/Loki qualification fixtures and a compact evidence table linked from this plan.
 Acceptance: Stock images pass normal S3/Harbor/Loki behavior and clean cutover/rollback checks. Each removed patch has either a procedural replacement or an explicit risk disposition under the revised data contract; no new runtime patch is required.
@@ -227,10 +239,11 @@ Evidence: [Strict fault qualification](../notes/2026-10-20-stock-storage-qualifi
 - [x] Complete the multi-component patched → stock → patched rollback → stock
   rehearsal with both-gateway object checks, native two-copy checks, Harbor registry
   blob/manifest checks and 8,000 exact Loki records per hot/cold application stage.
-- [ ] Finish lifecycle coverage and production preparation. Harbor's registry
-  protocol checks do not cover its database/UI/GC; Loki ingestion/cold-query checks
-  do not prove timed retention deletion. Use ordered shutdown: the lab's final
-  parallel cleanup timed out filers, despite clean component-transition exits.
+- [x] Verify stock retention with pre-aged records and actual S3 deletion:
+  11 records/chunks become the four expected survivors under 24h/336h/720h policy.
+  Verify clean Loki stock-to-patched rollback with a fresh WAL: 512 final records
+  survive, both earlier WAL trees unchanged. These are isolated tests; full Harbor
+  recovery and the seven-day production observation remain later gates.
 - [x] Reuse the existing fixtures for sync failures, rollback-boundary errors,
   compaction failures, metadata persistence, and Loki checkpoint/replay. Preserve
   tests that express necessary behavior; retire tests tied only to an abandoned
@@ -240,13 +253,16 @@ Evidence: [Strict fault qualification](../notes/2026-10-20-stock-storage-qualifi
   not on the critical path to stock deployment.
 
 ### Unit prepare
-Status: pending
+Status: blocked
 Depends on: contract, qualify
 Write scope: Selected stock image pins/configuration, one cutover runbook, existing backup/recovery tooling and any separately approved migration manifest.
 Acceptance: The exact candidate, consistent restore rehearsal, writer fences, rollback and measured maintenance budget are reviewable before live approval; bootstrap access does not depend solely on the Harbor instance backed by this storage.
 Verification: Restore the selected backup into isolated storage and read real object/log contents; rehearse cutover and rollback on copies using the actual image architecture. Verify images are obtainable through a tested independent source/cache and current credentials remain scoped.
-Evidence: pending
+Evidence: [Recovery/retention evidence](../notes/2026-10-20-plan0028-recovery-and-retention.md) and [prepared runbook](../../docs/docs/runbooks/seaweedfs-stock-cutover.md). Historical archives restore under stock and ciphertext hashes match, but current Harbor has no configured database backup; a fresh coordinated DB/S3 capture and full Harbor restore need a separately approved backup-only operation. Draft image/configuration patches and split capture manifests are local and unapplied.
 
+- [x] Verify retained encrypted archive identities and a stock isolated restore
+  of historical volume/filer data: 271 file hashes, expected buckets and exact
+  seeded object bytes. This is not the current coordinated Harbor recovery point.
 - [ ] Use an independent consistent backup of data, filer metadata and required
   master state; include Harbor database/registry consistency and Loki WAL state
   in the recovery boundary. Snapshot availability alone is insufficient.
@@ -256,9 +272,14 @@ Evidence: pending
 - [ ] Preserve existing S3 endpoints, bucket ownership and credentials. Inventory
   active app consumers in both repositories; do not provision future uploads
   implicitly. Keep Harbor and Loki attached to SeaweedFS during the transition.
-- [ ] Present exact targets, commands, expected transitions, stop time, recovery
-  operation and cleanup list. Coordinate with any existing storage work; old
-  approvals and recorded Pod/PVC bindings do not carry into a new window.
+- [x] Prepare the ordered cutover/rollback runbook, pinned source-change drafts
+  and named capture inventory; validate local application/rendering and inspect
+  the actual operator. Use temporary StatefulSet holds with the operator frozen;
+  its accepted CR strategy field is ignored by version 1.0.39. Do not apply the 508Gi clone inventory wholesale.
+- [ ] Refresh exact identities, finish chart/contracts validation on the release
+  revision, and obtain approval for backup capture, one clone/reader at a time,
+  PostgreSQL dump/roles/credential recovery and the maintenance budget. No old
+  approval or recorded Pod/PVC binding carries into the new window.
 
 ### Unit execute
 Status: pending
@@ -392,6 +413,29 @@ Evidence: pending
   runbook gates in the revised qualification note. All owned lab resources were
   removed. Prove It Works kept local protocol success distinct from deployment
   readiness; no production action or new runtime patch was performed.
+
+- 2026-10-20: Worked remaining gates without production mutations. Verified
+  current ready workloads and normal Flux ownership; confirmed Harbor CNPG has
+  no configured backup/plugin and Longhorn's backup target is empty. All eight
+  encrypted archives remain byte-identical. Restored five historical data/filer
+  archives (271 files, 31,140,434,016 bytes) into isolated stock SeaweedFS and read
+  the exact probe and bucket inventory. Stock retention physically deleted seven
+  expired chunks and kept four expected records; Loki's fresh-WAL image rollback
+  preserved all 512 records and both prior WAL trees. Marked bounded qualification
+  complete and preparation blocked on fresh coordinated Harbor DB/S3 capture and
+  actual Harbor restore, plus the pending upload contract. Prepared the runbook,
+  stock source/ADR drafts and split capture packet; no deployment file was changed
+  and no live capture/clone/restart was performed. Prove It Works required service
+  readback and object deletion; Laziness Protocol reused the controller-freeze procedure
+  and the encrypted export path rather than introducing a new backup platform.
+
+- 2026-10-20: Operator delegated the app-upload policy to the recommended
+  default. Treat uploads as potentially unique; require independent encrypted
+  backup and verified restore before relying on the cluster as the only copy.
+  Set daily cadence / at-most-24-hour usable-backup-age as the target, with loss
+  since the recovery point explicit and restore time still to be measured.
+  Backup infrastructure and the live maintenance window remain unapproved and
+  unimplemented; this resolves the policy choice, not its implementation gate.
 
 ## References
 
