@@ -55,14 +55,124 @@ fail-open cases. All 16 focused tests pass. The integrated public contract
 suite passed 493 tests with one skip. Removing this script and its tests
 reverts this unit; it changes no runtime state.
 
+[PR 517](https://github.com/wcygan/anton/pull/517) merged this unit at
+23:00:15 UTC as `73202f81`; GitHub checks passed. No runtime manifest changed.
+
+Both exact filer Pods returned readable root metadata and HTTP 404 for
+`/etc/seaweedfs/filer.conf` in a subsequent GET-only observation. The running
+filer command has no explicit replica-placement override. At pinned 4.40 an
+empty filer default is supplied by the master's current default on each
+assignment, rather than cached once at filer startup. Repeat this path-rule
+preflight before rollout; an explicit persisted rule would take precedence.
+
 ## Current decision gate
 
+The root independently executed the frozen 4.40 fixture, then added the review's
+same-volume control assertion and reran the resulting artifact successfully.
+All five withdrawals assert one chunk per warm/cold object, the same VID and
+different file IDs. The `000` unread GET timed out at 10.058 seconds while the
+warm GET returned exact bytes. All four `001` unread GETs passed (two migrated,
+two newly allocated), as did fresh PUT/GET operations whose native placement
+had two surviving owners. The migrated source/destination `.dat`, `.idx` and
+`.vif` hashes matched, read-only state persisted through restart and copy,
+and both copies became writable with VID 1 in the master's `001` write layout.
+The test's source `.dat` was 4,194,632 bytes below its 8 MiB limit.
+All responses verified 1,048,576 bytes with the expected digest. Local timings
+are not production throughput or latency estimates.
+
+Both root executions exited zero and verified cleanup of their own Docker
+containers, networks and volumes. The final guarded run's raw evidence is
+retained in the integration checkout's ignored
+`.private/seaweed-maintenance/proof-final-controls.log`. The final public
+contract suite passed 493 tests with one skip, and the docs production build
+passed. Source and runbook review closed the stale-location, size-consistency,
+warm/cold volume, writer fence, bucket CronJob, node-owner, credential-exposure,
+budget, restore-state and filer-before-S3 sequencing findings.
+
+The same pinned fixture now supports 4.48 without changing its cache settings.
+The worker and root independently executed it successfully: the single-copy
+cold GET failed, while all four two-copy cold GETs and fresh PUT/GET checks
+passed. The exact migration retained FID/VID, matched all three file hashes,
+persisted read-only state and restored the `001` write layout. Unlike the 4.40
+observation, the worker's 4.48 warm baseline timed out too; the cause of that
+warm-read difference remains unassessed. The required baseline is cold-read
+unavailability, not the presence of a warm body-cache hit. Every successful
+response must have the expected digest. Root's first 4.48 evidence is retained
+in `.private/seaweed-maintenance/proof-root-4.48.log`.
+
+Final review additionally requires distinct permitted volume-server hosts
+instead of counting duplicate location entries as copies, and rejects a corrupt
+HTTP 200 cold response instead of classifying it as an expected outage. Mocked
+duplicate/foreign-owner, multi-chunk and corrupt-response cases reject as
+expected. The final guarded 4.40 worker run and independent root 4.48 run both
+exited zero, each with five same-volume controls and four successful two-copy
+withdrawals. Root separately inspected returned hashes and distinct surviving
+owners in the final log and queried Docker labels to confirm cleanup. Evidence
+is retained in the proof worktree's ignored
+`.private/seaweed-maintenance-availability/4.40-guarded-final.log` and integration
+checkout's `.private/seaweed-maintenance/proof-root-4.48-guarded.log`.
+The reusable proof is delivered separately in
+[PR 518](https://github.com/wcygan/anton/pull/518); it changes no runtime state.
+
+An earlier sequential local experiment failed its second cold GET after a
+server returned and a one-location lookup was reused. That failed run did not
+capture every process's map. Direct filer `LookupVolume` observations and fresh
+S3 processes are preparation gates; the S3 map's contents/completeness remain
+unassessed. Actual never-read bytes while an owner is absent are the outcome
+evidence, rather than a claim that gateway readiness synchronizes caches.
+
+At 23:27 UTC, GET-only checks found 3/3 Ready schedulable nodes, 86/86 Ready
+reconcilers, 72/72 desired Ready Deployments/StatefulSets, 23 healthy Longhorn
+volumes and 46 running replicas. The extra five PVCs and their unmanaged reader
+Pods belong to the separate SeaweedFS 4.48 restore/upgrade workstream. Our
+production inventory remains the same 20 single-copy `000` volumes. All three
+masters were back on 4.40 at that observation, after main's staged master pin
+`e00c4ee7` and revert `3f182a85`; that owner is still working on its readiness
+gate. Preserve its evidence and resources, and serialize all live storage
+changes. Main subsequently added Raft-gated 4.48 masters and began staged volume
+server upgrades. This proposal preserves those source changes. Its local
+qualification cannot authorize work during that rollout or replace the fresh
+owner/version check. The [qualification record](2026-10-19-seaweedfs-4.48-qualification.md)
+belongs to that separate workstream.
+
 The candidate is native placement `001` while retaining one volume server per
-node, existing PVCs and Longhorn replication. Local fresh-`001` tests support
-the intended cold-read behavior. Existing data still needs a safe copy
-procedure, byte verification and gateway lookup-cache refresh testing.
+node, existing PVCs and Longhorn replication. Local fresh and migrated `001`
+tests support the intended cold-read behavior. Production still needs the
+approved copy procedure, byte verification and gateway lookup-cache checks.
 No production availability improvement is claimed before those gates pass
 and the separately approved live exercise succeeds.
+
+## Prepared runtime unit
+
+[Draft PR 519](https://github.com/wcygan/anton/pull/519) contains only the
+`001`/growth setting, proposed ADR and migration/verification records. The
+integrated semantic YAML comparison confirms that the upstream image pins,
+Raft readiness and telemetry controls remain intact. PR 518 merged at
+23:43:53 UTC as `507af404`. The final combined suite passed 493 tests with
+one skip, and the documentation build passed.
+
+The root-owned ignored `.private/seaweed-maintenance-verification/` bundle
+contains the exact-key client, ledger schema, hardened Job templates and two
+role-specific egress policies. Nineteen offline tests passed independently.
+An isolated 4.48 integration used synthetic credentials to verify pre-seed
+HEAD 404, existing-key rejection, exact GET and fresh PUT/GET, and DELETE
+followed by HEAD 404. Two additional exact HEAD checks also returned 404.
+Source hashes match the root copy, and the local Docker resources were removed.
+The integration ran under local emulation and makes no production timing claim.
+The client-source hash is
+`5ed05442deba7e01cd9ae1bb76002fd99a272ab68a364935fce0c783313e6af9`;
+the renderer-source hash is
+`2b1d996f7f09c2d6dc91b89cdc5ada2a3ca9377ac87419f8adde38d79770a718`.
+The exact harness and raw log remain in the proof worktree's ignored
+`.private/seaweed-maintenance-verification-local/` directory.
+
+At 23:50:14 UTC, GET-only checks found all ten Seaweed Pods Ready on the pinned
+4.48 image. Volume ordinals had moved: 0 was on `k8s-3`, 1 on `k8s-1` and 2 on
+`k8s-2`. Fixture selection now uses actual source/destination Pod-to-node UID
+joins. It records whether the withdrawn owner is original/new; absent-owner
+availability alone does not establish that the new copy served. The separate
+upgrade owner is completing its health observation and cleanup. Our new live
+migration remains unapproved and cannot overlap that work.
 
 The earlier R3 recovery drill used a fresh OCI client after warming the same
 fixture through S3. Its metadata mapped the fixture to the replaced server,
