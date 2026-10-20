@@ -103,19 +103,33 @@ non-fsync deletes, and asynchronous filer metadata peers.
 ## Fresh backup progress
 
 Five original PVC identities were captured and preserved. With S3 and both filer
-writers stopped and vacuum disabled, five retained CSI snapshots became ready.
+writers stopped, five retained CSI snapshots became ready.
 All 241 files across the five restored clones matched the source-before and
 source-after manifests (about 31.45 GB). Three encrypted master archives also
 decrypted and matched all file hashes. Source reader Pods were removed by UID
 before filers restarted, preserving normal volume attachment.
 
-The original replica counts, vacuum, HelmRelease and Flux controls were restored;
+The original replica counts, HelmRelease and Flux controls were restored;
 the backup service outage lasted 439 seconds. All ten SeaweedFS Pods, all 23
 Longhorn volumes including temporary clones, and controller ownership were
 healthy afterward, with no active storage/log-loss alert. Loki had two queued
 flushes immediately after restoration; require that backlog to drain before
 another planned interruption. Encrypted clone export and decrypted file-hash
 verification are in progress; snapshots alone do not complete the backup gate.
+
+A later helper review found that the remote shell invocation lacked its stdin
+forwarding flag, so the intended native vacuum disable/enable commands were not
+forwarded. Do not treat those commands as verified evidence. Complete
+source-before, source-after and restored-clone file equality independently
+establishes the captured backup state despite this missing fence. The helper now
+forwards stdin, retains stderr and rejects shell errors before reuse. No native
+volume copy or vacuum command was run by this helper during the backup.
+
+The initial v0 encrypted export decrypted but had a truncated gzip stream and
+was rejected. A separately retained retry, with an explicit stdout flush and a
+brief process-exit delay, passed every file hash. The failed archive remains
+evidence and is not an eligible backup. Both filer exports and v2 have also
+passed verification; v1 remains in progress.
 
 The independent pass covered source, lock ordering, capability inheritance,
 boundary fault execution and six Python policy tests. It did not independently
