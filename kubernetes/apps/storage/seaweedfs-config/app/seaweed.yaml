@@ -55,7 +55,7 @@ spec:
         value: "1"
       - name: WEED_MASTER_VOLUME_GROWTH_COPY_2
         value: "1"
-    # Keep logical volumes small enough that each 120Gi volume server has
+    # Keep logical volumes small enough that each 160Gi volume server has
     # room for multiple collections. Existing volumes are unaffected; this
     # only increases the number of new volume slots available to S3 buckets.
     volumeSizeLimitMB: 5000         # 5 GB per volume file
@@ -76,7 +76,7 @@ spec:
     # of headless-Service DNS resolution.
     ipBind: 0.0.0.0
     requests:
-      storage: 120Gi
+      storage: 160Gi
     storageClassName: longhorn      # default Longhorn SC; no NAD attachment here
     # Phase 1 scratch shakeout showed `replicas: 3` alone does not spread
     # across nodes (all three landed on k8s-2). Chart 0.1.14's Seaweed CRD
