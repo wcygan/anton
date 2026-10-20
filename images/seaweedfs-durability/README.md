@@ -77,3 +77,25 @@ The native stale-address remedy is a procedure, rather than another image patch:
 configure and copy through current Pod UID/PVC/IP-bound direct RPC targets,
 reject identity changes and never retry a partial/ambiguous copy. Stable
 advertised DNS remains unchanged.
+
+## Compaction source sync failures
+
+Add `--growth-fence --compaction-sync` to retain the durable acknowledgment and
+HTTP growth-fence patches while making compaction fail on source data/index
+sync errors and a source-data close error. The separate patch is
+`scripts/fixtures/seaweedfs-durability/compaction-sync.patch`; its hash is retained
+in the build identity. If closing the source fails, the unchanged original
+files are reopened before the error is returned. A failed reopen quarantines
+the volume instead of serving closed handles. The regression fixture checks
+error identity, retained payloads, writable recovery and balanced volume metrics.
+
+```sh
+mise exec -- python3 images/seaweedfs-durability/build.py \
+  --source-repo /path/to/upstream-seaweedfs \
+  --output /path/to/new-private-build \
+  --growth-fence --compaction-sync
+```
+
+This patch does not perform orphan deletion or compaction during deployment.
+Deletion still needs a separately checked durability barrier in the maintenance
+procedure. An image rollout does not make the three old test orphans disappear.
