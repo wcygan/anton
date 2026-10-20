@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,6 +17,25 @@ UPSTREAM = "530be3e37337488ecc34d58441e0bc476e121c93"
 
 def run(args, **kwargs):
     return subprocess.run(args, check=True, **kwargs)
+
+
+def policy_copy_budget(binary_bytes, pod):
+    def quantity(value):
+        match = re.fullmatch(r"([0-9]+)(Ki|Mi|Gi)?", str(value))
+        if not match:
+            raise ValueError("unsupported policy copy budget: " + str(value))
+        return int(match[1]) * {None: 1, "Ki": 1024, "Mi": 1024**2, "Gi": 1024**3}[match[2]]
+
+    init = next(c for c in pod["initContainers"] if c["name"] == "weed-tool")
+    tools = next(v for v in pod["volumes"] if v["name"] == "tools")
+    memory = quantity(init["resources"]["limits"]["memory"])
+    storage = quantity(tools["emptyDir"]["sizeLimit"])
+    if memory < binary_bytes:
+        raise ValueError("init memory limit is smaller than the copied binary")
+    if storage < binary_bytes:
+        raise ValueError("tools volume limit is smaller than the copied binary")
+    return dict(binary_bytes=binary_bytes, init_memory_limit_bytes=memory,
+                tools_volume_limit_bytes=storage)
 
 
 def main():
@@ -38,6 +58,10 @@ def main():
     run(["go", "build", "-trimpath", "-buildvcs=false", "-p", "4", "-ldflags",
          "-X github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT=" + UPSTREAM + "+durable1",
          "-o", str(context / "weed"), "./weed"], cwd=out / "source/candidate", env=env)
+    manifest = ROOT / "kubernetes/apps/storage/seaweedfs-config/app/durability-cronjob.yaml"
+    pod = json.loads(subprocess.check_output(
+        ["yq", "-o=json", ".spec.jobTemplate.spec.template.spec", str(manifest)]))
+    budget = policy_copy_budget((context / "weed").stat().st_size, pod)
     patch_hash = hashlib.sha256((fixture / "durable-ack.patch").read_bytes()).hexdigest()
     run(["docker", "build", "--platform", "linux/amd64", "--tag", args.tag,
          "--label", "org.opencontainers.image.revision=" + UPSTREAM,
@@ -46,7 +70,8 @@ def main():
     assert info["Architecture"] == "amd64" and info["Os"] == "linux"
     identity = dict(source_commit=UPSTREAM, go_version=version, patch_sha256=patch_hash,
                     binary_sha256=hashlib.sha256((context / "weed").read_bytes()).hexdigest(),
-                    image_id=info["Id"], platform="linux/amd64", tag=args.tag)
+                    image_id=info["Id"], platform="linux/amd64", tag=args.tag,
+                    policy_copy_budget=budget)
     (out / "build-identity.json").write_text(json.dumps(identity, indent=2) + "\n")
     print(json.dumps(identity, indent=2))
 
