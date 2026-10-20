@@ -39,11 +39,15 @@ def _items(value: Any, label: str) -> list[dict[str, Any]]:
 
 
 def parse_replica_placement(value: Any) -> str:
-    """Decode SeaweedFS's native ReplicaPlacement JSON fields to its 3-digit form."""
+    """Decode SeaweedFS's native ReplicaPlacement JSON fields to XYZ form."""
     if not isinstance(value, dict):
         raise AuditError("malformed native ReplicaPlacement")
+    fields = ("dc", "rack", "node")
+    unknown = set(value) - set(fields)
+    if unknown:
+        raise AuditError("unknown native ReplicaPlacement field")
     counts = []
-    for field in ("DiffDataCenterCount", "DiffRackCount", "SameRackCount"):
+    for field in fields:
         count = value.get(field, 0)
         if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 9:
             raise AuditError("malformed native ReplicaPlacement count")
