@@ -73,10 +73,23 @@ laptop Docker cache alone does not prove Kubernetes can start an image.
 
 ## Recovery point: capture before image changes
 
-The current snapshots/exports are historical evidence. They are not a fresh,
-consistent Harbor-plus-S3 backup. Harbor CNPG has no configured backup or plugin;
-Longhorn's backup target is empty. Do not proceed on the strength of Ready
-snapshots alone.
+The 2026-10-20 backup-only window (evidence in
+`context/notes/2026-10-20-plan0028-backup-window.md`) captured a coordinated
+Harbor database/S3 recovery point; consult its final verification status before
+relying on it. Harbor CNPG still has no configured
+recurring backup or plugin, and Longhorn's backup target is empty. Do not proceed
+on the strength of Ready snapshots alone. Refresh the recovery point for a later
+cutover and account explicitly for writes since the tested checkpoint.
+
+That window's six exports passed every captured file hash and archive integrity
+check, and the full isolated Harbor application restore passed against stock
+SeaweedFS 4.48, including old-image blob digests and a new robot push/pull.
+Production recovery and temporary-resource cleanup completed at minute 53.42.
+Three catalogue manifests checked during the lab are missing in current production
+too; no pre-window artifact baseline dates their loss. Record whether they need
+rebuilding or may remain known gaps before approving cutover. The successful
+known-image restore does not recover already-missing content. Daily backup and
+freshness monitoring remain unimplemented.
 
 Use the existing encrypted export path as the interim method; do not introduce a
 new backup controller for this cutover. The independent destination is an
@@ -105,6 +118,10 @@ After approval of the named maintenance actions:
    serially. Require clean exits; do not force-delete, delete PVCs, or stop all
    components in parallel. Keep masters and their identity state preserved.
    Stop here on an unclean exit and investigate before calling the capture clean.
+   Establish the Pod watch before scaling: use `resourceVersion=0`, require its
+   initial ADDED event to match the captured UID, and retain the final DELETED
+   event with the main container's terminated exit code. A stale last-change
+   resource version can expire from the watch cache before the stop.
 5. Capture the five data/metadata PVCs and Loki's PVC, plus the master state,
    image identities, bucket policy and storage manifests. The five SeaweedFS PVCs
    are `mount0-seaweedfs-volume-0..2` and
@@ -130,7 +147,11 @@ After approval of the named maintenance actions:
    Use the split snapshot/isolation manifests and process one clone/reader at a
    time: 508Gi nominal PVC capacity would otherwise be cloned concurrently.
    Refresh source UIDs, free capacity and unused target names before approval.
-8. Restore into isolated storage with no production endpoint/credentials. Restore
+   Run the Loki clone reader as UID/GID 10001, matching the writer, with all
+   capabilities dropped and the mount read-only; preserve source permissions.
+8. Restore into isolated storage with no route to production or published ports.
+   Use recovered Harbor credentials only inside that sealed lab, retain private
+   logs and never print credentials. Give the restored S3 gateway lab-only keys. Restore
    the database and S3 state from the same write fence. Verify projects, robot/user
    access, known manifest/blob digests and a new scratch push/pull through a real
    Harbor core/registry; verify S3 app objects and Loki cold queries/retention.
