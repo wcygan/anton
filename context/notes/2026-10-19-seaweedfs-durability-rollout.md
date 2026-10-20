@@ -8,16 +8,19 @@ superseded and must not be published. The revised boundary fix passed fault and
 HA qualification and was committed/pushed as `13649abb` on top of the initial
 source/fixture/policy-helper commit `f7f629a0`, on
 `codex/qualify-seaweedfs-durability`. All 502 repository contract tests passed
-(one skipped). The revised image is published and verified; fresh encrypted data
-exports, GitOps rollout and final production acceptance remain pending. Main has
-not been advanced by this task.
+(one skipped). PR #522 deployed the pinned source at `080ae85e`; all ten
+production components now run the reviewed binary. Fresh encrypted exports passed
+every file hash and complete gzip CRC/end-of-stream checks. Runtime rollout and
+restoration of controller ownership passed; bucket policy activation and final
+production acceptance are in progress.
 
 The operator authorized review, amd64 build, upgrade/rollback rehearsal, commit,
 push, fresh backups and staged deployment. Another active cluster-maintenance
 task finished its recovery and cleanup before this task acquired its own backup
-holds. Production still uses stock 4.48; the image cache and read probes are
-temporary run-owned diagnostics, and the staged durability policy CronJob is
-suspended until every component is verified on the patched runtime.
+holds. Volumes, filers, S3 gateways and masters were replaced in that order, with
+followers before the master leader. All ten image manifests and embedded binary
+hashes matched the qualification identity. The staged durability policy CronJob
+is now eligible for activation because every component passed runtime checks.
 
 ## Review findings and disposition
 
@@ -115,7 +118,10 @@ Longhorn volumes including temporary clones, and controller ownership were
 healthy afterward, with no active storage/log-loss alert. Loki had two queued
 flushes immediately after restoration; require that backlog to drain before
 another planned interruption. Encrypted clone export and decrypted file-hash
-verification are in progress; snapshots alone do not complete the backup gate.
+verification completed for all five exports: 241 files, 31,454,082,494 source
+bytes and 23,877,631,676 encrypted bytes. Archive hashes and gzip integrity also
+passed independently. The five reader Pods and temporary clone PVCs were removed
+by recorded UID; original PVCs and five retained snapshots are preserved.
 
 A later helper review found that the remote shell invocation lacked its stdin
 forwarding flag, so the intended native vacuum disable/enable commands were not
@@ -129,7 +135,30 @@ The initial v0 encrypted export decrypted but had a truncated gzip stream and
 was rejected. A separately retained retry, with an explicit stdout flush and a
 brief process-exit delay, passed every file hash. The failed archive remains
 evidence and is not an eligible backup. Both filer exports and v2 have also
-passed verification; v1 remains in progress.
+passed verification, as did v1. The failed export's stderr identified an abnormal
+Kubernetes exec WebSocket closure. A command exit or successful decryption alone
+was never accepted as backup completion.
+
+## Production runtime checkpoint
+
+At 2026-10-20 03:21:03 UTC all ten patched Pods and all 18 original Longhorn
+volumes were healthy, with no active storage/log-loss alert and Loki flush queue
+zero. Original update strategies, S3 deployment state, operator replicas and
+Flux/HelmRelease ownership were restored. No Pod was replaced by that restoration.
+
+Fresh 1 MiB Harbor and Loki objects each had two byte-identical native copies on
+different nodes (volumes 52 and 50); both test keys were deleted and confirmed
+absent. A new anonymous Harbor cold pull verified all 13 OCI objects and
+315,235,750 bytes. Loki returned all 4,981 numbered records across the S3 outage,
+with no missing, unexpected or duplicate records. All 1,800 historical records
+also remained queryable before runtime replacement. Final policy, post-rollout
+log and alert checks remain required.
+
+Two private-helper assertions were corrected during rollout: Kubernetes omits a
+false `paused` value and may omit default `maxUnavailable: 1`. The API's documented
+default was checked before comparing strategies semantically. Both pauses were
+fail-closed; evidence and recovery are retained, and no extra image replacement
+or data-file repair was performed.
 
 The independent pass covered source, lock ordering, capability inheritance,
 boundary fault execution and six Python policy tests. It did not independently

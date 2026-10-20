@@ -3,7 +3,7 @@ kind: CronJob
 metadata:
   name: seaweedfs-durability-ensure
 spec:
-  suspend: true
+  suspend: false
   schedule: "23 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
