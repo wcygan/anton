@@ -10,16 +10,17 @@ review-by: 2026-10-27
 
 # 0028 — Retire custom storage runtime patches
 
-> Finish SeaweedFS maintenance with a tested operating contract, then remove custom SeaweedFS and Loki binaries without silently weakening data guarantees.
+> Keep shared SeaweedFS S3 for apps, Harbor and Loki; return to stock software with planned downtime, best-effort logs and explicit upload-recovery limits.
 
 ## Goal
 
-Run the Harbor/Loki/S3 path on supported, unmodified upstream releases with a
-small GitOps configuration, one understandable maintenance procedure, and a
-tested recovery path. The operator accepts brief planned downtime; use that
-contract to retire custom availability machinery. Zero downstream
-runtime patches is the target; permanently maintaining a fork is not an acceptable
-completion state. This is a proposed execution plan, not a rollout authorization.
+Keep SeaweedFS S3 as a shared cluster capability for applications such as Drop,
+Harbor and Loki. Run unmodified upstream SeaweedFS and Loki with a small GitOps
+configuration and one understandable maintenance procedure. Accept planned
+downtime and occasional diagnostic log loss instead of maintaining runtime forks.
+Application uploads remain a separate data class with explicit crash-loss and
+backup limits; log-loss tolerance does not declare uploads disposable. Zero
+runtime patches is the target. This plan update authorizes no production change.
 
 ### Scope
 
@@ -27,24 +28,26 @@ SeaweedFS runtime, its maintenance and policy helpers, the custom Loki WAL
 runtime, dependent Harbor/Loki/private S3 consumers, and their operating records.
 This is not a claim to inventory every custom binary in Anton. Do not replace
 Longhorn, add a database, switch deployment controllers, or migrate to another
-object store unless the bounded comparison below demonstrates a lower total
-operating burden and receives its own decision. Existing unrelated work stays
+object store as part of this plan. Do not move Harbor or Loki to filesystem
+backends merely to remove their dependency on the retained S3 service. Existing unrelated work stays
 with its owners. One operator coordinates all live storage changes serially.
 
 ### Completion
 
 An upstream-only deployment passes the agreed maintenance and recovery checks;
 custom runtime build/patch dependencies are removed; the current runbook and
-skills describe the deployed system. If upstream cannot meet the agreed data
-contract, return a bounded migration proposal or an explicit unmet gate. Do not
-claim success by renaming the custom image or relabeling a data-loss regression.
+skills describe the deployed system. Known fault-injection failures remain
+recorded as accepted limitations where the consumer contract permits them, never
+relabeled as passing tests. Block on ordinary-operation failures, unsafe migration
+or an app requirement that the chosen storage cannot meet; do not add a new fork.
 
 ## Acceptance criteria
 
 - [ ] Harbor, Loki and every discovered S3 consumer run against qualified stock
   releases; no active runtime or deployment job depends on Anton source patches.
 - [ ] A real planned node-maintenance exercise passes the selected availability
-  contract and preserves exact old/new object contents and numbered log records.
+  contract: orderly maintenance preserves checked object bytes, Harbor artifacts
+  and flushed log history; crash/replay log loss is recorded rather than a zero-loss gate.
 - [ ] Consistent independent backups pass an isolated restore and actual service
   readback; recovery time and backup freshness meet the accepted per-data contract.
 - [ ] Normal operations use one policy owner and one maintenance runbook; retired
@@ -56,20 +59,45 @@ claim success by renaming the custom image or relabeling a data-loss regression.
 
 ### Recommendation and decision boundary
 
-Start by qualifying stock software after the current storage owner finishes.
-The native replica migration has already completed; preserve it and do not repeat
-or undo it. The operator accepted brief planned downtime on October 20. Record
-the successor to ADR 0043 before retiring its continuity acceptance requirement;
-retire the remaining uninterrupted-maintenance drill if that decision is accepted.
-The exact outage budget and live procedure still need review. Downtime tolerance
-and acknowledged-write durability are separate decisions.
-Backups, replication and a UPS do not substitute for correct write barriers.
+The selected route is stock SeaweedFS serving apps, Harbor and Loki on their
+existing S3 endpoints. Keep separate buckets and scoped credentials. Keep Loki
+monolithic with stock WAL enabled and graceful-shutdown flushing: disabling WAL
+is not required to remove patches and would broaden unflushed-log loss. Harbor
+stays on S3; no filesystem or external-service migration is scheduled.
 
-| Candidate | When to choose it | Consequence |
-| --- | --- | --- |
-| Stock SeaweedFS with bounded planned downtime | Selected first candidate, subject to stock releases passing the required data contract | Retain the completed two-copy topology. Test orderly stop, node return and recovery; no further replication migration is needed for this goal. |
-| Stock SeaweedFS with uninterrupted maintenance | Deferred; revisit only if the operator later changes the maintenance requirement and released software supports the necessary paths | Qualify owner-absent cold-read/write behavior on the existing two-copy topology; retain capacity and cache checks. |
-| Move affected consumers to an independently operated S3 service | Evaluate if stock SeaweedFS fails the required integrity contract and no qualified release is available | Removes local SeaweedFS patch ownership but introduces cost, network dependence and migration work. Select an actual provider only after feature, privacy, cost and restore checks. |
+The operator accepts planned downtime and occasional log loss. This supersedes
+the earlier requirement that every retained crash/fault fixture pass before a
+stock image can proceed to transition qualification. Preserve the failed results;
+change the operating contract explicitly instead of modifying tests to pass.
+The completed native replica migration stays in place. Record a successor to
+ADR 0043 before retiring its uninterrupted-maintenance acceptance requirement.
+Measure an exact maintenance budget before proposing a live window.
+
+### Data contract and risks to app uploads
+
+| Data class | Accepted tradeoff and required recovery |
+| --- | --- |
+| Loki diagnostic logs | Best-effort history; occasional gaps after crashes/replay are acceptable. No completeness/audit-log guarantee. Keep ordinary ingestion/query, retention, disk alerts and graceful flush; quantify observed gaps without promising a maximum loss interval. |
+| Harbor images and artifacts | Planned push/pull interruption is acceptable. Preserve current artifact digests through the transition and retain consistent registry/database recovery. Rebuildability is per artifact: rebuilding source may produce a different digest and will not repair a missing pinned image automatically. |
+| Application uploads, including future S3 consumers | Stock SeaweedFS may acknowledge bytes or metadata still buffered in memory. A host/power failure before persistence can lose a successful upload; replication reduces some failures but does not eliminate shared-power/cache loss. Index/metadata inconsistency or a compaction I/O failure can make objects unreadable and require restore/repair. Risk is not restricted to the most recent object or a measured number of seconds. |
+
+A successful PUT or immediate GET is not an independent durable backup. Longhorn
+replicas and in-cluster snapshots do not provide a separate failure domain or
+force application buffers onto disk. A restore can lose all changes since the
+last usable backup; inconsistent data/metadata backups can leave missing objects.
+Planned downtime also means failed or delayed uploads, downloads and presigned-URL
+requests; applications need visible failure/retry behavior and upload completion
+verification. Clients must not silently present an interrupted upload as saved.
+
+Before enabling unique user uploads or cutting over an existing upload consumer,
+record whether users retain originals, what can be regenerated, independent backup
+coverage/freshness, tested restore time and the owner-approved loss expectation.
+Do not advertise guaranteed preservation of acknowledged uploads. For data that
+must never lose its only copy, require an independently durable original/copy or
+a separately selected stronger storage service; that app is gated, not a reason
+to maintain a cluster-wide fork. No new app-side replication framework is part of
+this plan. Unknown app requirements are an onboarding gate, not a reason to delay
+isolated stock qualification or unrelated best-effort logs.
 
 Do not reduce Longhorn replicas, downgrade existing two-copy volumes, shrink the
 160Gi PVCs, or consolidate servers as part of the image transition. These are
@@ -150,15 +178,18 @@ is 4.48. Inspection of upstream master `610346ae8c84fb4cc62bb947a516417637009548
 still found compaction logging and continuing after source sync errors, and the
 HTTP growth handler without the local growth-disabled check. This is source
 evidence for two unresolved paths, not qualification of all current upstream code.
-No stock release has been qualified by this planning task.
+The isolated stock comparison is complete: see the qualification note below.
+Neither candidate passed the former strict fault contract. Transition qualification
+under the revised best-effort contract is still pending; no production eligibility
+is implied merely by accepting the known risks.
 
 | Local change | What it buys | Exit condition |
 | --- | --- | --- |
-| `durable-ack.patch`: volume data/index barriers and rollback boundaries | Rejects failed persistence and preserves previously acknowledged mappings in modeled failure cases | A published stock release passes the retained failure/recovery cases, or migrate affected data to a service satisfying the agreed contract. Do not silently revert to weaker writes. |
-| Same patch: opt-in synchronous LevelDB2 mutations | Persists local filer metadata before success | Qualify upstream support. Consider a supported external metadata backend only if that resolves this specific gap with less operating burden; it cannot fix volume-write durability. |
-| `growth-http-fence.patch` | Blocks administrative growth during the special native migration | Remove the need for that migration, or prove a stock procedure fences every allocation path; no source patch merely to preserve a preferred maintenance procedure. |
-| `compaction-sync.patch` | Aborts compaction on source sync/close failures | Qualify an upstream fix. Deferring discretionary compaction reduces exposure but does not prove automatic/background paths are safe; inventory those before changing policy. |
-| Loki checkpoint/counter patches | Addresses demonstrated WAL checkpoint/replay behavior | Stock Loki passes checkpoint, stream recreation, replay and numbered-record tests. Upstream PR 25162 was open/unmerged at review; its merge alone would not prove every local fix is covered. |
+| `durable-ack.patch`: volume data/index barriers and rollback boundaries | Stronger acknowledged-write persistence and error recovery | Remove after stock transition/restore checks and applicable upload-risk review; retain fault failures as documented limits, not mandatory upstream-fix gates. |
+| Same patch: synchronous LevelDB2 mutations | Stronger local metadata persistence | Preserve filer metadata and test restore using stock behavior; remove patch-only settings/helper expectations. Do not add a database solely to mimic this patch. |
+| `growth-http-fence.patch` | Fences the special native migration | Retire that completed migration workflow; keep ordinary writer fencing for the cutover. No stock growth-fence equivalent is needed for an abandoned procedure. |
+| `compaction-sync.patch` | Rejects source sync/close failures | Record the stock I/O-error risk, inventory automatic vacuum/compaction, retain recovery and disk-error alerts. Do not run discretionary cleanup during cutover or claim disabling a job eliminates every compaction path. |
+| Loki checkpoint/counter patches | Stronger WAL replay completeness | Accept occasional crash/replay log loss; prove clean flush/exit and compatible stock startup, normal ingestion/query and retention. Preserve old WAL as rollback evidence; no upstream merge is a prerequisite. |
 
 ### Unit contract
 Status: pending
@@ -173,35 +204,38 @@ Evidence: pending
   Use read-only APIs first; any exec/probe follows the repository approval boundary.
 - [ ] Propose a bounded 30-minute planned service interruption for the simpler
   path, with the exact limit set only after measuring stop/start and Loki buffer
-  margin. No accepted data-loss budget is implied. Agree backup freshness and
-  restore time per consumer rather than assigning a blanket disposable-data label.
+  margin. Occasional log loss is accepted, without a measured maximum gap. Agree upload
+  loss expectations, backup freshness and restore time per consumer; do not assign
+  a blanket disposable-data label.
 - [ ] Reconcile plan 0027 and the scratch backlog only after the architecture
   decision. If the continuity goal is retired, mark that gate superseded with a
   successor ADR; never mark the unperformed availability drill passed.
 
 ### Unit qualify
-Status: blocked
+Status: pending
 Depends on: none
 Write scope: Existing SeaweedFS/Loki qualification fixtures and a compact evidence table linked from this plan.
-Acceptance: Each patch has a verified stock-release replacement, a proved procedural alternative, or an explicitly unresolved integrity gap; the chosen route requires no new downstream runtime patch.
+Acceptance: Stock images pass normal S3/Harbor/Loki behavior and clean cutover/rollback checks. Each removed patch has either a procedural replacement or an explicit risk disposition under the revised data contract; no new runtime patch is required.
 Verification: Pin upstream release/source/image identities, run the existing failing-before cases on unmodified candidates, test data-format upgrade/downgrade, and check real Harbor registry plus Loki/S3 behavior in isolation. Retain failure output and exact bytes, not only process exit status.
-Evidence: [2026-10-20 stock qualification](../notes/2026-10-20-stock-storage-qualification.md). Current releases fail retained integrity gates; passing patched controls confirm test discrimination. Local qualification was explicitly authorized before completion of the service contract. Production preparation remains gated on that contract and a qualified candidate.
+Evidence: [2026-10-20 stock qualification](../notes/2026-10-20-stock-storage-qualification.md) records the completed strict-contract experiment, including passing patched controls. Its stock-promotion blocker was conditional on the former no-regression contract; the revised decision above permits proceeding with normal-operation and transition qualification. The failures remain valid. Production preparation requires the contract and remaining checks; no new passing result is claimed.
 
-- [ ] Timebox the first stock-release comparison to two focused engineering
-  sessions. Do not keep extending it with more production patches. If blocked,
-  return the exact failed guarantees and compare the external-S3 route before
-  another migration window. Do not wait indefinitely for upstream to merge fixes.
+- [x] Complete the first bounded stock-release fault comparison and retain its
+  failures and passing controls. Do not repeat it solely to pursue zero log loss.
+- [ ] Test stock S3 PUT/GET/hash, multipart completion/abort, listing/deletion,
+  scoped auth and presigned access needed by apps, plus Harbor digest push/pull
+  and Loki ingestion/query/retention. Exercise clean restart with exact object
+  readback; distinguish expected crash-loss limits from normal-operation defects.
 - [x] Reuse the existing fixtures for sync failures, rollback-boundary errors,
   compaction failures, metadata persistence, and Loki checkpoint/replay. Preserve
   tests that express necessary behavior; retire tests tied only to an abandoned
   internal procedure once the replacement behavior is covered.
-- [ ] Prepare minimal upstream reproductions and patch correspondence locally.
-  Obtain explicit authorization before publishing issues, PRs or comments.
-  Upstream submission is useful but is not a promise of a released fix.
+- [ ] Retain existing reproductions and patch correspondence as historical
+  evidence. Further upstream contribution is optional, separately authorized and
+  not on the critical path to stock deployment.
 
 ### Unit prepare
 Status: pending
-Depends on: qualify
+Depends on: contract, qualify
 Write scope: Selected stock image pins/configuration, one cutover runbook, existing backup/recovery tooling and any separately approved migration manifest.
 Acceptance: The exact candidate, consistent restore rehearsal, writer fences, rollback and measured maintenance budget are reviewable before live approval; bootstrap access does not depend solely on the Harbor instance backed by this storage.
 Verification: Restore the selected backup into isolated storage and read real object/log contents; rehearse cutover and rollback on copies using the actual image architecture. Verify images are obtainable through a tested independent source/cache and current credentials remain scoped.
@@ -213,12 +247,9 @@ Evidence: pending
 - [ ] For stock SeaweedFS, keep current PVC identities, metadata paths and
   placement. Remove patch-only configuration only when the stock replacement's
   semantics are verified. Keep supported fsync settings where applicable.
-- [ ] For an external-S3 alternative, enumerate API requirements including
-  multipart/range access, auth, listing, lifecycle and any version metadata;
-  freeze writes for final synchronization, verify manifests and object hashes,
-  switch all consumer endpoints coherently, and retain the old source. If writes
-  have reached the new backend, rollback must preserve those writes rather than
-  blindly switching back. Provider adoption requires separate intake and approval.
+- [ ] Preserve existing S3 endpoints, bucket ownership and credentials. Inventory
+  active app consumers in both repositories; do not provision future uploads
+  implicitly. Keep Harbor and Loki attached to SeaweedFS during the transition.
 - [ ] Present exact targets, commands, expected transitions, stop time, recovery
   operation and cleanup list. Coordinate with any existing storage work; old
   approvals and recorded Pod/PVC bindings do not carry into a new window.
@@ -232,18 +263,13 @@ Verification: Verify source revision through Flux and applied image digests, his
 Evidence: pending
 
 - [ ] Roll one causal change at a time; stop on identity/hash mismatch, failed
-  barriers, degraded storage, ambiguous copy, unexpected allocation or time budget.
+  normal read/write checks, degraded storage, ambiguous copy, unexpected allocation
+  or time budget. Known isolated fault-test failures alone are not rollback triggers.
   Rollback before admitting new writes where possible; after new writes, preserve
   their authoritative state before restoring any older files or endpoint.
 - [ ] Downtime path: drain/flush writers, preserve Loki WAL and bounded buffers,
   stop affected services safely, maintain one node, restore service and verify
   exact bytes. Do not claim uninterrupted availability from post-recovery success.
-- [ ] Continuity path, only if selected later: refresh the full corpus and verify
-  the completed placement rather than repeating migration. Resolve any remaining
-  integrity exceptions through their separately approved procedure. Then prove
-  never-read object GETs through each
-  surviving S3 backend and fresh PUT/GET during actual owner absence. Local
-  fixtures, Ready gateways and aggregate copy counts are insufficient.
 - [ ] Change Loki in its own window. Follow the tested drain/complete flush/clean
   exit and WAL compatibility procedure; do not plain-revert its image against
   incompatible counter history or discard old WAL directories after an unclean stop.
@@ -260,10 +286,10 @@ Evidence: pending
   fixtures after the stock rollout and rollback observation period pass. Keep
   regression tests that remain valuable and evidence in Git history; remove active
   references rather than preserving a parallel legacy interface.
-- [ ] Consolidate the hourly durability policy helper with the existing bucket
-  provisioning owner if that owner can apply and verify supported settings.
-  Preserve drift detection; remove the large binary-copy init container only when
-  the replacement actually performs the required policy check.
+- [ ] Remove patch-only durability policy enforcement and its binary-copy init
+  container once stock rollout is verified. Keep only supported settings required
+  by the revised contract, owned by the existing bucket provisioner where needed;
+  do not recreate the old helper merely to preserve its former guarantees.
 - [ ] Remove the sleeping readiness sidecar only when the selected upstream
   operator/chart exposes a working Raft-aware probe. Do not weaken quorum gating
   just to reduce container count. A chart/controller migration is a separate cost
@@ -285,8 +311,10 @@ Evidence: pending
 
 - [ ] Review on October 27 or after the first completed operating cycle, whichever
   is appropriate to actual execution. This date creates no scheduled automation.
-- [ ] If an integrity gap remains, retain an explicit blocker and next decision;
-  do not call the plan done because the cluster is currently healthy.
+- [ ] Close only when required normal-operation/recovery gates pass and known
+  risks have explicit consumer dispositions. An accepted crash-loss limitation
+  does not keep the plan open indefinitely; an unmet upload contract, migration
+  defect or untested restore does. Retain these distinctions in the final record.
 
 ## Log
 
@@ -334,6 +362,18 @@ Evidence: pending
   when available, or evaluate external S3 plus a separate logging replacement;
   external S3 alone cannot fix Loki. No further migration test against these
   failing candidates is warranted.
+
+- 2026-10-20: Operator explicitly retained SeaweedFS S3 for apps, Harbor and
+  Loki, accepted planned downtime and occasional log loss, and requested the
+  simplest stock-software path. Updated this plan in place as requested. Retired
+  external-S3/filesystem migration as the default and removed strict fault-test
+  equivalence as an automatic promotion gate. Previous experiment/log entries
+  remain historical evidence; no failed test was relabeled. Stock WAL stays on,
+  topology stays unchanged during image cutover, and app uploads have explicit
+  cache/index/metadata/compaction and backup-loss risks with per-consumer review.
+  Redesign From First Principles retained S3 as an application capability and
+  shifted qualification to the accepted operating contract. No production work
+  was authorized or performed by this update.
 
 ## References
 
