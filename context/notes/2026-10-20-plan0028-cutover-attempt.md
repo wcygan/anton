@@ -84,3 +84,50 @@ build passes. These documentation corrections are local commits until publicatio
 **Prove It Works** adds API admission to the renderer gate after the real rejection.
 **Laziness Protocol** keeps ordinary RollingUpdate and a brief owner hold rather
 than patching the CRD/operator or adding a permanent traffic-fencing component.
+
+## Admission dependency found during the corrected execution
+
+The corrected operator hold was approved. Image caching and writer/operator/S3
+stops passed. Runtime revision `069da499` reached main and the Flux source while
+all affected owners remained held. No backend image had changed when the CR
+patch was rejected: the operator Deployment also hosts both fail-closed admission
+webhooks. A server dry run with the operator running did not prove that the same
+patch would be admitted after stopping it.
+
+The smallest additional temporary boundary is an exception for **only
+`Seaweed storage/seaweedfs`** in the cluster-scoped
+`seaweedfs-operator-mutating-webhook-configuration` and
+`seaweedfs-operator-validating-webhook-configuration`. Add this `matchConditions`
+entry to their sole `mseaweed.kb.io` / `vseaweed.kb.io` webhook:
+
+```yaml
+name: plan0028-maintenance
+expression: "request.namespace != 'storage' || request.name != 'seaweedfs'"
+```
+
+All other objects still invoke their original fail-closed webhooks. CRD schema
+validation remains active, including the two-gateway valid desired state. The
+final CR has already passed the real webhook while available, with no mutation
+of credentials, storage claims or topology. The two configuration edits passed
+API-server dry runs and must be UID/resource-version guarded. No exception has
+been applied during preparation.
+
+After this additional approval, apply the two conditions, finish the already
+approved CR/config/image transition, resume config against the reviewed source,
+and restore the operator. Once its webhook endpoint is ready, remove both added
+conditions and verify the entire webhook lists equal their captured originals
+before returning Helm ownership. On rollback, restore the original CR while
+fenced, then start the operator and restore the two webhook lists. A webhook
+exception must never be left behind at handoff. Keep the same 60-minute limit
+and minute-40 stop; recover original serving state if this decision does not fit.
+
+## Final resolution
+
+The operator approved the exact-object webhook exception. Both configurations
+were changed with UID/version tests, the stock CR and backend rollout passed,
+and both complete webhook lists were restored after operator startup. Flux's
+operator-before-config dependency and the original CronJob suspension fields
+were verified explicitly. Stock SeaweedFS/Loki and the tooling deletion are now
+published; see the [completed execution record](2026-10-20-plan0028-stock-cutover.md).
+The earlier pending-approval/recovery paragraphs describe their dated checkpoints,
+not the final live state.

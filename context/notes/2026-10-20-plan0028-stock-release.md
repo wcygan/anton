@@ -1,5 +1,7 @@
 # Plan 0028 stock release and execution boundary — 2026-10-20
 
+This is the historical preparation packet. The [completed execution record](2026-10-20-plan0028-stock-cutover.md) supersedes its live-state and pending-approval statements.
+
 The source candidate on `codex/stock-storage-simplification` is based on deployed
 `886fbd6a30efff5a8ac75befb25d1e40c8fef45b`. It keeps shared S3 for apps, Harbor and
 Loki, existing claims/endpoints/credentials and native two-copy placement. This

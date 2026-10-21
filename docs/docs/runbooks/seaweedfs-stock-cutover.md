@@ -2,11 +2,12 @@
 title: SeaweedFS and Loki stock-software cutover
 ---
 
-This is the prepared procedure for Plan 0028. It retains shared SeaweedFS S3 for
-apps, Harbor and Loki. Production execution needs approval of the exact recovery
-point, resources and outage window. The first approved attempt passed cache/read checks but stopped at API admission
-before image changes; original runtime and ownership were restored. The corrected
-owner-held procedure below requires its additional live targets to be approved.
+Plan 0028 deployed stock SeaweedFS 4.48 and Loki 3.7.8 on 2026-10-20
+(local date), retaining shared S3 for apps, Harbor and Loki. Custom runtime
+patches/builders are retired. See the [execution evidence](https://github.com/wcygan/anton/blob/main/context/notes/2026-10-20-plan0028-stock-cutover.md).
+This records the one-time image transition and rollback; use
+[the node-maintenance runbook](seaweedfs-node-maintenance.md) for ordinary node
+work. Any later execution needs its own exact targets, recovery point and window.
 
 ## Selected approach
 
@@ -20,8 +21,9 @@ observation period, so rollback never depends on rebuilding a fork.
 
 The live CRD requires at least one S3 replica. **Do not set CR S3 replicas to
 zero:** the first approved attempt was rejected at admission before image changes.
-A renderer test alone is insufficient; require API-server dry runs of final CR,
-filer ConfigMap and backend templates before the window.
+A renderer test alone is insufficient. Require API-server dry runs of final CR,
+filer ConfigMap and backend templates, and account for the admission webhook
+being hosted by the operator that maintenance stops.
 
 The corrected procedure temporarily holds the operator and scales its S3
 Deployment to zero directly. Keep the CR at valid desired replicas two. Use the
@@ -33,8 +35,9 @@ see the [execution boundary](https://github.com/wcygan/anton/blob/main/context/n
 
 The exact operator 1.0.39 builders were checked against the admitted CR: stock
 changes only the main-container image in the three StatefulSets, preserving PVCs,
-probes and replica counts; the S3 Deployment honors replicas zero. This is a
-renderer check, not a completed production rollout. Sources:
+probes and replica counts; the S3 Deployment honors replicas zero internally.
+The CRD rejects zero, so the live rollout used the direct Deployment fence below.
+All eight backend replacements subsequently passed production checks. Sources:
 [master renderer](https://github.com/seaweedfs/seaweedfs-operator/blob/1.0.39/internal/controller/controller_master_statefulset.go),
 [filer renderer](https://github.com/seaweedfs/seaweedfs-operator/blob/1.0.39/internal/controller/controller_filer_statefulset.go),
 [S3 renderer](https://github.com/seaweedfs/seaweedfs-operator/blob/1.0.39/internal/controller/controller_s3.go).
@@ -175,8 +178,9 @@ The backup/restore authorization is separate from the stock deployment. Obtain
 approval for its exact capture/export/clone resources first. Use the tested recovery point only within its agreed freshness and per-app
 loss contract; record its timestamp and all later writes as potentially absent
 from disaster recovery. A binary rollback preserves current PVCs and does not
-restore that older checkpoint. Routine recurring backup cadence belongs with Plan 0008; it is not
-implemented by a one-time export.
+restore that older checkpoint. Plan 0008 tracks recurring Harbor DB backups; independent S3/filer/master coverage
+for unique uploads is an additional open protection gate. A one-time export does
+not implement either cadence.
 
 ## SeaweedFS image cutover
 
@@ -191,6 +195,8 @@ withdrawn because API admission rejects CR S3 replicas zero.
 2. Hold Harbor/Loki Kustomizations and HelmReleases, `storage/seaweedfs-config`,
    both storage CronJobs, and the operator owners `storage/seaweedfs`
    Kustomization / `storage/seaweedfs-operator` HelmRelease. Journal each field.
+   Include the two operator webhook configurations in the approval packet: their
+   fail-closed endpoints disappear while the operator is stopped.
 3. Stop Harbor nginx, jobservice, core, registry. The stock Harbor registry image
    exits 2 on normal SIGTERM, as reproduced locally; record this separately from
    the zero-exit requirement for SeaweedFS/Loki. Flush Loki, require queue zero and
@@ -199,7 +205,13 @@ withdrawn because API admission rejects CR S3 replicas zero.
    terminate, then scale the operator-owned `storage/seaweedfs-s3` Deployment to
    zero. Require both gateway Pod watches to record zero-exit deletion. Keep the
    Seaweed CR at its valid desired two replicas.
-5. Publish the reviewed runtime revision and verify its Flux source artifact.
+5. With separate approval, add a temporary `matchConditions` entry to the sole
+   webhook in `seaweedfs-operator-mutating-webhook-configuration` and
+   `seaweedfs-operator-validating-webhook-configuration`:
+   `request.namespace != 'storage' || request.name != 'seaweedfs'`.
+   This skips only this CR while leaving CRD validation and other objects'
+   admission unchanged. Retain the original webhook lists and guard UID/version.
+   Publish the reviewed runtime revision and verify its Flux source artifact.
    Guard-patch the Seaweed CR to final stock image/config/disabled Iceberg listener.
    Set `storage/seaweedfs-filer` ConfigMap `data.filer.toml` to the same committed
    config. Change only the main-container image in `seaweedfs-master`,
@@ -208,11 +220,16 @@ withdrawn because API admission rejects CR S3 replicas zero.
 6. Require all eight backend Pods at the exact stock digest/current revisions,
    recorded clean old-Pod exits, healthy quorum, original PVC identities and the
    complete writable native corpus before restoring S3. Stop on any mismatch.
-7. Resume `storage/seaweedfs-config` against the reviewed source while the operator
-   remains stopped. Restore the operator's original replica; it creates two stock
-   S3 gateways from the valid CR. Verify source/operator-rendered template equality,
-   authenticated seeded reads, native fsync/001 policies and prior readable bytes.
-   Restore operator HelmRelease/Kustomization fields exactly.
+7. Restore the operator's original replica against the already matching stock
+   CR/backends. Once its endpoint is ready, remove both temporary webhook
+   conditions and verify the full lists equal their originals. Restore the
+   operator HelmRelease/Kustomization suspend fields. Reconcile `seaweedfs`
+   before `seaweedfs-config`: the latter requires the operator owner's current
+   source revision and the CR's current observed generation. Verify both stock
+   S3 gateways, native-tool init image, source/rendered template equality,
+   authenticated seeded reads/ranges, native policies and historical bytes.
+   Explicitly restore both CronJobs' original suspend fields; an omitted source
+   field does not necessarily undo an imperative suspension.
 8. Restore Harbor replicas/owners and verify health/login, historical manifest and
    blobs, and one newly created scratch robot push/pull; remove only those new
    objects. Complete Loki's separately verified stock/new-WAL phase within budget.
@@ -220,7 +237,9 @@ withdrawn because API admission rejects CR S3 replicas zero.
 
 On failure, keep writers/S3 fenced and restore the original CR, filer ConfigMap
 and three main images using the same StatefulSet rollout. Restore operator,
-gateways, clients and source ownership after recovery checks. A blocked Pod needing
+gateways, clients and source ownership after recovery checks. Remove any
+temporary admission exceptions once the operator endpoint is back, and verify
+the original webhook lists. A blocked Pod needing
 an eviction requires a fresh exact-target recovery decision. No PVC, snapshot,
 bucket, artifact or WAL deletion is authorized by an image cutover.
 

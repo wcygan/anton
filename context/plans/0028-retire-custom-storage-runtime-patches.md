@@ -43,16 +43,16 @@ or an app requirement that the chosen storage cannot meet; do not add a new fork
 
 ## Acceptance criteria
 
-- [ ] Harbor, Loki and every discovered S3 consumer run against qualified stock
+- [x] Harbor, Loki and every discovered S3 consumer run against qualified stock
   releases; no active runtime or deployment job depends on Anton source patches.
 - [ ] A real planned node-maintenance exercise passes the selected availability
   contract: orderly maintenance preserves checked object bytes, Harbor artifacts
   and flushed log history; crash/replay log loss is recorded rather than a zero-loss gate.
 - [ ] Consistent independent backups pass an isolated restore and actual service
   readback; recovery time and backup freshness meet the accepted per-data contract.
-- [ ] Normal operations use one policy owner and one maintenance runbook; retired
+- [x] Normal operations use one policy owner and one maintenance runbook; retired
   migration paths, build scripts and stale instructions are removed from active use.
-- [ ] Source, Flux revision, applied runtime, stable health and cleanup agree;
+- [x] Source, Flux revision, applied runtime, stable health and cleanup agree;
   remaining risks and any superseded maintenance promises are recorded honestly.
 
 ## Tasks
@@ -133,12 +133,13 @@ The later sync-guard rollout at `886fbd6a` retained that topology. Four transien
 read timeouts recovered during replacements; uninterrupted maintenance is still
 unproved. Do not mistake completed replication for that stronger guarantee.
 
-### Completed coordination and remaining gates
+### Historical coordination baseline before the stock cutover
 
 **Check cluster health**, thread `01a15287-1d2f-7180-a4a6-ea5808cf1ef8`,
 completed its authorized qualification on October 20 and is idle. Its final
 report is dated 15:56 CDT. The wait-for-session hold is released; execution units
-below remain pending, and this planning request authorizes no rollout or cleanup.
+were then pending, and that planning request authorized no rollout or cleanup.
+The execution record below supersedes this baseline for current live state.
 Refresh current operation ownership before any later live work.
 
 The final report and retained result files establish:
@@ -176,7 +177,9 @@ crash-consistent; older archives predate subsequent writes. Neither replaces the
 fresh rollback point. The qualified cleanup is bound to the deployed custom image;
 stock replacement must independently pass its necessary integrity checks.
 
-**Next planning step:** proceed to the contract and stock-qualification units.
+**Current next step:** complete the real node-maintenance exercise, seven-day
+stock observation and upload-protection gate in the units below. Contract,
+qualification, preparation and runtime/tooling transition have passed.
 Treat the four synthetic leftovers as documented exceptions, not an automatic
 prerequisite for patch retirement or a reason to reopen a 60-minute outage.
 Choose cleanup only if it is necessary for the accepted operating contract or
@@ -204,22 +207,21 @@ full Harbor restoration. Accepting known risks alone is not production eligibili
 | Loki checkpoint/counter patches | Stronger WAL replay completeness | Accept occasional crash/replay log loss; prove clean flush/exit and compatible stock startup, normal ingestion/query and retention. Preserve old WAL as rollback evidence; no upstream merge is a prerequisite. |
 
 ### Unit contract
-Status: pending
+Status: complete
 Depends on: none
 Write scope: This plan, a successor ADR if needed, and the maintenance portions of plan 0027/backlog.
 Acceptance: Every consumer has an agreed downtime budget, data-loss contract, backup freshness and recovery target; one selected target architecture and one current storage operation owner are recorded.
 Verification: Read current Git/Flux/runtime identities and S3 consumer declarations in both repositories; classify rebuildable images, unique artifacts, retained logs and private application data separately. Confirm which existing maintenance work has completed since the baseline. Record the accepted brief-downtime preference in the successor to ADR 0043 and agree the exact interruption budget.
-Evidence: [Release preparation](../notes/2026-10-20-plan0028-stock-release.md) records current topology, the accepted contract and ADR 0044. Exact rollout approval remains outstanding.
+Evidence: ADR 0044 and the [completed stock cutover](../notes/2026-10-20-plan0028-stock-cutover.md) record the approved 60-minute reservation, planned downtime, best-effort logs, unique-upload protection default and the tested independent recovery point.
 
 - [x] Record the actual current topology, complete native-volume corpus, serving
   copies, physical free bytes, slots, active writers and in-flight operations.
   Use read-only APIs first; any exec/probe follows the repository approval boundary.
-- [ ] Propose a bounded 30-minute planned service interruption for the simpler
-  path, with the exact limit set only after measuring stop/start and Loki buffer
-  margin. Occasional log loss is accepted, without a measured maximum gap. Agree upload
-  loss expectations, backup freshness and restore time per consumer; do not assign
-  a blanket disposable-data label.
-- [ ] Reconcile plan 0027 and the scratch backlog only after the architecture
+- [x] Agree a 60-minute reservation, no new image steps after minute 40, and
+  20 minutes reserved for recovery. Occasional log loss is accepted without a
+  measured maximum gap. Uploads use the independent-copy/24-hour usable backup
+  default; no production disaster-recovery RTO or disposable-upload label is implied.
+- [x] Reconcile plan 0027 and the scratch backlog only after the architecture
   decision. If the continuity goal is retired, mark that gate superseded with a
   successor ADR; never mark the unperformed availability drill passed.
 
@@ -229,7 +231,7 @@ Depends on: none
 Write scope: Existing SeaweedFS/Loki qualification fixtures and a compact evidence table linked from this plan.
 Acceptance: Stock images pass normal S3/Harbor/Loki behavior and clean cutover/rollback checks. Each removed patch has either a procedural replacement or an explicit risk disposition under the revised data contract; no new runtime patch is required.
 Verification: Pin upstream release/source/image identities, run the existing failing-before cases on unmodified candidates, test data-format upgrade/downgrade, and check real Harbor registry plus Loki/S3 behavior in isolation. Retain failure output and exact bytes, not only process exit status.
-Evidence: [Strict fault qualification](../notes/2026-10-20-stock-storage-qualification.md) remains historical evidence of known risks. [Revised-contract qualification](../notes/2026-10-20-stock-storage-revised-qualification.md) records stock app S3 behavior, scoped credentials, presigned access, synthetic cold restore and Loki clean transition results. Production preparation still needs the contract, production-shaped restore, remaining lifecycle checks and a reviewed runbook; isolated success is not rollout approval.
+Evidence: [Strict fault qualification](../notes/2026-10-20-stock-storage-qualification.md) remains historical evidence of known risks. [Revised-contract qualification](../notes/2026-10-20-stock-storage-revised-qualification.md) records stock app S3 behavior, scoped credentials, presigned access, synthetic cold restore and Loki clean transition results. The later production-shaped restore and live cutover now pass in the completed execution record; isolated qualification alone was not rollout approval.
 
 - [x] Complete the first bounded stock-release fault comparison and retain its
   failures and passing controls. Do not repeat it solely to pursue zero log loss.
@@ -243,22 +245,22 @@ Evidence: [Strict fault qualification](../notes/2026-10-20-stock-storage-qualifi
   11 records/chunks become the four expected survivors under 24h/336h/720h policy.
   Verify clean Loki stock-to-patched rollback with a fresh WAL: 512 final records
   survive, both earlier WAL trees unchanged. These are isolated tests; full Harbor
-  recovery and the seven-day production observation remain later gates.
+  recovery subsequently passed; the seven-day production observation remains open.
 - [x] Reuse the existing fixtures for sync failures, rollback-boundary errors,
   compaction failures, metadata persistence, and Loki checkpoint/replay. Preserve
   tests that express necessary behavior; retire tests tied only to an abandoned
   internal procedure once the replacement behavior is covered.
-- [ ] Retain existing reproductions and patch correspondence as historical
+- [x] Retain existing reproductions and patch correspondence as historical
   evidence. Further upstream contribution is optional, separately authorized and
   not on the critical path to stock deployment.
 
 ### Unit prepare
-Status: blocked
+Status: complete
 Depends on: contract, qualify
 Write scope: Selected stock image pins/configuration, one cutover runbook, existing backup/recovery tooling and any separately approved migration manifest.
 Acceptance: The exact candidate, consistent restore rehearsal, writer fences, rollback and measured maintenance budget are reviewable before live approval; bootstrap access does not depend solely on the Harbor instance backed by this storage.
 Verification: Restore the selected backup into isolated storage and read real object/log contents; rehearse cutover and rollback on copies using the actual image architecture. Verify images are obtainable through a tested independent source/cache and current credentials remain scoped.
-Evidence: [Recovery/retention preparation](../notes/2026-10-20-plan0028-recovery-and-retention.md), [completed backup-only window and full Harbor restore](../notes/2026-10-20-plan0028-backup-window.md), and [prepared runbook](../../docs/docs/runbooks/seaweedfs-stock-cutover.md). Fresh coordinated encrypted DB/S3/Loki exports and an isolated Harbor restore on stock SeaweedFS pass. The [prepared stock release](../notes/2026-10-20-plan0028-stock-release.md) now contains pinned manifests, ADR 0044, simpler operator-owned rollout and removal of all five runtime patches/build paths. The exact operator renderer, stock quorum probe and local contracts pass; all four image directions now execute on all three live nodes. The first approved cutover stopped at API admission: the CRD requires at least one S3 replica. No stock image or Git promotion occurred. The [corrected execution boundary](../notes/2026-10-20-plan0028-cutover-attempt.md) passed API-server dry runs; its additional temporary owner/template operations require approval. Current missing manifests remain an unrepaired data gap, not a newly demonstrated stock regression or authorization to delete entries. The original cutover was approved but its fence was rejected; the revised boundary is pending approval; daily backup/freshness monitoring is still unimplemented.
+Evidence: [Verified backup/Harbor restore](../notes/2026-10-20-plan0028-backup-window.md), [recovery/retention qualification](../notes/2026-10-20-plan0028-recovery-and-retention.md), and the [completed stock cutover](../notes/2026-10-20-plan0028-stock-cutover.md). Exact images executed on all three live nodes, final fields passed admission, and the approved owner/webhook/dependency corrections were exercised and restored. Daily monitored backup coverage remains a separate open protection gate.
 
 - [x] Verify retained encrypted archive identities and a stock isolated restore
   of historical volume/filer data: 271 file hashes, expected buckets and exact
@@ -268,43 +270,43 @@ Evidence: [Recovery/retention preparation](../notes/2026-10-20-plan0028-recovery
   six exports / 414 file hashes verified, full isolated Harbor restore on stock
   SeaweedFS passed. This does not recover already-missing manifests or implement
   daily backups; refresh the checkpoint before a later cutover.
-- [ ] For stock SeaweedFS, keep current PVC identities, metadata paths and
+- [x] For stock SeaweedFS, keep current PVC identities, metadata paths and
   placement. Remove patch-only configuration only when the stock replacement's
   semantics are verified. Keep supported fsync settings where applicable.
-- [ ] Preserve existing S3 endpoints, bucket ownership and credentials. Inventory
+- [x] Preserve existing S3 endpoints, bucket ownership and credentials. Inventory
   active app consumers in both repositories; do not provision future uploads
   implicitly. Keep Harbor and Loki attached to SeaweedFS during the transition.
-- [x] Prepare the ordered cutover/rollback runbook, pinned source-change drafts
-  and named capture inventory; validate local application/rendering and inspect
-  the actual operator. Supersede the OnDelete draft with normal operator rolling
-  updates while writers and S3 are fenced. The renderer accepts zero S3 replicas, but the live CRD rejects zero;
-  the operator-running fence is withdrawn. The corrected procedure briefly holds
-  the operator and uses ordinary StatefulSet RollingUpdate; it requires approval
-  for those additional targets and server-side dry runs. Do not apply all clones concurrently.
+- [x] Prepare and exercise the cutover/rollback runbook. Use the existing
+  StatefulSet RollingUpdate while operator and S3 are held; no OnDelete strategy
+  or manual Pod deletion. CR replicas zero is rejected by admission. The exact
+  webhook exception, owner-before-dependent reconciliation and explicit CronJob
+  restoration are now recorded from live evidence.
 - [x] Complete the approved backup-only capture, sequential clone export and
   isolated full Harbor restore. Production recovery/cleanup finished at minute
   53.42 of the 60-minute reservation; conservative service interruption totaled
-  13m24s across three attempts. Original images/PVCs/owners remain in place.
+  13m24s across three attempts. That backup window restored original images/PVCs/owners; the later stock cutover
+  changed only the reviewed runtime/config fields.
 - [x] Keep the three currently missing Harbor manifests recorded as unrepaired
   gaps without deleting or relabeling them. Their pre-window status is unknown,
   and no current source reference was found. Repair/rebuild is a separate data
   operation; the image change must preserve every artifact readable at baseline.
-- [ ] Refresh identities, independent image availability and chart/contracts
+- [x] Refresh identities, independent image availability and chart/contracts
   validation on the eventual release revision; publish the contract/ADR decision,
-  obtain approval for the exact stock cutover. Use the verified independent
+  obtain and execute approval for the exact stock cutover, including the temporary
+  operator/webhook boundary. Use the verified independent
   checkpoint only while it is within the delegated 24-hour freshness contract;
   later writes remain outside disaster recovery. Refresh first if an app requires
   it or that point expires. Backup authorization does not authorize image rollout.
 
 ### Unit execute
-Status: pending
+Status: running
 Depends on: prepare
 Write scope: Approved GitOps runtime/configuration cutover and exact maintenance resources recorded in the reviewed runbook.
 Acceptance: The selected maintenance contract passes against the actual owning node, all preserved data checks pass, and full recovery has no unmanaged drift or temporary residue.
 Verification: Verify source revision through Flux and applied image digests, historical Harbor pulls, new push/pull, old/new Loki records and each private consumer. Perform one approved node-maintenance exercise, measure interruption/recovery, and inspect controllers, replicas, errors and cleanup after restoration.
-Evidence: [First cutover attempt and corrected boundary](../notes/2026-10-20-plan0028-cutover-attempt.md). Preflight/image caching and historical Harbor/Loki reads passed; stock rollout did not begin because the API rejected the S3-zero CR.
+Evidence: [Completed stock cutover](../notes/2026-10-20-plan0028-stock-cutover.md). Source/runtime checks, old/new Harbor reads/writes, real Drop downloads, both-gateway reads/ranges, native corpus, historical/fresh Loki records and a clean stock restart pass. The real node-maintenance exercise remains unperformed; Pod replacement does not satisfy it.
 
-- [ ] Roll one causal change at a time; stop on identity/hash mismatch, failed
+- [x] Roll one causal change at a time; stop on identity/hash mismatch, failed
   normal read/write checks, degraded storage, ambiguous copy, unexpected allocation
   or time budget. Known isolated fault-test failures alone are not rollback triggers.
   Rollback before admitting new writes where possible; after new writes, preserve
@@ -312,20 +314,20 @@ Evidence: [First cutover attempt and corrected boundary](../notes/2026-10-20-pla
 - [ ] Downtime path: drain/flush writers, preserve Loki WAL and bounded buffers,
   stop affected services safely, maintain one node, restore service and verify
   exact bytes. Do not claim uninterrupted availability from post-recovery success.
-- [ ] Change Loki in a separately verified phase within the approved budget,
+- [x] Change Loki in a separately verified phase within the approved budget,
   or its own window if time runs short. Follow the tested drain/complete flush/clean
   exit and WAL compatibility procedure; do not plain-revert its image against
   incompatible counter history or discard old WAL directories after an unclean stop.
 
 ### Unit simplify
-Status: pending
-Depends on: execute
+Status: complete
+Depends on: prepare
 Write scope: Retired custom image builders/patches, policy helpers, readiness/probe configuration, storage documentation/skills and completed task records.
 Acceptance: Active references to custom SeaweedFS and Loki runtime builds are zero, one owner controls each policy, and routine maintenance needs no private one-off migration scripts.
 Verification: Search source and rendered manifests for old image/build/patch references, run contracts:validate and the documentation build for touched surfaces, inspect live image identities, and rehearse the concise runbook with its retained behavioral checks.
-Evidence: pending
+Evidence: [Completed stock cutover](../notes/2026-10-20-plan0028-stock-cutover.md), runtime revision `069da499` and cleanup revision `9de9f031`. Cleanup followed verified live stock operation; it does not depend on the later hardware-maintenance/observation gates. Every tracked runtime patch and custom build path is deleted; rollback binaries remain.
 
-- [ ] Delete custom runtime build paths and their now-unused implementation
+- [x] Delete custom runtime build paths and their now-unused implementation
   fixtures after live stock verification. The prepared cleanup removes 37 files
   and all five runtime patches. Exact off-cluster rollback OCI archives are
   verified, so observation requires retaining those binaries and old WAL trees,
@@ -339,12 +341,12 @@ Evidence: pending
   native handler change failed the render gate and was removed. Stock healthz
   passes full/two-master quorum and rejects lost quorum with HTTP 503; no new
   operator patch or migration is justified merely to remove three containers.
-- [ ] Keep a small real S3 read check, useful alerts and persistent filer metadata.
+- [x] Keep a small real S3 read check, useful alerts and persistent filer metadata.
   Disable the retired Iceberg listener explicitly (`-port.iceberg=0`); stock 4.48
   otherwise defaults to 8181. No Service or active repository consumer was found.
   Keep legacy bucket data/credentials untouched. Refresh the stale lakehouse
   skill and node runbook; retain historical evidence in Git.
-- [ ] Keep Harbor active-image protection and recovery checks. Avoid adding
+- [x] Keep Harbor active-image protection and recovery checks. Avoid adding
   automated orphan deletion or compaction merely to make counters look cleaner.
   Revisit reclamation scheduling using measured disk pressure and safe stock paths.
 
@@ -362,6 +364,11 @@ Evidence: pending
   risks have explicit consumer dispositions. An accepted crash-loss limitation
   does not keep the plan open indefinitely; an unmet upload contract, migration
   defect or untested restore does. Retain these distinctions in the final record.
+
+- [ ] Verify independent-copy protection for current unique uploads. Automate and
+  monitor independent S3/filer/master backup coverage before relying on the
+  cluster as their sole copy; Plan 0008 covers the Harbor DB component only.
+  A tested one-time point does not establish a continuing 24-hour freshness SLA.
 
 ## Log
 
@@ -503,6 +510,19 @@ Evidence: pending
   interruption was 5m41s, with S3 never stopped. Harbor old/new reads/writes, stored
   and fresh Loki records, native corpus and all 18 Longhorn volumes pass; temporary
   cache and scratch Harbor objects are removed. No release was promoted.
+
+- 2026-10-20: Completed the approved stock cutover and clean Loki restart.
+  SeaweedFS 4.48 and Loki 3.7.8 use upstream images; revision `9de9f031` removes
+  all five runtime patches and 37 build/fixture/migration files. Original PVCs,
+  replica/suspend fields, webhook lists and native 32/64 corpus are verified;
+  all 18 Longhorn volumes are healthy. Harbor old/new blob operations, three real
+  Drop downloads, 100 historical Loki hashes and 25 stock-restart hashes pass.
+  The revised execution also resolved the stopped-operator webhook dependency,
+  Flux dependency order and one retained CronJob suspension. No admission exception
+  or cache/scratch resource remains. Plan stays open for the real node exercise,
+  seven-day stock observation and the independent-upload protection gate; daily
+  monitored S3/filer/master backups remain a separate protection follow-up;
+  Plan 0008 tracks the Harbor DB component only. See the completed execution record.
 
 ## References
 
