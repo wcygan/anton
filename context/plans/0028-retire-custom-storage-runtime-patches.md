@@ -524,6 +524,13 @@ Evidence: pending
   monitored S3/filer/master backups remain a separate protection follow-up;
   Plan 0008 tracks the Harbor DB component only. See the completed execution record.
 
+- 2026-10-21: Overnight read-only checks pass: serving Pod UIDs unchanged, zero
+  container restarts, all 18 Longhorn volumes healthy, native 32/64 corpus intact,
+  historical/fresh Loki records readable, and all four affected Kustomizations
+  Ready at published main/Flux revision `350a9b8e`. Runtime simplification and
+  fork-tooling retirement are complete. Real node maintenance, seven-day stock
+  observation and continuing independent-upload protection remain open.
+
 ## References
 
 - [ADR 0043 and its accepted continuity goal](https://github.com/wcygan/anton/blob/886fbd6a/context/adrs/0043-keep-two-seaweedfs-copies-for-maintenance.md).

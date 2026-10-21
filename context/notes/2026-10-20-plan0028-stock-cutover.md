@@ -111,3 +111,14 @@ writes, stored log hashes, restart readback and exact final field comparisons;
 it caught the admission, dependency and CronJob gaps. **Outcome-Oriented
 Execution** retains verified rollback binaries instead of continuing to maintain
 source forks during observation.
+
+## Overnight checkpoint — October 21
+
+Read-only verification at **2026-10-21 12:32 UTC** confirms the same serving Pod
+UIDs and zero container restarts since the completed cutover. All 18 Longhorn
+volumes remain healthy; all 32 native volumes and 64 writable copies remain.
+The 100 historical canary hashes and fresh Loki records still pass. Main and
+Flux source revision `350a9b8e` agree, and all four affected Kustomizations are
+Ready at that revision. Temporary cache resources remain absent and both webhook
+lists retain their originals. This is an overnight checkpoint, not the full
+seven-day observation or a real node-maintenance exercise.
