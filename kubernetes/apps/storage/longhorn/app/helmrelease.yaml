@@ -3,7 +3,13 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: longhorn
+  labels:
+    # Longhorn does not support downgrades; flux-child-defaults retries
+    # failed upgrades in place instead of rolling back.
+    anton.io/upgrade-no-rollback: "true"
 spec:
+  # The manager DaemonSet rolls one node at a time; the 5m default is too short.
+  timeout: 15m
   chart:
     spec:
       chart: longhorn

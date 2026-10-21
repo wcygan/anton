@@ -40,6 +40,22 @@ spec:
               target:
                 group: helm.toolkit.fluxcd.io
                 kind: HelmRelease
+            - # Charts that cannot be downgraded (Longhorn) must never roll back.
+              # Retry the upgrade in place instead of remediating.
+              patch: |-
+                apiVersion: helm.toolkit.fluxcd.io/v2
+                kind: HelmRelease
+                metadata:
+                  name: _
+                spec:
+                  upgrade:
+                    strategy:
+                      name: RetryOnFailure
+                      retryInterval: 5m
+              target:
+                group: helm.toolkit.fluxcd.io
+                kind: HelmRelease
+                labelSelector: anton.io/upgrade-no-rollback=true
       target:
         group: kustomize.toolkit.fluxcd.io
         kind: Kustomization
