@@ -27,7 +27,7 @@ required, add narrow destination exceptions before changing tunnel settings.
 
 ## Rollout and acceptance
 
-Follow [ADR 0029](../../context/adrs/0029-restore-pod-security-isolate-public-workloads.md):
+Follow [ADR 0029](../../docs/docs/records/operation-contracts-and-agent-workflows.md):
 one workload at a time, with positive and negative traffic checks before
 expanding. The exact test workload/command needs operator approval under
 `AGENTS.md`; no debug pod, exec, synthetic traffic, or force reconcile is

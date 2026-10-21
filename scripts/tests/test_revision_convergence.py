@@ -32,12 +32,13 @@ from revision_convergence import (  # noqa: E402
 
 
 FIXTURE = REPO / "scripts" / "tests" / "fixtures" / "revision-convergence-v1.json"
-LIVE_EVIDENCE = (
+REGRESSION_FIXTURE = (
     REPO
-    / "context"
-    / "notes"
-    / "cluster-metric-evidence"
-    / "2026-08-11T011440Z-m2.json"
+    / "scripts"
+    / "tests"
+    / "fixtures"
+    / "metric-observations"
+    / "revision-convergence.json"
 )
 CURRENT_REVISION = "refs/heads/main@sha1:50f056942b78cfaa16052ff781630cfcde4d793a"
 STALE_REVISION = "refs/heads/main@sha1:fc3f7940ea9d0f7d6d11e6f386431a6b895ca8d8"
@@ -178,8 +179,8 @@ class RevisionConvergenceTests(unittest.TestCase):
             [item.identifier for item in DEFAULT_CRITICAL_KUSTOMIZATIONS],
         )
 
-    def test_retained_live_evidence_uses_the_fixed_scope(self) -> None:
-        evidence = json.loads(LIVE_EVIDENCE.read_text(encoding="utf-8"))
+    def test_historical_fixture_uses_the_fixed_scope(self) -> None:
+        evidence = json.loads(REGRESSION_FIXTURE.read_text(encoding="utf-8"))
         self.assertEqual(evidence["target_preflight"], "passed")
         self.assertEqual(
             [f"{item['namespace']}/{item['name']}" for item in evidence["critical_kustomizations"]],
@@ -192,10 +193,10 @@ class RevisionConvergenceTests(unittest.TestCase):
         self.assertEqual(evidence["incomplete_count"], incomplete)
         self.assertEqual(evidence["complete"], incomplete == 0)
         self.assertRegex(evidence["source"]["revision"], r"@sha1:[0-9a-f]{40}$")
-        self.assertNotIn("message", LIVE_EVIDENCE.read_text(encoding="utf-8").lower())
+        self.assertNotIn("message", REGRESSION_FIXTURE.read_text(encoding="utf-8").lower())
 
-    def test_retained_live_evidence_starts_one_incomplete_record(self) -> None:
-        evidence = json.loads(LIVE_EVIDENCE.read_text(encoding="utf-8"))
+    def test_historical_fixture_starts_one_incomplete_record(self) -> None:
+        evidence = json.loads(REGRESSION_FIXTURE.read_text(encoding="utf-8"))
         record = new_revision_record(evidence)
         self.assertEqual(record["status"], "incomplete")
         self.assertIsNone(record["duration_seconds"])

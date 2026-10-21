@@ -1,0 +1,30 @@
+{
+  "target_preflight": "passed",
+  "experiment_id": "M4-E5",
+  "raw_query": "sum(sum_over_time((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m]))[14d23h59m:1m]))",
+  "detail_query": "(sum by (node,namespace,container,reason) (sum_over_time((((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m])) * on (namespace,pod,uid,container) group_left(reason) kube_pod_container_status_last_terminated_reason{reason!=\"\"}) * on (namespace,pod,uid) group_left(node) kube_pod_info{node!=\"\"})[14d23h59m:1m]))) > 0",
+  "measurement_kind": "time_local_1m_restart_reason_estimator",
+  "authoritative_event_count_state": "no_data",
+  "oom_restart_increments": 2.0,
+  "unattributed_restart_increments": 0.0,
+  "tolerance": 1e-06,
+  "by_node": [
+    {
+      "node": "node-c",
+      "value": 2.0
+    }
+  ],
+  "by_component": [
+    {
+      "container": "external-secrets",
+      "namespace": "external-secrets",
+      "value": 2.0
+    }
+  ],
+  "outcome_gaps": [
+    "api_thresholds_unapproved",
+    "oom_event_counter_unavailable",
+    "storage_threshold_unapproved"
+  ],
+  "fixture_provenance": "Sanitized historical regression fixture. Not current cluster evidence."
+}

@@ -34,10 +34,10 @@ Then stop. Don't retry, don't auto-recover. The skill's job is to surface where 
 
 ## When to escalate
 
-After three rounds of any single failure mode (skill stops, user fixes, retries, fails the same way), recommend opening a new plan with `/planner new "<failure summary>"` rather than continuing to iterate inline. Persistent failures usually indicate a deeper issue than the skill's scope can address.
+After three rounds of any single failure mode (skill stops, user fixes, retries, fails the same way), recommend asking the planner skill to open a plan for the failure rather than continuing to iterate inline. Persistent failures usually indicate a deeper issue than the skill's scope can address.
 
 ## When NOT to use this skill
 
-If multiple Flux objects across the cluster are unhealthy (not just the target app), this skill is the wrong tool. Run `/anton-cluster-health` first; fix the cluster-wide issue; then come back to this skill.
+If multiple Flux objects across the cluster are unhealthy (not just the target app), this skill is the wrong tool. Use `anton-cluster-health` first; fix the cluster-wide issue; then come back to this skill.
 
 If `flux-operator` itself is in CrashLoopBackOff, downstream reconciles may work in narrow green windows but are unreliable. Fix flux-operator first.

@@ -60,3 +60,13 @@ A Renovate PR untouched for >30 days with `mergeable=UNKNOWN` usually has a merg
 ## Talos-area PRs are always a hand-off
 
 Any PR with `area/talos` bumps `ghcr.io/siderolabs/installer` or `ghcr.io/siderolabs/kubelet`. Those are the two version pins backing `talos/talenv.yaml`. Merging one directly without running the rolling upgrade leaves the repo and the cluster in disagreement. **Always recommend `upgrade-talos-or-k8s` for these** — never Tier 1/2/3/4.
+
+## Review beyond Renovate labels
+
+Semver labels and a narrow PR diff do not describe the full upgrade impact. For a consequential chart or operator bump, inspect the upstream release and upgrade notes, rendered values/templates, CRD schema and RBAC, subchart behavior, and any default operand images. Compare those changes with Anton's custom resources and explicit pins before recommending a merge.
+
+For raw or vendored manifests, compare the complete upstream artifact at the old and new tags. A one-line image bump can leave CRDs or permissions stale, while a full refetch can change sidecar versions; preserve intentional overrides only after checking the upstream values. Check paired bootstrap and Flux pins together when both own a component version.
+
+Renovate annotations can also hide pinned images from version discovery. During an audit, verify annotated versions appear in Renovate's current dashboard and inspect important explicit tags even if no PR exists. Treat a missing dashboard entry as a follow-up to validate, not proof that upstream has no newer version.
+
+For storage operators, check rollback support, reconciliation timeouts, engine or data-format skew, and current backup/recovery posture. A chart rollback can be unsupported even when Helm can perform it. Keep historical audit findings as leads; re-check current manifests, upstream release notes, and live state before applying them.

@@ -1,12 +1,11 @@
 ---
 name: observability-integrate
 description: Integrate an anton workload with kube-prometheus-stack. Use to add a ServiceMonitor, add a PodMonitor, expose metrics to Prometheus, author a Grafana dashboard (sidecar ConfigMap), write a PrometheusRule (alerts or recording rules), verify scrape targets, or debug why a metric or series is missing. Covers the observability stack installed per ADR 0007 / plan 0002.
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Integrate with kube-prometheus-stack
 
-Task skill for wiring anton workloads into the metrics stack. The stack itself was installed under plan 0002 (closed 2026-04-16); this skill is what you use every time afterward. For the *why* behind the install shape (retention, replica counts, deferred pillars) read `context/adrs/0007-adopt-kube-prometheus-stack.md`. This skill assumes you already know the Flux 3-file pattern — if not, load `add-flux-app` or `anton-repo-conventions` first.
+Task skill for wiring anton workloads into the metrics stack. The stack itself was installed under plan 0002 (closed 2026-04-16); this skill is what you use every time afterward. For the *why* behind the install shape (retention, replica counts, deferred pillars) read `docs/docs/decisions/0007-adopt-kube-prometheus-stack.md`. This skill assumes you already know the Flux 3-file pattern — if not, load `add-flux-app` or `anton-repo-conventions` first.
 
 ## When to invoke
 
@@ -24,7 +23,7 @@ Task skill for wiring anton workloads into the metrics stack. The stack itself w
 ## Anton-specific facts (don't re-derive these)
 
 - **Namespace**: `observability`. All kps workloads live here.
-- **Chart**: `kube-prometheus-stack` **83.5.0** via **HelmRepository** (the OCI mirror at `ghcr.io/prometheus-community/charts` is stale at 41.7.4 — do not switch sources without checking Artifact Hub).
+- **Chart**: `kube-prometheus-stack` **83.5.0** via the committed **HelmRepository**. Do not switch source types based on historical mirror status; verify current upstream tags and chart provenance first.
 - **Discovery scope**: the HelmRelease sets every `*MonitorSelector`, `probeSelector`, and `ruleSelector` to `{}` (match-all) with nil `*NamespaceSelector`. **You can put a ServiceMonitor / PodMonitor / PrometheusRule in any namespace** and Prometheus will pick it up. Co-locate with the app.
 - **Grafana sidecar**: looks for ConfigMaps with label `grafana_dashboard: "1"` in **every** namespace (`searchNamespace: ALL`). Hardened: `allowUiUpdates: false`, `disableDeletion: true` — UI edits don't persist, which is intentional.
 - **Grafana admin creds**: sourced via `ExternalSecret` from 1Password vault `anton`, item `grafana-admin`. Rotating the item does **not** hot-reload — restart the Grafana pod (helm-charts #3679).
@@ -107,9 +106,9 @@ kubectl -n observability exec prometheus-kube-prometheus-stack-prometheus-0 -c p
 
 ## Pointers
 
-- ADR 0007 (kps decision, deferred-pillar triggers): `context/adrs/0007-adopt-kube-prometheus-stack.md`
-- Plan 0002 (install record): `context/plans/0002-install-kube-prometheus-stack.md`
-- Baseline (reference footprint): `docs/docs/notes/kps-baseline-2026-04-16.md`
+- ADR 0007 (kps decision, deferred-pillar triggers): `docs/docs/decisions/0007-adopt-kube-prometheus-stack.md`
+- Plan 0002 (install record): `../anton-private/docs/operations/platform-work/plans/0002-install-kube-prometheus-stack.md`
+- Baseline (reference footprint): `docs/docs/overview/capabilities.md`
 - HelmRelease (source of truth for values): `kubernetes/apps/observability/kube-prometheus-stack/app/helmrelease.yaml`
 - Dashboard exemplar: `kubernetes/apps/observability/kube-prometheus-stack/app/dashboard-cluster-health.yaml`
 - Flux PodMonitor exemplar: `kubernetes/apps/flux-system/flux-instance/app/podmonitor.yaml`

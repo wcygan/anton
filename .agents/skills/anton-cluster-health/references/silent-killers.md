@@ -24,7 +24,7 @@ mise exec -- flux -n <ns> describe ks <name> | grep -A3 -i 'decrypt'
 kubectl -n flux-system describe secret sops-age
 ```
 
-`describe` prints key names and byte counts without exposing the private key. **Fix path**: `rotate-credential` (age key) or operator-approved key inspection outside Codex. Full detail: [layer-4-flux](layer-4-flux.md).
+`describe` prints key names and byte counts without exposing the private key. **Fix path**: `rotate-credential` (age key) or operator-approved key inspection outside agent. Full detail: [layer-4-flux](layer-4-flux.md).
 
 ---
 

@@ -1,0 +1,134 @@
+[
+  {
+    "from": "/notes/adding-a-2nd-domain",
+    "to": "/guides/secrets-and-exposure"
+  },
+  {
+    "from": "/notes/clickstack-experiment",
+    "to": "/records/observability-and-logging"
+  },
+  {
+    "from": "/notes/cloudflare-tunnel-dns-conflicts",
+    "to": "/records/dns-and-monitoring-lessons"
+  },
+  {
+    "from": "/notes/exposing-workloads-through-tailscale",
+    "to": "/guides/remote-access"
+  },
+  {
+    "from": "/notes/external-secrets-onepassword",
+    "to": "/guides/secrets-and-exposure"
+  },
+  {
+    "from": "/notes/harbor-developer-guide",
+    "to": "/guides/harbor"
+  },
+  {
+    "from": "/notes/harbor-registry",
+    "to": "/guides/harbor"
+  },
+  {
+    "from": "/notes/hosting-apps-outside-flux",
+    "to": "/records/learning-experiments"
+  },
+  {
+    "from": "/notes/kps-baseline-2026-04-16",
+    "to": "/overview/capabilities"
+  },
+  {
+    "from": "/notes/logging-stack",
+    "to": "/guides/logging"
+  },
+  {
+    "from": "/notes/longhorn-baseline-2026-04-16",
+    "to": "/guides/storage"
+  },
+  {
+    "from": "/notes/longhorn-storage-network-host-shim",
+    "to": "/guides/storage"
+  },
+  {
+    "from": "/notes/ntfy-iphone-setup",
+    "to": "/guides/alerts"
+  },
+  {
+    "from": "/notes/prometheus-disk-exhaustion",
+    "to": "/records/dns-and-monitoring-lessons"
+  },
+  {
+    "from": "/notes/rook-ceph",
+    "to": "/decisions/0002-defer-rook-ceph"
+  },
+  {
+    "from": "/notes/seaweedfs-baseline-2026-04-19",
+    "to": "/guides/seaweedfs"
+  },
+  {
+    "from": "/notes/seaweedfs-iceberg-log-lakehouse",
+    "to": "/records/lakehouse-retirement"
+  },
+  {
+    "from": "/notes/spegel-private-registry",
+    "to": "/overview/capabilities"
+  },
+  {
+    "from": "/notes/tailscale-extension",
+    "to": "/guides/remote-access"
+  },
+  {
+    "from": "/playground/clickhouse",
+    "to": "/records/learning-experiments"
+  },
+  {
+    "from": "/playground/debugging",
+    "to": "/guides/operations"
+  },
+  {
+    "from": "/playground/dragonfly",
+    "to": "/records/learning-experiments"
+  },
+  {
+    "from": "/playground/intro",
+    "to": "/records/learning-experiments"
+  },
+  {
+    "from": "/playground/redpanda",
+    "to": "/records/learning-experiments"
+  },
+  {
+    "from": "/playground/scylla",
+    "to": "/records/learning-experiments"
+  },
+  {
+    "from": "/playground/tidb",
+    "to": "/records/learning-experiments"
+  },
+  {
+    "from": "/runbooks/flux-helm-remediation",
+    "to": "/guides/flux"
+  },
+  {
+    "from": "/runbooks/kubernetes-logs-loki",
+    "to": "/guides/logging"
+  },
+  {
+    "from": "/runbooks/multus-attach-failure",
+    "to": "/guides/storage"
+  },
+  {
+    "from": "/runbooks/routine-operations",
+    "to": "/guides/operations"
+  },
+  {
+    "from": "/runbooks/seaweedfs-stock-cutover",
+    "to": "/guides/seaweedfs"
+  },
+  {
+    "from": "/runbooks/talos-health",
+    "to": "/guides/talos"
+  },
+  {
+    "from": "/todo",
+    "to": "/reference/documentation"
+  }
+]

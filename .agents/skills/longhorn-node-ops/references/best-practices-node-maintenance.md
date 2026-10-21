@@ -40,4 +40,4 @@ Hand off to `add-or-replace-node` for the Talos side. Longhorn specifics:
 
 ## Dedicated disks
 
-Anton's Longhorn disks are dedicated 1 TB NVMes at `/var/mnt/longhorn-{1,2}`. Don't co-locate other workloads on them — Longhorn's sparse replica files compete poorly with hostPath/emptyDir IO.
+Before assuming a Longhorn disk is dedicated, inspect its current Talos path and host usage. Avoid co-locating workloads where it would contend with replica IO; confirm the intended ownership for each disk.

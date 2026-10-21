@@ -1,7 +1,6 @@
 ---
 name: upgrade-talos-or-k8s
 description: Rolling upgrade for Anton's Talos OS or Kubernetes. Use to upgrade talos, bump kubernetes version, edit talenv, run a rolling upgrade across nodes, or change the talos version. High-stakes — one node at a time, etcd quorum gated.
-allowed-tools: Read, Bash
 ---
 
 # Upgrade Talos or Kubernetes

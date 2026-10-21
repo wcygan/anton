@@ -42,11 +42,11 @@ tasks:
       - which mise
 
   qmd:bootstrap:
-    desc: Rebuild the local QMD index for context/
+    desc: Rebuild the local QMD index for public documentation
     cmds:
       - find .qmd -maxdepth 1 -name 'index.sqlite*' -delete
       - qmd update
-      - qmd embed -c anton-context
+      - qmd embed -c anton-docs
     preconditions:
       - test -f .qmd/index.yml
       - which qmd
@@ -55,6 +55,7 @@ tasks:
     desc: Validate committed cluster operation contracts
     cmds:
       - python3 scripts/validate-public-privacy.py
+      - python3 scripts/validate-documentation.py
       - python3 scripts/validate-flux-contract.py
       - python3 scripts/validate-flux-postbuild-contract.py
       - python3 scripts/validate-log-contract.py

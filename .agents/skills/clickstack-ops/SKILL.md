@@ -25,7 +25,7 @@ Stop when: the requested ClickStack task is handled, the next approval-only acti
 ## Read First
 
 1. Read root `AGENTS.md` for Anton safety rules.
-2. Read `context/adrs/0028-clickstack-learning-experiment.md` for the experiment contract.
+2. Read `docs/docs/decisions/0028-clickstack-learning-experiment.md` for the experiment contract.
 3. If editing manifests under `kubernetes/apps/clickstack/`, read `kubernetes/apps/AGENTS.md` and load `anton-repo-conventions`.
 4. Load only the reference needed:
    - `references/usage.md` for HyperDX access, OTLP test signals, and queries.
@@ -33,7 +33,7 @@ Stop when: the requested ClickStack task is handled, the next approval-only acti
    - `references/operations.md` for health checks, Flux triage, and credential rotation.
    - `references/maintenance.md` for Renovate posture, the review-by checklist, and teardown.
 
-Use QMD only when the task needs Anton history beyond the ADR and manifests. Treat QMD snippets as leads; retrieve the actual `context/` file before citing it.
+Use QMD only when the task needs Anton history beyond the ADR and manifests. Treat QMD snippets as leads; retrieve the actual `docs/docs/` source before citing it.
 
 ## Safety Rules
 
@@ -64,7 +64,7 @@ Use QMD only when the task needs Anton history beyond the ADR and manifests. Tre
 
 ## Source Files
 
-- ADR: `context/adrs/0028-clickstack-learning-experiment.md`
+- ADR: `docs/docs/decisions/0028-clickstack-learning-experiment.md`
 - Operators HelmRelease: `kubernetes/apps/clickstack/clickstack-operators/app/helmrelease.yaml`
 - Main chart values: `kubernetes/apps/clickstack/clickstack-app/app/helmrelease.yaml`
 - ESO: `kubernetes/apps/clickstack/clickstack-app/app/externalsecret.yaml`

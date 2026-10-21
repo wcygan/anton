@@ -1,7 +1,6 @@
 ---
 name: anton-upgrade-audit
 description: Upgrade triage for Anton — walks open Renovate PRs, flags supersessions, proposes a tiered merge order (patches → minors → CI majors → cluster majors), reads the Renovate Dependency Dashboard, and runs live-cluster deprecation audits with kubent/pluto/nova. Read-only. Use when asking "what can we upgrade", "check renovate PRs", "upgrade audit", "is anything outdated", "audit chart versions", "k8s deprecation scan", "what should we merge next", "are there superseded PRs". Hands Talos or Kubernetes version pin bumps off to upgrade-talos-or-k8s. Keywords — renovate, upgrade, audit, outdated, dependency dashboard, helm chart, kubent, pluto, nova, deprecation, chart drift, PR triage, merge order, supersede, bump, renovate bot
-allowed-tools: Read, Bash
 ---
 
 # Anton upgrade audit

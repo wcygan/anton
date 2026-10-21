@@ -1,7 +1,6 @@
 ---
 name: cluster-intake
 description: "Intake gate for adding new system or infrastructure components to Anton. Use when deciding whether to adopt, install, evaluate, or learn a new app, operator, Helm chart, or platform component before scaffolding manifests. Applies concrete-need and honest-learning rubrics, checks containment and removal history, returns add/defer/reject with ADR-ready output, and stays read-only."
-allowed-tools: Read, Bash, Grep, Glob, WebFetch, WebSearch
 ---
 
 # Cluster intake
@@ -71,9 +70,9 @@ Intent is the axis that decides which rubric applies:
 
 - **Concrete need or both** → full production rubric (all 7 hard gates + sustainability + full soft score)
 - **Honest learning** → contained-learning rubric (gates 1, 2, 3, 4, 5 only; skip sustainability gating; require a timebox and exit plan)
-- **Completionism-as-need** → reject, cite pattern #10 in [known-bad-patterns](known-bad-patterns.md)
+- **Completionism-as-need** → reject, cite pattern #10 in [known-bad-patterns](references/known-bad-patterns.md)
 
-### Step 2 — Check the removal graveyard (now in `context/adrs/`)
+### Step 2 — Check the removal graveyard (now in `docs/docs/decisions/`)
 
 Before anything else, check if this component or its category is already in anton's removal history. The removal graveyard has been migrated into the ADR system:
 
@@ -83,11 +82,11 @@ git log --oneline --all --grep='remove\|rip\|drop\|abandon\|descope' -i | head -
 
 Then query the ADR index for prior `Reverted` decisions:
 
-- `Glob('context/adrs/0[0-9][0-9][0-9]-*.md')` — list all ADRs
+- `Glob('docs/docs/decisions/0[0-9][0-9][0-9]-*.md')` — list all ADRs
 - For each, read the frontmatter and filter for `status: Reverted`
 - Surface any whose `affects:` matches the candidate's category, *or* whose title clearly references the same component
 - Read each matched ADR's "Re-adoption guidance" section — that holds the conditions under which a re-attempt would be valid
-- Read `context/adrs/RE-ADOPTION-RUBRIC.md` for the policy on which categories require an explicit intent declaration before re-adopting
+- Read `references/re-adoption-rubric.md` for the policy on which categories require an explicit intent declaration before re-adopting
 
 If the candidate or its category matches a `Reverted` ADR, demand an explicit delta from the user (concrete-need reframing) **or** an explicit learning-intake declaration with timebox + exit plan (learning-intake reframing). The matched ADR's Re-adoption guidance section spells out the acceptable forms. If neither path applies, reject under the matched ADR's lesson.
 
@@ -135,7 +134,7 @@ Cross-check against well-known homelab landmines. → [known-bad-patterns](refer
 
 ### Step 8 — Return a structured recommendation, then hand off to `adr`
 
-Every verdict — Add, Defer, or Reject — is recorded by handing off to the **`adr` skill** (`/adr new`). That skill owns the canonical anton ADR template (`.Codex/skills/adr/references/template.md`), allocates the next NNNN, and writes the ADR file under `context/adrs/`. Do not stop at "ADR-ready" — the verdict must land in `context/adrs/`.
+Every verdict — Add, Defer, or Reject — is recorded by handing off to the **`adr` skill** (by invoking `adr`). That skill owns the canonical anton ADR template (`.agents/skills/adr/references/template.md`), allocates the next NNNN, and writes the ADR file under `docs/docs/decisions/`. Do not stop at "ADR-ready" — the verdict must land in `docs/docs/decisions/`.
 
 The four verdict shapes:
 

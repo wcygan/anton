@@ -1,7 +1,6 @@
 ---
 name: expose-service
 description: "Expose a workload for Anton access. Use when choosing between envoy-internal, Tailscale Ingress, Tailscale Service annotation, or explicitly approved envoy-external plus Cloudflare tunnel. Handles HTTPRoute authoring, DNSEndpoint for secondary domains, per-domain cert wiring, and route verification."
-allowed-tools: Read, Write, Edit, Glob, Grep
 ---
 
 # Expose a service

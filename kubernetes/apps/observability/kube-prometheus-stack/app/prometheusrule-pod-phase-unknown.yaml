@@ -54,7 +54,7 @@ spec:
               to find the hosting node and last-known status, then check that
               node's kubelet health via `talosctl service kubelet`. Recovery
               when needed: `kubectl delete pod -n {{ $labels.namespace }} {{ $labels.pod }} --force --grace-period=0`.
-            runbook_url: "https://github.com/wcygan/anton/blob/main/context/postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md"
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/records/reboot-and-thermal-investigation.md"
         - alert: PodPhaseUnknownCritical
           expr: |
             kube_pod_status_phase{phase="Unknown"} > 0
@@ -74,4 +74,4 @@ spec:
               Recovery: force-delete the ghost pod so its ReplicaSet /
               StatefulSet / DaemonSet creates a fresh replacement.
               `kubectl delete pod -n {{ $labels.namespace }} {{ $labels.pod }} --force --grace-period=0`
-            runbook_url: "https://github.com/wcygan/anton/blob/main/context/postmortems/2026-05-05-k8s-1-k8s-3-dual-silent-reboot.md"
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/records/reboot-and-thermal-investigation.md"

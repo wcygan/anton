@@ -1,0 +1,35 @@
+{
+  "target_preflight": "passed",
+  "raw_query": "sum(sum_over_time((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m]))[14d23h59m:1m]))",
+  "by_node_query": "sum by (node) (sum_over_time(((increase(kube_pod_container_status_restarts_total{namespace=~\"flux-system|kube-system|network|external-secrets|storage|observability|envoy-gateway-system\",container!=\"\"}[1m])) * on (namespace,pod,uid) group_left(node) kube_pod_info{node!=\"\"})[14d23h59m:1m]))",
+  "interval_count": 21600,
+  "unattributed_restart_increments": 0.0,
+  "tolerance": 1e-06,
+  "node_totals": [
+    {
+      "node": "node-a",
+      "value": 0.0,
+      "exact_value": "0"
+    },
+    {
+      "node": "node-b",
+      "value": 10.565133,
+      "exact_value": "10.565133333333334"
+    },
+    {
+      "node": "node-c",
+      "value": 6.565133,
+      "exact_value": "6.565133333333334"
+    }
+  ],
+  "raw_total_exact": "17.130266666666667",
+  "node_total_sum_exact": "17.130266666666668",
+  "unattributed_restart_increments_exact": "0.000000000000001",
+  "instrumentation_reason_count_after": 0,
+  "outcome_gaps": [
+    "api_thresholds_unapproved",
+    "oom_no_data",
+    "storage_threshold_unapproved"
+  ],
+  "fixture_provenance": "Sanitized historical regression fixture. Not current cluster evidence."
+}

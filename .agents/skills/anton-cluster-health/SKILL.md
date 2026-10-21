@@ -1,6 +1,6 @@
 ---
 name: anton-cluster-health
-description: Kubernetes-layer health triage for Anton. Use when Codex checks whether the cluster is OK, Flux is healthy, platform controllers are ready, CNI or DNS is failing, cert-manager or ESO is stuck, gateways are broken, cloudflared is disconnected, or apps are unhealthy.
+description: Kubernetes-layer health triage for Anton. Use when assessing whether the cluster is OK, Flux is healthy, platform controllers are ready, CNI or DNS is failing, cert-manager or ESO is stuck, gateways are broken, cloudflared is disconnected, or apps are unhealthy.
 ---
 
 # Anton Cluster Health

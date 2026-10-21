@@ -23,7 +23,7 @@ databases/cloudnative-pg + databases/dragonfly-operator
 
 Keep `persistence.imageChartStorage.type: s3`, endpoint `http://seaweedfs-s3.storage.svc.cluster.local:8333`, bucket `harbor`, and `disableredirect: true`. SeaweedFS does not support Harbor's pre-signed redirect flow reliably here.
 
-Keep `externalURL: http://192.168.1.106` unless you are intentionally fixing the Tailscale auth-realm issue. That issue is documented in `docs/docs/notes/harbor-registry.md` and this namespace's Claude precedent.
+Preserve the configured `externalURL` unless an approved change addresses the verified Tailscale authentication-realm issue. Inspect the actual `WWW-Authenticate` header and client network boundary first; see `docs/docs/guides/harbor.md` and the shared Harbor authentication reference.
 
 ## Validation
 

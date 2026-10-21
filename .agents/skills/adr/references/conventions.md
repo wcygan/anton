@@ -2,14 +2,9 @@
 
 Mechanical reference for the `adr` skill. This file is loaded on demand from `SKILL.md`; it's not part of the always-on context.
 
-## File location
+## Canonical location and policy
 
-```
-context/adrs/
-├── TEMPLATE.md               # canonical anton ADR template (also mirrored at .claude/skills/adr/references/template.md)
-├── RE-ADOPTION-RUBRIC.md     # meta-policy preserved from anton-history.md (non-ADR)
-└── NNNN-kebab-slug.md        # one ADR per file
-```
+ADR records live at `docs/docs/decisions/NNNN-kebab-slug.md`. The public lifecycle and status policy is [decisions-policy](../../../../docs/docs/reference/decisions-policy.md). This skill's [template](template.md) is the only canonical template; do not maintain a second copy in the public docs.
 
 ## Naming convention
 
@@ -95,4 +90,4 @@ The template enforces this section order. Do not add or remove sections.
 
 Once an ADR has any status other than `Proposed`, the body never changes. The *only* in-place edit allowed is flipping the `status:` line to `Superseded-by NNNN`. Any other revision must go through `supersede`, which writes a new ADR with `supersedes: [<old-NNNN>]`.
 
-This rule is what makes ADRs trustworthy as a decision history — if bodies could change, future-Claude could not rely on the historical record.
+This rule is what makes ADRs trustworthy as a decision history — if bodies could change, future agents could not rely on the historical record.

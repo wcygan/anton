@@ -23,7 +23,7 @@ Stop when: the changed network resource matches the intended scope and read-only
 
 Preserve the `storage-vxlan` host shim unless a new diagnosis proves Longhorn iSCSI still works without it. The host iSCSI initiator reaches same-node instance-manager pods through `lhnet1-host`; bare macvlan/ipvlan attempts on the VXLAN parent failed this gate.
 
-Use `docs/docs/notes/adding-a-2nd-domain.md` before adding secondary-domain routes. Add an explicit `DNSEndpoint` for those domains.
+Use `docs/docs/guides/secrets-and-exposure.md` before adding secondary-domain routes. Add an explicit `DNSEndpoint` for those domains.
 
 ## Validation
 

@@ -1,7 +1,6 @@
 ---
 name: rotate-credential
 description: Credential rotation for Anton. Use for the age key, Flux deploy key, ESO token, Cloudflare tunnel token, or application credential exposure. Includes preconditions, verification, evidence epochs, and rollback.
-allowed-tools: Read, Bash
 ---
 
 # Rotate a credential
@@ -149,4 +148,3 @@ kubectl -n network rollout status deploy/cloudflare-tunnel
 
 - Triaging Flux when reconciliation breaks after a rotation → `debug-flux-reconciliation`
 - The SOPS vs ExternalSecret decision tree (which credentials live where) → `anton-repo-conventions`
-- Airflow shadow-gate evidence epochs → `airflow-spark-lakehouse`

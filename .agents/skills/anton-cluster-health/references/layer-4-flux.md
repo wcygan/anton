@@ -78,7 +78,7 @@ Message: failed to decrypt secrets.sops.yaml: ... failed to create sops data key
 kubectl -n flux-system describe secret sops-age
 ```
 
-`kubectl describe secret` prints key names and byte counts without exposing the private key. If the Secret exists but decryption still fails, hand off to credential rotation or operator-approved key inspection outside Codex.
+`kubectl describe secret` prints key names and byte counts without exposing the private key. If the Secret exists but decryption still fails, hand off to credential rotation or operator-approved key inspection outside agent.
 
 ## postBuild substitution errors
 

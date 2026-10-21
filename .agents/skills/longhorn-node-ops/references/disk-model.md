@@ -19,7 +19,7 @@ Longhorn identifies disks internally by UUID (`status.diskStatus[<name>].diskUUI
 
 Longhorn refuses to delete a disk with live replicas. Swapping a disk requires two patches.
 
-Anton example — replacing the Talos EPHEMERAL default-disk on a node with two declared NVMes (what we actually did in plan 0001 Phase 2):
+Generic two-pass disk transition: substitute the exact confirmed disk names, UUID, and path from the current Longhorn node resource. Do not reuse historical node inventory.
 
 **Pass 1** — add new disks, disable the old one, request eviction:
 
@@ -28,22 +28,22 @@ kubectl patch nodes.longhorn.io <node> -n storage --type=merge -p "$(cat <<'EOF'
 {
   "spec": {
     "disks": {
-      "longhorn-1": {
-        "path": "/var/mnt/longhorn-1",
+      "<new-disk-name-1>": {
+        "path": "<new-disk-path-1>",
         "allowScheduling": true,
         "evictionRequested": false,
         "storageReserved": 0,
         "tags": []
       },
-      "longhorn-2": {
-        "path": "/var/mnt/longhorn-2",
+      "<new-disk-name-2>": {
+        "path": "<new-disk-path-2>",
         "allowScheduling": true,
         "evictionRequested": false,
         "storageReserved": 0,
         "tags": []
       },
-      "default-disk-<hash>": {
-        "path": "/var/lib/longhorn/",
+      "<old-disk-name>": {
+        "path": "<old-disk-path>",
         "allowScheduling": false,
         "evictionRequested": true,
         "storageReserved": 0,
@@ -69,11 +69,11 @@ Should reach `0` before proceeding.
 
 ```sh
 kubectl patch nodes.longhorn.io <node> -n storage --type=merge \
-  -p '{"spec":{"disks":{"default-disk-<hash>":null}}}'
+  -p '{"spec":{"disks":{"<old-disk-name>":null}}}'
 ```
 
 ## Why this is not GitOps
 
-The Longhorn disk list on a live node is runtime state. The GitOps truth is the Talos `default-disks-config` annotation, which is only read at **first registration**. For future node rebuilds or replacements the Talos annotation routes correctly; for live migrations on an already-registered node the two-pass kubectl patch above is the escape hatch.
+The Longhorn disk list on a live node is runtime state. The GitOps truth is the Talos `default-disks-config` annotation, which is read at **first registration**. For a live migration on an already-registered node, confirm the current Talos annotation and Longhorn node resource, then use the two-pass patch above only if the operator has approved that live change.
 
-Keep the Talos annotation in `talos/talconfig.yaml` matching the intended disk set, even when you correct drift via kubectl — future re-registration depends on it.
+Keep the Talos annotation in `talos/talconfig.yaml` aligned with the confirmed intended disk set, even when correcting live drift through Longhorn.

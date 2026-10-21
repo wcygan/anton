@@ -17,24 +17,20 @@ The GitOps source of truth for Longhorn disk topology is the Talos per-node patc
 
 **Load-bearing gotcha:** Longhorn only reads `default-disks-config` at **first node registration**. Changes after that are not a live feedback loop — the annotation remains GitOps truth for future re-registration, but changing it on an already-registered node requires a kubectl patch against `nodes.longhorn.io/<node>` to take effect.
 
-## Anton topology
+## Establish current disk state
 
-- k8s-1: 2× WD_BLACK at `/var/mnt/longhorn-{1,2}`
-- k8s-2: 1× WD_BLACK at `/var/mnt/longhorn-1` (second NVMe slot empty — followup tracked in `context/hardware.md`)
-- k8s-3: 2× WD_BLACK at `/var/mnt/longhorn-{1,2}`
+Node disk counts, models, serials, and free slots change over time. Do not infer current hardware from old plans or prior node-specific examples. Before authoring a Talos disk patch or Longhorn node patch, inspect the current `talos/talconfig.yaml`, generated config, Talos discovered volumes, node annotations, Longhorn `nodes.longhorn.io` objects, and replica placement. Record disagreements as separate observations; preserve uncertainty until the exact disk identity is confirmed.
+
+After adding a disk to an already-registered node, expect Longhorn not to reread `default-disks-config`; use the two-pass disk procedure in [disk-model](references/disk-model.md) only after confirming the intended disk and exact Longhorn node object.
 
 ## Recipes
 
-### Add a second NVMe to k8s-2 (when hardware returns)
+### Add a disk to a node
 
-1. Install the drive, boot the node, find the serial: `talosctl -n k8s-2 get discoveredvolumes`.
-2. Edit `talos/talconfig.yaml` under the k8s-2 entry:
-   - Add a `UserVolume` `longhorn-2` with the `disk.serial` selector.
-   - Add the `/var/mnt/longhorn-2` bind mount under `machine.kubelet.extraMounts`.
-   - Append `{"path":"/var/mnt/longhorn-2","allowScheduling":true}` to `default-disks-config`.
-3. `task talos:generate-config && task talos:apply-node IP=192.168.1.99 MODE=auto`.
-4. Confirm the mount: `talosctl -n k8s-2 ls /var/mnt/`.
-5. Because Longhorn already has k8s-2 registered with one disk, the annotation change is not picked up. kubectl-patch `nodes.longhorn.io/k8s-2` to add the new disk (see [disk-model](references/disk-model.md)).
+1. Inspect the target node's discovered volumes and identify the disk by a stable identifier, not device order.
+2. Edit `talos/talconfig.yaml` for that node: add a `UserVolume` with the confirmed disk selector, its kubelet bind mount, and the intended `default-disks-config` entry.
+3. Generate and review the Talos configs. Apply only after following the node-operation approval and quorum gates.
+4. Confirm the mount and Talos state. If the node is already registered in Longhorn, add the disk to its Longhorn node resource after checking replica placement.
 
 ### Evict replicas before long node maintenance
 
@@ -54,7 +50,7 @@ to reach `0`, then reboot. Un-evict after: set both annotations back. For short 
 
 ### Fix a disk-routing mismatch
 
-Two-pass kubectl patch if Longhorn registered the wrong disk (e.g. the 500 GB Talos EPHEMERAL default instead of the declared NVMes):
+Use the two-pass kubectl patch only after confirming the exact disk mismatch in Talos and Longhorn state:
 
 1. Patch 1 — add new disks + disable the wrong one + request eviction on it.
 2. Wait for replica count on the wrong disk to reach zero.

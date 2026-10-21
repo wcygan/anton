@@ -1,7 +1,6 @@
 ---
 name: add-flux-app
 description: Scaffold a new Helm or raw Kustomize Flux app for Anton. Use to add an app, add a chart, add a raw manifest app, create a namespace, or create an ExternalSecret. Stops after repository validation and an explicit Git/rollout handoff.
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Add a Flux app
@@ -33,7 +32,7 @@ Field reference for every file's shape: `anton-repo-conventions` skill.
    # add: - ./<app>/ks.yaml
    ```
    Apps are NOT auto-discovered. Skipping this means Flux silently never deploys the app.
-6. **Validate dependency readiness:** run
+6. **Validate dependency readiness:** keep the template default `wait: false`. Set `wait: true` only when a named downstream consumer depends on this Kustomization reporting ready, and comment which consumer requires the block. Then run
    `python3 scripts/validate-flux-contract.py`. If the app authors a custom
    resource, add the ADR 0027 `dependsOn` edge reported by the validator; if it
    is a provider, add `wait: true`, `healthChecks`, or `healthCheckExprs`.

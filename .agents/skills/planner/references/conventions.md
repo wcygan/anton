@@ -2,13 +2,9 @@
 
 Mechanical reference for the `planner` skill. This file is loaded on demand from `SKILL.md`; it's not part of the always-on context.
 
-## File location
+## Canonical location
 
-```
-context/plans/
-├── TEMPLATE.md               # canonical anton plan template (mirrored at .claude/skills/planner/references/template.md)
-└── NNNN-kebab-slug.md        # one plan per file
-```
+Plans live in the sibling private checkout at repo-root-relative `../anton-private/docs/operations/platform-work/plans/`. If that checkout or directory is unavailable, stop and report the missing access rather than creating a substitute. The canonical status enum is in [statuses.txt](statuses.txt); the template is in [template.md](template.md).
 
 ## Naming convention
 
@@ -50,7 +46,7 @@ review-by: <YYYY-MM-DD|null>
 
 ### Status enum
 
-The canonical enum is defined in [`statuses.txt`](statuses.txt) — a single source of truth shared by the `inject_plans_index.py` SessionStart hook, the `validate_plan_status.py` PostToolUse hook, and this reference. Do not add values here without updating that file first.
+The canonical enum is defined in [`statuses.txt`](statuses.txt). Do not add values here without updating that file first.
 
 - **`Draft`** — plan is being shaped; Goal and Acceptance criteria are not yet stable. Counts as active in the index.
 - **`In-progress`** — work is active. Default status for new plans.
@@ -58,11 +54,11 @@ The canonical enum is defined in [`statuses.txt`](statuses.txt) — a single sou
 - **`Done`** — all Acceptance criteria met and the plan is closed. Terminal.
 - **`Abandoned`** — work stopped without meeting Acceptance criteria. The Log's final entry must name the reason. Terminal.
 
-Active statuses appear in the SessionStart injection. Terminal statuses are historical and don't show in the active-plan table. Off-enum values (e.g. `Completed`, `Closed`) are blocked at write time by the PostToolUse validator and flagged as drift in the SessionStart injection if they slip past it.
+List active plans by their status; include terminal plans only when requested. Use only these values. If an existing plan contains another status, report the mismatch and resolve it through the plan lifecycle.
 
 ### `affects` category list
 
-Same canonical list as ADRs (see `.claude/skills/adr/references/conventions.md`):
+Same canonical list as ADRs (see `../../adr/references/conventions.md`):
 
 - `storage`, `observability`, `databases`, `registries`, `demos`, `networking`, `security`, `compute`, `all`
 
@@ -98,7 +94,7 @@ Plans differ from ADRs on mutability. The specifics:
 
 ## Active vs. terminal
 
-The SessionStart hook surfaces only active plans (`Draft` / `In-progress` / `Blocked`) to conserve instruction budget. Terminal plans (`Done` / `Abandoned`) stay on disk as history but are out of the always-on context. Use `/planner list --all` to see them.
+Active plans use `Draft`, `In-progress`, or `Blocked`. Terminal plans (`Done` / `Abandoned`) remain as history and appear when all plans are requested.
 
 ## Interaction with memory
 

@@ -43,7 +43,7 @@ spec:
 
     # ADR 0005 defaults. Asymmetric 2+1+2 OSD topology (k8s-1: 2, k8s-2: 1, k8s-3: 2)
     # means 2-replica + best-effort locality will skew toward k8s-1/k8s-3 until the
-    # k8s-2 second-NVMe followup lands (tracked in context/hardware.md).
+    # k8s-2 second-NVMe followup lands (tracked in docs/docs/overview/architecture.md).
     #
     # createDefaultDiskLabeledNodes: only register default disks on nodes that carry
     # the node.longhorn.io/create-default-disk=config label. Combined with the

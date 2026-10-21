@@ -1,7 +1,6 @@
 ---
 name: ntfy-alert-triage
 description: Triage ntfy.sh-routed alerts in Anton — identify which alert fired, why it fired (or why it didn't deliver), and propose a fix. Use when "got an ntfy alert", "alert just fired", "ntfy not delivering", "AlertmanagerClusterFailedToSendAlerts", "AlertmanagerFailedToSendAlerts", "code 40014", "attachments not allowed", "iOS push missing", "test the ntfy receiver", "send a test alert", "what just paged me", "is ntfy working". Combines kube-prometheus-stack Alertmanager API, the self-hosted ntfy server (ADR 0026), and the ntfy CLI for poll/publish probes. Read-only by default; proposes edits the operator applies.
-allowed-tools: Read, Bash, Grep, Edit
 ---
 
 # ntfy alert triage
@@ -54,7 +53,7 @@ kubectl exec -n observability alertmanager-kube-prometheus-stack-alertmanager-0 
 
 Sort the active alerts by `startsAt` and find the one that matches the time the user was paged. Only alerts with `rcv:` containing `observability/ntfy/ntfy` actually went to ntfy; everything else routes to `null`.
 
-**Ground-truth check before reacting**: a fresh-looking alert can be a metric/series artifact, not a real event. For `NodeUnexpectedReboot` specifically, check `/proc/uptime` directly via `talosctl`; cross-reference with the cluster-triage agent memory at `.Codex/agent-memory/cluster-triage/reference_reboot_alert_disambiguation.md`.
+**Ground-truth check before reacting**: a fresh-looking alert can be a metric/series artifact, not a real event. For `NodeUnexpectedReboot` specifically, check `/proc/uptime` directly via `talosctl`; cross-reference with the cluster-triage agent memory at `agent memory cluster-triage/reference_reboot_alert_disambiguation.md`.
 
 ---
 
@@ -178,7 +177,7 @@ A healthy line looks like `Successfully forwarded message to upstream`. Errors m
 | `kubernetes/apps/observability/ntfy/app/configmap.yaml` | ntfy server.yml — base-url, upstream-base-url, attachment limits |
 | `kubernetes/apps/observability/ntfy/app/externalsecret.yaml` | ESO mapping that fills the `ntfy-topic` Secret from 1Password |
 | `kubernetes/apps/observability/ntfy/app/deployment.yaml` | Single-replica ntfy v2.x, RWO cache PVC, Recreate strategy |
-| ADR 0026 (`context/adrs/0026-self-hosted-ntfy-as-alertmanager-destination.md`) | Why ntfy, why upstream relay, broadening policy |
+| ADR 0026 (`docs/docs/decisions/0026-adopt-self-hosted-ntfy-for-alerts.md`) | Why ntfy, why upstream relay, broadening policy |
 | Postmortem 2026-05-05 (alert cascade) | Captured as commit `084babaa` body — three coordinated fixes |
 
 ## Hard rules (carry-overs from AGENTS.md)

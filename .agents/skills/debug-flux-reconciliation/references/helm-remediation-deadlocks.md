@@ -3,7 +3,7 @@
 Use this reference when a HelmRelease reports timeout, exhausted retries,
 cleanup, rollback, hook failure, or an immutable Job error.
 
-Read `docs/docs/runbooks/flux-helm-remediation.md` for the evidence matrix and
+Read `docs/docs/guides/flux.md` for the evidence matrix and
 human handoff. This reference defines the agent completion criteria.
 
 ## Diagnose before remediation

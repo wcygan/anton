@@ -1,47 +1,9 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = []
-# ///
-"""SessionStart:compact hook — re-inject anton's non-negotiable conventions.
+#!/usr/bin/env python3
+"""Thin adapter: re-read canonical guidance after compaction."""
+import os
+import subprocess
+from pathlib import Path
 
-After a context compaction, CLAUDE.md nuance is often summarized away. This
-hook restates the five rules that most commonly cause damage when forgotten.
-"""
-import sys
-
-REMINDERS = """## Anton conventions (post-compact reminder)
-
-1. SOPS: never write plaintext to `*.sops.*` files, `age.key`,
-   `github-deploy.key`, or `cloudflare-tunnel.json`. Use `sops <file>` to
-   edit encrypted files in place; run `sops -e -i <file>` to encrypt a
-   plaintext `*.sops.*` before committing (verify with `sops filestatus`).
-
-2. Flux 3-file pattern for every app under kubernetes/apps/{ns}/{app}/:
-   - ks.yaml
-   - app/kustomization.yaml
-   - app/helmrelease.yaml
-   - app/ocirepository.yaml
-
-3. Destructive ops require explicit user approval — never run without it:
-   `task talos:reset`, `talosctl reset`, `kubectl delete namespace/pv/pvc`,
-   cluster-wide `flux suspend`, `talosctl apply-config` without `--mode`.
-
-4. Always verify `kubectl config current-context` and `talosctl config info`
-   match the anton cluster before running any mutating command.
-
-5. Never commit the real tailnet name — use `<tailnet-name>.ts.net`.
-
-Prefer jj over git in this repo. Hooks will block mutating git commands with
-a jj-equivalent hint; override with `JJ_OVERRIDE=1` only when jj genuinely
-cannot do what you need.
-"""
-
-
-def main() -> int:
-    print(REMINDERS)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+REPO = Path(__file__).resolve().parents[2]
+if __name__ == '__main__':
+    raise SystemExit(subprocess.call(['python3', str(REPO / 'scripts/documentation-index.py'), 'conventions', '--root', os.environ.get('CLAUDE_PROJECT_DIR', str(REPO))]))

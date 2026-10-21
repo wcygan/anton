@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from cluster_target_contract import CommandOperation, classify_command
+from documentation_paths import is_plan
 
 
 @dataclass(frozen=True)
@@ -266,7 +267,7 @@ def yaml_file_violation(path: Path, root: Path) -> PolicyViolation | None:
 
 
 def _plan_statuses(root: Path) -> frozenset[str]:
-    path = root / ".claude" / "skills" / "planner" / "references" / "statuses.txt"
+    path = root / ".agents" / "skills" / "planner" / "references" / "statuses.txt"
     try:
         values = {
             line.strip().lower()
@@ -280,7 +281,7 @@ def _plan_statuses(root: Path) -> frozenset[str]:
 
 def plan_status_violation(path: Path, root: Path) -> PolicyViolation | None:
     relative = _relative(path, root)
-    if not relative.startswith("context/plans/") or path.parent.name != "plans" or not PLAN_PATTERN.match(path.name):
+    if not is_plan(path, root) or not PLAN_PATTERN.match(path.name):
         return None
     try:
         lines = path.read_text(encoding="utf-8").splitlines()

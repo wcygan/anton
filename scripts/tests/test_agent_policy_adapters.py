@@ -292,7 +292,7 @@ class AgentPolicyAdapterTests(unittest.TestCase):
     def test_invalid_plan_status_is_blocked_by_both_adapters(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            path = root / "context" / "plans" / "0001-example.md"
+            path = root / "docs" / "operations" / "platform-work" / "plans" / "0001-example.md"
             path.parent.mkdir(parents=True)
             path.write_text("---\nstatus: mystery\n---\n", encoding="utf-8")
             claude_payload = {
@@ -302,7 +302,7 @@ class AgentPolicyAdapterTests(unittest.TestCase):
             }
             codex_patch = (
                 "*** Begin Patch\n"
-                "*** Update File: context/plans/0001-example.md\n"
+                "*** Update File: docs/operations/platform-work/plans/0001-example.md\n"
                 "@@\n-status: draft\n+status: mystery\n"
                 "*** End Patch\n"
             )

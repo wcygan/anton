@@ -18,7 +18,7 @@ examples or a clear explanation of why no logs were found.
 
 1. Read the repository `AGENTS.md` and use the repository's `mise exec --`
    wrapper for cluster commands.
-2. Read the [Kubernetes logs runbook](../../../docs/docs/runbooks/kubernetes-logs-loki.md)
+2. Read the [Kubernetes logs runbook](../../../docs/docs/guides/logging.md)
    when the question involves retention, storage, Grafana access, or a
    missing-log investigation.
 3. Read the [query catalog](references/query-catalog.md) for starting queries.

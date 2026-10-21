@@ -21,7 +21,7 @@ spec:
       targets: ["external.${SECRET_DOMAIN_TWO}"]
 ```
 
-Add `- ./dnsendpoint.yaml` to the app's `kustomization.yaml`. Background walk-through: `docs/docs/notes/adding-a-2nd-domain.md`.
+Add `- ./dnsendpoint.yaml` to the app's `kustomization.yaml`. Background walk-through: `docs/docs/guides/secrets-and-exposure.md`.
 
 ## Per-domain certificates
 

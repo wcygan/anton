@@ -16,17 +16,19 @@ Anton is a hand-edited Talos + Flux cluster. `kubernetes/`, `talos/`, and `boots
 
 ## Agent skills
 
-### Issue tracker
+### Documentation and execution records
 
-Specs and tickets use Local Markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Public documentation lives under `docs/docs/`: overview, guides, reference,
+decisions, and brief historical records. See
+[documentation policy](docs/docs/reference/documentation.md).
 
-### Triage labels
+Shared procedures live in `.agents/skills/` and are harness-neutral. Thin harness
+adapters may provide integration and safety enforcement; they do not own policy.
 
-Local issue status uses the five canonical triage roles. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Anton uses one domain context with durable records under `context/`. See `docs/agents/domain.md`.
+Private plans and tickets live in the sibling operator repository under
+`docs/operations/platform-work/`. Use the `planner` skill to locate them; if the
+private checkout is unavailable, report that limitation instead of assuming no
+active work. Preserve pre-existing local scratch files until their owner migrates them.
 
 ## Route First
 
@@ -39,7 +41,7 @@ Read the matching `.agents/skills/<name>/SKILL.md` before following that branch:
 | Stuck Flux source, Kustomization, HelmRelease, SOPS, postBuild, or dependency | `debug-flux-reconciliation` |
 | Incident logs, LogQL, missing logs, or the OTel-to-Loki path | `query-kubernetes-logs` |
 | Repository security scans, finding validation, or scanner configuration | `codex-security` |
-| Airflow lakehouse Workflow Runs, Spark Attempts, shadow gates, writer cutover, or recovery | `airflow-spark-lakehouse` |
+| Retired learning workloads | Read `docs/docs/records/lakehouse-retirement.md`; re-adoption needs a new decision |
 | Flux manifest authoring or review | `anton-repo-conventions` plus the task-specific app, exposure, storage, database, or observability skill |
 | Node replacement, upgrades, credential rotation, restore, or storage-node work | The matching high-risk skill; retain all of its preconditions, approval gates, and rollback checks |
 
@@ -56,10 +58,10 @@ Read the instruction file for every area the task touches:
 | Bootstrap Helmfile | [bootstrap/AGENTS.md](bootstrap/AGENTS.md) |
 | Shared scripts | [scripts/AGENTS.md](scripts/AGENTS.md) |
 | Task wrappers | [.taskfiles/AGENTS.md](.taskfiles/AGENTS.md) |
-| ADRs and plans | [context/AGENTS.md](context/AGENTS.md) |
+| ADRs and execution records | `.agents/skills/adr/SKILL.md`, `.agents/skills/planner/SKILL.md` |
 | Docusaurus docs | [docs/AGENTS.md](docs/AGENTS.md) |
 
-The `.claude/` tree remains authoritative precedent during the Codex migration. Preserve it and consult it when the active Codex guidance does not cover a branch.
+The `.agents/skills/` tree is the canonical procedure library. Harness files are thin adapters; do not add independent domain guidance or persistent agent memory there.
 
 ## Operational Contract
 
@@ -109,7 +111,12 @@ Verify the intended revision or configuration, Flux-reported revision and reconc
 
 ## QMD Context Search
 
-Use QMD before broad manual browsing when the task depends on Anton's ADRs, plans, incidents, postmortems, or inventory under `context/`. Search `anton-context`, then retrieve the source with `qmd get` or `qmd multi-get` before relying on it. Treat snippets as leads and cite the actual `context/` path. Use `rg` for exact repository state. Rebuild a missing or stale local index with `mise exec -- task qmd:bootstrap`.
+Use QMD before broad manual browsing when work depends on public decisions,
+records, or platform reference. Search `anton-docs`, retrieve the source with
+`qmd get` or `qmd multi-get`, and cite its actual `docs/docs/` path. Search private
+execution records directly through the planner workflow; they are not included
+in the public collection. Use `rg` for exact repository state. Rebuild the local
+index with `mise exec -- task qmd:bootstrap`.
 
 ## Safety and Secrets
 
@@ -130,6 +137,9 @@ Use QMD before broad manual browsing when the task depends on Anton's ADRs, plan
 5. Run the narrowest validation that proves the edited surface: YAML parse, skill or hook fixture, Docusaurus check, generated-config check, or read-only Flux/Talos status. Run `mise exec -- task contracts:validate` when changing Flux application policy, Kubernetes logging semantics, SeaweedFS bucket provisioning, cluster target/preflight behavior, or shared agent safety policy.
 6. Summarize changed files, validation evidence, residual risks, and any operator-only follow-up. Do not reconcile or apply merely because repository validation passed.
 
-## Codex Enablement
+## Agent integration
 
-Repo-local Codex work is tracked in [context/plans/0017-codex-usage-parity.md](context/plans/0017-codex-usage-parity.md). Add Codex skills under `.agents/skills/`, Codex project config and hooks under `.codex/`, and keep each port scoped to a proven Claude precedent.
+Keep shared procedures in `.agents/skills/`, shared executable policy in
+`scripts/lib/`, and necessary harness adapters under their integration directories.
+Accepted decisions live in `docs/docs/decisions/`; use supersession for new choices.
+Keep the public/private documentation boundary explicit.

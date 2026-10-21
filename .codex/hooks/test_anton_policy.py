@@ -131,12 +131,12 @@ class AntonPolicyTests(unittest.TestCase):
             scripts = root / "scripts"
             scripts.mkdir()
             scripts.joinpath("cluster-targets.json").write_text("{}\n")
-            plan = root / "context" / "plans" / "0001-test.md"
+            plan = root / "docs" / "operations" / "platform-work" / "plans" / "0001-test.md"
             plan.parent.mkdir(parents=True)
             plan.write_text("---\nstatus: mystery\n---\n")
             patch = (
                 "*** Begin Patch\n"
-                "*** Update File: ../context/plans/0001-test.md\n"
+                "*** Update File: ../docs/operations/platform-work/plans/0001-test.md\n"
                 "@@\n-status: draft\n+status: mystery\n"
                 "*** End Patch\n"
             )
@@ -147,10 +147,10 @@ class AntonPolicyTests(unittest.TestCase):
     def test_blocks_invalid_plan_status_after_patch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            plan = root / "context" / "plans" / "0001-test.md"
+            plan = root / "docs" / "operations" / "platform-work" / "plans" / "0001-test.md"
             plan.parent.mkdir(parents=True)
             plan.write_text("---\nstatus: Almost\n---\n\n# test\n")
-            patch = "*** Begin Patch\n*** Update File: context/plans/0001-test.md\n@@\n-status: Almost\n+status: Almost\n*** End Patch\n"
+            patch = "*** Begin Patch\n*** Update File: docs/operations/platform-work/plans/0001-test.md\n@@\n-status: Almost\n+status: Almost\n*** End Patch\n"
             result = run_hook("post", self.patch(patch, tmp))
         self.assertEqual(result.returncode, 2)
         self.assertIn("invalid status", result.stderr)
