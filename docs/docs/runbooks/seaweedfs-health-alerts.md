@@ -7,6 +7,14 @@ They do not automatically repair files or restore writability. Longhorn volume
 health is a separate layer: healthy block replicas can contain identical corrupt
 application files.
 
+The current deployment uses stock SeaweedFS 4.48 with native `001` placement
+and shared S3 for apps, Harbor and Loki. Planned S3 downtime and occasional log
+loss are accepted; unique uploads still require independent recovery coverage.
+Use the [node-maintenance runbook](seaweedfs-node-maintenance.md) for node work
+and the [stock cutover record](https://github.com/wcygan/anton/blob/main/context/notes/2026-10-20-plan0028-stock-cutover.md)
+for the verified transition. The dated durability review below preserves the
+earlier 4.40 baseline, not current deployment settings.
+
 ## Alert behavior
 
 | Alert | Trigger | Evaluation |
@@ -63,7 +71,7 @@ coverage. A sidecar in each S3 pod performs a signed localhost GET every minute,
 with a 15-second whole-request deadline enforced by a process timer, exact 65,536-byte length, and SHA-256
 verification. The persistent fixture is `s3-read-probe/fixture-v1`, containing
 65,536 zero bytes. The ordinary bucket provisioner owns it and creates it only
-when missing. S3 uploads in 4.40 create volume chunks instead of inline filer data.
+when missing. The 65,536-byte fixture exercises volume-backed data reads.
 Do not delete it during cleanup of temporary verification jobs.
 
 The probe mounts only the existing read-only spark-events reader credential
@@ -91,9 +99,8 @@ stalled probe loop independently of its last success result.
 
 One fixture does not cover every historical object, volume, cached mapping, or
 consumer credential. After maintenance, also verify a cold immutable Harbor
-pull and historical Loki reads. SeaweedFS 4.40 refreshes stale locations only
-after retries; stable DNS reduces recurrence but cannot remove DNS propagation
-delay or the downtime of single-copy logical volumes.
+pull and historical Loki reads. Stable DNS and native copies do not prove gateway
+cache freshness or uninterrupted service; compare actual topology and readbacks.
 
 Local regression commands:
 
@@ -105,8 +112,9 @@ AMTOOL_BIN=/path/to/amtool mise exec -- python3 -m unittest scripts.tests.test_n
 mise exec -- task contracts:validate
 ```
 
-For rollout, keep a gateway available, stop active lakehouse writers, observe
-both new pods and their probe results before continuing, and stop on failed
+For an approved probe rollout, fence affected app, Harbor and Loki writers as
+required by the maintenance packet, observe both new pods and their probe results
+before continuing, and stop on failed
 data verification or readiness. Revert the probe/monitoring commit if it
 destabilizes gateway startup; retain stable volume advertisement. Never modify
 volume files or delete PVCs to clear an address cache.
@@ -129,13 +137,13 @@ volume files or delete PVCs to clear an address cache.
    Longhorn health, dependent applications, and stable restarts. A 15-minute
    integrity alert can remain firing until the original message ages out.
 
-## Durability review — 2026-10-19
+## Historical durability review — 2026-10-19
 
 Reviewed the deployed SeaweedFS 4.40 source at revision `875cd1f67` and current
 generated volume StatefulSet and Longhorn StorageClass. This patch changes
 monitoring only; it does not change write durability or replication.
 
-| Layer | Current setting or behavior | Consequence |
+| Layer | Setting or behavior at review | Consequence |
 | --- | --- | --- |
 | Seaweed replication | Master `defaultReplication: "000"` | One Seaweed copy of each logical volume; three volume-server pods are not three copies of its data. |
 | Longhorn | Default StorageClass: two replicas, ext4, data engine v1 | Replicates block writes received by Longhorn; cannot persist bytes still buffered above it or independently validate application CRC/index consistency. |

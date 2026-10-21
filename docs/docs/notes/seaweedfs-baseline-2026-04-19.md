@@ -1,5 +1,11 @@
 # SeaweedFS baseline — 2026-04-19
 
+> Historical install baseline. Current stock software, native two-copy placement
+> and planned downtime are documented in the
+> [node-maintenance runbook](../runbooks/seaweedfs-node-maintenance.md) and
+> [stock cutover record](https://github.com/wcygan/anton/blob/main/context/notes/2026-10-20-plan0028-stock-cutover.md).
+> The versions, placement and commands below describe the original installation.
+
 Phase 2 + 3 acceptance artifact for [plan 0005 — Adopt SeaweedFS per ADR 0019](https://github.com/wcygan/anton/blob/main/context/plans/0005-adopt-seaweedfs.md). Captures the install shape, the endpoint surface, the credential path, a copy-pasteable smoke test, and the two chart-level surprises we worked around — so future me (or future Harbor) can consume the S3 endpoint without rereading the whole plan log.
 
 > ADR 0019 supersedes ADR 0016. The install uses the canonical `spec.s3` (standalone S3 Deployment) path, not the deprecated `FilerSpec.S3` subtree 0016 originally targeted.

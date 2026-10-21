@@ -1,6 +1,14 @@
 # Cooling and Loki WAL incident follow-up
 
-## Current evidence snapshot
+## Historical evidence snapshot — 2026-10-19
+
+The cooling findings below remain an operator follow-up. The Loki investigation
+in Plan 0026 completed, and Plan 0028 subsequently retired its custom runtime.
+Stock Loki now uses a fresh WAL on the original PVC; see the
+[current logging runbook](kubernetes-logs-loki.md) and
+[stock cutover evidence](https://github.com/wcygan/anton/blob/main/context/notes/2026-10-20-plan0028-stock-cutover.md).
+The old startup counter and diagnostic targets below describe the recorded
+incident, not the current process or a pending replay authorization.
 
 As of 2026-10-19 19:34 UTC, the collector returned 2,881 of 2,881 expected
 30-second Prometheus range-query evaluation points for each fan1 node series
@@ -81,7 +89,7 @@ recorded original part/cabling and stop for reassessment. Hardware work needs
 the operator's explicit maintenance decision; no remote software restart is a
 substitute.
 
-**Loki WAL diagnosis — preserve first, then use plan 0026 gates.** Owner:
+**Historical Loki WAL diagnosis — completed under Plan 0026.** Owner:
 observability/storage operator. The 18:54:40–18:56:00 UTC startup interval is
 the evidence window. Capture and retain any surviving authoritative source and
 Loki logs, `loki_ingester_wal_corruptions_total` samples, replay-active,
@@ -89,7 +97,8 @@ checkpoint and disk indicators, plus the canary request/response IDs and
 timestamps without recording request bodies or credentials. The old replay
 segments may already have rotated away; if so, mark the original error as not
 reproducible from current data. Do not infer loss from the generic recovery
-error, counter name, or canary record counts. The next mutation gate is the
-retained snapshot described in plan 0026; it needs separate explicit approval
-and must preserve the original production volume. No production restart or WAL repair is
-authorized by this handoff.
+error, counter name, or canary record counts. Retained snapshots and encrypted
+evidence remain historical recovery material. For a new incident, establish a
+new window and exact targets through the current logging runbook; do not rerun
+the old capture packet. No production restart or WAL repair is authorized by
+this handoff.

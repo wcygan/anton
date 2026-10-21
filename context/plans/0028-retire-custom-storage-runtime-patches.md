@@ -531,6 +531,14 @@ Evidence: pending
   fork-tooling retirement are complete. Real node maintenance, seven-day stock
   observation and continuing independent-upload protection remain open.
 
+- 2026-10-21: Reconciled the node-maintenance, integrity-alert and Loki incident
+  entry points with the completed stock cutover. Removed the invalid CR-zero
+  S3 fence, distinguished routine node work from the one-time image/admission
+  procedure, marked Plan 0026 and the old install baseline as historical, and
+  replaced stale agent-memory restart advice with evidence-first recovery under
+  the current runbook. Ongoing independent backup coverage, the actual node
+  exercise and seven-day observation remain open; no production action occurred.
+
 ## References
 
 - [ADR 0043 and its accepted continuity goal](https://github.com/wcygan/anton/blob/886fbd6a/context/adrs/0043-keep-two-seaweedfs-copies-for-maintenance.md).

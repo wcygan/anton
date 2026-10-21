@@ -7,8 +7,9 @@ title: SeaweedFS node maintenance
 Use planned S3 downtime for node work. Shared SeaweedFS serves apps, Harbor and
 Loki; native two-copy placement and Longhorn replicas remain, but uninterrupted
 service during a node outage is not promised. ADR 0044 replaces that acceptance
-requirement. Plan 0028 tracks the stock image transition and its still-unperformed
-planned node exercise. This page does not authorize a drain or Talos change.
+requirement. The stock image transition is complete; Plan 0028 still tracks the
+planned node exercise, seven-day observation and ongoing backup coverage. This
+page does not authorize a drain or Talos change.
 
 ## Before the window
 
@@ -37,9 +38,13 @@ fencing writers, so existing missing artifacts are not attributed to this window
 
 Use the writer-fence and ownership journal in the
 [stock cutover runbook](./seaweedfs-stock-cutover.md): pause Harbor jobs/front door,
-flush and cleanly stop Loki, hold other app writers and stop S3 through its CR.
+flush and cleanly stop Loki, and hold other app writers. The CRD rejects zero S3
+replicas: keep the Seaweed CR at two, hold its operator owner, stop the operator,
+then scale the S3 Deployment to zero using separately approved exact targets.
 Stop provisioning/policy jobs during the window. Preserve CNPG, cache, all PVCs,
-WAL directories and the current source of truth.
+WAL directories and the current source of truth. Ordinary node work does not
+require changing CR/backend images or adding admission exceptions; those were
+specific to the one-time cutover.
 
 Maintain one named node using the matching Talos/node skill and its separately
 approved commands. Preserve quorum and Longhorn preconditions; accepting S3
@@ -47,7 +52,9 @@ downtime does not waive node safety. Wait for the node and original storage
 workloads to recover before touching another node. No automatic orphan deletion,
 compaction, replica migration or storage-controller replacement is part of it.
 
-Restore two fresh S3 gateways after topology and all stateful roles are healthy.
+After topology and all stateful roles are healthy, restore the operator and its
+owners so it restores two fresh S3 gateways from the unchanged CR. Reconcile the
+operator Kustomization before its dependent config Kustomization if needed.
 Check seeded object bytes/ranges, the prior readable Harbor image and a scratch
 push/pull, then resume Loki and verify stored chunks/new logs and queue recovery.
 Record any log gap without claiming a maximum loss bound. Restore every captured

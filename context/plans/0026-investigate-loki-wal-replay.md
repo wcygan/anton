@@ -12,6 +12,12 @@ review-by: null
 
 > Preserve a point-in-time Loki volume and diagnose replay on isolated copies before selecting a production repair.
 
+> Historical completed investigation. Plan 0028 subsequently retired the patched
+> runtime and deployed stock Loki 3.7.8 with a fresh WAL on the original PVC.
+> See [the final cutover record](../notes/2026-10-20-plan0028-stock-cutover.md).
+> Preserve this plan's findings and retained evidence; its dated diagnostic
+> targets and patch rollout are not current operating instructions.
+
 ## Goal
 
 Determine the exact returned error behind Loki 3.7.8's generic WAL segment

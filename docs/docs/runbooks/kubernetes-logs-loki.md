@@ -184,9 +184,16 @@ every known source record. Re-run it with:
 mise exec -- python3 scripts/verify-log-durability.py --backend-failure http503 --output /tmp/otel-shutdown-replay.json
 ```
 
-For WAL evidence capture and isolated replay, follow
-[plan 0026](https://github.com/wcygan/anton/blob/main/context/plans/0026-investigate-loki-wal-replay.md).
-Its snapshot, clone and diagnostic execution stages require their own approval.
+Loki now runs stock 3.7.8 with WAL enabled at `/var/loki/wal-stock-0028` and
+graceful-shutdown flushing. The [stock cutover record](https://github.com/wcygan/anton/blob/main/context/notes/2026-10-20-plan0028-stock-cutover.md)
+supersedes the patch-era repair in
+[completed plan 0026](https://github.com/wcygan/anton/blob/main/context/plans/0026-investigate-loki-wal-replay.md).
+That plan retains forensic methods and historical evidence, not a current patch
+rollout or permission to reuse its dated diagnostic targets. Any new snapshot,
+clone or replay workload needs its own exact-target approval. Preserve old WAL
+trees; do not replay them into stock Loki or delete them to clear an alert.
+Occasional crash/replay log loss is accepted; a clean shutdown is still required
+for planned maintenance.
 
 Queue ratios use the actual `otelcol_exporter_queue_size` and
 `otelcol_exporter_queue_capacity` gauges. With `sizer: bytes`, these values are
