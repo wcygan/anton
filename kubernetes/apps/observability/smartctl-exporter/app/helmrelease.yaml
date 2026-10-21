@@ -48,6 +48,12 @@ spec:
       runAsUser: 0
       runAsNonRoot: false
 
+    # v0.15.0 also discovers Longhorn's iSCSI volumes ("IET VIRTUAL-DISK" as
+    # sdX), which have no SMART data and come and go with attachments.
+    # Monitor only the physical NVMe drives.
+    config:
+      device_include: "^nvme[0-9]+$"
+
     # ServiceMonitor: kube-prometheus-stack has match-all selectors
     # (serviceMonitorSelectorNilUsesHelmValues=false), so this is auto-discovered.
     serviceMonitor:
