@@ -53,6 +53,19 @@
       minimumGroupSize: 3,
     },
     {
+      description: "Envoy proxy pin: parse distroless-vX.Y.Z tags",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["docker.io/envoyproxy/envoy"],
+      versioning: "regex:^distroless-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
+    },
+    {
+      description: "Envoy proxy pin: patch-only; minor must follow the envoy-gateway release",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["docker.io/envoyproxy/envoy"],
+      matchUpdateTypes: ["major", "minor"],
+      enabled: false,
+    },
+    {
       description: "Auto-merge GitHub Actions",
       matchManagers: ["github-actions"],
       automerge: true,
