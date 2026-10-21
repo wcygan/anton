@@ -258,7 +258,7 @@ Depends on: contract, qualify
 Write scope: Selected stock image pins/configuration, one cutover runbook, existing backup/recovery tooling and any separately approved migration manifest.
 Acceptance: The exact candidate, consistent restore rehearsal, writer fences, rollback and measured maintenance budget are reviewable before live approval; bootstrap access does not depend solely on the Harbor instance backed by this storage.
 Verification: Restore the selected backup into isolated storage and read real object/log contents; rehearse cutover and rollback on copies using the actual image architecture. Verify images are obtainable through a tested independent source/cache and current credentials remain scoped.
-Evidence: [Recovery/retention preparation](../notes/2026-10-20-plan0028-recovery-and-retention.md), [completed backup-only window and full Harbor restore](../notes/2026-10-20-plan0028-backup-window.md), and [prepared runbook](../../docs/docs/runbooks/seaweedfs-stock-cutover.md). Fresh coordinated encrypted DB/S3/Loki exports and an isolated Harbor restore on stock SeaweedFS pass. The [prepared stock release](../notes/2026-10-20-plan0028-stock-release.md) now contains pinned manifests, ADR 0044, simpler operator-owned rollout and removal of all five runtime patches/build paths. The exact operator renderer, stock quorum probe and local contracts pass; live node image-cache acceptance and exact source-promotion/rollout approval remain. Current missing manifests remain an unrepaired data gap, not a newly demonstrated stock regression or authorization to delete entries. No production stock cutover is approved; daily backup/freshness monitoring is still unimplemented.
+Evidence: [Recovery/retention preparation](../notes/2026-10-20-plan0028-recovery-and-retention.md), [completed backup-only window and full Harbor restore](../notes/2026-10-20-plan0028-backup-window.md), and [prepared runbook](../../docs/docs/runbooks/seaweedfs-stock-cutover.md). Fresh coordinated encrypted DB/S3/Loki exports and an isolated Harbor restore on stock SeaweedFS pass. The [prepared stock release](../notes/2026-10-20-plan0028-stock-release.md) now contains pinned manifests, ADR 0044, simpler operator-owned rollout and removal of all five runtime patches/build paths. The exact operator renderer, stock quorum probe and local contracts pass; all four image directions now execute on all three live nodes. The first approved cutover stopped at API admission: the CRD requires at least one S3 replica. No stock image or Git promotion occurred. The [corrected execution boundary](../notes/2026-10-20-plan0028-cutover-attempt.md) passed API-server dry runs; its additional temporary owner/template operations require approval. Current missing manifests remain an unrepaired data gap, not a newly demonstrated stock regression or authorization to delete entries. The original cutover was approved but its fence was rejected; the revised boundary is pending approval; daily backup/freshness monitoring is still unimplemented.
 
 - [x] Verify retained encrypted archive identities and a stock isolated restore
   of historical volume/filer data: 271 file hashes, expected buckets and exact
@@ -277,8 +277,10 @@ Evidence: [Recovery/retention preparation](../notes/2026-10-20-plan0028-recovery
 - [x] Prepare the ordered cutover/rollback runbook, pinned source-change drafts
   and named capture inventory; validate local application/rendering and inspect
   the actual operator. Supersede the OnDelete draft with normal operator rolling
-  updates while writers and S3 are fenced. Version 1.0.39 honors zero S3 replicas;
-  it does not honor the CR strategy field. Do not apply all clones concurrently.
+  updates while writers and S3 are fenced. The renderer accepts zero S3 replicas, but the live CRD rejects zero;
+  the operator-running fence is withdrawn. The corrected procedure briefly holds
+  the operator and uses ordinary StatefulSet RollingUpdate; it requires approval
+  for those additional targets and server-side dry runs. Do not apply all clones concurrently.
 - [x] Complete the approved backup-only capture, sequential clone export and
   isolated full Harbor restore. Production recovery/cleanup finished at minute
   53.42 of the 60-minute reservation; conservative service interruption totaled
@@ -300,7 +302,7 @@ Depends on: prepare
 Write scope: Approved GitOps runtime/configuration cutover and exact maintenance resources recorded in the reviewed runbook.
 Acceptance: The selected maintenance contract passes against the actual owning node, all preserved data checks pass, and full recovery has no unmanaged drift or temporary residue.
 Verification: Verify source revision through Flux and applied image digests, historical Harbor pulls, new push/pull, old/new Loki records and each private consumer. Perform one approved node-maintenance exercise, measure interruption/recovery, and inspect controllers, replicas, errors and cleanup after restoration.
-Evidence: pending
+Evidence: [First cutover attempt and corrected boundary](../notes/2026-10-20-plan0028-cutover-attempt.md). Preflight/image caching and historical Harbor/Loki reads passed; stock rollout did not begin because the API rejected the S3-zero CR.
 
 - [ ] Roll one causal change at a time; stop on identity/hash mismatch, failed
   normal read/write checks, degraded storage, ambiguous copy, unexpected allocation
@@ -490,6 +492,17 @@ Evidence: pending
   caught both assumptions; Laziness Protocol removed custom rollout steps;
   Outcome-Oriented Execution removes unused fork tooling without waiting to
   rebuild it. No live rollout or publication has occurred in this preparation.
+
+- 2026-10-20: Executed the approved cache and writer-fence preflight. All four
+  images ran on all three nodes, historical Harbor blobs and stored Loki records
+  passed. Stopped before publication/images when live CRD admission rejected S3
+  replicas zero. The renderer test had missed this constraint. Prepared a bounded
+  operator-held RollingUpdate correction and proved final CR/config/template
+  changes with API-server dry runs; requested approval for the changed boundary.
+  Original runtimes, templates, owners and PVCs were restored; conservative writer
+  interruption was 5m41s, with S3 never stopped. Harbor old/new reads/writes, stored
+  and fresh Loki records, native corpus and all 18 Longhorn volumes pass; temporary
+  cache and scratch Harbor objects are removed. No release was promoted.
 
 ## References
 

@@ -57,7 +57,11 @@ lab; no pre-maintenance baseline dates their loss. Keep them recorded and
 unmodified as a separate repair question. The rollout must preserve every
 artifact readable at its fresh baseline; it does not repair existing data holes.
 
-## Proposed exact live scope — approval required
+## Original execution scope — zero-replica fence withdrawn
+
+The approved attempt found that API admission rejects the renderer-supported
+S3-zero CR. No stock image or Git promotion occurred. Do not execute the table
+below unchanged. Use the [corrected boundary and execution evidence](2026-10-20-plan0028-cutover-attempt.md); its additional live targets require approval.
 
 One **60-minute reservation**, with no new image step after minute 40 and 20
 minutes reserved for recovery. Verify stock SeaweedFS before the separate Loki

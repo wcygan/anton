@@ -4,8 +4,9 @@ title: SeaweedFS and Loki stock-software cutover
 
 This is the prepared procedure for Plan 0028. It retains shared SeaweedFS S3 for
 apps, Harbor and Loki. Production execution needs approval of the exact recovery
-point, resources and outage window. No command on this page has been run against
-production as part of preparing it.
+point, resources and outage window. The first approved attempt passed cache/read checks but stopped at API admission
+before image changes; original runtime and ownership were restored. The corrected
+owner-held procedure below requires its additional live targets to be approved.
 
 ## Selected approach
 
@@ -17,15 +18,18 @@ migration until after the image transition. Retire custom build sources only
 after live stock verification; retain exact rollback OCI archives through the
 observation period, so rollback never depends on rebuilding a fork.
 
-Use the installed operator's normal RollingUpdate reconciliation with clients
-and S3 fenced. Keep its Deployment, HelmRelease and Kustomization running.
-Temporarily suspend only the source that owns the Seaweed CR and client owners
-whose replicas must stay zero. Set `spec.s3.replicas: 0` before changing images;
-wait for the three stateful components to converge, then restore S3 through Git.
-No StatefulSet strategy overrides, manual follower ordering or routine Pod
-evictions are required. The operator rolls each StatefulSet in ordinal order;
-existing Raft readiness gates remain mandatory. Different components can roll
-concurrently, which is acceptable only while writers and gateways are stopped.
+The live CRD requires at least one S3 replica. **Do not set CR S3 replicas to
+zero:** the first approved attempt was rejected at admission before image changes.
+A renderer test alone is insufficient; require API-server dry runs of final CR,
+filer ConfigMap and backend templates before the window.
+
+The corrected procedure temporarily holds the operator and scales its S3
+Deployment to zero directly. Keep the CR at valid desired replicas two. Use the
+existing Kubernetes StatefulSet RollingUpdate strategy for backend image changes;
+restore operator ownership only after backend and data checks pass. Different
+roles may roll concurrently while writers and S3 are stopped. This requires
+approval for the additional operator-owner and temporary template/config targets;
+see the [execution boundary](https://github.com/wcygan/anton/blob/main/context/notes/2026-10-20-plan0028-cutover-attempt.md).
 
 The exact operator 1.0.39 builders were checked against the admitted CR: stock
 changes only the main-container image in the three StatefulSets, preserving PVCs,
@@ -34,8 +38,9 @@ renderer check, not a completed production rollout. Sources:
 [master renderer](https://github.com/seaweedfs/seaweedfs-operator/blob/1.0.39/internal/controller/controller_master_statefulset.go),
 [filer renderer](https://github.com/seaweedfs/seaweedfs-operator/blob/1.0.39/internal/controller/controller_filer_statefulset.go),
 [S3 renderer](https://github.com/seaweedfs/seaweedfs-operator/blob/1.0.39/internal/controller/controller_s3.go).
-The earlier private OnDelete/template patches are historical drafts and must not
-be used with this procedure. The committed steady-state files are
+The earlier private OnDelete strategy patches are historical drafts and must not
+be used with this procedure. Only the named main-image/config template changes
+in the corrected boundary are permitted. The committed steady-state files are
 `kubernetes/apps/storage/seaweedfs-config/app/seaweed.yaml`, its
 `durability-cronjob.yaml`, and `kubernetes/apps/observability/loki/app/helmrelease.yaml`.
 ADR 0044 records the accepted downtime and upload-recovery contract.
@@ -175,57 +180,49 @@ implemented by a one-time export.
 
 ## SeaweedFS image cutover
 
-Use a new approved 60-minute reservation, with no new image step after minute 40
-and 20 minutes reserved for recovery. This approves no destructive data restore.
+Use an approved 60-minute reservation. Stop new image steps at minute 40 and
+reserve 20 minutes for recovery. The original operator-running procedure is
+withdrawn because API admission rejects CR S3 replicas zero.
 
-1. Verify exact cluster, source revision, original field presence/values, object
-   UIDs, PVCs, quorum and Longhorn health. Require no other storage operation or
-   active Harbor GC/retention job. Cache all four exact stock/rollback images on
-   all three execution nodes before fencing clients; verify successful version
-   commands and image identities. Use only the named disposable cache DaemonSet
-   and its deny-all policy, with no API token, host mounts or storage attachment.
-2. Suspend Kustomizations/HelmReleases `registries/harbor` and
-   `observability/loki`, plus Kustomization `storage/seaweedfs-config`. Suspend
-   `storage/seaweedfs-buckets-ensure` and `storage/seaweedfs-durability-ensure`
-   CronJobs and drain existing work. Keep the Seaweed operator and its owners
-   running. Journal each original field so absence and value are restored exactly.
-3. Stop Harbor nginx, jobservice, core and registry in that order. Flush Loki,
-   verify stored-chunk reads and queue zero, then stop it cleanly. Preserve CNPG,
-   cache and every PVC. The S3 front door subsequently fences other app traffic;
-   inventory those apps before doing this, rather than assuming they are absent.
-4. UID/resource-version-guard patch only `Seaweed storage/seaweedfs`
-   `spec.s3.replicas` to zero. Wait for the operator to stop both gateways.
-   Establish Pod watches with a current initial UID event before image mutation.
-   Do not update StatefulSet templates or their strategies manually.
-5. Publish the reviewed final Git revision while the three affected source owners
-   remain suspended. Verify the main source artifact contains that exact revision.
-   Guard-patch the held Seaweed CR to the committed stock image and filer config
-   (remove unsupported `leveldb2.sync` and the retired Iceberg listener), keeping S3 at zero. The operator
-   updates ConfigMaps and StatefulSets normally. Require all 3 masters, 3 volume
-   servers and 2 filers Ready at the exact stock digest, current controller
-   revisions/generations and unchanged PVC identities. Check the entire native
-   volume/copy corpus, quorum and health before restoring gateways. Individual
-   Pod exits and retries must be recorded, not inferred from final readiness.
-6. Resume `storage/seaweedfs-config` against the reviewed Git revision. The source
-   restores two fresh S3 gateways and ordinary CronJob settings with a stock weed
-   tool. Require both authenticated seeded reads, historical object bytes/ranges,
-   native fsync/001 policy readback and the prior readable Harbor artifact digests.
-7. Restore Harbor and the other captured owners/replicas, preserving their exact
-   prior settings. Verify health/login, scratch push/pull through the real registry,
-   source/applied images, storage health and absence of unintended drift. Start
-   patched Loki temporarily if the global time budget cannot cover its separate
-   clean image/WAL transition; its HelmRelease must stay held in that case.
-8. Remove only the owned cache DaemonSet/policy after checks. Retain rollback OCI
-   archives, backups and previous WAL trees through observation. No original
-   PVC, bucket, artifact, WAL directory or snapshot is deleted by this cutover.
+1. Verify context, UIDs, original field presence, PVC identities, recovery-point
+   freshness, Raft quorum, Longhorn health and the complete native corpus. Require
+   no competing storage operation or active Harbor GC/retention work. Verify all
+   four exact images execute on all three storage nodes before an outage.
+2. Hold Harbor/Loki Kustomizations and HelmReleases, `storage/seaweedfs-config`,
+   both storage CronJobs, and the operator owners `storage/seaweedfs`
+   Kustomization / `storage/seaweedfs-operator` HelmRelease. Journal each field.
+3. Stop Harbor nginx, jobservice, core, registry. The stock Harbor registry image
+   exits 2 on normal SIGTERM, as reproduced locally; record this separately from
+   the zero-exit requirement for SeaweedFS/Loki. Flush Loki, require queue zero and
+   stored-chunk reads, then stop Loki cleanly. Preserve CNPG, cache and all PVCs.
+4. Stop `storage/seaweedfs-operator` Deployment (one to zero), wait for its Pod to
+   terminate, then scale the operator-owned `storage/seaweedfs-s3` Deployment to
+   zero. Require both gateway Pod watches to record zero-exit deletion. Keep the
+   Seaweed CR at its valid desired two replicas.
+5. Publish the reviewed runtime revision and verify its Flux source artifact.
+   Guard-patch the Seaweed CR to final stock image/config/disabled Iceberg listener.
+   Set `storage/seaweedfs-filer` ConfigMap `data.filer.toml` to the same committed
+   config. Change only the main-container image in `seaweedfs-master`,
+   `seaweedfs-volume` and `seaweedfs-filer` StatefulSets. Keep RollingUpdate and all
+   claims. No OnDelete strategy or routine Pod deletion is needed.
+6. Require all eight backend Pods at the exact stock digest/current revisions,
+   recorded clean old-Pod exits, healthy quorum, original PVC identities and the
+   complete writable native corpus before restoring S3. Stop on any mismatch.
+7. Resume `storage/seaweedfs-config` against the reviewed source while the operator
+   remains stopped. Restore the operator's original replica; it creates two stock
+   S3 gateways from the valid CR. Verify source/operator-rendered template equality,
+   authenticated seeded reads, native fsync/001 policies and prior readable bytes.
+   Restore operator HelmRelease/Kustomization fields exactly.
+8. Restore Harbor replicas/owners and verify health/login, historical manifest and
+   blobs, and one newly created scratch robot push/pull; remove only those new
+   objects. Complete Loki's separately verified stock/new-WAL phase within budget.
+   Remove the UID-recorded cache DaemonSet/policy and verify all original ownership.
 
-Stop progress on an unclean exit, lost quorum, degraded original volume, changed
-PVC identity, unexpected allocation, missing previously readable bytes, blocked
-image pull or failure to converge. The global deadline takes precedence over
-individual waits. Keep writers fenced, revert the CR/image and source through
-the same normal operator path, then restore captured ownership after recovery.
-Known isolated crash-fault failures remain accepted limits, not automatic rollback
-triggers under the revised contract.
+On failure, keep writers/S3 fenced and restore the original CR, filer ConfigMap
+and three main images using the same StatefulSet rollout. Restore operator,
+gateways, clients and source ownership after recovery checks. A blocked Pod needing
+an eviction requires a fresh exact-target recovery decision. No PVC, snapshot,
+bucket, artifact or WAL deletion is authorized by an image cutover.
 
 ## Loki image cutover
 
@@ -267,5 +264,5 @@ retain their state and reconcile them before returning to an older checkpoint.
 
 Before closing, verify the final Git/Flux/applied identities, all original replica
 and suspension fields, no temporary probes/readers/networks, and seven normal days
-of operation. Remove obsolete build pipelines and migration helpers only after
-rollback retention ends. Preserve fault findings as historical risk evidence.
+of operation. Remove obsolete build pipelines and migration helpers after live stock verification;
+retain exact rollback binaries through observation. Preserve fault findings as historical risk evidence.
