@@ -1,0 +1,78 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: seaweedfs-durability-ensure
+spec:
+  suspend: false
+  schedule: "23 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 1
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: weed-tool
+              image: docker.io/chrislusf/seaweedfs:4.48@sha256:aba492e2a4e4c90bff795745e8e660affa1f09e7650f5981bd7bccd1a06cd931
+              command: [/bin/sh, -ec, "cp /usr/bin/weed /tools/weed"]
+              volumeMounts:
+                - name: tools
+                  mountPath: /tools
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 256Mi
+                limits:
+                  cpu: 100m
+                  memory: 384Mi
+          containers:
+            - name: ensure-durability
+              image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+              command: [python3, /policy/ensure-durability.py]
+              args:
+                - --master=seaweedfs-master-0.seaweedfs-master-peer.storage:9333,seaweedfs-master-1.seaweedfs-master-peer.storage:9333,seaweedfs-master-2.seaweedfs-master-peer.storage:9333
+                - --filers=seaweedfs-filer-0.seaweedfs-filer-peer.storage:8888,seaweedfs-filer-1.seaweedfs-filer-peer.storage:8888
+              volumeMounts:
+                - name: tools
+                  mountPath: /tools
+                  readOnly: true
+                - name: policy
+                  mountPath: /policy
+                  readOnly: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+          volumes:
+            - name: tools
+              emptyDir:
+                sizeLimit: 384Mi
+            - name: policy
+              configMap:
+                name: seaweedfs-durability-policy

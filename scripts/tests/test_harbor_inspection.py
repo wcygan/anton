@@ -14,7 +14,7 @@ APP = ROOT / "kubernetes/apps/registries/harbor-config/app"
 
 
 class HarborInspection(unittest.TestCase):
-    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False, missing_manifest=False, execution_status="Success", ambiguous_execution=False, empty_schedule=False):
+    def run_script(self, mode, schedule, expect_success=True, workload=None, missing_blob=False, missing_manifest=False, execution_status="Success", ambiguous_execution=False, empty_schedule=False, prior_evidence=None, fail_second_project=False):
         requests = []
         submitted = []
 
@@ -43,11 +43,13 @@ class HarborInspection(unittest.TestCase):
                 elif path.startswith("/system/gc?"):
                     body = [{"id": 7, "job_status": "Success", "job_parameters": '{"dry_run":true,"delete_untagged":false,"workers":1}'}]
                 elif path.startswith("/projects?"):
-                    body = [{"project_id": 1}]
-                elif path == "/projects/1/metadatas/":
-                    body = {"retention_id": "1"}
-                elif path == "/retentions/1":
+                    body = [{"project_id": 1}, {"project_id": 2}] if fail_second_project else [{"project_id": 1}]
+                elif path in ["/projects/1/metadatas/", "/projects/2/metadatas/"]:
+                    body = {"retention_id": "2" if "/projects/2/" in path else "1"}
+                elif path in ["/retentions/1", "/retentions/2"]:
                     body = {"rules": []}
+                elif path.startswith("/retentions/2/executions?"):
+                    body = [{"id": 3, "policy_id": 2, "status": "Error"}] if len(submitted)>1 else []
                 elif path.startswith("/retentions/1/executions?"):
                     body = [{"id": 2, "policy_id": 1, "start_time":"2026-10-13T22:00:00Z", "end_time":"2026-10-13T22:00:01Z",
                              "status": execution_status, "dry_run": submitted[-1]["dry_run"]}] if submitted else []
@@ -70,7 +72,7 @@ class HarborInspection(unittest.TestCase):
             def write(self):
                 body = self.rfile.read(int(self.headers.get("content-length", 0)))
                 requests.append((self.command, self.path, json.loads(body) if body else None))
-                if self.command=="POST" and self.path=="/retentions/1/executions": submitted.append(json.loads(body))
+                if self.command=="POST" and self.path in ["/retentions/1/executions", "/retentions/2/executions"]: submitted.append(json.loads(body))
                 self.send_response(200)
                 self.end_headers()
             do_POST = write
@@ -86,7 +88,7 @@ class HarborInspection(unittest.TestCase):
                 script = p / "reconcile.sh"
                 script.write_text((APP / "reconcile.sh").read_text().replace("$$", "$"))
                 copy_scripts(p, APP)
-                write_kubectl(p, workload if workload is not None else {"items": []})
+                write_kubectl(p, workload if workload is not None else {"items": []}, prior_evidence)
                 env = {**os.environ, "PATH": str(p) + ":" + os.environ["PATH"], "MODE": mode,
                        "HARBOR_SCRATCH_DIR": str(p),
                        "HARBOR_API_URL": f"http://127.0.0.1:{server.server_port}",
@@ -103,6 +105,7 @@ class HarborInspection(unittest.TestCase):
                 else:
                     self.assertNotEqual(result.returncode, 0)
                 self.kube_actions = [json.loads(line) for line in (p / "kube-actions").read_text().splitlines()] if (p / "kube-actions").exists() else []
+                self.saved_evidence = json.loads((p / "evidence.json").read_text())["data"]
                 return result.stdout, requests
         finally:
             server.shutdown()
@@ -190,19 +193,57 @@ class HarborInspection(unittest.TestCase):
     def test_dryrun_never_publishes_real_success(self):
         output,_=self.run_script("retention-dry-run",self.schedule())
         self.assertTrue(json.loads(output.splitlines()[-1])["dry_run"])
-        self.assertEqual(self.kube_actions,[])
+        self.assertEqual(json.loads(self.saved_evidence["last_dry_run"])["state"], "Success")
+        self.assertNotIn("evidence", self.saved_evidence)
 
     def test_failed_or_ambiguous_retention_leaves_invalid_proof(self):
         for arguments in [{"execution_status":"Error"},{"ambiguous_execution":True}]:
             self.run_script("retention",self.schedule(),expect_success=False,**arguments)
-            self.assertEqual(len(self.kube_actions),1)
-            self.assertEqual(json.loads(json.loads(self.kube_actions[0][-1])["data"]["evidence"]),{"state":"running"})
+            failed=json.loads(self.saved_evidence["evidence"])
+            self.assertEqual(failed["state"], "Failed")
+            self.assertEqual(failed["phase"], "execute-retention")
+            self.assertNotEqual(failed["exit_code"], 0)
 
     def test_failed_inventory_or_content_blocks_all_writes(self):
         for arguments in [{"workload":{}},{"workload":{"items":[{"spec":{"containers":[{"image":"registry/library/demo:v1"}]}}]},"missing_manifest":True}]:
             _,requests=self.run_script("retention",self.schedule(),expect_success=False,**arguments)
             self.assertTrue(all(method in {"GET","HEAD"} for method,_,_ in requests))
-            self.assertEqual(self.kube_actions,[])
+            failed=json.loads(self.saved_evidence["evidence"])
+            self.assertEqual(failed["state"], "Failed")
+            self.assertIn(failed["phase"], ["inventory", "verify-images"])
+            self.assertEqual(failed["executions"], [])
+
+    def test_preflight_failure_preserves_last_success(self):
+        prior={"schema":1,"state":"Success","dry_run":False,"completed_at":123,"inventory_sha256":"a"*64}
+        self.run_script("retention",self.schedule(),workload={},expect_success=False,
+                        prior_evidence={"evidence":json.dumps(prior)})
+        self.assertEqual(json.loads(self.saved_evidence["last_success"]),prior)
+        failed=json.loads(self.saved_evidence["last_attempt"])
+        self.assertEqual(failed["state"],"Failed")
+        self.assertEqual(failed["phase"],"inventory")
+        self.assertEqual(failed["executions"],[])
+        self.assertNotEqual(failed["exit_code"],0)
+
+    def test_partial_execution_failure_records_completed_project(self):
+        self.run_script("retention",self.schedule(),expect_success=False,fail_second_project=True)
+        failed=json.loads(self.saved_evidence["evidence"])
+        self.assertEqual(failed["state"],"Failed")
+        self.assertEqual(failed["phase"],"execute-retention")
+        self.assertEqual(failed["project_id"],"2")
+        self.assertEqual(failed["policy_id"],"2")
+        self.assertEqual([(e["id"],e["policy_id"],e["status"]) for e in failed["executions"]],
+                         [(2,1,"Success")])
+
+    def test_dryrun_failure_and_success_preserve_real_proof(self):
+        prior={"schema":1,"state":"Success","dry_run":False,"completed_at":123}
+        for status in ["Success","Error"]:
+            with self.subTest(status=status):
+                self.run_script("retention-dry-run",self.schedule(),execution_status=status,
+                                expect_success=status=="Success",prior_evidence={"evidence":json.dumps(prior)})
+                self.assertEqual(json.loads(self.saved_evidence["evidence"]),prior)
+                evidence=json.loads(self.saved_evidence["last_dry_run"])
+                self.assertEqual(evidence["state"],"Success" if status=="Success" else "Failed")
+                self.assertTrue(evidence["dry_run"])
 
     def test_large_inventory_stays_out_of_process_arguments(self):
         workload={"items":[{"metadata":{"annotations":{"large":"x"*300000}},"spec":{"containers":[{"image":"registry/library/demo:v1"}]}}]}

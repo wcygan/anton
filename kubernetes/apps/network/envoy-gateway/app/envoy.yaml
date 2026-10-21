@@ -17,6 +17,11 @@ spec:
         pod:
           priorityClassName: system-cluster-critical
         container:
+          # Pinned ahead of the chart default (1.39.1 in EG v1.9.2) for
+          # CVE-2026-35189 + GHSA-8vc2-jrm4-835w + GHSA-47vj-9r25-wv5j:
+          # https://gateway.envoyproxy.io/news/releases/notes/v1.9.2/
+          # Drop or re-check this pin whenever envoy-gateway is upgraded.
+          image: docker.io/envoyproxy/envoy:distroless-v1.39.3@sha256:7369b033550a14997e5d698677b7b51f0210a80754f5d084c5caa1a78268267b
           resources:
             requests:
               cpu: 50m

@@ -7,7 +7,7 @@ spec:
   chart:
     spec:
       chart: opentelemetry-collector
-      version: 0.173.1
+      version: 0.176.1
       sourceRef:
         kind: HelmRepository
         name: opentelemetry
@@ -21,9 +21,11 @@ spec:
     mode: daemonset
     image:
       repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s
-      tag: 0.161.0
+      tag: 0.163.1
     command:
       name: otelcol-k8s
+      extraArgs:
+        - --feature-gates=stanza.synchronousLogEmitter
     presets:
       logsCollection:
         enabled: false
@@ -64,6 +66,11 @@ spec:
       extensions:
         file_storage:
           directory: /var/lib/otelcol
+          fsync: true
+          max_size: 268435456
+          compaction:
+            on_start: true
+            directory: /var/lib/otelcol
         health_check:
           endpoint: $${env:MY_POD_IP}:13133
       receivers:
@@ -73,7 +80,12 @@ spec:
           exclude:
             - /var/log/pods/airflow_*/*/*.log
             - /var/log/pods/lakehouse_*/*/*.log
-          start_at: end
+            - /var/log/pods/storage_seaweedfs-volume-*/*/*.log
+          start_at: beginning
+          storage: file_storage
+          retry_on_failure:
+            enabled: true
+            max_elapsed_time: 0s
           include_file_name: false
           include_file_path: true
           operators:
@@ -91,6 +103,9 @@ spec:
             - /var/log/pods/lakehouse_*/*/*.log
           start_at: beginning
           storage: file_storage
+          retry_on_failure:
+            enabled: true
+            max_elapsed_time: 0s
           include_file_name: false
           include_file_path: true
           operators:
@@ -102,11 +117,24 @@ spec:
               parse_from: body
               parse_to: attributes
               if: 'body matches "^\\s*\\{"'
+        file_log/seaweedfs_volumes:
+          include:
+            - /var/log/pods/storage_seaweedfs-volume-*/*/*.log
+          start_at: beginning
+          storage: file_storage
+          retry_on_failure:
+            enabled: true
+            max_elapsed_time: 0s
+          include_file_name: false
+          include_file_path: true
+          operators:
+            - type: container
+              id: seaweedfs-container-parser
+              max_log_size: 256KiB
+            - type: filter
+              id: skip-old-seaweedfs-logs
+              expr: 'timestamp < now() - duration("1h")'
       processors:
-        batch:
-          timeout: 2s
-          send_batch_size: 256
-          send_batch_max_size: 512
         memory_limiter:
           check_interval: 1s
           limit_mib: 384
@@ -147,11 +175,18 @@ spec:
             enabled: true
             initial_interval: 1s
             max_interval: 30s
-            max_elapsed_time: 5m
+            max_elapsed_time: 0s
           sending_queue:
             enabled: true
             num_consumers: 2
-            queue_size: 256
+            storage: file_storage
+            sizer: bytes
+            queue_size: 67108864
+            batch:
+              sizer: items
+              min_size: 256
+              max_size: 512
+              flush_timeout: 2s
       service:
         extensions:
           - health_check
@@ -170,11 +205,11 @@ spec:
             receivers:
               - file_log
               - file_log/workflows
+              - file_log/seaweedfs_volumes
             processors:
               - memory_limiter
               - transform/severity
               - groupbyattrs/severity
-              - batch
             exporters:
               - otlp_http/loki
     extraVolumes:

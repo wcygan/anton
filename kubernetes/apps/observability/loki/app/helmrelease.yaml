@@ -9,7 +9,7 @@ spec:
   chart:
     spec:
       chart: loki
-      version: 18.13.5
+      version: 18.17.1
       sourceRef:
         kind: HelmRepository
         name: grafana-community
@@ -42,6 +42,16 @@ spec:
             name: loki-s3-credentials
 
     loki:
+      image:
+        registry: docker.io
+        repository: grafana/loki
+        tag: 3.7.8
+        digest: sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+      ingester:
+        wal:
+          enabled: true
+          dir: /var/loki/wal-stock-0028
+          flush_on_shutdown: true
       auth_enabled: false
       server:
         http_listen_port: 3100
@@ -102,6 +112,20 @@ spec:
         apply_retention_interval: 10m
         retention_delete_delay: 2h
         delete_request_store: s3
+      structuredConfig:
+        ruler:
+          storage:
+            type: local
+            local:
+              directory: /etc/loki/alert-rules
+          rule_path: /var/loki/ruler
+          poll_interval: 30s
+          enable_api: false
+          enable_sharding: false
+          ring:
+            kvstore:
+              store: inmemory
+          alertmanager_url: http://kube-prometheus-stack-alertmanager.observability.svc.cluster.local:9093
       # Keep only deliberately low-cardinality resource attributes as Loki
       # labels. Pod names, UIDs, node names, image fields, and request-like
       # values remain structured metadata.
@@ -125,6 +149,20 @@ spec:
       enabled: true
       kind: StatefulSet
       replicas: 1
+      terminationGracePeriodSeconds: 120
+      extraVolumes:
+        - name: seaweedfs-alert-rules
+          configMap:
+            name: loki-seaweedfs-alerts
+            items:
+              - key: seaweedfs-alerts.yaml
+                path: fake/seaweedfs-alerts.yaml
+              - key: log-pipeline-alerts.yaml
+                path: fake/log-pipeline-alerts.yaml
+      extraVolumeMounts:
+        - name: seaweedfs-alert-rules
+          mountPath: /etc/loki/alert-rules
+          readOnly: true
       podDisruptionBudget:
         enabled: false
       persistence:
@@ -151,6 +189,7 @@ spec:
     compactor:
       enabled: false
     ruler:
+      # Rule evaluation runs in target=all; no separate ruler workload.
       enabled: false
 
     monitoring:

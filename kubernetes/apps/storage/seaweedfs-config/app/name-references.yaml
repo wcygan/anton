@@ -1,0 +1,6 @@
+nameReference:
+  - kind: ConfigMap
+    fieldSpecs:
+      - group: seaweed.seaweedfs.com
+        kind: Seaweed
+        path: spec/s3/volumes/configMap/name

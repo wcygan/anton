@@ -64,6 +64,28 @@ class HarborProtection(unittest.TestCase):
             self.assertNotEqual(self.inventory([data]).returncode, 0)
         self.assertNotEqual(self.jq('protected-images.jq', {'workloads': {}, 'ingresses': {'items': []}}).returncode, 0)
 
+    def test_pending_runtime_keeps_declared_harbor_image(self):
+        for status_key in ['containerStatuses', 'initContainerStatuses', 'ephemeralContainerStatuses']:
+            for image_id in ['', None]:
+                with self.subTest(status_key=status_key, image_id=image_id):
+                    result = self.inventory([{'kind': 'Pod', 'status': {status_key: [
+                        {'image': 'registry/library/demo:v1', 'imageID': image_id},
+                        {'image': 'busybox:latest', 'imageID': ''}]}}])
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(result.stdout), [
+                        {'repository': 'library/demo', 'reference': 'v1'}])
+
+    def test_missing_runtime_image_name_fails_closed(self):
+        for image in [None, '', 42]:
+            result = self.inventory([{'kind': 'Pod', 'status': {'containerStatuses': [
+                {'image': image, 'imageID': ''}]}}])
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_nonstring_harbor_runtime_identity_fails_closed(self):
+        result = self.inventory([{'kind': 'Pod', 'status': {'containerStatuses': [
+            {'image': 'registry/library/demo:v1', 'imageID': 42}]}}])
+        self.assertNotEqual(result.returncode, 0)
+
     def test_filer_requires_exact_ready_writable_bound_healthy_claim(self):
         self.assertEqual(self.jq('filer-persistence.jq', filer_data()).returncode, 0)
         variants = []

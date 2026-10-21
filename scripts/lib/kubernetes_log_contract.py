@@ -200,8 +200,8 @@ def validate_otel(path: Path) -> list[ContractViolation]:
         )
     for fragment in (
         "groupbyattrs/severity:",
-        "start_at: end",
         "file_log/workflows:",
+        "file_log/seaweedfs_volumes:",
         "start_at: beginning",
         "storage: file_storage",
         "- /var/log/pods/airflow_*/*/*.log",
@@ -213,6 +213,7 @@ def validate_otel(path: Path) -> list[ContractViolation]:
     for path_glob in (
         "/var/log/pods/airflow_*/*/*.log",
         "/var/log/pods/lakehouse_*/*/*.log",
+        "/var/log/pods/storage_seaweedfs-volume-*/*/*.log",
     ):
         if text.count(f"- {path_glob}") != 2:
             violations.append(
@@ -228,14 +229,43 @@ def validate_otel(path: Path) -> list[ContractViolation]:
             ContractViolation("otel", path, "workflow receiver must appear exactly once in the logs pipeline")
         )
 
+    seaweed = re.search(r"(?ms)^        file_log/seaweedfs_volumes:\n(.*?)(?=^      processors:)", text)
+    required = ('start_at: beginning', 'storage: file_storage',
+                'expr: \'timestamp < now() - duration("1h")\'')
+    if seaweed is None or any(fragment not in seaweed.group(1) for fragment in required):
+        violations.append(ContractViolation("otel", path, "SeaweedFS startup logs require checkpointed replay and an old-log filter"))
+    if text.count("              - file_log/seaweedfs_volumes") != 1:
+        violations.append(ContractViolation("otel", path, "SeaweedFS receiver must appear exactly once in the logs pipeline"))
+
+    if "--feature-gates=stanza.synchronousLogEmitter" not in text:
+        violations.append(ContractViolation("otel", path, "file readers must emit synchronously before checkpointing"))
+    general = re.search(r"(?ms)^        file_log:\n(.*?)(?=^        file_log/)", text)
+    if general is None or any(fragment not in general.group(1) for fragment in (
+        "start_at: beginning", "storage: file_storage", "retry_on_failure:",
+        "enabled: true", "max_elapsed_time: 0s",
+    )):
+        violations.append(ContractViolation("otel", path, "general logs require checkpointed beginning/resume and downstream retries"))
+    storage = re.search(r"(?ms)^        file_storage:\n(.*?)(?=^        health_check:)", text)
+    if storage is None or any(fragment not in storage.group(1) for fragment in (
+        "fsync: true", "max_size: 268435456",
+    )):
+        violations.append(ContractViolation("otel", path, "file storage must fsync and cap each database at 256 MiB"))
+    queue = re.search(r"(?ms)^          sending_queue:\n(.*?)(?=^      service:)", text)
+    if queue is None or any(fragment not in queue.group(1) for fragment in (
+        "enabled: true", "storage: file_storage", "sizer: bytes", "queue_size: 67108864",
+        "batch:", "sizer: items", "min_size: 256", "max_size: 512", "flush_timeout: 2s",
+    )):
+        violations.append(ContractViolation("otel", path, "logs require a 64 MiB persistent queue with exporter-side batching"))
+    if re.search(r"(?m)^        batch(?:/[^:]+)?:|^              - batch(?:/\S+)?$", text):
+        violations.append(ContractViolation("otel", path, "asynchronous batch processors must not acknowledge logs before persistence"))
+
     pipeline_order = [
         text.rfind("              - transform/severity"),
         text.rfind("              - groupbyattrs/severity"),
-        text.rfind("              - batch"),
     ]
     if any(position < 0 for position in pipeline_order) or pipeline_order != sorted(pipeline_order):
         violations.append(
-            ContractViolation("otel", path, "logs pipeline must normalize, group by severity, then batch")
+            ContractViolation("otel", path, "logs pipeline must normalize then group by severity before the durable exporter")
         )
     return violations
 
@@ -363,8 +393,24 @@ def validate_runbook(path: Path) -> list[ContractViolation]:
     return violations
 
 
+def validate_shutdown_alert(rule_path: Path, collector_path: Path) -> list[ContractViolation]:
+    if "otel_alert_error !~" not in rule_path.read_text():
+        return []
+    image = re.search(r"(?ms)^    image:\n(.*?)(?=^    command:)", collector_path.read_text())
+    expected = (
+        "repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s",
+        "tag: 0.161.0",
+    )
+    if image is None or any(line not in {part.strip() for part in image.group(1).splitlines()} for line in expected):
+        return [ContractViolation("shutdown-alert", rule_path,
+                "shutdown exception requires the tested collector 0.161.0 image; reverify queue replay before changing it")]
+    return []
+
+
 def validate_repository(root: Path) -> list[ContractViolation]:
     return [
+        *validate_shutdown_alert(root / "kubernetes/apps/observability/loki/app/log-pipeline-alerts.yaml",
+                                 root / "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"),
         *validate_fixtures(root / "scripts" / "tests" / "fixtures" / "kubernetes-log-records.json"),
         *validate_otel(root / "kubernetes" / "apps" / "observability" / "otel-collector" / "app" / "helmrelease.yaml"),
         *validate_loki(root / "kubernetes" / "apps" / "observability" / "loki" / "app" / "helmrelease.yaml"),

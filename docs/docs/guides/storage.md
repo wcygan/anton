@@ -31,7 +31,7 @@ If the Flux resource for this layer is itself failing, use [Flux remediation](fl
 
 ## Protect the data
 
-Replication protects against losing a node. It does not protect against deletion, corruption, or losing the cluster, and no off-cluster backup currently runs.
+Replication protects against losing a node. It does not protect against deletion, corruption, or losing the cluster, and no off-cluster backup currently runs. SeaweedFS keeps its own two copies on top of Longhorn; see [SeaweedFS](seaweedfs.md) for what that does and does not cover.
 
 - Never delete PVCs, Longhorn volumes, or replicas as a cleanup shortcut.
 - Volume changes, replica cleanup, and node maintenance need approval and the matching skill.

@@ -1,5 +1,12 @@
 # Job-owned evidence fields are deliberately absent from Git's SSA field set.
+# data.evidence: latest real attempt; only Success permits reclamation.
+# data.last_attempt: latest real attempt, including phase/exit/partial executions.
+# data.last_success: previous successful real proof, retained for diagnosis only.
+# data.last_dry_run: latest dry-run attempt; never permits real reclamation.
+# An interrupted process may leave Running; it must never be treated as success.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: harbor-retention-status
+  annotations:
+    kustomize.toolkit.fluxcd.io/ssa: Merge

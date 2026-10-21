@@ -1,0 +1,74 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: notification-controller-reconcile-only
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    matchPolicy: Equivalent
+    resourceRules:
+      - apiGroups: [source.toolkit.fluxcd.io]
+        apiVersions: [v1]
+        operations: [UPDATE]
+        resources: [gitrepositories, gitrepositories/status]
+        resourceNames: [flux-system]
+        scope: Namespaced
+      - apiGroups: [kustomize.toolkit.fluxcd.io]
+        apiVersions: [v1]
+        operations: [UPDATE]
+        resources: [kustomizations, kustomizations/status]
+        resourceNames: [flux-system]
+        scope: Namespaced
+  matchConditions:
+    - name: restricted-notification-controller
+      expression: >-
+        request.userInfo.username == 'system:serviceaccount:flux-system:notification-controller-restricted'
+    - name: flux-system-namespace
+      expression: request.namespace == 'flux-system'
+  variables:
+    - name: newAnnotations
+      expression: >-
+        has(object.metadata.annotations) && object.metadata.annotations != null ? object.metadata.annotations : {}
+    - name: oldAnnotations
+      expression: >-
+        has(oldObject.metadata.annotations) && oldObject.metadata.annotations != null ? oldObject.metadata.annotations : {}
+  validations:
+    - expression: "!has(request.subResource) || request.subResource == ''"
+      reason: Forbidden
+      message: notification-controller cannot update Flux subresources.
+    - expression: >-
+        dyn(object).all(k, k == 'metadata' || (k in dyn(oldObject) && dyn(object)[k] == dyn(oldObject)[k])) &&
+        dyn(oldObject).all(k, k == 'metadata' || k in dyn(object))
+      reason: Forbidden
+      message: notification-controller cannot change Flux configuration, status, or other object fields.
+    - expression: >-
+        dyn(object.metadata).all(k,
+          k in ['annotations', 'resourceVersion', 'managedFields'] ||
+          (k in dyn(oldObject.metadata) && dyn(object.metadata)[k] == dyn(oldObject.metadata)[k])) &&
+        dyn(oldObject.metadata).all(k,
+          k in ['annotations', 'resourceVersion', 'managedFields'] || k in dyn(object.metadata))
+      reason: Forbidden
+      message: notification-controller cannot change Flux labels, finalizers, owners, or other protected metadata.
+    - expression: >-
+        variables.newAnnotations.all(k,
+          k == 'reconcile.fluxcd.io/requestedAt' ||
+          (k in variables.oldAnnotations && variables.newAnnotations[k] == variables.oldAnnotations[k])) &&
+        variables.oldAnnotations.all(k,
+          k == 'reconcile.fluxcd.io/requestedAt' || k in variables.newAnnotations)
+      reason: Forbidden
+      message: notification-controller may change only the reconciliation-request annotation.
+    - expression: >-
+        'reconcile.fluxcd.io/requestedAt' in variables.newAnnotations &&
+        size(variables.newAnnotations['reconcile.fluxcd.io/requestedAt']) > 0 &&
+        size(variables.newAnnotations['reconcile.fluxcd.io/requestedAt']) <= 128
+      reason: Forbidden
+      message: The reconciliation request must contain a non-empty value of at most 128 characters.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: notification-controller-reconcile-only
+spec:
+  policyName: notification-controller-reconcile-only
+  validationActions: [Deny]

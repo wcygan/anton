@@ -61,3 +61,13 @@ Decide which of these failed before changing either service:
 | Blob storage | Uploads or downloads fail after authentication |
 
 For the last case, check Harbor and SeaweedFS status and events. Harbor's storage credentials come from Flux and External Secrets; do not edit the generated Secret. Reclaiming registry storage has its own inventory and safety gates.
+
+## During node maintenance
+
+Harbor's nginx front door runs two replicas, spread across nodes where possible, with a disruption budget that keeps one available during a voluntary eviction. That protects the front door only. Image blobs still live in SeaweedFS, so a maintenance window that stops S3 also stops pushes and cold pulls ([SeaweedFS node maintenance](seaweedfs.md#node-maintenance)).
+
+To check continuity, pull a previously uncached private image by digest while one node is drained. A cached or anonymous pull does not exercise the path.
+
+The registry and `registryctl` containers carry explicit resource requests, sized from a bounded seven-day observation. Requests reserve scheduling capacity; they are not a measure of use. `scripts/check-harbor-resource-contract.py` renders the pinned chart and confirms the values reach the containers.
+
+The `anton-cluster-health` skill holds the full [continuity check](https://github.com/wcygan/anton/blob/main/.agents/skills/anton-cluster-health/references/harbor-continuity.md) and [resource contract](https://github.com/wcygan/anton/blob/main/.agents/skills/anton-cluster-health/references/critical-resource-contracts.md). A NetworkPolicy limiting ingress to Harbor's PostgreSQL is staged for review but not active; see [internal service boundaries](https://github.com/wcygan/anton/blob/main/.agents/skills/anton-cluster-health/references/internal-service-boundaries.md).

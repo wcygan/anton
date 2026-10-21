@@ -33,6 +33,34 @@ tasks:
       - which python3 kubectl talosctl
       - test -f {{.KUBECONFIG}}
 
+  drain:node:
+    desc: Evict the API proxy first, then drain one already-cordoned node
+    prompt: This will evict workloads from the selected node. Continue?
+    env:
+      DRAIN_NODE: '{{.NODE}}'
+      DRAIN_CONTEXT: '{{.CONTEXT}}'
+      DRAIN_CLUSTER_UID: '{{.CLUSTER_UID}}'
+      DRAIN_NODE_UID: '{{.NODE_UID}}'
+      DRAIN_OPERATOR_UID: '{{.OPERATOR_UID}}'
+      DRAIN_TIMEOUT: '{{.TIMEOUT}}'
+    vars:
+      TIMEOUT: '{{.TIMEOUT | default "600"}}'
+      DELETE_EMPTYDIR_DATA: '{{.DELETE_EMPTYDIR_DATA | default "false"}}'
+    cmd: >-
+      python3 scripts/drain-node.py
+      --node "$DRAIN_NODE"
+      --expected-context "$DRAIN_CONTEXT"
+      --expected-cluster-uid "$DRAIN_CLUSTER_UID"
+      --expected-node-uid "$DRAIN_NODE_UID"
+      --expected-operator-uid "$DRAIN_OPERATOR_UID"
+      --timeout "$DRAIN_TIMEOUT"
+      {{if eq .DELETE_EMPTYDIR_DATA "true"}}--delete-emptydir-data{{end}}
+    requires:
+      vars: [NODE, CONTEXT, CLUSTER_UID, NODE_UID, OPERATOR_UID]
+    preconditions:
+      - which python3 kubectl
+      - test -f {{.KUBECONFIG}}
+
   reconcile:
     desc: Force Flux to pull in changes from your Git repository
     cmd: mise exec -- flux --namespace flux-system reconcile kustomization flux-system --with-source

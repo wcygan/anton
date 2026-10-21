@@ -19,6 +19,8 @@ spec:
   dependsOn:
     - name: multus
       namespace: network
+    - name: snapshot-controller
+      namespace: kube-system
   wait: false
   postBuild:
     substituteFrom:

@@ -9,6 +9,8 @@ spec:
   # under `app/` so manifest applies don't race those CRDs on a cold-start.
   # See plan 0016.
   dependsOn:
+    - name: cilium
+      namespace: kube-system
     - name: cloudflare-dns
       namespace: network
     - name: flux-operator

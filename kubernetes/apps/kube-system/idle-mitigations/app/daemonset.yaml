@@ -36,7 +36,7 @@ spec:
           # `printf` — all in busybox-1.x. Using the registry.k8s.io mirror so
           # spegel can serve it cluster-locally.
           # renovate: datasource=docker depName=busybox
-          image: busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+          image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
           imagePullPolicy: IfNotPresent
           securityContext:
             # Need root + write access to /sys/module + character-device write
@@ -112,7 +112,7 @@ spec:
               # Iter-15 was retracted on thermal grounds — the mitigation forced drives
               # to PS0 (~5-8 W per drive continuous), producing 80-94 °C NVMe temps on
               # k8s-2 (the node with a separately-failing chassis fan1, see
-              # context/notes/k8s-2-instability/evidence-2026-05-06-k8s-2-fan1-intermittent-failure.md).
+              # https://github.com/wcygan/anton/blob/628e15ba1c9b40b2731240dcfb3a282f013319cc/context/notes/k8s-2-instability/evidence-2026-05-06-k8s-2-fan1-intermittent-failure.md).
               # The original silent-reboot suspicion that motivated iter-15 was
               # circumstantial and contradicted by 2+ weeks of natural-APST data with
               # zero silent reboots (the de801143 mitigation was silently ineffective

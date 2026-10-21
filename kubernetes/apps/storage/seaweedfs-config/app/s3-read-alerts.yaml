@@ -1,0 +1,55 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: seaweedfs-s3-reads
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: seaweedfs-s3-reads
+      interval: 30s
+      rules:
+        - alert: SeaweedFSS3Read5xx
+          expr: |
+            sum by (pod, bucket) (
+              increase(SeaweedFS_s3_request_total{namespace="storage",service="seaweedfs-s3",type="GET",code=~"5.."}[5m])
+            ) >= 3
+          for: 1m
+          labels:
+            severity: warning
+            component: seaweedfs
+            namespace: storage
+          annotations:
+            summary: "SeaweedFS S3 read errors on {{ $labels.pod }}"
+            description: "At least three GET/HEAD API 5xx responses occurred in five minutes. Check stale volume addresses and S3 read-error logs."
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
+        - alert: SeaweedFSS3ReadProbeFailed
+          expr: |
+            seaweedfs_s3_read_probe_consecutive_failures{namespace="storage"} >= 2
+          labels:
+            severity: critical
+            component: seaweedfs
+            namespace: storage
+          annotations:
+            summary: "Verified S3 reads failed on {{ $labels.pod }}"
+            description: "Two consecutive signed localhost GETs failed their whole-request deadline, status, length, or SHA-256 check. Preserve evidence before restarting a gateway."
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
+        - alert: SeaweedFSS3MonitoringUnavailable
+          expr: |
+            ((count(count by (pod) (up{namespace="storage",service="seaweedfs-s3",endpoint="s3-metrics"} == 1)) or vector(0))
+              < scalar(kube_deployment_spec_replicas{namespace="storage",deployment="seaweedfs-s3"}))
+            or
+            ((count(count by (pod) ((up{namespace="storage",container="read-probe",job="storage/seaweedfs-s3-read-probe"} == 1)
+              and on(namespace,pod) (time() - seaweedfs_s3_read_probe_last_completed_timestamp_seconds{namespace="storage"} < 120)
+              and on(namespace,pod) seaweedfs_s3_read_probe_consecutive_failures{namespace="storage"})) or vector(0))
+              < scalar(kube_deployment_spec_replicas{namespace="storage",deployment="seaweedfs-s3"}))
+            or absent(kube_deployment_spec_replicas{namespace="storage",deployment="seaweedfs-s3"})
+          for: 2m
+          labels:
+            severity: warning
+            component: seaweedfs
+            namespace: storage
+          annotations:
+            summary: SeaweedFS S3 read monitoring coverage is incomplete
+            description: "Fewer healthy S3 scrapes or fresh read probes exist than desired gateway replicas. Missing or stalled probes are not evidence of successful reads."
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts

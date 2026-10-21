@@ -1,0 +1,59 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudflare-tunnel-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/controller: cloudflare-tunnel
+      app.kubernetes.io/instance: cloudflare-tunnel
+      app.kubernetes.io/name: cloudflare-tunnel
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: proxy
+              app.kubernetes.io/name: envoy
+              gateway.envoyproxy.io/owning-gateway-name: envoy-external
+              gateway.envoyproxy.io/owning-gateway-namespace: network
+      ports:
+        - port: 10443
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.0.0.0/24
+              - 192.0.2.0/24
+              - 192.168.0.0/16
+              - 198.18.0.0/15
+              - 198.51.100.0/24
+              - 203.0.113.0/24
+              - 224.0.0.0/4
+              - 240.0.0.0/4
+      ports:
+        - port: 7844
+          protocol: TCP
+        - port: 443
+          protocol: TCP

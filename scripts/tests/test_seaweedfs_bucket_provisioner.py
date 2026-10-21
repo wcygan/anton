@@ -18,6 +18,7 @@ FAKE_AWS = textwrap.dedent(
     r"""
     #!/usr/bin/env python3
     import json
+    import hashlib
     import os
     import re
     import sys
@@ -40,6 +41,12 @@ FAKE_AWS = textwrap.dedent(
         print(json.dumps({"Buckets": [{"Name": name} for name in state["ordinary"]]}))
     elif service == "s3api" and operation == "head-bucket":
         raise SystemExit(0 if option("--bucket") in state["ordinary"] else 1)
+    elif service == "s3api" and operation == "head-object":
+        raise SystemExit(0 if option("--key") in state.get("objects", {}) else 1)
+    elif service == "s3api" and operation == "put-object":
+        body = Path(option("--body")).read_bytes()
+        state.setdefault("objects", {})[option("--key")] = {"length": len(body), "sha256": hashlib.sha256(body).hexdigest()}
+        save()
     elif service == "s3" and operation == "mb":
         name = args[-1].removeprefix("s3://")
         if name not in state["ordinary"]:
@@ -125,6 +132,8 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
         *,
         ordinary: str = "harbor loki iceberg-raw",
         tables: str = "iceberg-warehouse iceberg-shadow",
+        probe: str = "",
+        auxiliary: str = "",
     ) -> tuple[subprocess.CompletedProcess[str], dict]:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -141,6 +150,8 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
                     "S3_ENDPOINT": "http://example.invalid:8333",
                     "ORDINARY_BUCKETS": ordinary,
                     "TABLE_BUCKETS": tables,
+                    "READ_PROBE_BUCKET": probe,
+                    "AUXILIARY_ORDINARY_BUCKETS": auxiliary,
                 }
             )
             result = subprocess.run(
@@ -152,6 +163,34 @@ class SeaweedFSBucketProvisionerTests(unittest.TestCase):
                 timeout=10,
             )
             return result, json.loads(state_path.read_text(encoding="utf-8"))
+
+    def test_probe_fixture_has_exact_bytes_and_is_idempotent(self):
+        result, state = self.run_provisioner(
+            {"ordinary": [], "tables": []}, ordinary="s3-read-probe", tables="", probe="s3-read-probe")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import hashlib
+        self.assertEqual(state["objects"]["fixture-v1"], {
+            "length": 65536, "sha256": hashlib.sha256(bytes(65536)).hexdigest()})
+        result, unchanged = self.run_provisioner(
+            state, ordinary="s3-read-probe", tables="", probe="s3-read-probe")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(unchanged, state)
+
+    def test_auxiliary_ordinary_buckets_use_the_same_idempotent_provisioner(self):
+        initial = {"ordinary": ["harbor", "loki"], "tables": []}
+        result, state = self.run_provisioner(initial, ordinary="harbor loki", tables="", auxiliary="private-fixture")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state["ordinary"], ["harbor", "loki", "private-fixture"])
+        again, repeated = self.run_provisioner(state, ordinary="harbor loki", tables="", auxiliary="private-fixture")
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertEqual(repeated, state)
+
+    def test_auxiliary_kind_collision_creates_nothing(self):
+        initial = {"ordinary": ["harbor", "loki"], "tables": ["private-fixture"]}
+        result, state = self.run_provisioner(initial, ordinary="harbor loki", tables="", auxiliary="new-fixture private-fixture")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bucket kind collision", result.stderr)
+        self.assertEqual(state, initial)
 
     def test_flux_strict_substitution_rejects_unescaped_shell_expansion(self) -> None:
         result = self.strict_flux_substitution(
