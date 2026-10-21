@@ -12,7 +12,14 @@
   dependencyDashboard: true,
   dependencyDashboardTitle: "Renovate Dashboard 🤖",
   schedule: ["every weekend"],
-  ignorePaths: ["**/*.sops.*"],
+  ignorePaths: [
+    "**/*.sops.*",
+    // Retired by ADR 0040; kept as reference material, not built or deployed.
+    "images/airflow-runtime/**",
+    "images/flight-recorder-contract/**",
+    "images/iceberg-log-spark/**",
+    "images/spark-runtime/**",
+  ],
   flux: {
     managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml$/"],
   },
