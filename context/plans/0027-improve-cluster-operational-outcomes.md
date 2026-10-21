@@ -57,8 +57,8 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 - [x] Publish the reviewed availability policy, migration/rollback plan and successor ADR; obtain exact live approval before changing replication or replacing/draining resources.
 - [x] Observe the approved default through GitOps and verify an actual new two-copy allocation before the writer fence (PR 519; VID 52, exact fixture bytes verified).
 - [x] Execute the approved existing-data attempt, stop on the first stale-address failure before configuration/copy, and verify restoration and cleanup; see `context/notes/2026-10-20-seaweedfs-migration-abort.md`.
-- [ ] Qualify the native-command address path and legacy-layout growth fence; refresh the inventory and execution budget before another existing-data window.
-- [ ] Verify existing and new S3 data during the approved one-node hold, full recovery and temporary-resource cleanup; do not infer this from the earlier warm gateway fixture.
+- [x] Retire the old existing-data migration gate under Plan 0028 / ADR 0044; native placement has completed and the one-off legacy-layout tooling is being retired. Do not rerun it as routine maintenance.
+- [x] Supersede the unperformed uninterrupted one-node hold with ADR 0044's planned-downtime contract. The planned node/recovery exercise remains an open Plan 0028 acceptance check, not a passed continuity test.
 - [x] Verify normal workload recovery after the approved private verifier mirror repair and ESO sync; desired replicas, enforcing admission and user-facing HTTP/TLS checks passed.
 - [ ] Complete independent bootstrap-image origin/cache-seeding evidence and approve an isolated rebuild drill; source audit remains incomplete.
 - [ ] Gather ten comparable ordinary release samples with explicit timestamp coverage before any polling experiment; the current private tool distinguishes its proxy from push timing.
@@ -101,6 +101,13 @@ Make Anton safer and more predictable without expanding its infrastructure footp
 | Rebuild audit, PR 508 | Rerunnable source check: 18 source-presence PASS, 8 informational stages, 7 unknowns, expected exit 2. | Revert merge `1c019ed8`; no live state was changed by the audit. |
 | Cooling evidence, PR 509 | Bounded passive collector and exact hardware/WAL handoffs; fan/tach fault and historical log completeness remain unresolved. | Revert merge `b2d76f4b`; hardware and WAL operations have separate recovery plans. |
 | Private release timing | Outcome-aware CLI and 133 passing private tests; actual push/scan times remain unknown and polling stays unchanged. | Revert its private merge; no application or polling configuration changed. |
+
+- 2026-10-20: Plan 0028 and ADR 0044 replace the uninterrupted-maintenance
+  requirement with planned S3 downtime and stock software. Preserve the failed
+  continuity records; completed native copy placement remains. The legacy
+  migration/address-fence fixtures can retire with the forks. Planned node
+  maintenance and seven-day stock observation still need actual execution;
+  neither is marked passed by this policy decision.
 
 ## References
 
