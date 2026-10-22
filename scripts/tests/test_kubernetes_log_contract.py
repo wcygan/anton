@@ -148,7 +148,7 @@ class KubernetesLogContractTests(unittest.TestCase):
                 "scripts/validate-log-contract.py --show\n"
                 "mise exec -- task contracts:validate\n"
                 "seaweedfs-buckets-ensure\n"
-                "## Rollout and ClickStack teardown\n"
+                "## Change and recovery order\n"
                 "Reconcile the Loki app, then seaweedfs-config.\n",
                 encoding="utf-8",
             )

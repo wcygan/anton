@@ -72,7 +72,7 @@ Treat generated findings as sensitive.
 
 For prior finding dispositions and open follow-ups, use QMD's `anton-context`
 collection and retrieve the source record. Start with the
-[September remediation record](../../../context/notes/2026-09-29-codex-security-remediation.md).
+[September remediation record](../../../docs/docs/records/security-and-credential-delivery.md).
 Historical records are leads; recheck current source and applied state before
 claiming a previously fixed finding has returned or a follow-up is complete.
 

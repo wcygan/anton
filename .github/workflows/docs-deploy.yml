@@ -5,6 +5,8 @@ on:
     branches: [ main ]
     paths:
       - 'docs/**'
+      - 'scripts/validate-docs-design.py'
+      - 'scripts/tests/test_docs_design.py'
       - '.github/workflows/docs-deploy.yml'
   workflow_dispatch:
 
@@ -32,8 +34,17 @@ jobs:
       - name: Install dependencies
         run: |
           cd docs
-          bun install
+          bun install --frozen-lockfile
           
+      - name: Check public documentation
+        run: |
+          python3 scripts/validate-documentation.py
+          python3 scripts/validate-public-privacy.py
+          cd docs
+          bun run typecheck
+          cd ..
+          python3 -m unittest discover -s scripts/tests -p test_docs_design.py
+
       - name: Build site
         run: |
           cd docs

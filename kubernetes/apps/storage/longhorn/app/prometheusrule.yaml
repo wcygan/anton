@@ -59,8 +59,8 @@ spec:
               Immediate triage:
               - `kubectl -n storage get volumes.longhorn.io {{ $labels.volume }} -o yaml` — read .status.conditions
               - `kubectl -n storage get replicas.longhorn.io -o jsonpath='{range .items[?(@.spec.volumeName=="{{ $labels.volume }}")]}{.metadata.name} {.status.currentState}{"\n"}{end}'`
-              - If a single replica's host has lost storage-network reachability, see [multus-attach-failure runbook](https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md).
-            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md"
+              - If a single replica's host has lost storage-network reachability, see [multus-attach-failure runbook](https://github.com/wcygan/anton/blob/main/docs/docs/guides/storage.md).
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/guides/storage.md"
 
         - alert: LonghornVolumeDegraded
           expr: |-
@@ -99,7 +99,7 @@ spec:
 
               Triage path:
               - Check if Multus attached lhnet1 on the destination node:
-                see the [multus-attach-failure runbook](https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md).
+                see the [multus-attach-failure runbook](https://github.com/wcygan/anton/blob/main/docs/docs/guides/storage.md).
               - `kubectl -n storage get engines.longhorn.io -o jsonpath`
                 filtered to volume to see if the engine is starting/stopped.
-            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/runbooks/multus-attach-failure.md"
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/guides/storage.md"

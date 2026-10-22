@@ -25,7 +25,7 @@ spec:
               includes errors before the first scrape; the counter is not a count of lost
               logs. Preserve WAL/PVC evidence and compare source logs before any repair.
               Normal checkpoint duplicate entries do not trigger this alert.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
         - alert: LokiWALPersistenceFailure
           expr: |
             max by (namespace,pod) (
@@ -49,7 +49,7 @@ spec:
               window, including a newly exposed nonzero counter. Inspect the Loki PVC, free
               space, Longhorn and write errors. Do not delete WAL data or restart just to
               reset counters.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
         - alert: LokiLogMetricsUnavailable
           expr: |
             absent(
@@ -67,4 +67,4 @@ spec:
               No healthy Loki scrape with the WAL replay gauge has existed for five minutes.
               WAL failure detection is blind. Inspect the Loki pod, ServiceMonitor and
               Prometheus target.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts

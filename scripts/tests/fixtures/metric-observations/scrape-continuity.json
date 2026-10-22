@@ -1,0 +1,35 @@
+{
+  "target_preflight": "passed",
+  "query": "min_over_time(((count by (job) (min_over_time(up{job=\"apiserver\"}[1m]) == 1) == bool 3) or label_replace(vector(0), \"job\", \"apiserver\", \"\", \"\"))[15d:1m])\nor min_over_time(((count by (job) (min_over_time(up{job=\"kube-state-metrics\"}[1m]) == 1) == bool 1) or label_replace(vector(0), \"job\", \"kube-state-metrics\", \"\", \"\"))[15d:1m])\nor min_over_time(((count by (job) (min_over_time(up{job=\"kubelet\"}[1m]) == 1) == bool 9) or label_replace(vector(0), \"job\", \"kubelet\", \"\", \"\"))[15d:1m])\nor min_over_time(((count by (job) (min_over_time(up{job=\"node-exporter\"}[1m]) == 1) == bool 3) or label_replace(vector(0), \"job\", \"node-exporter\", \"\", \"\"))[15d:1m])",
+  "expected_target_counts": {
+    "apiserver": 3,
+    "kube-state-metrics": 1,
+    "kubelet": 9,
+    "node-exporter": 3
+  },
+  "samples": [
+    {
+      "job": "apiserver",
+      "value": 1.0
+    },
+    {
+      "job": "kube-state-metrics",
+      "value": 1.0
+    },
+    {
+      "job": "kubelet",
+      "value": 1.0
+    },
+    {
+      "job": "node-exporter",
+      "value": 1.0
+    }
+  ],
+  "oom_state": "no_data",
+  "threshold_states": {
+    "api_error": "unapproved",
+    "api_latency": "unapproved",
+    "storage": "unapproved"
+  },
+  "fixture_provenance": "Sanitized historical regression fixture. Not current cluster evidence."
+}

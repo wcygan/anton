@@ -22,7 +22,7 @@ groups:
             Inspect node-local /var/lib/otelcol permissions, available space, database
             limits and storage errors. Export can remain healthy while checkpoints fail.
             Preserve databases; do not delete state to clear the alert.
-          runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+          runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
       - alert: OTelCollectorExportFailure
         expr: |
           sum by (pod) (
@@ -52,4 +52,4 @@ groups:
             retry messages and typed shutdown interruptions retained by the pinned
             persistent queue do not match this alert. Unknown/malformed dropped-data
             messages still alert. The logging contract enforces the queue prerequisite.
-          runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+          runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts

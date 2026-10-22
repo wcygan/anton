@@ -24,12 +24,10 @@ def main() -> int:
         (REPO / "kubernetes" / "apps" / "AGENTS.md", "mise exec -- task contracts:validate"),
         (REPO / ".agents" / "skills" / "add-flux-app" / "SKILL.md", "scripts/validate-flux-contract.py"),
         (REPO / ".agents" / "skills" / "anton-repo-conventions" / "SKILL.md", "scripts/validate-flux-contract.py"),
-        (REPO / ".claude" / "skills" / "add-flux-app" / "SKILL.md", "scripts/validate-flux-contract.py"),
-        (REPO / ".claude" / "skills" / "anton-repo-conventions" / "SKILL.md", "scripts/validate-flux-contract.py"),
-        (REPO / ".claude" / "agents" / "flux-app-author.md", "scripts/validate-flux-contract.py"),
-        (REPO / ".claude" / "agents" / "conventions-linter.md", "scripts/validate-flux-contract.py"),
-        (REPO / ".codex" / "agents" / "anton-flux-app-author.toml", "scripts/validate-flux-contract.py"),
-        (REPO / ".codex" / "agents" / "conventions-linter.toml", "scripts/validate-flux-contract.py"),
+        (REPO / ".claude" / "agents" / "flux-app-author.md", ".agents/skills/add-flux-app/SKILL.md"),
+        (REPO / ".claude" / "agents" / "conventions-linter.md", ".agents/skills/anton-repo-conventions/SKILL.md"),
+        (REPO / ".codex" / "agents" / "anton-flux-app-author.toml", ".agents/skills/add-flux-app/SKILL.md"),
+        (REPO / ".codex" / "agents" / "conventions-linter.toml", ".agents/skills/anton-repo-conventions/SKILL.md"),
     )
     pointer_failures = [
         f"[flux.tooling.pointer] {path.relative_to(REPO)}: missing {token!r}"
@@ -38,11 +36,7 @@ def main() -> int:
     ]
     guidance_requirements = (
         (REPO / ".agents" / "skills" / "add-flux-app" / "SKILL.md", ("raw mode", "explicitly authorizes")),
-        (REPO / ".claude" / "skills" / "add-flux-app" / "SKILL.md", ("raw mode", "explicitly authorizes")),
-        (REPO / ".claude" / "agents" / "flux-app-author.md", ("raw apps", "exactly one")),
-        (REPO / ".claude" / "agents" / "conventions-linter.md", ("raw mode", "exactly one")),
-        (REPO / ".codex" / "agents" / "anton-flux-app-author.toml", ("raw Kustomize apps", "explicit operator approval")),
-        (REPO / ".codex" / "agents" / "conventions-linter.toml", ("raw mode", "exactly one")),
+        (REPO / ".agents" / "skills" / "anton-repo-conventions" / "SKILL.md", ("raw", "source")),
     )
     guidance_failures: list[str] = []
     for path, tokens in guidance_requirements:
@@ -55,7 +49,6 @@ def main() -> int:
 
     add_app_skills = (
         REPO / ".agents" / "skills" / "add-flux-app" / "SKILL.md",
-        REPO / ".claude" / "skills" / "add-flux-app" / "SKILL.md",
     )
     forbidden_authority = ("**Commit and push.**", "force with `task reconcile`", "after `task reconcile`")
     for path in add_app_skills:

@@ -1,0 +1,92 @@
+:root {
+  --ifm-color-primary: #2e8555;
+  --ifm-color-primary-dark: #29784c;
+  --ifm-color-primary-darker: #277148;
+  --ifm-color-primary-darkest: #205d3b;
+  --ifm-color-primary-light: #33925d;
+  --ifm-color-primary-lighter: #359962;
+  --ifm-color-primary-lightest: #3cad6e;
+  --ifm-code-font-size: 95%;
+  --ifm-background-color: #ffffff;
+  --site-code-surface: #f6f7f8;
+  color-scheme: light;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* Pair dark surfaces with light foregrounds and restrained accent fills. */
+[data-theme='dark'] {
+  --ifm-color-primary: #8bdfc4;
+  --ifm-color-primary-dark: #69d5b2;
+  --ifm-color-primary-darker: #58d0a9;
+  --ifm-color-primary-darkest: #35b98e;
+  --ifm-color-primary-light: #ade9d6;
+  --ifm-color-primary-lighter: #beeee0;
+  --ifm-color-primary-lightest: #e0f8f0;
+  --site-code-surface: #292929;
+  color-scheme: dark;
+  --ifm-background-color: #323232;
+  --ifm-background-surface-color: #393939;
+  --ifm-navbar-background-color: #393939;
+  --ifm-font-color-base: #eeeeec;
+  --ifm-color-content: #eeeeec;
+  --ifm-color-content-secondary: #ccccca;
+  --ifm-color-emphasis-300: #555555;
+  --ifm-color-emphasis-500: #999999;
+  --ifm-color-emphasis-600: #bdbdbb;
+  --ifm-color-emphasis-700: #d6d6d4;
+  --ifm-code-background: #444444;
+  --ifm-toc-border-color: #555555;
+  --ifm-table-border-color: #555555;
+  --ifm-menu-color: #ccccca;
+  --ifm-menu-color-background-active: #414a44;
+  --docusaurus-highlighted-code-line-bg: rgba(139, 223, 196, 0.12);
+}
+:root {
+  --diagram-node-text: #1c1e21;
+  --diagram-text: #1c1e21;
+  --diagram-muted-text: #444950;
+  --diagram-connector: #606770;
+  --diagram-drive-case: #656d78;
+  --diagram-drive-base: #555b64;
+  --diagram-drive-plate: #cdd1d9;
+  --diagram-drive-hub: #a7afb8;
+  --diagram-drive-arm: #e7e9ec;
+  --diagram-drive-ink: #000000;
+  --diagram-radius: 1rem;
+  --diagram-padding: clamp(0.75rem, 2vw, 1.5rem);
+  --diagram-font-size: 16px;
+  --diagram-label-size: 13px;
+  --diagram-stroke-width: 1.5;
+  --diagram-panel-background: #f5f7fb;
+  --diagram-panel-border: #cbd5e1;
+  --diagram-group-background: #ffffff;
+  --diagram-group-border: #737980;
+  --diagram-processing-fill: #eee9fb;
+  --diagram-processing-stroke: #6d4bb3;
+  --diagram-storage-fill: #e5f1fa;
+  --diagram-storage-stroke: #076fa8;
+  --diagram-flow-fill: #e2f3eb;
+  --diagram-flow-stroke: #26735e;
+  --diagram-control-fill: #fae7f0;
+  --diagram-control-stroke: #9d3d72;
+}
+
+[data-theme='dark'] {
+  --diagram-node-text: #252525;
+  --diagram-text: #eeeeec;
+  --diagram-muted-text: #ccccca;
+  --diagram-connector: #bdbdbb;
+  --diagram-processing-stroke: #a78bfa;
+  --diagram-storage-stroke: #79bce5;
+  --diagram-flow-stroke: #6cc4ac;
+  --diagram-control-stroke: #d5ac73;
+  --diagram-panel-background: #252525;
+  --diagram-panel-border: #505050;
+  --diagram-group-background: #303030;
+  --diagram-group-border: #707070;
+  --diagram-processing-fill: #c4b5fd;
+  --diagram-storage-fill: #a5d8f3;
+  --diagram-flow-fill: #9cddcb;
+  --diagram-control-fill: #e9c99b;
+}
+

@@ -36,4 +36,4 @@ spec:
           annotations:
             summary: "{{APP_NAME}} rate above threshold for 10m"
             description: "{{ $labels.job }} at {{ $value }} events/s"
-            runbook_url: "https://wcygan.github.io/anton/runbooks/{{APP_NAME}}"
+            runbook_url: "https://wcygan.github.io/anton/guides/{{APP_NAME}}"

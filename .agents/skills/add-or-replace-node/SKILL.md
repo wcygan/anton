@@ -1,7 +1,6 @@
 ---
 name: add-or-replace-node
 description: Add or replace a Talos node in Anton. Use to add a node, replace node, scaffold a new control plane, recover a dead node, plan node replacement like k8s-4, or edit nodes.yaml / talconfig.yaml. Generates patches, applies via talosctl.
-allowed-tools: Read, Write, Edit, Bash
 ---
 
 # Add or replace a Talos node

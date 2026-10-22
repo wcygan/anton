@@ -1,9 +1,9 @@
 collections:
-  anton-context:
-    path: context
+  anton-docs:
+    path: docs/docs
     pattern: "**/*.md"
     context:
-      "": "Anton homelab cluster context: ADRs, plans, incidents, postmortems, hardware and software inventory."
+      "": "Public Anton platform capabilities, guides, reference, decisions, and historical summaries."
 models:
   embed: hf:ggml-org/embeddinggemma-300M-GGUF/embeddinggemma-300M-Q8_0.gguf
   generate: hf:tobil/qmd-query-expansion-1.7B-gguf/qmd-query-expansion-1.7B-q4_k_m.gguf

@@ -15,9 +15,9 @@ Stop when: storage manifests keep the chart-vs-config split, important workaroun
 
 Use existing Longhorn references before node or disk work:
 
-- `context/adrs/0005-adopt-longhorn-for-block-storage.md`
-- `docs/docs/notes/longhorn-storage-network-host-shim.md`
-- `.claude/skills/longhorn-node-ops/references/talos.md`
+- `docs/docs/records/operation-contracts-and-agent-workflows.md`
+- `docs/docs/guides/storage.md`
+- `.agents/skills/longhorn-node-ops/references/talos.md`
 
 ## SeaweedFS
 
@@ -34,7 +34,7 @@ Check PVC byte capacity and logical volume slots as separate limits. A volume
 server can exhaust slots while its Longhorn PVC still has free bytes.
 
 Preserve bounded growth and slot headroom in the source `Seaweed` CR. Use the
-`seaweedfs-iceberg-lakehouse` skill for topology checks and maintenance order.
+`seaweedfs-ops` skill for topology checks and maintenance order.
 
 After a volume pod address change, compare master topology with S3 errors.
 Restart only the S3 gateways when the master topology is correct.

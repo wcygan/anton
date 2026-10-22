@@ -1,48 +1,39 @@
 ---
-sidebar_position: 1
+title: Anton
 slug: /
+sidebar_position: 1
 ---
+
+import ClusterOverview from '@site/src/components/ClusterOverview';
 
 # Anton
 
-Anton is a Talos Kubernetes homelab for public applications, private services
-over Tailscale, and learning experiments. Flux applies the committed desired
-state. Manifests under `kubernetes/` and `bootstrap/` are hand-edited; Talos
-machine configs are generated from the sources under `talos/`.
+Anton is a three-node Kubernetes homelab running Talos Linux. It hosts public applications, private operator services, and time-boxed learning experiments. Flux applies what is committed to Git; these pages explain what the platform provides and how to operate it safely.
+
+<ClusterOverview />
+
+Public requests reach applications through Cloudflare Tunnel. The cluster opens the tunnel outbound to Cloudflare, and responses return over that same connection. Inside the cluster, `cloudflared` hands each request to Envoy Gateway, which routes it to an application.
 
 ## Start here
 
-The [routine operations guide](runbooks/routine-operations.md) covers checking
-health, deploying a change, and finding the first failing layer. Run commands
-from the repository root with `mise exec --`.
-
-```sh
-mise exec -- task --list
-```
-
-| Situation | Guide |
+| I want to… | Read |
 | --- | --- |
-| Remote access or Talos health | [Talos health](runbooks/talos-health.md) |
-| Workload logs or missing log streams | [Kubernetes logs in Loki](runbooks/kubernetes-logs-loki.md) |
-| Helm timeout, rollback, cleanup, or hook failure | [Flux Helm remediation](runbooks/flux-helm-remediation.md) |
-| Storage network attachment failure | [Multus attach failure](runbooks/multus-attach-failure.md) |
-| Push or pull an image through Harbor | [Harbor developer guide](notes/harbor-developer-guide.md) |
+| See what the platform provides | [Capabilities](overview/capabilities.md) |
+| Understand how the pieces fit | [Architecture](overview/architecture.md) |
+| Check health or find a failure | [Routine operations](guides/operations.md) |
+| Connect from outside the LAN | [Remote access](guides/remote-access.md) |
+| Store data or debug a volume | [Storage](guides/storage.md) |
+| Know why something was chosen | [Decisions](decisions/index.md) |
+| Learn from a past incident | [Records](records/index.md) |
 
-Runbooks describe operator procedures. Notes and Playground pages also contain
-historical experiments; their examples are not a current workload inventory.
-Use committed manifests for desired state and bounded live reads for current health.
+## How to read these pages
 
-## Hardware and access
+Each collection answers a different question, and none of them is a live health check:
 
-The hardware inventory last verified April 20, 2026 records three Minisforum
-MS-01 control-plane nodes, each with an Intel Core i9-13900H and 96 GiB RAM.
-Each node has a 500 GB system NVMe and two 1 TB data NVMes. A dedicated 10 Gbit
-SFP+ full mesh carries storage traffic; management uses a separate RJ45 network.
-The repository's `context/hardware.md` retains the dated inventory and topology.
+- **Guides** describe current procedures. They name the checks to run; they do not report results.
+- **Decisions** explain why a choice was made. Follow supersession links before treating an old decision as current.
+- **Records** summarize what was established during a dated window, including what stayed uncertain.
 
-Public applications use Cloudflare Tunnel and the external Envoy gateway.
-Private access uses Tailscale; internal HTTPRoutes use the internal Envoy
-gateway. Public exposure is an explicit operator decision.
+A committed manifest shows intent, and an old record shows history. Confirm present behavior against the live cluster.
 
-Talos provides API-based node management without SSH. Flux owns application
-configuration; routine deployment changes go through Git rather than live edits.
+This site is public. Credentials, private hostnames, detailed inventories, raw evidence, and working plans stay outside it. Shared agent procedures live in the repository's `.agents/skills/`. [Documentation and maintenance](reference/documentation.md) explains what belongs where.

@@ -11,8 +11,8 @@ Per-volume Longhorn operations in anton.
 
 - `longhorn` is the cluster default StorageClass (HelmRelease `persistence.defaultClass: true`).
 - 2 replicas, `dataLocality: best-effort`, `staleReplicaTimeout: 2880` minutes.
-- Topology is asymmetric 2+1+2 (k8s-1: 2 disks, k8s-2: 1 disk, k8s-3: 2 disks). A 2-replica volume will skew toward k8s-1 + k8s-3 until the k8s-2 second-NVMe followup lands (see `context/hardware.md`).
-- Authoritative decision: `context/adrs/0005-adopt-longhorn-for-block-storage.md`.
+- Disk counts, capacity, and replica placement vary with hardware and maintenance. Inspect current Talos discovered volumes, Longhorn node disk status, and replica placement before sizing or claiming a node is a scheduling bottleneck.
+- Authoritative decision: `docs/docs/decisions/0005-adopt-longhorn-for-block-storage.md`.
 - Talos platform gotchas live in [longhorn-node-ops/references/talos.md](../longhorn-node-ops/references/talos.md).
 
 ## When to use
@@ -57,7 +57,7 @@ reclaimPolicy: Delete
 volumeBindingMode: Immediate
 ```
 
-Note: anton's 2+1+2 topology has only 3 nodes. 3-replica is feasible cluster-wide but only k8s-1/k8s-3 can host two replicas each; k8s-2's single disk is the hard ceiling on spreading.
+Check the current node and disk inventory plus Longhorn anti-affinity rules before selecting a replica count. A sample StorageClass does not establish that the current cluster can place all replicas.
 
 ### Online resize
 

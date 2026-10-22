@@ -1,7 +1,6 @@
 ---
 name: deploy-owned-app
 description: "Deploy or onboard an owned Anton app through Flux image automation. Use for deploy, redeploy, force reconcile, deploy sample-site-a, onboard app, new owned app, ADR 0024 image automation, ImageRepository loops, rollout watching, and public URL verification. Reports stuck reconciles and hands them to debug-flux-reconciliation."
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # Deploy owned app
@@ -111,7 +110,7 @@ See [references/troubleshoot.md](references/troubleshoot.md) for the full failur
 - `debug-flux-reconciliation` — what to run when this skill stops on a stuck reconcile.
 - `anton-cluster-health` — when the failure looks cluster-wide rather than app-specific.
 - `observability-integrate` — wire a deploy-frequency / image-automation-success panel after the first successful onboard.
-- ADRs/plans: [`0024`](../../../context/adrs/0024-adopt-image-automation-for-owned-apps.md) (decision), [`0012`](../../../context/plans/0012-image-automation-sample-site-a-rollout.md) (sample-site-a as canonical example), [`0023`](../../../context/adrs/0023-shared-cloudflare-tunnel-only.md) (shared tunnel; gateway constraint).
+- ADRs/plans: [`0024`](../../../docs/docs/decisions/0024-adopt-image-automation-for-owned-apps.md) (decision), [`0012`](../../../../anton-private/docs/operations/platform-work/plans/0012-image-automation-sample-site-a-rollout.md) (sample-site-a as canonical example), [`0023`](../../../docs/docs/decisions/0023-shared-cloudflare-tunnel-only.md) (shared tunnel; gateway constraint).
 
 ## Anti-patterns
 

@@ -72,7 +72,7 @@ spec:
                    --mode=default` to preempt iTCO.
                 3. Capture: snapshot the peer-side metrics before recovery
                    for post-mortem.
-            runbook_url: "https://github.com/wcygan/anton/blob/main/context/notes/k8s-2-instability/evidence-2026-05-06-precursor-signature-found.md"
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/records/reboot-and-thermal-investigation.md"
 
         - alert: HighStorageNicRxDrops
           expr: |

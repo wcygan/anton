@@ -20,7 +20,7 @@ CRONJOB = APP / "buckets-cronjob.yaml"
 KUSTOMIZATION = APP / "kustomization.yaml"
 S3_CONFIG = APP / "externalsecret.yaml"
 SEAWEED = APP / "seaweed.yaml"
-LAKEHOUSE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-iceberg-lakehouse" / "SKILL.md"
+STORAGE_SKILL = REPO / ".agents" / "skills" / "seaweedfs-ops" / "SKILL.md"
 STORAGE_GUIDANCE = REPO / "kubernetes" / "apps" / "storage" / "AGENTS.md"
 
 
@@ -128,13 +128,13 @@ def main() -> int:
     )
     failures.extend(f"repeated provisioner still exists: {path.relative_to(REPO)}" for path in removed if path.exists())
 
-    lakehouse_skill = LAKEHOUSE_SKILL.read_text(encoding="utf-8")
+    storage_skill = STORAGE_SKILL.read_text(encoding="utf-8")
     required_skill = (
         "cronjob seaweedfs-buckets-ensure",
         "batch.kubernetes.io/cronjob-name=seaweedfs-buckets-ensure",
     )
     failures.extend(
-        f"lakehouse skill missing {value!r}" for value in required_skill if value not in lakehouse_skill
+        f"SeaweedFS skill missing {value!r}" for value in required_skill if value not in storage_skill
     )
     obsolete_job_names = (
         "seaweedfs-lakehouse-buckets-ensure",
@@ -142,9 +142,9 @@ def main() -> int:
         "loki-bucket-ensure",
     )
     failures.extend(
-        f"lakehouse skill still references removed job {value!r}"
+        f"SeaweedFS skill still references removed job {value!r}"
         for value in obsolete_job_names
-        if value in lakehouse_skill
+        if value in storage_skill
     )
 
     storage_guidance = STORAGE_GUIDANCE.read_text(encoding="utf-8")

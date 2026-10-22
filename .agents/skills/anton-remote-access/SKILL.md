@@ -1,6 +1,6 @@
 ---
 name: anton-remote-access
-description: Remote access reference for Anton. Use when Codex needs to reach or reason about kubectl, flux, talosctl, Tailscale MagicDNS, kubeconfig, talosconfig, off-LAN node access, or failed connectivity to k8s nodes.
+description: Remote access reference for Anton. Use when agent needs to reach or reason about kubectl, flux, talosctl, Tailscale MagicDNS, kubeconfig, talosconfig, off-LAN node access, or failed connectivity to k8s nodes.
 ---
 
 # Anton Remote Access
@@ -49,7 +49,7 @@ it probes the complete set before running the server-side health check.
 Fallback addresses live in ignored `.private/cluster-targets.json`; the public
 inventory contains node names only. Fresh clones use complete live Tailscale
 discovery or an explicit `TALOS_TAILSCALE_NODES` override until private fallback
-setup is complete. See `docs/docs/runbooks/talos-health.md` for the file format.
+setup is complete. See `docs/docs/guides/talos.md` for the file format.
 
 ## Mutation Handoff
 

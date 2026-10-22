@@ -1,30 +1,120 @@
-/**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
- */
+@import "./tokens.css";
 
-/* You can override the default Infima variables here. */
-:root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+.docusaurus-mermaid-container,
+.diagram-panel {
+  margin-block: 1.5rem;
+  padding: var(--diagram-padding);
+  border: 1px solid var(--diagram-panel-border);
+  border-radius: var(--diagram-radius);
+  background: var(--diagram-panel-background);
+  overflow-x: auto;
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
-[data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+.docusaurus-mermaid-container svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
 }
+
+@media (max-width: 600px) {
+  .markdown h1 { font-size: 2rem; }
+  .markdown table { font-size: 0.9rem; }
+}
+
+/* Mermaid assigns semantic classes; CSS owns the paired palette. */
+.docusaurus-mermaid-container svg .node.processing > :is(rect, polygon, path, circle),
+.diagram-node.processing > .diagram-shape {
+  fill: var(--diagram-processing-fill) !important;
+  stroke: var(--diagram-processing-stroke) !important;
+}
+.docusaurus-mermaid-container svg .node.storage > :is(rect, polygon, path, circle, ellipse),
+.diagram-node.storage > .diagram-shape {
+  fill: var(--diagram-storage-fill) !important;
+  stroke: var(--diagram-storage-stroke) !important;
+}
+.docusaurus-mermaid-container svg .node.flow > :is(rect, polygon, path, circle),
+.diagram-node.flow > .diagram-shape {
+  fill: var(--diagram-flow-fill) !important;
+  stroke: var(--diagram-flow-stroke) !important;
+}
+.docusaurus-mermaid-container svg .node.control > :is(rect, polygon, path, circle),
+.diagram-node.control > .diagram-shape {
+  fill: var(--diagram-control-fill) !important;
+  stroke: var(--diagram-control-stroke) !important;
+}
+.docusaurus-mermaid-container svg .node:is(.processing, .storage, .flow, .control) .nodeLabel {
+  color: var(--diagram-node-text) !important;
+}
+
+.capability-map table {
+  display: table;
+  table-layout: fixed;
+  width: 100%;
+}
+.capability-map th:first-child { width: 31%; }
+.capability-map td, .capability-map th { overflow-wrap: anywhere; }
+
+.cluster-overview-narrow { display: none; }
+@media (max-width: 600px) {
+  .cluster-overview-wide { display: none; }
+  .cluster-overview-narrow { display: block; }
+}
+
+.diagram-svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
+.diagram-svg text { fill: var(--diagram-text); font: var(--diagram-font-size) var(--ifm-font-family-base); }
+.diagram-svg .diagram-heading { font-weight: 600; }
+.diagram-svg .diagram-label { font-size: var(--diagram-label-size); }
+.diagram-group { fill: var(--diagram-group-background); stroke: var(--diagram-group-border); stroke-width: var(--diagram-stroke-width); }
+.diagram-node text { fill: var(--diagram-node-text); }
+.diagram-shape { stroke-width: var(--diagram-stroke-width); }
+.diagram-connector { fill: none; stroke: var(--diagram-connector); stroke-width: var(--diagram-stroke-width); }
+.diagram-arrowhead { fill: var(--diagram-connector); }
+
+/* Keep Mermaid's generated labels, groups, and connectors on the site palette. */
+.docusaurus-mermaid-container svg .cluster rect {
+  fill: var(--diagram-group-background) !important;
+  stroke: var(--diagram-group-border) !important;
+}
+.docusaurus-mermaid-container svg :is(.edgeLabel, .edgeLabel p, .labelBkg) {
+  background-color: var(--diagram-panel-background) !important;
+  fill: var(--diagram-panel-background) !important;
+  color: var(--diagram-muted-text) !important;
+}
+.docusaurus-mermaid-container svg :is(.cluster-label span, .cluster-label text) {
+  color: var(--diagram-text) !important;
+  fill: var(--diagram-text) !important;
+}
+.docusaurus-mermaid-container svg :is(.flowchart-link, .messageLine0, .messageLine1) {
+  stroke: var(--diagram-connector) !important;
+}
+.docusaurus-mermaid-container svg marker path {
+  fill: var(--diagram-connector) !important;
+  stroke: var(--diagram-connector) !important;
+}
+
+.docusaurus-mermaid-container svg .node:is(.processing, .storage, .flow, .control) .nodeLabel :is(p, span) {
+  color: var(--diagram-node-text) !important;
+}
+
+[data-theme='dark'] .footer--dark {
+  --ifm-footer-background-color: var(--site-code-surface);
+}
+[data-theme='dark'] .theme-code-block pre {
+  background-color: var(--site-code-surface) !important;
+}
+
+.diagram-detail { fill: none; stroke: var(--diagram-node-text); stroke-width: var(--diagram-stroke-width); }
+.diagram-group-dashed { stroke-dasharray: 6 5; }
+.diagram-shape-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; margin-block: 1.5rem; }
+.diagram-shape-gallery .diagram-panel { margin: 0; }
+
+.diagram-drive-base { fill: var(--diagram-drive-base); }
+.diagram-drive-case { fill: var(--diagram-drive-case); }
+.diagram-drive-plate { fill: var(--diagram-drive-plate); }
+.diagram-drive-ink { fill: var(--diagram-drive-ink); }
+.diagram-drive-platter { fill: var(--diagram-drive-plate); }
+.diagram-drive-hub { fill: var(--diagram-drive-hub); }
+.diagram-drive-arm { fill: var(--diagram-drive-arm); }
+.diagram-drive-line { fill: none; }
+.diagram-drive-icon :is(.diagram-drive-platter, .diagram-drive-hub, .diagram-drive-arm, .diagram-drive-line) { stroke: var(--diagram-drive-ink); stroke-width: 16; stroke-linejoin: round; stroke-linecap: round; }

@@ -1,41 +1,16 @@
-# Website
+# Anton documentation
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+Docusaurus publishes the public platform overview, guides, reference, decisions,
+and short historical records from `docs/`. Agent procedures live in the repository's
+`.agents/skills/`; private evidence and working records are outside this site.
 
-## Installation
+From the repository root:
 
-```bash
-bun install
+```sh
+mise exec -- bun run --cwd docs start --host 127.0.0.1
+mise exec -- bun run --cwd docs typecheck
+mise exec -- bun run --cwd docs build
 ```
 
-## Local Development
-
-```bash
-bun start
-```
-
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
-
-## Build
-
-```bash
-bun run build
-```
-
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
-
-## Deployment
-
-Using SSH:
-
-```bash
-USE_SSH=true bun run deploy
-```
-
-Not using SSH:
-
-```bash
-GIT_USER=<Your GitHub username> bun run deploy
-```
-
-If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+The site uses `/anton/` as its base path. Publishing requires explicit authorization.
+See `docs/reference/documentation.md` for content ownership and maintenance.

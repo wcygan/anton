@@ -1,8 +1,8 @@
 # ADR template
 
-Canonical anton ADR template. Mirrors `context/adrs/TEMPLATE.md` — keep them in sync. The `adr` skill uses this version when authoring new ADRs; the in-tree copy is the human-facing reference.
+Canonical anton ADR template. This is the only canonical ADR template. The `adr` skill uses this version when authoring new ADRs. Public policy links to this template without maintaining another copy.
 
-Use this exactly. Don't add or reorder sections without updating both copies and `references/conventions.md`.
+Use this exactly. Don't add or reorder sections without updating `references/conventions.md`.
 
 ---
 
@@ -20,7 +20,7 @@ retrospective: false
 
 # NNNN — Title in present tense
 
-> One-sentence summary that makes sense in the injected ADR index.
+> One-sentence summary that makes sense in the decision index.
 
 ## Status
 
@@ -69,9 +69,9 @@ Conditions under which this decision could be revisited:
 
 ---
 
-## Variant — handoff from `cluster-intake-gatekeeper`
+## Variant — handoff from `cluster-intake`
 
-When invoked from `cluster-intake-gatekeeper`, the verdict object substitutes for the interactive interview. The mapping:
+When invoked from `cluster-intake`, the verdict object substitutes for the interactive interview. The mapping:
 
 | Gatekeeper verdict | ADR `status` | Extra fields | Body emphasis |
 |---|---|---|---|

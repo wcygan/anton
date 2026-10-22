@@ -17,26 +17,29 @@ from urllib.parse import urlsplit
 REPO = Path(__file__).resolve().parents[2]
 MODULE_PATH = REPO / "scripts" / "lib" / "platform_stability.py"
 FIXTURE = REPO / "scripts" / "tests" / "fixtures" / "platform-stability-prometheus.json"
-LIVE_EVIDENCE = (
+REGRESSION_FIXTURE = (
     REPO
-    / "context"
-    / "notes"
-    / "cluster-metric-evidence"
-    / "2026-08-11T005110Z-m4.json"
+    / "scripts"
+    / "tests"
+    / "fixtures"
+    / "metric-observations"
+    / "scrape-continuity.json"
 )
-LIVE_ATTRIBUTION_EVIDENCE = (
+ATTRIBUTION_REGRESSION_FIXTURE = (
     REPO
-    / "context"
-    / "notes"
-    / "cluster-metric-evidence"
-    / "2026-08-11T013927Z-m4-restart-attribution.json"
+    / "scripts"
+    / "tests"
+    / "fixtures"
+    / "metric-observations"
+    / "restart-attribution.json"
 )
-LIVE_OOM_EVIDENCE = (
+OOM_REGRESSION_FIXTURE = (
     REPO
-    / "context"
-    / "notes"
-    / "cluster-metric-evidence"
-    / "2026-08-11T142625Z-m4-oom-restart-estimator.json"
+    / "scripts"
+    / "tests"
+    / "fixtures"
+    / "metric-observations"
+    / "oom-estimator.json"
 )
 
 SPEC = importlib.util.spec_from_file_location("evaluate_platform_stability", MODULE_PATH)
@@ -448,14 +451,14 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         self.assertEqual(attribution["state"], "incomplete")
 
     def test_retained_restart_attribution_matches_the_evaluator_contract(self) -> None:
-        evidence = json.loads(LIVE_ATTRIBUTION_EVIDENCE.read_text(encoding="utf-8"))
+        evidence = json.loads(ATTRIBUTION_REGRESSION_FIXTURE.read_text(encoding="utf-8"))
         self.assertEqual(evidence["target_preflight"], "passed")
         self.assertEqual(evidence["raw_query"], MODULE.QUERY_CATALOG["restart_attribution_total"].promql)
         self.assertEqual(evidence["by_node_query"], MODULE.QUERY_CATALOG["restart_attribution_by_node"].promql)
         self.assertEqual(evidence["interval_count"], MODULE.ATTRIBUTION_INTERVAL_COUNT)
         self.assertEqual(evidence["unattributed_restart_increments"], 0.0)
         self.assertLessEqual(evidence["unattributed_restart_increments"], evidence["tolerance"])
-        self.assertEqual({sample["node"] for sample in evidence["node_totals"]}, {"k8s-1", "k8s-2", "k8s-3"})
+        self.assertEqual({sample["node"] for sample in evidence["node_totals"]}, {"node-a", "node-b", "node-c"})
         node_total = sum(Decimal(sample["exact_value"]) for sample in evidence["node_totals"])
         residual = abs(Decimal(evidence["raw_total_exact"]) - node_total)
         self.assertEqual(node_total, Decimal(evidence["node_total_sum_exact"]))
@@ -468,7 +471,7 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         )
 
     def test_retained_oom_estimator_matches_the_evaluator_contract(self) -> None:
-        evidence = json.loads(LIVE_OOM_EVIDENCE.read_text(encoding="utf-8"))
+        evidence = json.loads(OOM_REGRESSION_FIXTURE.read_text(encoding="utf-8"))
         self.assertEqual(evidence["target_preflight"], "passed")
         self.assertEqual(evidence["experiment_id"], "M4-E5")
         self.assertEqual(evidence["raw_query"], MODULE.QUERY_CATALOG["restart_attribution_total"].promql)
@@ -481,7 +484,7 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
         self.assertEqual(evidence["oom_restart_increments"], 2.0)
         self.assertEqual(evidence["unattributed_restart_increments"], 0.0)
         self.assertLessEqual(evidence["unattributed_restart_increments"], evidence["tolerance"])
-        self.assertEqual(evidence["by_node"], [{"node": "k8s-3", "value": 2.0}])
+        self.assertEqual(evidence["by_node"], [{"node": "node-c", "value": 2.0}])
         self.assertEqual(
             evidence["by_component"],
             [{"container": "external-secrets", "namespace": "external-secrets", "value": 2.0}],
@@ -495,8 +498,8 @@ class PlatformStabilityEvaluatorTests(unittest.TestCase):
             ],
         )
 
-    def test_retained_scrape_evidence_matches_the_evaluator_contract(self) -> None:
-        evidence = json.loads(LIVE_EVIDENCE.read_text(encoding="utf-8"))
+    def test_historical_scrape_fixture_matches_the_evaluator_contract(self) -> None:
+        evidence = json.loads(REGRESSION_FIXTURE.read_text(encoding="utf-8"))
         self.assertEqual(evidence["target_preflight"], "passed")
         self.assertEqual(evidence["query"], MODULE.QUERY_CATALOG["scrape_continuity"].promql)
         self.assertEqual(evidence["expected_target_counts"], MODULE.EXPECTED_SCRAPE_TARGETS)

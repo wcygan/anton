@@ -57,7 +57,7 @@ class CoolingWalEvidenceTests(unittest.TestCase):
         report = MODULE.collect(start, end, 30, prefix=("kubectl",), runner=runner)
         self.assertEqual(1.0, report["metrics"]["fan1_rpm"]["series"][0]["zero_fraction"])
         self.assertIn("does not prove raw scrape continuity", report["interpretation"]["coverage_basis"])
-        self.assertEqual("context/plans/0026-investigate-loki-wal-replay.md", report["loki_wal_followup"]["plan"])
+        self.assertEqual("private platform-work/plans/0026-investigate-loki-wal-replay.md", report["loki_wal_followup"]["plan"])
         self.assertEqual("unknown", report["loki_wal_followup"]["historical_loss_quantity"])
 
     def test_cli_fails_closed_before_collection_when_target_preflight_fails(self) -> None:

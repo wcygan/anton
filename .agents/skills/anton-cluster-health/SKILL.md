@@ -1,6 +1,6 @@
 ---
 name: anton-cluster-health
-description: Kubernetes-layer health triage for Anton. Use when Codex checks whether the cluster is OK, Flux is healthy, platform controllers are ready, CNI or DNS is failing, cert-manager or ESO is stuck, gateways are broken, cloudflared is disconnected, or apps are unhealthy.
+description: Kubernetes-layer health triage for Anton. Use when assessing whether the cluster is OK, Flux is healthy, platform controllers are ready, CNI or DNS is failing, cert-manager or ESO is stuck, gateways are broken, cloudflared is disconnected, or apps are unhealthy.
 ---
 
 # Anton Cluster Health
@@ -22,6 +22,7 @@ Stop when: the first red layer is explained or every layer is green enough for t
 4. Platform: read `references/layer-5-platform.md`.
 5. Apps: read `references/layer-6-apps.md`.
 6. Silent killers: read `references/silent-killers.md` when symptoms look clean but behavior is wrong.
+   Supporting procedures: `references/harbor-continuity.md` (Harbor during node maintenance), `references/critical-resource-contracts.md` (resource reservations), `references/internal-service-boundaries.md` (staged Harbor PostgreSQL policy), `references/cluster-rebuildability.md` (offline rebuild audit and tabletop), and `references/cooling-wal-followup.md` (open cooling fault evidence).
 
 ## Read-Only Checks
 

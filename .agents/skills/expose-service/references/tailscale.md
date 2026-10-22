@@ -1,6 +1,6 @@
 # Tailscale in Anton
 
-**Policy source**: ADR 0012 (`context/adrs/0012-tailscale-for-internal-remote-workload-access.md`), amended 2026-04-17.
+**Policy source**: ADR 0012 (`docs/docs/decisions/0012-tailscale-for-internal-remote-workload-access.md`), amended 2026-04-17.
 
 Tailscale has two roles in this cluster:
 
@@ -120,6 +120,6 @@ Each exposed resource (Ingress or annotated Service) consumes a tailnet device s
 
 ## Related reading
 
-- Policy ADR → `context/adrs/0012-tailscale-for-internal-remote-workload-access.md`
+- Policy ADR → `docs/docs/decisions/0012-tailscale-for-internal-remote-workload-access.md`
 - Operational Tailscale (how `kubectl`/`talosctl` reach the cluster) → `anton-remote-access`
 - Persistent Tailscale node names, why `TS_STATE_DIR=mem:` matters → ADR 0010

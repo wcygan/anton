@@ -379,7 +379,7 @@ def validate_runbook(path: Path) -> list[ContractViolation]:
     if "seaweedfs-lakehouse-buckets-ensure" in text:
         violations.append(ContractViolation("documentation", path, "references removed lakehouse bucket Job"))
 
-    rollout = text.partition("## Rollout and ClickStack teardown")[2]
+    rollout = text.partition("## Change and recovery order")[2]
     storage_position = rollout.find("seaweedfs-config")
     loki_position = rollout.find("Loki app")
     if storage_position < 0 or loki_position < 0 or storage_position >= loki_position:
@@ -416,7 +416,7 @@ def validate_repository(root: Path) -> list[ContractViolation]:
         *validate_loki(root / "kubernetes" / "apps" / "observability" / "loki" / "app" / "helmrelease.yaml"),
         *validate_grafana(root / "kubernetes" / "apps" / "observability" / "kube-prometheus-stack" / "app" / "helmrelease.yaml"),
         *validate_query_catalog(root / ".agents" / "skills" / "query-kubernetes-logs" / "references" / "query-catalog.md"),
-        *validate_runbook(root / "docs" / "docs" / "runbooks" / "kubernetes-logs-loki.md"),
+        *validate_runbook(root / "docs" / "docs" / "guides" / "logging.md"),
         *validate_pointer(root / ".agents" / "skills" / "query-kubernetes-logs" / "SKILL.md"),
     ]
 

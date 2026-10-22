@@ -78,4 +78,4 @@ the exact policy and the affected paths recover. Emergency live removal needs
 explicit approval. Leave external Envoy's policy unchanged.
 
 References: [Cloudflare firewall requirements](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/tunnel-with-firewall/),
-[ADR 0029](../../../../../context/adrs/0029-restore-pod-security-isolate-public-workloads.md).
+[ADR 0029](../../../../../docs/docs/decisions/0029-restore-pod-security-isolate-public-workloads.md).

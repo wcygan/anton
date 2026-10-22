@@ -28,4 +28,4 @@ Author a **custom StorageClass** with `parameters.dataLocality: <value>`. Don't 
 
 ## `numberOfReplicas` pairing
 
-If you change `dataLocality`, think about replica count too. `strict-local` + 1 replica is a hostPath with extra steps. `strict-local` + 3 replicas on anton forces replicas onto all three nodes, which only works while k8s-2 has headroom.
+If you change `dataLocality`, think about replica count too. `strict-local` + 1 replica is a hostPath with extra steps. `strict-local` + 3 replicas forces replicas across nodes; confirm the current node inventory and scheduling capacity can satisfy anti-affinity before applying it.

@@ -1,22 +1,21 @@
 ---
 name: adr
-description: Anton ADR lifecycle — author new architectural decision records, list existing ones by status or affects-category, and mark old decisions superseded. Use when capturing a decision (especially after `cluster-intake-gatekeeper` returns an ADD/DEFER/REJECT verdict), when reviewing prior decisions before changing direction, when checking if a candidate component has been removed before, or when promoting a decision out of memory into a durable record. ADRs live in `context/adrs/` and are immutable — supersession is the only way to change a decision. The ADR index is built by scanning ADR files directly and injected into every Codex session by `.Codex/hooks/inject_adr_index.py`. Keywords — ADR, architecture decision record, decision log, supersede, decision history, why did we, prior decision, recorded decision, MADR, immutable, intake handoff, cluster-intake-gatekeeper handoff, removal graveyard, reverted decision.
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+description: Anton ADR lifecycle — author new architectural decision records, list existing ones by status or affects-category, and mark old decisions superseded. Use when capturing a decision (especially after `cluster-intake` returns an ADD/DEFER/REJECT verdict), when reviewing prior decisions before changing direction, when checking if a candidate component has been removed before, or when promoting a decision out of memory into a durable record. ADRs live in `docs/docs/decisions/` and are immutable — supersession is the only way to change a decision. The public decision register is documented at [decisions policy](../../../docs/docs/reference/decisions-policy.md). Keywords — ADR, architecture decision record, decision log, supersede, decision history, why did we, prior decision, recorded decision, MADR, immutable, intake handoff, cluster-intake handoff, removal graveyard, reverted decision.
 ---
 
 # ADR
 
-Anton-local skill for the architectural decision record lifecycle. Owns three workflows: **new**, **list**, **supersede**. ADRs live at `context/adrs/NNNN-kebab-slug.md` and are immutable — once accepted, the body never changes. Supersession is the only way to revise a decision.
+Anton-local skill for the architectural decision record lifecycle. Owns three workflows: **new**, **list**, **supersede**. ADRs live at `docs/docs/decisions/NNNN-kebab-slug.md` and are immutable — once accepted, the body never changes. Supersession is the only way to revise a decision.
 
 ## Why this skill exists
 
 Anton needs **one durable home** for architectural decisions so that:
-- `cluster-intake-gatekeeper` has somewhere to hand off its ADD/DEFER/REJECT verdicts (instead of stopping at "ADR-ready").
-- Future Codex sessions can discover prior decisions automatically via the SessionStart hook (`.Codex/hooks/inject_adr_index.py`) without the operator typing them in.
+- `cluster-intake` has somewhere to hand off its ADD/DEFER/REJECT verdicts (instead of stopping at "ADR-ready").
+- Agents can find prior decisions by listing the canonical `docs/docs/decisions/` directory and reading matching records.
 - `cluster-intake` Step 2 can query past `Reverted` decisions by category instead of grepping a single shared file.
 - The operator (and future-Will) can recover *why* the cluster looks the way it does without mining `git log`.
 
-The skill is anton-local and has **no runtime dependency** on `~/.Codex/skills/context-repo-adr` — the format is intentionally compatible with the global context-repo conventions, but invoking this skill never delegates to that one.
+The skill is anton-local and has **no runtime dependency** on `~/skills/context-repo-adr` — the format is intentionally compatible with the global context-repo conventions, but invoking this skill never delegates to that one.
 
 ## Hard rules
 
@@ -31,12 +30,12 @@ References:
 ## Workflow — `new`
 
 Triggered by:
-- The user says "create an ADR" / "record this decision" / `/adr new "<title>"`
-- `cluster-intake-gatekeeper` hands off an ADD / DEFER / REJECT verdict (the verdict object substitutes for the interactive interview — see "Handoff from intake" below)
+- The user says "create an ADR" / "record this decision" / requesting a new ADR
+- `cluster-intake` hands off an ADD / DEFER / REJECT verdict (the verdict object substitutes for the interactive interview — see "Handoff from intake" below)
 
 ### Steps
 
-1. **Allocate the next number.** `Glob('context/adrs/0[0-9][0-9][0-9]-*.md')`. Sort. The next number is `max + 1`, zero-padded to 4 digits. Never reuse a number.
+1. **Allocate the next number.** `Glob('docs/docs/decisions/0[0-9][0-9][0-9]-*.md')`. Sort. The next number is `max + 1`, zero-padded to 4 digits. Never reuse a number.
 
 2. **Generate the slug.** Lowercase the title, kebab-case it, drop articles and prepositions, take the first 4–6 meaningful words. Example: "Adopt Cilium over Calico for CNI" → `adopt-cilium-over-calico-for-cni` → file `0018-adopt-cilium-over-calico-for-cni.md`.
 
@@ -52,7 +51,7 @@ Triggered by:
    - **Alternatives considered** (do-nothing + 1–2 alternatives, with a one-line "why rejected" each)
    - **Consequences** — accepted costs, lessons (if `Reverted`), follow-ups
 
-4. **Write the ADR file** at `context/adrs/NNNN-slug.md` using the shape from [template](references/template.md). Frontmatter is mandatory; missing frontmatter fields default to the template's defaults.
+4. **Write the ADR file** at `docs/docs/decisions/NNNN-slug.md` using the shape from [template](references/template.md). Frontmatter is mandatory; missing frontmatter fields default to the template's defaults.
 
 5. **If `supersedes:` is non-empty**, also flip the `status:` line of each superseded ADR to `Superseded-by NNNN`. This is the *only* allowed in-place edit on an existing ADR. Use `Edit` with a precise old/new string for the status line only — never touch the body.
 
@@ -60,7 +59,7 @@ Triggered by:
 
 ### Handoff from intake
 
-When `cluster-intake-gatekeeper` invokes this skill at the end of its evaluation, it passes the verdict object directly. Map the verdict to ADR fields without re-interviewing:
+When `cluster-intake` invokes this skill at the end of its evaluation, it passes the verdict object directly. Map the verdict to ADR fields without re-interviewing:
 
 | Gatekeeper verdict | ADR `status:` | Notes |
 |---|---|---|
@@ -69,17 +68,17 @@ When `cluster-intake-gatekeeper` invokes this skill at the end of its evaluation
 | Defer | `Deferred` | Body holds the exact measurable unblock conditions (what would have to be true to convert to Accepted). |
 | Reject | `Rejected` | Body holds the failed gate (1–7) or known-bad pattern, and — if appropriate — whether reframing as a learning intake would change the answer. |
 
-After writing the ADR, return to the gatekeeper with the ADR number so it can include it in its memory append.
+After writing the ADR, return its number to the caller.
 
 ## Workflow — `list`
 
 Triggered by:
-- `/adr list` or `/adr list --status Reverted` or `/adr list --affects databases`
+- requesting an ADR listing, optionally filtered by status or category
 - `cluster-intake` Step 2 (the removal-detection lookup) — internally invokes this with `--status Reverted --affects <candidate-category>` to find prior reverts
 
 ### Steps
 
-1. `Glob('context/adrs/0[0-9][0-9][0-9]-*.md')`.
+1. `Glob('docs/docs/decisions/0[0-9][0-9][0-9]-*.md')`.
 2. For each file, read the frontmatter and extract `status`, `date`, `affects`, `intent`, and the H1 title.
 3. Apply filters:
    - `--status <X>` → keep only ADRs whose `status:` matches `X` (case-insensitive)
@@ -91,11 +90,11 @@ Triggered by:
 ## Workflow — `supersede`
 
 Triggered by:
-- `/adr supersede <NNNN> "<reason>"` — the user wants to revise an existing decision
+- requesting that ADR NNNN be superseded with a stated reason — the user wants to revise an existing decision
 
 ### Steps
 
-1. **Verify the target exists.** `Read` `context/adrs/NNNN-*.md`. If missing, abort with a clear error.
+1. **Verify the target exists.** `Read` `docs/docs/decisions/NNNN-*.md`. If missing, abort with a clear error.
 2. **Verify the target's current status.** If it is already `Superseded-by NNNN`, abort — supersession chains exist (NNNN can be superseded by MMMM which is superseded by PPPP), so the user must supersede the *latest* in the chain.
 3. **Author the replacement** by invoking the `new` workflow with `supersedes: [<NNNN>]` pre-populated. Walk the interview as normal.
 4. **Flip the old ADR's status line** — and *only* the status line — from `Accepted` (or whatever it was) to `Superseded-by <new NNNN>`. Use `Edit` with the precise old/new strings. Do not touch the body, the date, or any other field.
@@ -106,15 +105,15 @@ Triggered by:
 - Does not write Flux manifests — that is `add-flux-app`.
 - Does not run cluster intake — that is `cluster-intake` (which hands off here).
 - Does not edit ADR bodies after the fact. Ever. Use `supersede`.
-- Does not auto-detect when a decision should be superseded. Manual via `/adr supersede`.
+- Does not auto-detect when a decision should be superseded. A user request to revise the decision starts the supersede workflow.
 - Does not push, commit, or tag — the user owns git operations.
 - Does not delete ADRs. ADRs are append-only forever, even superseded ones.
 
 ## Related skills and agents
 
-- `cluster-intake` / `cluster-intake-gatekeeper` — the dominant authoring path. Hand off here on every verdict.
+- `cluster-intake` / `cluster-intake` — the dominant authoring path. Hand off here on every verdict.
 - `add-flux-app` / `flux-app-author` — invoked *after* an `Accepted` ADR that involves new manifests.
-- `~/.Codex/skills/context-repo-adr` (user-level) — format-compatible but not invoked at runtime. If the user adopts the full context-repo convention later, the existing ADRs will Just Work.
+- `~/skills/context-repo-adr` (user-level) — format-compatible but not invoked at runtime. If the user adopts the full context-repo convention later, the existing ADRs will Just Work.
 
 ## Anti-patterns
 

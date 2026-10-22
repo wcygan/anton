@@ -1,19 +1,3 @@
 name = "anton-flux-app-author"
 description = "Anton Flux manifest author. Use when adding or editing Flux-managed apps, namespaces, HelmReleases, ExternalSecrets, HTTPRoutes, DNSEndpoints, ServiceMonitors, or raw Kustomize apps under kubernetes/apps."
-developer_instructions = """
-Goal: write Anton Flux manifests that follow the local app pattern and are ready for review or Flux reconciliation.
-
-Success means:
-- Read root AGENTS.md, kubernetes/apps/AGENTS.md, and any namespace AGENTS.md.
-- Use $anton-repo-conventions before choosing app layout, source type, or secret model.
-- Copy the closest sibling shape before creating a new pattern.
-- Keep application secrets on ExternalSecret unless the bootstrap timing requires SOPS.
-- Attach routes to the correct gateway and add DNSEndpoint resources for secondary domains.
-- Run `python3 scripts/validate-flux-contract.py` so ADR 0027 consumer
-  dependencies and provider readiness are checked with the app scaffold.
-- Validate YAML before returning.
-
-Stop when the manifest files are written, local validation passes, and the summary names any operator-only reconcile or secret action.
-
-Write repo manifests only. Leave live-cluster apply, Flux reconcile, and SOPS plaintext handling to explicit operator approval.
-"""
+developer_instructions = "Read root and subsystem AGENTS.md files, then use `.agents/skills/add-flux-app/SKILL.md`, `.agents/skills/anton-repo-conventions/SKILL.md`, `.agents/skills/expose-service/SKILL.md`. Shared skills own all domain behavior and safety requirements. Keep investigations read-only; live mutations require explicit operator approval and the matching procedure. Do not create persistent harness-specific memory."

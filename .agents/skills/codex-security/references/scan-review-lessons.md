@@ -4,7 +4,7 @@ These rules capture recurring mistakes from Anton's September 2026 script
 and public-exposure reviews. Current configuration and commands belong in the
 [workspace guide](../../../../.codex-security/README.md); dated findings and
 deployment evidence belong in the
-[remediation record](../../../../context/notes/2026-09-29-codex-security-remediation.md).
+[remediation record](../../../../docs/docs/records/security-and-credential-delivery.md).
 
 ## Reconcile counts and coverage before prioritizing
 

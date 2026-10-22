@@ -25,7 +25,7 @@ spec:
               read-only on {{ $labels.instance }}. Inspect the volume /status
               endpoint and retained startup logs before changing writability.
               IsReadOnly is the total; summing its cause series double-counts volumes.
-            runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
         - alert: SeaweedFSVolumeMetricsUnavailable
           expr: |
             (count(
@@ -46,4 +46,4 @@ spec:
               than desired volume replicas, or the scrape pool is missing. Read-only alert coverage
               is incomplete. Check the operator-managed seaweedfs-volume
               ServiceMonitor, its volume-metrics endpoints, and Prometheus targets.
-            runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts

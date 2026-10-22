@@ -36,7 +36,7 @@ From the Prometheus maintainers' own guide — the golden path:
 2. **Every alert must be actionable.** If the on-caller can only say "yep, that's broken" and close it, delete the alert.
 3. **Use `for:`** to absorb transient spikes. Typical values: `for: 5m` (page-worthy), `for: 15m` (slower burn), `for: 1h` (capacity / trend).
 4. **Severity** convention on anton: `warning` (investigate when convenient), `critical` (page). Put in labels: `labels: { severity: warning }`.
-5. **Write the runbook link in the annotation.** Even if there's no runbook yet, write the URL you *would* write — it forces clarity about what "fix" means.
+5. **Write the runbook link in the annotation.** Link an existing public guide with actionable diagnosis; do not invent a future URL.
 
 ```yaml
 - alert: NodeFilesystemNearlyFull
@@ -48,7 +48,7 @@ From the Prometheus maintainers' own guide — the golden path:
     severity: warning
   annotations:
     summary: "{{ $labels.instance }} filesystem {{ $labels.mountpoint }} < 10% free"
-    runbook_url: "https://wcygan.github.io/anton/runbooks/node-disk"
+    runbook_url: "https://wcygan.github.io/anton/guides/storage"
 ```
 
 ## Recording-rule doctrine

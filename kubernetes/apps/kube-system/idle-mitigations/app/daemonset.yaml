@@ -1,3 +1,4 @@
+# Investigation summary: docs/docs/records/reboot-and-thermal-investigation.md
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -111,7 +112,7 @@ spec:
               # Iter-15 was retracted on thermal grounds — the mitigation forced drives
               # to PS0 (~5-8 W per drive continuous), producing 80-94 °C NVMe temps on
               # k8s-2 (the node with a separately-failing chassis fan1, see
-              # context/notes/k8s-2-instability/evidence-2026-05-06-k8s-2-fan1-intermittent-failure.md).
+              # https://github.com/wcygan/anton/blob/628e15ba1c9b40b2731240dcfb3a282f013319cc/context/notes/k8s-2-instability/evidence-2026-05-06-k8s-2-fan1-intermittent-failure.md).
               # The original silent-reboot suspicion that motivated iter-15 was
               # circumstantial and contradicted by 2+ weeks of natural-APST data with
               # zero silent reboots (the de801143 mitigation was silently ineffective

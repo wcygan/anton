@@ -22,7 +22,7 @@ spec:
           annotations:
             summary: "SeaweedFS S3 read errors on {{ $labels.pod }}"
             description: "At least three GET/HEAD API 5xx responses occurred in five minutes. Check stale volume addresses and S3 read-error logs."
-            runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
         - alert: SeaweedFSS3ReadProbeFailed
           expr: |
             seaweedfs_s3_read_probe_consecutive_failures{namespace="storage"} >= 2
@@ -33,7 +33,7 @@ spec:
           annotations:
             summary: "Verified S3 reads failed on {{ $labels.pod }}"
             description: "Two consecutive signed localhost GETs failed their whole-request deadline, status, length, or SHA-256 check. Preserve evidence before restarting a gateway."
-            runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
         - alert: SeaweedFSS3MonitoringUnavailable
           expr: |
             ((count(count by (pod) (up{namespace="storage",service="seaweedfs-s3",endpoint="s3-metrics"} == 1)) or vector(0))
@@ -52,4 +52,4 @@ spec:
           annotations:
             summary: SeaweedFS S3 read monitoring coverage is incomplete
             description: "Fewer healthy S3 scrapes or fresh read probes exist than desired gateway replicas. Missing or stalled probes are not evidence of successful reads."
-            runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts

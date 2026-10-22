@@ -1,6 +1,6 @@
 ---
 name: anton-repo-conventions
-description: Reference for Anton Flux and manifest conventions. Use when Codex writes or reviews Kubernetes manifests, adds a Flux app, chooses OCIRepository versus HelmRepository versus GitRepository, decides between ExternalSecret and SOPS, or checks the 3-file app pattern.
+description: Reference for Anton Flux and manifest conventions. Use when agent writes or reviews Kubernetes manifests, adds a Flux app, chooses OCIRepository versus HelmRepository versus GitRepository, decides between ExternalSecret and SOPS, or checks the 3-file app pattern.
 ---
 
 # Anton Repo Conventions

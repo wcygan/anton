@@ -24,7 +24,7 @@ spec:
               The node-local Loki export queue has remained above 80% of capacity for two
               minutes. The configured sizer is bytes despite the metric HELP saying batches.
               Check Loki readiness, export retries and node storage before the queue fills.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
         - alert: OTelCollectorQueueSaturated
           expr: |
             otelcol_exporter_queue_size{namespace="observability",exporter="otlp_http/loki",data_type="logs"}
@@ -39,7 +39,7 @@ spec:
               The persistent Loki export queue has remained above 95% for one minute.
               Readers may pause and source-log rotation can overtake catch-up. Restore
               export throughput; do not clear checkpoint or queue databases.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
         - alert: OTelCollectorEnqueueFailure
           expr: |
             max by (namespace,pod) (
@@ -57,7 +57,7 @@ spec:
               file_storage errors and node disk space. Receiver retries can preserve
               records, but this is a log-loss risk, not proof of loss. First-seen nonzero
               counters are included.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
         - alert: OTelCollectorExportFailure
           expr: |
             max by (namespace,pod) (
@@ -76,7 +76,7 @@ spec:
               dropped-data messages and Loki health. Retryable connection failures are
               retained in the queue and do not increment this counter in the pinned 0.161.0
               exporter path. Compare source records before declaring loss.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
         - alert: OTelCollectorLogMetricsUnavailable
           expr: |
             (count(
@@ -99,4 +99,4 @@ spec:
               than desired DaemonSet pods. This also catches collectors that cannot start
               because checkpoint storage is unavailable, when self-logs cannot reach Loki.
               Check pod startup logs and PodMonitor coverage.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-loss-risk-alerts
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts

@@ -26,7 +26,7 @@ spec:
               An emitted numbered record has remained unconfirmed by Loki HTTP queries
               for over three minutes. The deadline remains observable during query failures.
               This is a canary visibility failure, not proof of permanent application log loss.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-delivery-canary
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-delivery-canary
         - alert: LokiCanaryDeliveryStalled
           expr: |
             max by (namespace,pod) (
@@ -44,7 +44,7 @@ spec:
               The canary stopped emitting records or completing successful Loki queries
               for three minutes. Inspect the probe, collector, export queue and Loki while
               preserving checkpoints and WAL before attributing permanent loss.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-delivery-canary
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-delivery-canary
         - alert: LokiCanaryCoverageMissing
           expr: |
             (
@@ -67,4 +67,4 @@ spec:
               Fewer healthy canary scrapes with expected counters exist than the DaemonSet
               requires, or the expected DaemonSet is absent. A missing probe is not a healthy
               pipeline. Check scheduling, readiness and Prometheus discovery.
-            runbook_url: https://wcygan.github.io/anton/runbooks/kubernetes-logs-loki#log-delivery-canary
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-delivery-canary

@@ -60,17 +60,12 @@ def main() -> int:
             failures.append(f"adapter does not consume target contract: {path.relative_to(REPO)}")
 
     pointer_files = (
-        REPO / "docs" / "docs" / "runbooks" / "talos-health.md",
+        REPO / "docs" / "docs" / "guides" / "talos.md",
         REPO / ".agents" / "skills" / "anton-remote-access" / "SKILL.md",
-        REPO / ".claude" / "skills" / "anton-remote-access" / "SKILL.md",
         REPO / ".agents" / "skills" / "talos-inspect" / "SKILL.md",
         REPO / ".agents" / "skills" / "talos-inspect" / "references" / "health.md",
         REPO / ".agents" / "skills" / "talos-inspect" / "references" / "disks.md",
         REPO / ".agents" / "skills" / "talos-inspect" / "references" / "network.md",
-        REPO / ".claude" / "skills" / "talos-inspect" / "SKILL.md",
-        REPO / ".claude" / "skills" / "talos-inspect" / "references" / "health.md",
-        REPO / ".claude" / "skills" / "talos-inspect" / "references" / "disks.md",
-        REPO / ".claude" / "skills" / "talos-inspect" / "references" / "network.md",
     )
     for path in pointer_files:
         text = path.read_text(encoding="utf-8")
@@ -92,7 +87,7 @@ def main() -> int:
     task_guidance = (
         REPO / "AGENTS.md",
         REPO / "scripts" / "AGENTS.md",
-        REPO / "docs" / "docs" / "runbooks" / "talos-health.md",
+        REPO / "docs" / "docs" / "guides" / "talos.md",
     )
     bare_task = re.compile(r"(?m)(?:^[ \t]*|`)task\s+(?:--list|reconcile|[a-z0-9_-]+:[a-z0-9_-]+)\b")
     for path in task_guidance:

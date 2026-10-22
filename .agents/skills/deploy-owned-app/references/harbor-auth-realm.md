@@ -1,0 +1,5 @@
+# Harbor authentication realm
+
+Harbor's configured `externalURL` uses HTTP (read `kubernetes/apps/registries/harbor/app/helmrelease.yaml` for the current value). Harbor derives the Docker `WWW-Authenticate` token realm from the request host while retaining the configured HTTP scheme. Through the Tailscale Ingress, browser access uses HTTPS, but an authenticated Docker flow can be redirected to port 80, which the operator does not serve. Anonymous in-cluster pulls do not exercise this token flow.
+
+For a Docker login or push failure, inspect the actual `WWW-Authenticate` header and the client network namespace before changing `externalURL` or the ingress. The current documented workflow is in [Harbor registry operations](../../../../docs/docs/guides/harbor.md); it explains the challenge and client-network boundary. The detailed [host-native image handoff](harbor-host-client.md) retains verification and cleanup steps. Treat previous port-forward and insecure-registry workarounds as historical unless the current guide and manifests confirm they apply. Never expose registry tokens or passwords in output.

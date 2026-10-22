@@ -22,7 +22,7 @@ groups:
             15 minutes. The startup failure can be logged at INFO, so this rule
             deliberately does not filter by severity. Preserve data and index
             files and investigate before repair; do not force the volume writable.
-          runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+          runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
 
   - name: seaweedfs-s3-reads
     interval: 30s
@@ -49,4 +49,4 @@ groups:
             minutes, including INFO retries. Events are not distinct requests.
             Streaming can fail after HTTP 200 headers; inspect logs and verified
             read probes even if the HTTP 5xx counter is clear.
-          runbook_url: https://wcygan.github.io/anton/runbooks/seaweedfs-health-alerts
+          runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
