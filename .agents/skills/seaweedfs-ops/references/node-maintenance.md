@@ -24,8 +24,12 @@ S3 cache freshness or authority to drain. Historical migration and failed
 continuity exercises remain in `https://github.com/wcygan/anton/blob/628e15ba1c9b40b2731240dcfb3a282f013319cc/context/plans/0027-improve-cluster-operational-outcomes.md`.
 Do not rerun the retired one-off migration fixtures for routine maintenance.
 
-Require a tested independent recovery point within each consumer's freshness
-contract. Unique uploads are not disposable; daily backup/freshness automation
+Follow the [upgrade procedure's recovery-location and transfer-authority rule](../../upgrade-talos-or-k8s/SKILL.md#recovery-location-and-transfer-authority)
+before selecting a capture destination. Require a tested independent recovery
+point within each consumer's freshness contract, or record the operator's explicit
+choice of cluster-only maintenance recovery and the unmet independent-recovery
+contract. In-cluster snapshots do not satisfy that contract. Unique uploads are
+not disposable; daily backup/freshness automation
 is still a separate requirement. Retain independent originals until it operates.
 Record baseline authenticated S3 bytes and a readable Harbor image digest before
 fencing writers, so existing missing artifacts are not attributed to this window.

@@ -5,10 +5,9 @@ talosVersion: "${talosVersion}"
 kubernetesVersion: "${kubernetesVersion}"
 
 endpoint: https://192.168.1.101:6443
-additionalApiServerCertSans: &sans
+additionalMachineCertSans:
   - "127.0.0.1"
   - "192.168.1.101"
-additionalMachineCertSans: *sans
 
 clusterPodNets: ["10.42.0.0/16"]
 clusterSvcNets: ["10.43.0.0/16"]
@@ -24,7 +23,7 @@ nodes:
       serial: "24304A343650"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
+    talosImageURL: factory.talos.dev/metal-installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -116,7 +115,7 @@ nodes:
       serial: "24304A23D2F0"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
+    talosImageURL: factory.talos.dev/metal-installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -209,7 +208,7 @@ nodes:
       serial: "24304A23705F"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
+    talosImageURL: factory.talos.dev/metal-installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
