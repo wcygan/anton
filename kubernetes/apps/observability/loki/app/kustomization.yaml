@@ -18,3 +18,4 @@ resources:
   - ./prometheusrule.yaml
   - ./canary-prometheusrule.yaml
   - ./canary.yaml
+  - ./recovery-rbac.yaml
