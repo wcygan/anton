@@ -106,3 +106,27 @@ Compare any remaining temporary objects' exact UIDs with the journal registry
 before cleanup. Dedicated leftover/headroom alerts are deferred because the
 controller's UID registry and conservative capacity calculation are not exported
 as robust Prometheus metrics.
+
+## Serial Longhorn engine upgrades
+
+A manager/chart upgrade does not prove that existing volume engines advanced.
+Automatic engine upgrades stay disabled so an operator owns the sequence. Check
+both `spec.image` and `status.currentImage` on every Longhorn volume. Bring older
+engines to the current manager's supported engine version before advancing the
+manager one minor release; then advance the engines to match it. Keep V1 volumes
+on V1 unless a separate migration is approved. Longhorn downgrades are unsupported.
+
+`scripts/upgrade-longhorn-engines.py` defaults to a read-only plan. Run `--help`
+through `mise exec -- python3` for its required kubeconfig, operator context,
+cluster UID, target and snapshot-prefix arguments. It requires a fresh Ready
+Retain-policy CSI snapshot for every exact source PVC/volume UID, both running
+replicas, all Longhorn nodes Ready and the advertised engine image deployed on
+all nodes. The snapshot annotations are `anton.wcygan.dev/source-volume-uid` and
+`anton.wcygan.dev/source-pvc-uid`; creating that reviewed checkpoint set is a
+separate operation. `--execute` requires explicit live-change authorization.
+
+The tool changes one `spec.image` with UID/resource-version/image preconditions,
+then waits for the running engine and both active replicas to match before
+advancing. It stops on identity changes, degraded volumes or convergence timeout;
+inspect the exact failure before resuming. It never creates exports, repairs data,
+rolls back, or migrates data engines.
