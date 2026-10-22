@@ -114,7 +114,8 @@ If ANY check fails, STOP. Do not move to the next node. Investigate; rollback if
 
 ## Workflow B — Kubernetes version bump
 
-For bumping `kubernetesVersion`. talhelper handles the rolling upgrade across all nodes.
+For bumping `kubernetesVersion`. Talhelper generates the command; `talosctl`
+performs the rolling upgrade across all nodes.
 
 1. **Bump the pin** in `talos/talenv.yaml`:
    ```yaml
@@ -128,7 +129,17 @@ For bumping `kubernetesVersion`. talhelper handles the rolling upgrade across al
    ```sh
    task talos:upgrade-k8s
    ```
-   Under the hood: `talhelper gencommand upgrade-k8s --extra-flags "--to '<version>'" | bash`. talhelper rolls control planes first, then workers. Watch the output — it does NOT auto-pause on failures.
+   Under the hood: `talhelper gencommand upgrade-k8s --extra-flags "--to '<version>'" | bash`.
+   `talosctl` checks compatibility and removed flags/APIs, then updates each
+   control-plane component serially, waiting for its pod to recover before the
+   next node. Kubelets follow, control planes before workers. A failed recovery
+   gate stops the command; investigate the exact component before resuming.
+
+   Off-LAN, this client fetches an admin kubeconfig from Talos rather than using
+   the local Kubernetes proxy context. If its LAN endpoint is unreachable, use
+   `--endpoint` with an approved reachable API path that preserves the cluster CA
+   and certificate names. Never disable TLS verification. Run
+   `upgrade-k8s --dry-run --pre-pull-images=false` with that path first.
 4. **Verify after the run:**
    ```sh
    kubectl get nodes -o wide                    # all nodes show new kubelet version
@@ -155,7 +166,7 @@ Kubernetes downgrade is **not** supported. If a Kubernetes upgrade fails halfway
 - Never parallelize. One node at a time, always.
 - Control planes BEFORE workers, always.
 - Health gate between every node, no exceptions.
-- Never skip the etcd snapshot. The cost of taking it is seconds; the cost of skipping it is hours.
+- Never skip the verified pre-upgrade etcd recovery point. Follow the recovery-location rule; retaining an existing snapshot does not authorize another external export.
 - Never bump both `talosVersion` and `kubernetesVersion` in the same change. Bump one, run that workflow to completion, commit, THEN do the other.
 - Never run `task talos:reset` as part of an upgrade. If you need it, you have a different problem.
 

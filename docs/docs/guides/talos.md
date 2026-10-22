@@ -16,7 +16,9 @@ mise exec -- task talos:generate-config
 
 Generating and reviewing config does not apply it. Applying is a separate, separately approved step.
 
-`talosVersion` selects the installed OS image. `talosConfigVersion` selects the configuration format used by Talhelper. Keep the latter at `v1.13.12` while using Talhelper 3.1.17: its final release cannot combine Talos 1.14's new document defaults with Anton's existing patches. Talos 1.14 still supports this older format. The global installer patch uses `talosVersion`, so generated node configurations retain the intended OS image. Validate every generated node configuration with the target Talos client before a rollout.
+`talosVersion` selects the installed OS image and the configuration format used by Talhelper. Talos 1.14 uses separate documents for the resolver and Kubernetes control-plane components; keep those settings in their typed patches rather than duplicating them in the legacy `machine.network` or `cluster` blocks. Validate every generated node configuration with the target Talos client before a rollout.
+
+Talhelper 3.1.17 does not copy `additionalApiServerCertSans` into Talos 1.14's `KubeAPIServerConfig`. Set API-server certificate names explicitly in the controller patch's `certExtraSANs`; `additionalMachineCertSans` continues to configure the Talos API certificate.
 
 ## Choose a target
 
