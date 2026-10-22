@@ -18,13 +18,15 @@ High-stakes checklist task skill. Two version pins drive everything: `talosVersi
    talosctl --talosconfig ./talos/clusterconfig/talosconfig -n k8s-1 etcd members
    ```
    Expect three members, all `Healthy=true`. If any node is unhealthy, FIX FIRST and abort the upgrade.
-2. **Take an etcd snapshot.** Cheap insurance.
-   ```sh
-   mkdir -p $HOME/anton-backup-$(date +%Y%m%d)
-   talosctl --talosconfig ./talos/clusterconfig/talosconfig -n k8s-1 \
-     etcd snapshot $HOME/anton-backup-$(date +%Y%m%d)/etcd-pre-upgrade.db
-   ls -lh $HOME/anton-backup-$(date +%Y%m%d)/etcd-pre-upgrade.db   # must be > 0 bytes
-   ```
+2. **Take and verify an etcd snapshot at the approved recovery location.**
+   `talosctl etcd snapshot` writes on the machine running the client: invoking it
+   on the Mac transfers the database to the Mac. Follow the recovery-location rule
+   below before selecting that execution host or destination. A cluster-only
+   checkpoint needs an explicitly approved in-cluster client and storage target;
+   missing that capability does not authorize a Mac export. Record the cluster
+   identity, capture time, revision, nonzero size and checksum. Preserve an existing
+   verified pre-upgrade snapshot when continuing the same rollout; state its age
+   and any unmet freshness requirement instead of silently taking another export.
 3. **Confirm Flux is healthy** so it doesn't fight the rolling reboot.
    ```sh
    flux check
@@ -32,6 +34,23 @@ High-stakes checklist task skill. Two version pins drive everything: `talosVersi
    ```
 4. **Read the upstream release notes** for the new Talos and Kubernetes versions. Breaking changes (CRD removals, feature gates, kubelet flags) MUST be triaged before the bump.
 5. **Confirm kubeconfig + talosconfig point at the right cluster.** This skill operates against whichever cluster the local config points to — there is no `--context` guard.
+
+## Recovery location and transfer authority
+
+Keep maintenance recovery checkpoints and verification near the data by default.
+Do not initiate backups or large exports to the operator's Mac or another external
+destination as an automatic upgrade preflight. A transfer requires a separate,
+explicit user request naming the destination and scope; an upgrade request alone
+does not authorize it. Preserve existing backups and partial files unless their
+removal is separately requested.
+
+In-cluster snapshots and clone-based verification share the cluster's failure
+domain. Do not describe them as independent disaster-recovery backups or claim
+that they satisfy an independent-backup freshness contract. If the operator
+explicitly selects cluster-only recovery for a maintenance window, record that
+choice and the remaining disaster-recovery gap. Keep identity, quorum, storage
+health, writer-fencing and data-consistency gates active; a location preference
+does not authorize data repair or waive those gates.
 
 ## Workflow A — Talos OS rolling upgrade
 
