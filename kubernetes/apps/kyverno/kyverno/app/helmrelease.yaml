@@ -14,10 +14,10 @@ spec:
       replicas: 3
       container:
         image:
-          tag: v1.19.1@sha256:b31d8511ae5fd6010e2a01ea72ebae08eb82fa51d91af14a1d9fe989949b4edb
+          tag: v1.19.2@sha256:c8c4dd09e720d2cd7fd24ca73ac28e46651001372f988e0cba3f2f612f04b955
       initContainer:
         image:
-          tag: v1.19.1@sha256:c25c47461f06f2845a48c319ae86fbbc1730a7b9ed5b701889c9dc1f9ee94b09
+          tag: v1.19.2@sha256:27f3cc52e628559b56d08363b85316819802086c9808606914f7805a244148f4
       podDisruptionBudget:
         minAvailable: 2
     backgroundController:
