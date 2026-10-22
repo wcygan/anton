@@ -54,6 +54,7 @@ spec:
     # WD_BLACK NVMes instead of the 500 GB Talos EPHEMERAL partition at
     # /var/lib/longhorn/.
     defaultSettings:
+      concurrentAutomaticEngineUpgradePerNodeLimit: 0
       createDefaultDiskLabeledNodes: true
       defaultReplicaCount: 2
       # Preserve a recovery window for abandoned replica data.
