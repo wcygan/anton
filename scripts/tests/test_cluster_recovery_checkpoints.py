@@ -188,6 +188,9 @@ class CleanupTests(unittest.TestCase):
                 if mount["mountPath"].startswith("/restore"):
                     self.assertTrue(mount["readOnly"])
         self.assertEqual(pod["initContainers"][2]["restartPolicy"], "Always")
+        wait_resources = pod["initContainers"][0]["resources"]
+        self.assertEqual(wait_resources["requests"]["cpu"], "10m")
+        self.assertEqual(wait_resources["limits"]["cpu"], "100m")
 
 
 class LifecycleTests(unittest.TestCase):
@@ -198,7 +201,7 @@ class LifecycleTests(unittest.TestCase):
             self.created = []
             self.selected = [{"namespace": "observability" if i == 5 else "storage", "label": "source" + str(i), "uid": "source-uid" + str(i), "pv": "pv" + str(i), "pvc": "source" + str(i), "size": "1Gi"} for i in range(6)]
             self.objects[("storage", "leases", recovery.NAME)] = {"metadata": {"name": recovery.NAME}, "spec": {}}
-            self.objects[("storage", "configmaps", recovery.NAME + "-journal")] = {"metadata": {"name": recovery.NAME + "-journal"}, "data": {"verified": "good", "previous_verified": "older"}}
+            self.objects[("storage", "configmaps", recovery.NAME + "-journal")] = {"metadata": {"name": recovery.NAME + "-journal"}, "data": {"verified": "good", "previous_verified": "older", "error": "previous run HTTP 429"}}
             for generation in ("good", "older", "failed-candidate"):
                 self.objects[("storage", "volumesnapshots", generation)] = {"metadata": {"name": generation, "uid": generation, "labels": {recovery.OWNER: recovery.NAME, recovery.GEN: generation}}}
             self.objects[("storage", "configmaps", recovery.NAME + "-journal")]["data"]["registry"] = json.dumps([{"namespace": "storage", "kind": "volumesnapshots", "name": gen, "uid": gen} for gen in ("good", "older", "failed-candidate")])
@@ -277,6 +280,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(journal["phase"], "complete")
         self.assertNotEqual(journal["verified"], "good")
         self.assertIn("verified_report", journal)
+        self.assertEqual(journal["error"], "")
 
     def test_failure_preserves_both_verified_generations(self):
         journal = self.run_lifecycle(True)

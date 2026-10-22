@@ -353,7 +353,7 @@ def coordinate():
     uncertain_generations = set()
     try:
         clean({last_verified, previous_verified})
-        save("preflight")
+        save("preflight", error="")
         pods = {ns: api.list(ns, "pods") for ns in ("storage", "observability")}
         pvcs = {(ns, pvc["metadata"]["name"]): pvc for ns in pods for pvc in api.list(ns, "persistentvolumeclaims")}
         selected = sources(pods, pvcs)
@@ -469,7 +469,7 @@ def reader_job(name, generation, selected):
         volumes.append({"name": source["label"], "persistentVolumeClaim": {"claimName": source["clone"], "readOnly": True}})
         mounts.append({"name": source["label"], "mountPath": "/restore/" + source["label"], "readOnly": True})
     reader = {"name": "reader", "image": PYTHON, "command": ["python3", "-u", "/code/run.py", "verify", "/restore"], "volumeMounts": mounts, "securityContext": security, "resources": {"requests": {"cpu": "100m", "memory": "128Mi"}, "limits": {"cpu": "500m", "memory": "1Gi"}}}
-    wait_container = {"name": "wait-for-healthy-clones", "image": PYTHON, "command": ["python3", "/code/run.py", "wait"], "volumeMounts": mounts, "securityContext": security, "resources": {"requests": {"cpu": "1m", "memory": "16Mi"}, "limits": {"cpu": "10m", "memory": "32Mi"}}}
+    wait_container = {"name": "wait-for-healthy-clones", "image": PYTHON, "command": ["python3", "/code/run.py", "wait"], "volumeMounts": mounts, "securityContext": security, "resources": {"requests": {"cpu": "10m", "memory": "16Mi"}, "limits": {"cpu": "100m", "memory": "32Mi"}}}
     spec = {"automountServiceAccountToken": False, "restartPolicy": "Never", "securityContext": {"runAsUser": 0, "seccompProfile": {"type": "RuntimeDefault"}}, "volumes": volumes, "containers": [reader], "initContainers": [wait_container]}
     if any(s["label"] == "filer0" for s in selected):
         spec["initContainers"] += [{"name": "copy-filers", "image": PYTHON, "command": ["python3", "/code/run.py", "copy"], "volumeMounts": mounts, "securityContext": security, "resources": {"requests": {"cpu": "100m", "memory": "64Mi"}, "limits": {"cpu": "500m", "memory": "256Mi"}}},
