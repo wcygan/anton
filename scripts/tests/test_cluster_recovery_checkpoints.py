@@ -1,5 +1,6 @@
 """Exercise actual restore readers and destructive-cleanup boundary failures."""
 import importlib.util
+import io
 import json
 from pathlib import Path
 import struct
@@ -11,6 +12,58 @@ SOURCE = Path(__file__).resolve().parents[2] / "kubernetes/apps/storage/longhorn
 spec = importlib.util.spec_from_file_location("recovery", SOURCE)
 recovery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recovery)
+
+
+class APIProtocolTests(unittest.TestCase):
+    def setUp(self):
+        self.api = object.__new__(recovery.API)
+        self.api.base = "https://kubernetes.example:443"
+        self.api.token = "unit-test-token-not-for-output"
+        self.api.ssl = None
+        self.path = "/apis/longhorn.io/v1beta2/namespaces/storage/nodes"
+
+    def failure(self, code=429, retry_after="1"):
+        status = {"kind": "Status", "reason": "TooManyRequests" if code == 429 else "Forbidden", "message": "storage is (re)initializing" if code == 429 else "request forbidden", "details": {"retryAfterSeconds": 1}}
+        return recovery.urllib.error.HTTPError(self.api.base + self.path, code, "HTTP failure", {"Retry-After": retry_after}, io.BytesIO(json.dumps(status).encode()))
+
+    def test_get_429_respects_retry_after_then_returns_success(self):
+        with patch.object(recovery.urllib.request, "urlopen", side_effect=[self.failure(), io.BytesIO(b'{"items":[]}')]) as request, patch.object(recovery.time, "sleep") as sleep:
+            self.assertEqual(self.api.request("GET", self.path), {"items": []})
+            self.assertEqual(request.call_count, 2)
+            sleep.assert_called_once_with(1)
+
+    def test_repeated_get_429_is_bounded_and_diagnostic(self):
+        with patch.object(recovery.urllib.request, "urlopen", side_effect=[self.failure(retry_after="100") for _ in range(4)]) as request, patch.object(recovery.time, "sleep") as sleep:
+            with self.assertRaises(RuntimeError) as error:
+                self.api.request("GET", self.path)
+            self.assertEqual(request.call_count, 4)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [5, 5, 5])
+            self.assertIn(self.path, str(error.exception))
+            self.assertIn("429", str(error.exception))
+            self.assertIn("TooManyRequests", str(error.exception))
+            self.assertIn("storage is (re)initializing", str(error.exception))
+            self.assertNotIn(self.api.token, str(error.exception))
+
+    def test_retry_delay_uses_status_fallback_and_caps_http_date(self):
+        for header, expected in ((None, 1), ("Wed, 31 Dec 2099 23:59:59 GMT", 5)):
+            with self.subTest(header=header):
+                error = self.failure()
+                if header is None:
+                    error.headers = {}
+                else:
+                    error.headers["Retry-After"] = header
+                with patch.object(recovery.urllib.request, "urlopen", side_effect=[error, io.BytesIO(b'{"items":[]}')]), patch.object(recovery.time, "sleep") as sleep:
+                    self.api.request("GET", self.path)
+                    sleep.assert_called_once_with(expected)
+
+    def test_post_429_other_http_and_network_errors_are_never_retried(self):
+        for method, error in (("POST", self.failure()), ("PUT", self.failure()), ("DELETE", self.failure()), ("GET", self.failure(403)), ("GET", recovery.urllib.error.URLError("network unavailable"))):
+            with self.subTest(method=method, error=type(error).__name__):
+                with patch.object(recovery.urllib.request, "urlopen", side_effect=error) as request, patch.object(recovery.time, "sleep") as sleep:
+                    with self.assertRaises((RuntimeError, recovery.urllib.error.URLError)):
+                        self.api.request(method, self.path)
+                    self.assertEqual(request.call_count, 1)
+                    sleep.assert_not_called()
 
 
 class RestoredDataTests(unittest.TestCase):

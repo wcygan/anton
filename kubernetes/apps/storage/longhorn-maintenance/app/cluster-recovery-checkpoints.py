@@ -5,6 +5,7 @@ No production writes or quiescence. Success is a sampled crash-recovery rehearsa
 not a coordinated Harbor/Postgres restore or a full S3 integrity audit.
 """
 import datetime
+from email.utils import parsedate_to_datetime
 import hashlib
 import json
 import os
@@ -236,13 +237,38 @@ class API:
     def request(self, method, path, data=None):
         request = urllib.request.Request(self.base + path, data=None if data is None else json.dumps(data).encode(), method=method,
                                          headers={"Authorization": "Bearer " + self.token, "Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(request, context=self.ssl, timeout=30) as response:
-                return json.load(response)
-        except urllib.error.HTTPError as error:
-            if error.code == 404:
-                return None
-            raise RuntimeError("Kubernetes API " + method + " failed: " + str(error.code)) from None
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(request, context=self.ssl, timeout=30) as response:
+                    return json.load(response)
+            except urllib.error.HTTPError as error:
+                if error.code == 404:
+                    error.close()
+                    return None
+                status = {}
+                try:
+                    body = json.loads(error.read(4096))
+                    if isinstance(body, dict) and body.get("kind") == "Status":
+                        status = body
+                except (ValueError, UnicodeError):
+                    pass
+                finally:
+                    error.close()
+                if method == "GET" and error.code == 429 and attempt < 3:
+                    details = status.get("details") or {}
+                    value = error.headers.get("Retry-After", str(details.get("retryAfterSeconds", 1)))
+                    try:
+                        delay = float(value)
+                    except (ValueError, TypeError):
+                        try:
+                            delay = (parsedate_to_datetime(value) - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+                        except (ValueError, TypeError, OverflowError):
+                            delay = 1
+                    time.sleep(max(0, min(5, delay if delay == delay else 1)))
+                    continue
+                reason = str(status.get("reason", "HTTPError"))[:80]
+                message = str(status.get("message", "No Kubernetes Status detail"))[:240]
+                raise RuntimeError("Kubernetes API " + method + " " + path + " returned HTTP " + str(error.code) + " " + reason + ": " + message) from None
 
     def path(self, namespace, kind, name=""):
         return BASES[kind] + "/namespaces/" + namespace + "/" + kind + ("/" + name if name else "")
