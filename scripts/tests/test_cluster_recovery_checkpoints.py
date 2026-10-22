@@ -192,6 +192,22 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(wait_resources["requests"]["cpu"], "10m")
         self.assertEqual(wait_resources["limits"]["cpu"], "100m")
 
+    def test_loki_reader_matches_source_uid_without_added_privileges(self):
+        selected = [{"label": "loki0", "clone": "loki-restore"}]
+        pod = recovery.reader_job("test", "generation", selected)["spec"]["template"]["spec"]
+        self.assertEqual(pod["securityContext"]["runAsUser"], 10001)
+        self.assertEqual(pod["securityContext"]["runAsGroup"], 10001)
+        self.assertTrue(pod["securityContext"]["runAsNonRoot"])
+        self.assertFalse(pod["automountServiceAccountToken"])
+        self.assertTrue(next(volume for volume in pod["volumes"] if volume["name"] == "loki0")["persistentVolumeClaim"]["readOnly"])
+        for container in pod["containers"] + pod["initContainers"]:
+            self.assertEqual(container["securityContext"]["capabilities"], {"drop": ["ALL"]})
+            self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
+            self.assertFalse(container["securityContext"]["allowPrivilegeEscalation"])
+            self.assertTrue(next(mount for mount in container["volumeMounts"] if mount["name"] == "loki0")["readOnly"])
+        seaweed = recovery.reader_job("test", "generation", [{"label": "volume0", "clone": "seaweed-restore"}])["spec"]["template"]["spec"]
+        self.assertEqual(seaweed["securityContext"]["runAsUser"], 0)
+
 
 class LifecycleTests(unittest.TestCase):
     class FakeAPI:
@@ -345,6 +361,18 @@ class LifecycleTests(unittest.TestCase):
         for obj in configs:
             self.assertTrue(obj["immutable"])
             self.assertEqual(obj["data"]["run.py"], recovery.SCRIPT_SOURCE)
+
+    def test_both_namespace_verifiers_keep_deny_all_network_policy(self):
+        api = self.FakeAPI(False)
+        with patch.object(recovery, "API", return_value=api), patch.object(recovery, "sources", return_value=api.selected), patch("builtins.print"):
+            recovery.coordinate()
+        policies = [obj for obj in api.created if obj["kind"] == "NetworkPolicy"]
+        self.assertEqual(len(policies), 2)
+        for policy in policies:
+            self.assertEqual(policy["spec"]["policyTypes"], ["Ingress", "Egress"])
+            self.assertEqual(policy["spec"]["ingress"], [])
+            self.assertEqual(policy["spec"]["egress"], [])
+            self.assertIn(recovery.GEN, policy["spec"]["podSelector"]["matchLabels"])
 
 
 if __name__ == "__main__":
