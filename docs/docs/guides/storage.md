@@ -39,7 +39,7 @@ Replication protects against losing a node. It does not protect against deletion
 
 ## Recurring in-cluster recovery checkpoints
 
-`storage/cluster-recovery` runs daily at 06:00 UTC without stopping production.
+`storage/cluster-recovery` runs on the first day of each month at 06:00 UTC without stopping production.
 It derives the three Seaweed volume, two filer and one Loki PVC from their current
 pods, records PVC/PV identities, and creates serial CSI snapshots. These are
 per-volume crash-consistent checkpoints: ongoing writes mean the six snapshots
@@ -96,9 +96,9 @@ inspect its completion and the journal. The source entry point is
 outside Kubernetes.
 
 `ClusterRecoveryCheckpointFailed` alerts on failed Jobs owned by the scheduled
-CronJob. `ClusterRecoveryCheckpointStale` alerts after 30 hours without a successful
+CronJob. `ClusterRecoveryCheckpointStale` alerts after 35 days without a successful
 scheduled rehearsal, including a never-successful installation after its initial
-30-hour grace period; absent CronJob metrics also alert. For either alert, inspect
+35-day grace period; absent CronJob metrics also alert. For either alert, inspect
 the coordinator Job's logs and journal `phase`, `error`, `verified` and
 `verified_report` fields, then check current Longhorn node/disk eligibility and
 physical free space. A new snapshot is not evidence of a verified restore.

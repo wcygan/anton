@@ -152,7 +152,7 @@ metadata:
   name: cluster-recovery
   namespace: storage
 spec:
-  schedule: "0 6 * * *"
+  schedule: "0 6 1 * *"
   timeZone: Etc/UTC
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 1800
