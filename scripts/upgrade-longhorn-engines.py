@@ -114,7 +114,8 @@ def healthy(volume, engines, replicas, expected_image=None):
     require(es.get("currentState") == "running" and es.get("currentImage") == spec["image"],
             name + ": engine is not running the current image")
     modes = es.get("replicaModeMap", {})
-    require(len(modes) == 2 and set(modes.values()) == {"RW"}, name + ": engine lacks two RW replicas")
+    require(isinstance(modes, dict) and len(modes) == 2 and set(modes.values()) == {"RW"},
+            name + ": engine lacks two RW replicas")
     selected = [r for r in replicas if r.get("spec", {}).get("volumeName") == name
                 and r["metadata"]["name"] in modes]
     require(len(selected) == 2, name + ": replica identities missing")
@@ -134,7 +135,9 @@ def images_ready(images, image, nodes):
     found = [e for e in images if e.get("spec", {}).get("image") == image]
     require(len(found) == 1, "Engine image missing or ambiguous: " + image)
     status = found[0].get("status", {})
-    require(status.get("state") == "deployed" and all(status.get("nodeDeploymentMap", {}).get(n) is True for n in nodes),
+    deployments = status.get("nodeDeploymentMap")
+    require(status.get("state") == "deployed" and isinstance(deployments, dict)
+            and all(deployments.get(n) is True for n in nodes),
             "Engine image unavailable on all engine/replica nodes: " + image)
 
 

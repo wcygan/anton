@@ -97,6 +97,40 @@ class FakeCluster:
 
 
 class UpgradeTests(unittest.TestCase):
+    def test_null_replica_map_waits_until_two_rw_replicas_are_observed(self):
+        class NullMapCluster(FakeCluster):
+            def __init__(self):
+                super().__init__()
+                self.pending_reads = None
+                self.null_observed = False
+
+            def command(self, *command):
+                result = super().command(*command)
+                self.value["engines"][0]["status"]["replicaModeMap"] = None
+                self.pending_reads = 0
+                return result
+
+            def state(self):
+                if self.pending_reads is not None:
+                    self.pending_reads += 1
+                    if self.pending_reads == 1:
+                        self.null_observed = True
+                    else:
+                        self.value["engines"][0]["status"]["replicaModeMap"] = {"r1": "RW", "r2": "RW"}
+                return super().state()
+
+        initial = state()
+        initial["engines"][0]["status"]["replicaModeMap"] = None
+        with self.assertRaisesRegex(RuntimeError, "two RW replicas"):
+            upgrade.healthy(initial["volumes"][0], initial["engines"], initial["replicas"])
+        cluster = NullMapCluster()
+        with patch.object(upgrade.time, "sleep") as wait:
+            upgrade.execute(cluster, args(True))
+        self.assertTrue(cluster.null_observed)
+        wait.assert_called_once()
+        self.assertEqual(len(cluster.mutations), 1)
+        self.assertEqual(cluster.value["engines"][0]["status"]["replicaModeMap"], {"r1": "RW", "r2": "RW"})
+
     def test_two_volumes_never_patch_second_before_first_engine_and_replicas_converge(self):
         class SerialCluster(FakeCluster):
             def __init__(self):
@@ -203,6 +237,7 @@ class UpgradeTests(unittest.TestCase):
                      lambda s: s["replicas"][0]["status"].update(currentState="stopped"),
                      lambda s: s["replicas"][0]["spec"].update(failedAt="now"),
                      lambda s: s["images"][1]["status"]["nodeDeploymentMap"].update(node2=False),
+                     lambda s: s["images"][1]["status"].update(nodeDeploymentMap=None),
                      lambda s: s["settings"][1].update(value="1")]
         for mutate in mutations:
             cluster = FakeCluster()
