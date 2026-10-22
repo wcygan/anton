@@ -85,3 +85,19 @@ class CloudflareTunnelEgressTests(unittest.TestCase):
             ("network", {}, 7844),
         ):
             self.assertFalse(allows(self.policy, namespace, labels, port))
+
+    def test_envoy_monitor_renders_and_selects_the_allowed_origin(self):
+        monitoring_app = REPO / "kubernetes/apps/observability/kube-prometheus-stack/app"
+        rendered = subprocess.check_output(["kubectl", "kustomize", str(monitoring_app)], text=True)
+        documents = json.loads(subprocess.check_output(
+            ["yq", "eval-all", "-o=json", "[.]", "-"], input=rendered, text=True))
+        monitors = [doc for doc in documents if doc.get("kind") == "PodMonitor"
+                    and doc["metadata"]["name"] == "envoy-external"]
+        self.assertEqual(len(monitors), 1)
+        monitor = monitors[0]["spec"]
+        self.assertEqual(monitor["namespaceSelector"]["matchNames"], ["network"])
+        self.assertTrue(labels_match(monitor["selector"], self.envoy))
+        internal = {**self.envoy, "gateway.envoyproxy.io/owning-gateway-name": "envoy-internal"}
+        self.assertFalse(labels_match(monitor["selector"], internal))
+        self.assertEqual(monitor["podMetricsEndpoints"],
+                         [{"port": "metrics", "path": "/stats/prometheus", "interval": "30s"}])

@@ -6,7 +6,7 @@ title: Kubernetes logs
 
 The OpenTelemetry Collector reads container logs on every node and sends them to Loki. You query them in Grafana; Loki itself is internal only. Metrics live separately in Prometheus.
 
-Loki runs the stock 3.7.8 release as a single monolithic instance. Its WAL is enabled and flushes on shutdown, and it keeps chunks in SeaweedFS. Under [ADR 0044](../decisions/0044-use-stock-shared-s3-with-planned-downtime.md), occasional log loss during crashes or planned maintenance is accepted, so logs are best-effort diagnostics, not an audit trail.
+Loki runs the stock 3.7.9 release as a single monolithic instance. Its WAL is enabled and flushes on shutdown, and it keeps chunks in SeaweedFS. Under [ADR 0044](../decisions/0044-use-stock-shared-s3-with-planned-downtime.md), occasional log loss during crashes or planned maintenance is accepted, so logs are best-effort diagnostics, not an audit trail.
 
 ```mermaid
 flowchart TB

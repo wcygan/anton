@@ -399,11 +399,11 @@ def validate_shutdown_alert(rule_path: Path, collector_path: Path) -> list[Contr
     image = re.search(r"(?ms)^    image:\n(.*?)(?=^    command:)", collector_path.read_text())
     expected = (
         "repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s",
-        "tag: 0.161.0",
+        "tag: 0.163.2",
     )
     if image is None or any(line not in {part.strip() for part in image.group(1).splitlines()} for line in expected):
         return [ContractViolation("shutdown-alert", rule_path,
-                "shutdown exception requires the tested collector 0.161.0 image; reverify queue replay before changing it")]
+                "shutdown exception requires the tested collector 0.163.2 image; reverify queue replay before changing it")]
     return []
 
 

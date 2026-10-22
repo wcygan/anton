@@ -14,12 +14,12 @@ node /var/log/pods (read-only)
   -> kube-prometheus-stack Grafana Explore
 ```
 
-The collector uses the official OpenTelemetry chart `0.173.1` and collector
-image `0.161.0`. Every reader resumes known files from persistent checkpoints
+The collector uses the official OpenTelemetry chart `0.176.1` and collector
+image `0.163.2`. Every reader resumes known files from persistent checkpoints
 and starts unseen files at the beginning. General, workflow, and SeaweedFS
 volume receivers use non-overlapping paths and the Kubernetes container-log
 parser. State lives on the existing node-local `/var/lib/otelcol` host path.
-Loki uses chart `18.13.5` with Loki `3.7.8` in monolithic mode. The
+The Loki HelmRelease pins its chart and stock `3.7.9` image in monolithic mode. The
 separate Talos log sink is not this backend and must remain separate.
 
 ## Executable contract
@@ -95,7 +95,8 @@ recovery counter or delete its WAL/PVC for this migration.
 mise exec -- python3 scripts/verify-log-durability.py --baseline-ref d6ffc31b --output /tmp/log-durability.json
 ```
 
-This local Docker check runs the pinned collector and Loki with a continuously
+This local Docker check generates synthetic logs; it does not access Kubernetes,
+copy cluster data, or create a cluster recovery checkpoint. It runs the pinned collector and Loki with a continuously
 written, fsynced record ledger. It overlaps a graceful Loki restart with two
 collector SIGKILLs and a graceful collector restart, retains queue/checkpoint
 files, and creates a new log file
@@ -169,7 +170,7 @@ Enqueue failures may be recovered by reader retries: alerting indicates risk,
 not proof that records were lost.
 
 The log fallback parses the structured exporter `error` field. In collector
-0.161.0, `interrupted due to shutdown:` leaves requests in the persistent queue
+0.163.2, `interrupted due to shutdown:` leaves requests in the persistent queue
 for replay even though the queue sender logs “Dropping data.” Only that typed
 shutdown prefix is excluded; a permanent error mentioning shutdown, a nested
 resource field, missing fields and malformed log formats still alert. The
@@ -177,14 +178,20 @@ contract requires an enabled, fsynced persistent queue and the verified image;
 an image upgrade requires replay verification and a deliberate contract update.
 The metrics-based permanent-failure rule remains unchanged.
 
-The isolated HTTP503 regression reproduced three drop messages while recovering
-every known source record. Re-run it with:
+The October 22, 2026 isolated regression used collector 0.163.2 and stock Loki
+3.7.9. A 123,885-byte queue survived two collector SIGKILLs and one graceful
+collector restart while the backend returned HTTP503. All 1,149 known synthetic
+records became queryable after Loki restarted, including a new file created
+during the outage; three shutdown drop messages caused no missing ledger IDs.
+This verifies that shutdown exception for this image and configuration, not
+general immunity to log loss. The JSON evidence includes UTC time, image IDs,
+queue occupancy, restart counts, and missing record IDs. Re-run it with:
 
 ```sh
 mise exec -- python3 scripts/verify-log-durability.py --backend-failure http503 --output /tmp/otel-shutdown-replay.json
 ```
 
-Loki now runs stock 3.7.8 with WAL enabled at `/var/loki/wal-stock-0028` and
+Loki now runs stock 3.7.9 with WAL enabled at `/var/loki/wal-stock-0028` and
 graceful-shutdown flushing. The [stock cutover record](https://github.com/wcygan/anton/blob/628e15ba1c9b40b2731240dcfb3a282f013319cc/context/notes/2026-10-20-plan0028-stock-cutover.md)
 supersedes the patch-era repair in
 [completed plan 0026](https://github.com/wcygan/anton/blob/628e15ba1c9b40b2731240dcfb3a282f013319cc/context/plans/0026-investigate-loki-wal-replay.md).

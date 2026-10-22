@@ -158,11 +158,13 @@ class KubernetesLogContractTests(unittest.TestCase):
         rule = REPO / "kubernetes/apps/observability/loki/app/log-pipeline-alerts.yaml"
         collector = REPO / "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"
         self.assertEqual(validate_shutdown_alert(rule, collector), [])
-        for before, after in [("tag: 0.161.0", "tag: 0.162.0"),
-                              ("tag: 0.161.0", "tag: 0.161.01"),
+        for before, after in [("tag: 0.163.2", "tag: 0.161.0"),
+                              ("tag: 0.163.2", "tag: 0.164.0"),
+                              ("tag: 0.163.2", "tag: 0.163.21"),
                               ("repository: ghcr.io/open-telemetry/", "repository: example.invalid/")]:
             with self.subTest(after=after), tempfile.TemporaryDirectory() as tmp:
                 changed = Path(tmp) / "collector.yaml"
+                self.assertIn(before, collector.read_text())
                 changed.write_text(collector.read_text().replace(before, after, 1))
                 violations = validate_shutdown_alert(rule, changed)
                 self.assertEqual([v.adapter for v in violations], ["shutdown-alert"])

@@ -24,7 +24,7 @@ import uuid
 
 REPO = Path(__file__).resolve().parents[1]
 MANIFEST = "kubernetes/apps/observability/otel-collector/app/helmrelease.yaml"
-LOKI = "grafana/loki:3.7.8"
+LOKI = "grafana/loki:3.7.9"
 PYTHON = "docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72"
 
 
@@ -182,7 +182,7 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
             ident = run("docker", "run", "-d", "--network", network, "--user", "0",
                         "--memory", "512m", "-e", "MY_POD_IP=0.0.0.0",
                         "-v", f"{root}:/fixture:ro", "-v", f"{root / 'state'}:/state",
-                        "-p", "127.0.0.1::8888", image, "--config=/fixture/otel.json", *values.get("command", {}).get("extraArgs", []))
+                        "-p", "127.0.0.1::8888", image, "--config=/fixture/otel.json", *values.get("command", {}).get("extraArgs", [])).splitlines()[-1]
             containers.append(ident)
             port = run("docker", "port", ident, "8888/tcp").rsplit(":", 1)[1]
             def ready():
@@ -197,7 +197,7 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
             platform = ["--platform", "linux/" + run("docker", "image", "inspect", loki_image, "--format", "{{.Architecture}}") ] if loki_image != LOKI else []
             lid = run("docker", "run", "-d", "--name", loki_name, "--network", network,
                       "-v", f"{root}:/fixture:ro", "-v", f"{root / 'loki-data'}:/data",
-                      "-p", "127.0.0.1::3100", *platform, loki_image, "-config.file=/fixture/loki.json")
+                      "-p", "127.0.0.1::3100", *platform, loki_image, "-config.file=/fixture/loki.json").splitlines()[-1]
             containers.append(lid)
             port = run("docker", "port", lid, "3100/tcp").rsplit(":", 1)[1]
             loki_url = f"http://127.0.0.1:{port}"
@@ -212,7 +212,7 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
                                 f"{datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')} stdout F historical stale {n}\n"
                                 for n in range(500))
                     seed = run("docker", "run", "-d", "--user", "0", "-v", f"{root}:/fixture:ro",
-                               "-v", f"{root / 'state'}:/state", image, "--config=/fixture/seed.json", *values.get("command", {}).get("extraArgs", []))
+                               "-v", f"{root / 'state'}:/state", image, "--config=/fixture/seed.json", *values.get("command", {}).get("extraArgs", [])).splitlines()[-1]
                     containers.append(seed)
                     eventually(lambda: run("docker", "logs", seed).count('\tmatched files\t') >= 3)
                     run("docker", "stop", "--time", "10", seed)
@@ -234,9 +234,11 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
                 containers.append(unavailable)
                 time.sleep(1)
 
-            eventually(lambda: any(
-                line.startswith("otelcol_exporter_queue_size{") and float(line.rsplit(" ", 1)[1]) > 0
-                for line in get(metrics_url).splitlines()))
+            def queued_bytes():
+                return max((float(line.rsplit(" ", 1)[1])
+                            for line in get(metrics_url).splitlines()
+                            if line.startswith("otelcol_exporter_queue_size{")), default=0)
+            queue_before_crash = eventually(queued_bytes)
             time.sleep(1)
             run("docker", "kill", cid)
             time.sleep(1)
@@ -288,7 +290,12 @@ def exercise(values: dict, *, label: str, expect_loss: bool, backend_failure="di
                 assert missing, "Baseline unexpectedly preserved everything; reproduction is not discriminating"
             else:
                 assert not missing, missing
-            result = {"case": label, "written_records": len(expected), "queryable_records": len(expected & actual),
+            result = {"case": label, "verified_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                      "collector_image": image,
+                      "collector_image_id": run("docker", "inspect", "-f", "{{.Image}}", cid),
+                      "loki_image_id": run("docker", "inspect", "-f", "{{.Image}}", lid),
+                      "queued_bytes_before_crash": queue_before_crash,
+                      "written_records": len(expected), "queryable_records": len(expected & actual),
                       "missing_records": len(missing), "missing_record_ids": missing,
                       "collector_sigkills": 2, "collector_graceful_restarts": 1, "loki_graceful_restarts": 1,
                       "loki_image": loki_image, "backend_failure": backend_failure, "shutdown_reports": shutdown_reports, "new_file_during_outage": True, "bootstrap_offsets_seeded": not expect_loss, "stale_bootstrap_rehearsed": not expect_loss}
