@@ -42,7 +42,7 @@ spec:
                 max by (namespace, cronjob) (
                   kube_cronjob_created{namespace="storage",cronjob="cluster-recovery"}
                 )
-              ) > 30 * 60 * 60
+              ) > 35 * 24 * 60 * 60
             )
             or absent(kube_cronjob_info{namespace="storage",cronjob="cluster-recovery"})
           for: 15m
@@ -52,9 +52,9 @@ spec:
           annotations:
             summary: No recent verified in-cluster recovery checkpoint
             description: |
-              No scheduled rehearsal has succeeded for over 30 hours, or its
+              No scheduled rehearsal has succeeded for over 35 days, or its
               CronJob/metrics are absent. A never-successful new installation
-              gets a 30-hour grace period from CronJob creation. Check scheduling,
+              gets a 35-day grace period from CronJob creation. Check scheduling,
               failed Jobs, API-only connectivity, source/clone health and the journal.
               The success metric records completed rehearsals, not snapshot readiness alone.
             runbook_url: https://wcygan.github.io/anton/guides/storage#recurring-in-cluster-recovery-checkpoints
