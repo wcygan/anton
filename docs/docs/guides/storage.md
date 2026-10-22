@@ -36,3 +36,73 @@ Replication protects against losing a node. It does not protect against deletion
 - Never delete PVCs, Longhorn volumes, or replicas as a cleanup shortcut.
 - Volume changes, replica cleanup, and node maintenance need approval and the matching skill.
 - Before reclaiming space, prove each item is orphaned. The [storage record](../records/storage-reliability-and-capacity.md) shows how that was done safely.
+
+## Recurring in-cluster recovery checkpoints
+
+`storage/cluster-recovery` runs daily at 06:00 UTC without stopping production.
+It derives the three Seaweed volume, two filer and one Loki PVC from their current
+pods, records PVC/PV identities, and creates serial CSI snapshots. These are
+per-volume crash-consistent checkpoints: ongoing writes mean the six snapshots
+do not represent one application-consistent instant.
+
+The rehearsal restores temporary PVCs inside the cluster. A sealed storage Job
+mounts all sources read-only, opens only disposable copies of the two filer
+LevelDB stores, validates sampled Seaweed index/header/payload records, and finds
+real filer-referenced Harbor and Loki payloads. Harbor samples must match their
+content-addressed SHA256 and both available volume copies. Loki samples must be
+readable; multiple present copies must agree. A separate sealed Job hashes a
+bounded sample of files from the restored Loki PVC. It does not replay Loki WAL,
+audit all S3 references, or restore Harbor's database. Known historical log gaps
+are not reclassified as a passing whole-corpus integrity result. Unavailable
+references encountered while searching for a sample are counted separately;
+an observed bad header, truncated payload or divergent checksum fails the Job.
+
+The coordinator records only small hash/count summaries in
+`storage/cluster-recovery-journal`; all payload bytes stay in the cluster.
+Verifier Pods have no service-account token and deny-all network policies.
+The coordinator can reach only the Kubernetes API, using namespace-scoped
+permissions in `storage` and `observability` and read-only PV/snapshot-content
+access. Kubernetes RBAC cannot restrict dynamically created resources by label;
+the controller therefore requires its ownership label and exact UID for cleanup.
+
+The latest two verified generations are retained. Both remain protected while a
+new candidate is captured, so a run temporarily holds at most three generations.
+Success removes the oldest; failure removes the failed candidate and keeps both
+verified generations. Temporary Jobs, clones and policies are removed. A durable
+UID registry guards every deletion; an object carrying copied ownership labels
+without a matching registered UID stops cleanup for operator review. A Lease, `Forbid` concurrency,
+deadlines, source-volume health checks, and a physical-space gate bound the work.
+The space gate requires two distinct Ready schedulable nodes, each with space
+for a full restore replica after disk reserves plus 20 percent headroom. Restored
+volumes must become healthy and attached before the verifier gate opens;
+failure leaves production and the last verified checkpoint untouched. A crashed
+run is reconciled by the next run after Lease expiry.
+If the API cannot establish whether publishing a new verified checkpoint
+committed, cleanup conservatively retains that candidate too until the journal
+can be read again. This exceptional third generation is never mistaken for an
+additional verified restore point.
+
+The new `longhorn-recurring-recovery` snapshot class has deletion policy `Delete`.
+The existing `longhorn-wal-forensics` class and manually retained maintenance
+snapshots are outside this controller's ownership. These local checkpoints do
+not protect against losing the cluster. A full Harbor recovery still needs a
+separately designed database checkpoint, such as a native CNPG scheduled backup,
+and a coordinated database/S3 restore rehearsal. No data is exported to a Mac or
+any other external destination by this workflow.
+
+For an explicitly approved one-off rehearsal, create a Job from the CronJob and
+inspect its completion and the journal. The source entry point is
+`scripts/cluster-recovery-checkpoints.py`; it refuses coordinator execution
+outside Kubernetes.
+
+`ClusterRecoveryCheckpointFailed` alerts on failed Jobs owned by the scheduled
+CronJob. `ClusterRecoveryCheckpointStale` alerts after 30 hours without a successful
+scheduled rehearsal, including a never-successful installation after its initial
+30-hour grace period; absent CronJob metrics also alert. For either alert, inspect
+the coordinator Job's logs and journal `phase`, `error`, `verified` and
+`verified_report` fields, then check current Longhorn node/disk eligibility and
+physical free space. A new snapshot is not evidence of a verified restore.
+Compare any remaining temporary objects' exact UIDs with the journal registry
+before cleanup. Dedicated leftover/headroom alerts are deferred because the
+controller's UID registry and conservative capacity calculation are not exported
+as robust Prometheus metrics.

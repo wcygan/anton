@@ -80,6 +80,7 @@ resources: []
             [
                 "kubernetes/apps/observability/loki/app",
                 "kubernetes/apps/registries/harbor-config/app",
+                "kubernetes/apps/storage/longhorn-maintenance/app",
                 "kubernetes/apps/storage/seaweedfs-config/app",
             ],
         )
