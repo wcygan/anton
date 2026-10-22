@@ -35,6 +35,11 @@ High-stakes checklist task skill. Two version pins drive everything: `talosVersi
 4. **Read the upstream release notes** for the new Talos and Kubernetes versions. Breaking changes (CRD removals, feature gates, kubelet flags) MUST be triaged before the bump.
 5. **Confirm kubeconfig + talosconfig point at the right cluster.** This skill operates against whichever cluster the local config points to — there is no `--context` guard.
 
+For Anton storage nodes, complete the [Longhorn node preconditions](../longhorn-node-ops/SKILL.md)
+and [SeaweedFS maintenance procedure](../seaweedfs-ops/references/node-maintenance.md)
+before the first node outage. Node readiness alone does not establish storage or
+data readiness.
+
 ## Recovery location and transfer authority
 
 Keep maintenance recovery checkpoints and verification near the data by default.
@@ -93,6 +98,17 @@ For bumping `talosVersion` (the OS image baked into each node).
 | etcd members healthy | `talosctl ... -n <ip> etcd members` | 3 healthy members |
 | no panicked services | `talosctl ... -n <ip> service` | nothing in `Failed` |
 | Flux still green | `flux get ks -A --status=all` | all `Ready=True` |
+
+When operating off-LAN, the upgrade client's automatic drain can use the node's
+admin kubeconfig and unreachable LAN API endpoint. Complete an approved drain
+through the working Kubernetes proxy first, then upgrade that exact node with
+`--drain=false`. Do not repeat an installer write to diagnose a failed drain.
+
+Keep the node cordoned after it returns until Cilium, Multus, Whereabouts and
+storage VXLAN are ready, and `/etc/cni/net.d/00-multus.conf` exists with
+`type: multus-shim`. Node Ready and Multus Pod Ready can precede that file.
+After uncordoning, verify the node's Longhorn instance manager has `lhnet1` and a
+storage IP, then wait for original volumes and stateful consumers to recover.
 
 If ANY check fails, STOP. Do not move to the next node. Investigate; rollback if needed.
 

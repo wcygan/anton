@@ -1,4 +1,6 @@
-# renovate: datasource=docker depName=ghcr.io/siderolabs/installer
-talosVersion: v1.13.12
+# renovate: datasource=docker depName=ghcr.io/siderolabs/installer-base
+talosVersion: v1.14.4
+# Talhelper 3.1.17 requires the legacy configuration contract.
+talosConfigVersion: v1.13.12
 # renovate: datasource=docker depName=ghcr.io/siderolabs/kubelet
 kubernetesVersion: v1.36.5

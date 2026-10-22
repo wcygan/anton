@@ -1,7 +1,7 @@
 ---
 clusterName: kubernetes
 
-talosVersion: "${talosVersion}"
+talosVersion: "${talosConfigVersion}"
 kubernetesVersion: "${kubernetesVersion}"
 
 endpoint: https://192.168.1.101:6443
@@ -24,7 +24,7 @@ nodes:
       serial: "24304A343650"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
+    talosImageURL: factory.talos.dev/metal-installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -116,7 +116,7 @@ nodes:
       serial: "24304A23D2F0"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
+    talosImageURL: factory.talos.dev/metal-installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -209,7 +209,7 @@ nodes:
       serial: "24304A23705F"
     machineSpec:
       secureboot: false
-    talosImageURL: factory.talos.dev/installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
+    talosImageURL: factory.talos.dev/metal-installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece
     controlPlane: true
     networkInterfaces:
       - deviceSelector:
@@ -298,6 +298,10 @@ nodes:
 
 # Global patches
 patches:
+  - |-
+    machine:
+      install:
+        image: factory.talos.dev/metal-installer/445a99db4002e6127e7f6e2a96377ac2c06d0de52f7a186b5536c0ac2f2a2ece:${talosVersion}
   - "@./patches/global/machine-files.yaml"
   - "@./patches/global/machine-kernel.yaml"
   - "@./patches/global/machine-kmsg.yaml"
