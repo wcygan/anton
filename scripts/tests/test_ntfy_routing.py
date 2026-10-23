@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+ETCD_RULES = ROOT / 'kubernetes/apps/observability/kube-prometheus-stack/app/prometheusrule-etcd.yaml'
 AMTOOL = os.environ.get('AMTOOL_BIN') or shutil.which('amtool')
 
 
@@ -72,11 +73,37 @@ class NtfyRouting(unittest.TestCase):
             ('OTelCollectorQueueHigh', 'info', 'observability', 'drop'),
             ('PrefixLonghornVolumeDegraded', 'warning', 'storage', 'drop'),
             ('OTelCollectorQueueHighSuffix', 'warning', 'observability', 'drop'),
+            ('EtcdNoLeader', 'critical', 'kube-system', 'ntfy'),
+            ('EtcdMembersDown', 'warning', 'kube-system', 'ntfy'),
+            ('EtcdFrequentLeaderChanges', 'warning', 'kube-system', 'ntfy'),
+            ('EtcdHighFsyncDurations', 'warning', 'kube-system', 'ntfy'),
+            ('EtcdHighCommitDurations', 'warning', 'kube-system', 'ntfy'),
+            ('EtcdDatabaseNearQuota', 'warning', 'kube-system', 'ntfy'),
+            ('EtcdDatabaseNearQuota', 'critical', 'kube-system', 'ntfy'),
+            ('EtcdDatabaseGrowingFast', 'warning', 'kube-system', 'ntfy'),
+            ('EtcdMetricsUnavailable', 'warning', 'kube-system', 'ntfy'),
+            ('EtcdDatabaseFragmented', 'info', 'kube-system', 'drop'),
+            ('EtcdMembersDown', 'info', 'kube-system', 'drop'),
+            ('PrefixEtcdMembersDown', 'warning', 'kube-system', 'drop'),
+            ('EtcdMetricsUnavailableSuffix', 'warning', 'kube-system', 'drop'),
         ]
         for name, severity, namespace, expected in cases:
             with self.subTest(alertname=name, severity=severity):
-                result = subprocess.run([
-                    AMTOOL, 'config', 'routes', 'test', '--config.file=' + str(self.config),
-                    '--verify.receivers=' + expected, 'alertname=' + name,
-                    'severity=' + severity, 'namespace=' + namespace], capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertRoutes(name, severity, namespace, expected)
+
+    def test_etcd_alerts_page_unless_informational(self):
+        rules = [json.loads(line) for line in subprocess.check_output([
+            'yq', '-o=json', '-I=0', '.spec.groups[].rules[] | select(has("alert"))', str(ETCD_RULES)],
+            text=True).splitlines()]
+        self.assertTrue(rules)
+        for rule in rules:
+            severity = rule['labels']['severity']
+            with self.subTest(alertname=rule['alert'], severity=severity):
+                self.assertRoutes(rule['alert'], severity, 'kube-system', 'drop' if severity == 'info' else 'ntfy')
+
+    def assertRoutes(self, name, severity, namespace, expected):
+        result = subprocess.run([
+            AMTOOL, 'config', 'routes', 'test', '--config.file=' + str(self.config),
+            '--verify.receivers=' + expected, 'alertname=' + name,
+            'severity=' + severity, 'namespace=' + namespace], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

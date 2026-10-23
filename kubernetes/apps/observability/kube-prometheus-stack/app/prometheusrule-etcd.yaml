@@ -1,0 +1,201 @@
+---
+# etcd health for Anton's three control-plane members. Talos runs etcd as a
+# host service; the kubeEtcd values in helmrelease.yaml scrape its plain-HTTP
+# metrics listener on every node as job="kube-etcd". These rules replace the
+# chart's etcd mixin (defaultRules.rules.etcd: false) with the signals that
+# matter for three members: leadership and membership, disk latency, space,
+# and monitoring coverage. Left out from the mixin: gRPC latency (etcd's
+# default basic metrics have no grpc_server_handling_seconds, so it could
+# never fire), failed gRPC requests and proposals (elections and API-server
+# alerts surface them), and peer round-trip time.
+#
+# Baseline on 2026-10-23: elections only at reboots, WAL fsync and backend
+# commit p99 about 10-20 ms, and a database about an eighth of etcd's default
+# 2 GiB quota. Verify with `mise exec -- python3 scripts/verify-etcd-alerts.py`.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: etcd-health
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: etcd-health
+      rules:
+        - alert: EtcdNoLeader
+          expr: etcd_server_has_leader{job="kube-etcd"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: etcd
+          annotations:
+            summary: "etcd member {{ $labels.instance }} has no leader"
+            description: |
+              etcd on {{ $labels.instance }} has had no Raft leader for over a
+              minute, so it serves no reads or writes and that node's API
+              server, which uses only its local member, fails requests. Two
+              members without a leader means quorum is lost. Read membership
+              and leader with talosctl etcd status before touching any node.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        # A scrape failure in every 5-minute window also catches a member that
+        # crash-loops between scrapes. A continuous outage fires after about
+        # 10 minutes, longer than a healthy kexec reboot.
+        - alert: EtcdMembersDown
+          expr: min_over_time(up{job="kube-etcd"}[5m]) == 0
+          for: 15m
+          labels:
+            severity: warning
+            component: etcd
+          annotations:
+            summary: "etcd member {{ $labels.instance }} is unreachable"
+            description: |
+              Prometheus has failed to scrape etcd on {{ $labels.instance }}
+              at least once in every 5-minute window for 15 minutes. With one
+              of three members down etcd has no fault tolerance left: do not
+              reboot, drain, upgrade, or defragment another control-plane node
+              until the member is back.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        # Each election counts once on every member, and a restarted member
+        # counts its first leader once. A rolling reboot stays below four.
+        - alert: EtcdFrequentLeaderChanges
+          expr: max by (job, namespace) (increase(etcd_server_leader_changes_seen_total{job="kube-etcd"}[15m])) >= 4
+          for: 5m
+          labels:
+            severity: warning
+            component: etcd
+          annotations:
+            summary: "etcd changed leader {{ $value | humanize }} times in 15 minutes"
+            description: |
+              Repeated elections usually mean slow disks, CPU starvation, or a
+              flaky network between control-plane nodes. Check the fsync and
+              commit latency alerts, node reboots, and talosctl logs etcd on
+              each member for slow fdatasync or heartbeat warnings.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        - alert: EtcdHighFsyncDurations
+          expr: histogram_quantile(0.99, rate(etcd_disk_wal_fsync_duration_seconds_bucket{job="kube-etcd"}[5m])) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            component: etcd
+          annotations:
+            summary: "etcd WAL fsync p99 on {{ $labels.instance }} is {{ $value | humanizeDuration }}"
+            description: |
+              Write-ahead-log fsyncs on {{ $labels.instance }} take over 500 ms
+              at the 99th percentile (normally 10-20 ms). Slow fsyncs delay
+              every write and lead to missed heartbeats and elections. Look
+              for contention or errors on that node's system disk.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        - alert: EtcdHighCommitDurations
+          expr: histogram_quantile(0.99, rate(etcd_disk_backend_commit_duration_seconds_bucket{job="kube-etcd"}[5m])) > 0.25
+          for: 10m
+          labels:
+            severity: warning
+            component: etcd
+          annotations:
+            summary: "etcd backend commit p99 on {{ $labels.instance }} is {{ $value | humanizeDuration }}"
+            description: |
+              Backend commits on {{ $labels.instance }} take over 250 ms at the
+              99th percentile (normally 10-20 ms), which slows applies on that
+              member. Look for contention or errors on that node's system disk.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        # etcd raises a NOSPACE alarm when the physical database reaches the
+        # quota; the cluster then rejects writes until it is defragmented and
+        # the alarm is disarmed. Critical inhibits warning for the same alert.
+        - alert: EtcdDatabaseNearQuota
+          expr: |
+            last_over_time(etcd_mvcc_db_total_size_in_bytes{job="kube-etcd"}[5m])
+              / last_over_time(etcd_server_quota_backend_bytes{job="kube-etcd"}[5m])
+              > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            component: etcd
+          annotations:
+            summary: "etcd database on {{ $labels.instance }} uses {{ $value | humanizePercentage }} of its quota"
+            description: |
+              The physical etcd database on {{ $labels.instance }} is past half
+              of its quota. Compare its size with the size in use from talosctl
+              etcd status: if most of it is free space, defragment as the
+              runbook describes; if it is in use, find the writer that grew it.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+        - alert: EtcdDatabaseNearQuota
+          expr: |
+            last_over_time(etcd_mvcc_db_total_size_in_bytes{job="kube-etcd"}[5m])
+              / last_over_time(etcd_server_quota_backend_bytes{job="kube-etcd"}[5m])
+              > 0.8
+          for: 10m
+          labels:
+            severity: critical
+            component: etcd
+          annotations:
+            summary: "etcd database on {{ $labels.instance }} uses {{ $value | humanizePercentage }} of its quota"
+            description: |
+              The physical etcd database on {{ $labels.instance }} is past 80%
+              of its quota. At 100% etcd raises NOSPACE and the API server can
+              no longer write. Act now: defragment if most of it is free space,
+              otherwise stop the writer that is growing it.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        - alert: EtcdDatabaseGrowingFast
+          expr: |
+            predict_linear(etcd_mvcc_db_total_size_in_bytes{job="kube-etcd"}[4h], 4 * 3600)
+              > etcd_server_quota_backend_bytes{job="kube-etcd"}
+          for: 10m
+          labels:
+            severity: warning
+            component: etcd
+          annotations:
+            summary: "etcd database on {{ $labels.instance }} will reach its quota within 4 hours"
+            description: |
+              At its growth rate over the last 4 hours, the database on
+              {{ $labels.instance }} reaches its quota within 4 hours. Find the
+              controller or workload writing objects or events in a loop
+              before defragmenting; defragmenting only buys time.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        # Free pages are reused, so fragmentation matters only as quota a
+        # defragmentation would give back. Informational: never pages.
+        - alert: EtcdDatabaseFragmented
+          expr: |
+            (
+              last_over_time(etcd_mvcc_db_total_size_in_bytes{job="kube-etcd"}[5m])
+                - last_over_time(etcd_mvcc_db_total_size_in_use_in_bytes{job="kube-etcd"}[5m])
+            )
+              / last_over_time(etcd_server_quota_backend_bytes{job="kube-etcd"}[5m])
+              > 0.25
+          for: 1h
+          labels:
+            severity: info
+            component: etcd
+          annotations:
+            summary: "Defragmenting etcd on {{ $labels.instance }} would free {{ $value | humanizePercentage }} of its quota"
+            description: |
+              Free pages in the database on {{ $labels.instance }} exceed a
+              quarter of the quota. Plan a defragmentation in a maintenance
+              window, one member at a time with the leader last.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts
+
+        # Fewer scrape targets than control-plane nodes means etcd alerts are
+        # blind for a member: the scrape is disabled, or the endpoint list in
+        # helmrelease.yaml no longer matches the nodes.
+        - alert: EtcdMetricsUnavailable
+          expr: (count(up{job="kube-etcd"}) or vector(0)) < count(kube_node_role{role="control-plane"})
+          for: 15m
+          labels:
+            severity: warning
+            component: etcd
+            namespace: kube-system
+          annotations:
+            summary: etcd metrics coverage is incomplete
+            description: |
+              Prometheus has fewer etcd scrape targets than control-plane
+              nodes, so etcd alerts cannot see every member. Check the kubeEtcd
+              endpoints in the kube-prometheus-stack HelmRelease against the
+              node addresses and the kube-etcd target in Prometheus.
+            runbook_url: https://wcygan.github.io/anton/guides/talos#etcd-alerts

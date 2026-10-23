@@ -27,10 +27,11 @@ values:
   kubeControllerManager: { enabled: false }   # Talos — absent
   kubeScheduler:         { enabled: false }   # Talos — absent
   kubeProxy:             { enabled: false }   # Cilium replaces it
-  kubeEtcd: { enabled: false|true }           # check Talos etcd exposure before flipping
+  kubeEtcd: { enabled: true }                 # node IPs on :2381, plain HTTP, authorization: null
   kubeStateMetrics: { enabled: true }         # (ships the kube-state-metrics subchart)
   nodeExporter:     { enabled: true }         # (ships node-exporter subchart)
-  defaultRules:     { create: true }          # default PrometheusRules the chart ships
+  defaultRules:     { create: true }          # default PrometheusRules the chart ships;
+                                              # rules.etcd: false — prometheusrule-etcd.yaml replaces them
 
   # Prometheus
   prometheus:
