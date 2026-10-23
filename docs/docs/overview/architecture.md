@@ -29,7 +29,7 @@ flowchart TB
 | --- | --- | --- | --- |
 | Machines | `talos/talconfig.yaml`, `talos/talenv.yaml`, and patches | Generating config, then a separately approved Talos apply | [Talos and node health](../guides/talos.md) |
 | Bootstrap | `bootstrap/helmfile.d/` | Rebuilding the cluster from scratch | — |
-| Steady state | `kubernetes/apps/` | A merged Git change that Flux reconciles | [Flux remediation](../guides/flux.md) |
+| Steady state | `kubernetes/apps/` | A commit on `main` that passes the [deploy gate](../guides/deploys.md), which Flux then reconciles | [Flux remediation](../guides/flux.md) |
 
 Bootstrap installs the network, DNS, certificate issuer, registry mirror, and Flux so the cluster can start. Flux then manages those same components from Git along with everything else. Generated Talos machine configuration is never edited by hand.
 

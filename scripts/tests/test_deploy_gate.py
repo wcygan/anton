@@ -191,5 +191,17 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(any("unittest discover" in str(command) for command in validate))
 
 
+class FluxSourceTests(unittest.TestCase):
+    def test_flux_reconciles_only_the_promoted_branch(self):
+        sync = yq_json("kubernetes/apps/flux-system/flux-instance/app/helmrelease.yaml",
+                       ".spec.values.instance.sync")
+        self.assertEqual(sync["ref"], "refs/heads/deploy")
+
+    def test_image_automation_writes_through_the_gate(self):
+        ref = yq_json("kubernetes/apps/flux-system/flux-instance/app/image-automation-gitrepository.yaml",
+                      ".spec.ref")
+        self.assertEqual(ref, {"name": "refs/heads/main"})
+
+
 if __name__ == "__main__":
     unittest.main()

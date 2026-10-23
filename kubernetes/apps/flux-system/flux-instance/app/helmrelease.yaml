@@ -25,7 +25,9 @@ spec:
       sync:
         kind: GitRepository
         url: "https://github.com/wcygan/anton.git"
-        ref: "refs/heads/main"
+        # Only commits that passed the Deploy Gate reach `deploy` (ADR 0045).
+        # Switch this ref with one push to both branches; see the deploy guide.
+        ref: "refs/heads/deploy"
         path: kubernetes/flux/cluster
         # The primary source stays anonymous because this repository is public.
         # Image automation uses a separate authenticated GitRepository so an

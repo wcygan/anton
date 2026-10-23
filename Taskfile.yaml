@@ -62,7 +62,7 @@ tasks:
       - test -f {{.KUBECONFIG}}
 
   reconcile:
-    desc: Force Flux to pull in changes from your Git repository
+    desc: Force Flux to fetch the deploy branch and reconcile the cluster root
     cmd: mise exec -- flux --namespace flux-system reconcile kustomization flux-system --with-source
     preconditions:
       - test -f {{.KUBECONFIG}}

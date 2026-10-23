@@ -24,6 +24,8 @@ Stop when: the stuck layer is named and the next correction is clear.
 6. Check SOPS decryption and postBuild substitutions.
 7. Propose a safe reconcile order if the source is stale.
 
+`flux-system` tracks `deploy`, which the Deploy Gate fast-forwards to `main` commits that pass. When that source is Ready but behind `main`, run `mise exec -- task deploy:status` before anything else: an unpromoted commit is a gate result, not a stuck source, and a reconcile cannot fetch it.
+
 Read [helm-remediation-deadlocks.md](references/helm-remediation-deadlocks.md)
 for Helm timeout, cleanup, rollback, hook-cycle, or immutable Job symptoms.
 

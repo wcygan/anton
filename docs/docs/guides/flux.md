@@ -4,7 +4,7 @@ title: Flux remediation
 
 # Flux remediation
 
-Flux applies everything committed under `kubernetes/` once bootstrap is done. When a Flux resource is stuck, the error you see is often downstream of the real one. Find the earliest failing object first.
+Flux applies everything committed under `kubernetes/` once bootstrap is done, reading the `deploy` branch that the [deploy gate](deploys.md) advances. When a Flux resource is stuck, the error you see is often downstream of the real one. Find the earliest failing object first.
 
 ```mermaid
 flowchart TB
@@ -27,6 +27,8 @@ mise exec -- flux logs --all-namespaces --since=30m
 ```
 
 Record each failing object's source revision, generation, condition reason, message, and time.
+
+If the `flux-system` source is Ready but behind `main`, run `mise exec -- task deploy:status` first. A commit the gate has not promoted is not a Flux failure, and reconciling will not fetch it.
 
 ## 2. Inspect the earliest failure
 

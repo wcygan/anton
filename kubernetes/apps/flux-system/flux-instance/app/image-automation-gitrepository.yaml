@@ -2,6 +2,8 @@
 # Keep image automation's write credential out of the primary public source.
 # A failed ESO sync or GitHub credential then pauses image bumps only, while
 # Flux can continue anonymously pulling the cluster's GitOps configuration.
+# Image automation commits to `main` like everyone else, so the Deploy Gate
+# validates its commits before Flux sees them on `deploy`.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:

@@ -137,6 +137,7 @@ index with `mise exec -- task qmd:bootstrap`.
 4. For SOPS files, verify encryption with `sops filestatus`; finish only when every touched payload reports encrypted.
 5. Run the narrowest validation that proves the edited surface: YAML parse, skill or hook fixture, Docusaurus check, generated-config check, or read-only Flux/Talos status. Run `mise exec -- task contracts:validate` when changing Flux application policy, Kubernetes logging semantics, SeaweedFS bucket provisioning, cluster target/preflight behavior, or shared agent safety policy.
 6. Summarize changed files, validation evidence, residual risks, and any operator-only follow-up. Do not reconcile or apply merely because repository validation passed.
+7. A push to `main` reaches the cluster only after the Deploy Gate promotes it to `deploy`; check with `mise exec -- task deploy:status`. Never push `deploy`: the break-glass path in `docs/docs/guides/deploys.md` belongs to the operator.
 
 ## Agent integration
 

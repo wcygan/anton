@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Deploying changes
 
-The deploy gate validates every commit on `main` and fast-forwards the `deploy` branch to the commits that pass. Once Flux reconciles `deploy`, only those commits reach the cluster. You still commit to `main` the same way. [ADR 0045](../decisions/0045-deploy-only-validated-commits.md) records why.
+The deploy gate validates every commit on `main` and fast-forwards the `deploy` branch to the commits that pass. Flux reconciles `deploy`, so only those commits reach the cluster. You still commit to `main` the same way. [ADR 0045](../decisions/0045-deploy-only-validated-commits.md) records why.
 
 ```mermaid
 flowchart TB
@@ -15,10 +15,6 @@ flowchart TB
   Main -.->|break glass| Deploy
   Deploy -->|source revision| Flux["Flux"]:::control
 ```
-
-:::note Cutover pending
-Flux still reconciles `main` until the cutover described below lands. Until then the gate runs in shadow mode: it validates every commit and advances `deploy`, but nothing reads that branch yet.
-:::
 
 ## How a commit reaches the cluster
 
@@ -114,9 +110,9 @@ Do these in the repository settings before the gate's first run on `main`:
 
 Create the environment before the workflow first runs on `main`; GitHub creates a missing environment on first use, without the branch restriction. Until the App is configured, Promote fails and `deploy` does not move. To rotate the key, generate a new one, replace the secret, then delete the old key.
 
-## Cutover
+## Change the branch Flux tracks
 
-The Flux source switches from `main` to `deploy` once, after the gate has promoted reliably for a while. The switching commit must reach both branches in a single push. If it reached only `main`, Flux would apply it, start tracking `deploy`, find the old setting there, and switch back until the gate promoted the commit.
+The `sync.ref` of the FluxInstance in `kubernetes/apps/flux-system/flux-instance/app/helmrelease.yaml` names the branch. A commit that moves it from `main` to `deploy` must reach both branches in a single push. If it reached only `main`, Flux would apply it, start tracking `deploy`, find the old setting there, and switch back until the gate promoted the commit:
 
 ```sh
 git fetch origin
@@ -124,4 +120,4 @@ git merge-base --is-ancestor origin/main <switch-commit>
 ANTON_BREAK_GLASS=1 git push --atomic origin <switch-commit>:refs/heads/main <switch-commit>:refs/heads/deploy
 ```
 
-Then confirm that the `flux-system` GitRepository reports `refs/heads/deploy` at that commit. To return to `main`, commit the old setting to `main`; the gate promotes it and Flux follows.
+Moving back to `main` needs no special push: commit the change to `main`, the gate promotes it, and Flux follows. Either way, confirm that the `flux-system` GitRepository reports the intended branch at that commit.
