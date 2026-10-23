@@ -86,3 +86,52 @@ git revert --no-edit <resource-contract-commit>
 Then verify the HelmRelease revision and Deployment values again. The prior
 chart render left both containers with empty resources, so rollback restores
 that state while a revised reservation is prepared.
+
+## SeaweedFS components
+
+### Baseline
+
+The `Seaweed` CR set no requests on the master, volume, filer or S3
+containers, so volume and filer pods were BestEffort and master and S3 pods
+were Burstable only through their sidecars. Under memory pressure the kubelet
+evicts pods that use more memory than they request before any others, whatever
+their priority, so the volume servers were among the first candidates even
+after moving to the `storage-service` tier.
+
+Pod working sets (`container_memory_working_set_bytes` summed per pod, read
+through the Kubernetes service proxy on 2026-10-23, with 25 days retained):
+
+| Component | p95, 7 days | Peak, 25 days |
+| --- | ---: | ---: |
+| master | 127 MiB | 154 MiB |
+| volume | 62 MiB | 712 MiB |
+| filer | 226 MiB | 1,705 MiB |
+| S3 (with read probe) | 288 MiB | 336 MiB |
+
+The volume peak fell on the 2026-10-20 stock cutover. The filer passed 512 MiB
+on four days (2026-09-28, 10-02, 10-13 and 10-14) and reached 1.9 GiB on
+2026-09-28, just before the 25-day window. Their causes were not investigated.
+
+### Reservations and benefit
+
+Memory requests only: master `192Mi`, volume `768Mi`, filer `512Mi`, S3
+`384Mi`. They cover the observed master, volume and S3 peaks; the filer's
+covers its routine load but not those four days. Together they reserve about
+1.5 GiB per node out of roughly 88 GiB allocatable. No limits:
+a limit would turn a spike into an OOM kill mid-write. CPU is unchanged. A pod
+that spikes above its request rejoins the first eviction group, where its
+priority still ranks it after ordinary workloads and storage consumers.
+
+### Rollout verification and rollback
+
+The change rolls every SeaweedFS StatefulSet and the S3 Deployment, so it
+needs the writer fence in the `seaweedfs-ops` node-maintenance procedure.
+Afterwards confirm the requests and QoS on the running pods:
+
+```sh
+mise exec -- kubectl -n storage get pods -l app.kubernetes.io/instance=seaweedfs \
+  -o custom-columns='NAME:.metadata.name,PRIORITY:.spec.priority,QOS:.status.qosClass'
+```
+
+Every component pod should report priority `500000000` and QoS `Burstable`.
+Rollback is a Git revert, which rolls the pods again under the same fence.

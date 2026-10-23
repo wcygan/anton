@@ -22,6 +22,9 @@ spec:
       namespace: network
     - name: external-secrets
       namespace: external-secrets
+    # The Seaweed components name a PriorityClass from this provider.
+    - name: priority-classes
+      namespace: kube-system
   path: ./kubernetes/apps/storage/seaweedfs-config/app
   prune: true
   sourceRef:

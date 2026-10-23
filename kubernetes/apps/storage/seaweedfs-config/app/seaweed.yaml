@@ -11,6 +11,14 @@ spec:
   imagePullPolicy: IfNotPresent
   master:
     replicas: 3
+    # Every component runs in the storage-service tier: on node shutdown it
+    # stops after its clients and before Longhorn, and the kubelet evicts it
+    # after them (kube-system/priority-classes). Eviction first picks pods
+    # using more memory than they request, whatever their priority, so each
+    # component requests its observed working set.
+    priorityClassName: storage-service
+    requests:
+      memory: 192Mi
     extraArgs:
       - -telemetry=false
     # Operator 1.0.39 can override probe timings, but not its HTTP path.
@@ -79,8 +87,13 @@ spec:
     # Advertise the stable StatefulSet peer DNS while keeping startup independent
     # of headless-Service DNS resolution.
     ipBind: 0.0.0.0
+    priorityClassName: storage-service
     requests:
+      memory: 768Mi
       storage: 160Gi
+    # On SIGTERM weed stops heartbeats, waits 10 seconds, drains HTTP for up
+    # to 30 seconds and then closes its volumes; leave room for all of it.
+    terminationGracePeriodSeconds: 60
     storageClassName: longhorn      # default Longhorn SC; no NAD attachment here
     # Phase 1 scratch shakeout showed `replicas: 3` alone does not spread
     # across nodes (all three landed on k8s-2). Chart 0.1.14's Seaweed CRD
@@ -100,6 +113,9 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   filer:
     replicas: 2                     # preserve the existing persistent metadata pair
+    priorityClassName: storage-service
+    requests:
+      memory: 512Mi
     config: |
       [leveldb2]
       enabled = true
@@ -182,6 +198,9 @@ spec:
             readOnly: true
     metricsPort: 9327
     replicas: 2                     # standalone Deployment HA per ADR 0019
+    priorityClassName: storage-service
+    requests:
+      memory: 384Mi
     iam: false                      # explicit override — operator default is true
     # The learning lakehouse is retired; stock 4.48 otherwise listens on 8181.
     extraArgs:
