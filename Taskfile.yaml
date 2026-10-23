@@ -79,8 +79,8 @@ tasks:
       - test -f .qmd/index.yml
       - which qmd
 
-  contracts:validate:
-    desc: Validate committed cluster operation contracts
+  contracts:fast:
+    desc: Run the static contract validators (seconds; the pre-push hook runs these)
     cmds:
       - python3 scripts/validate-public-privacy.py
       - python3 scripts/validate-documentation.py
@@ -91,9 +91,22 @@ tasks:
       - python3 scripts/validate-spark-runtime-contract.py
       - python3 scripts/validate-external-secret-contract.py
       - python3 scripts/validate-target-contract.py
+    preconditions:
+      - which flux kustomize python3 yq
+
+  contracts:validate:
+    desc: Validate committed cluster operation contracts (the deploy gate runs this)
+    cmds:
+      - task: contracts:fast
       - python3 -m unittest discover -s scripts/tests -p 'test_*.py'
     preconditions:
       - which flux kustomize python3 yq
+
+  deploy:status:
+    desc: Show main, the deploy branch, the latest Deploy Gate run, and the cluster's Flux revision
+    cmd: scripts/deploy-status.sh
+    preconditions:
+      - which git gh
 
   external-secrets:force-refresh:
     desc: Force one approved ExternalSecret to refresh from 1Password

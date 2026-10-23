@@ -1,0 +1,116 @@
+---
+name: "Deploy Gate"
+
+# Flux reconciles the `deploy` branch. Every commit on `main` runs the contract
+# suite and a full flux-local render; when both pass, `deploy` fast-forwards to
+# that commit. Pull requests run the same checks without promoting.
+# See docs/docs/guides/deploys.md and ADR 0045.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A pull request update replaces its older run. Each main commit keeps its own
+  # run, so a passing commit still promotes when a newer one fails.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  contracts:
+    name: Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Install only the tools the suite calls instead of all of .mise.toml.
+      MISE_EXEC_AUTO_INSTALL: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install tools
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          install_args: >-
+            python
+            aqua:fluxcd/flux2
+            aqua:go-task/task
+            aqua:helm/helm
+            aqua:jqlang/jq
+            aqua:kubernetes-sigs/kustomize
+            aqua:kubernetes/kubectl
+            aqua:mikefarah/yq
+            aqua:prometheus/alertmanager
+
+      - name: Validate contracts
+        run: mise exec -- task contracts:validate
+
+  render:
+    name: Render
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run flux-local test
+        uses: docker://ghcr.io/allenporter/flux-local:v8.3.0
+        with:
+          # `--sources "flux-system"` matches the diff job and restricts the
+          # test set to Kustomizations whose `sourceRef` points at the main
+          # `flux-system` GitRepository. Anton has two inner Kustomizations
+          # (multus-upstream, whereabouts-upstream) that source from external
+          # GitRepositories whose contents flux-local does not pull — without
+          # this flag, the test phase tries to `kustomize build` the inner
+          # paths (`deployments`, `doc/crds`) against the local checkout and
+          # raises KustomizePathException.
+          # `--skip-invalid-helm-release-paths` skips HelmReleases whose chart
+          # path does not exist locally — covers `dragonfly-operator` whose
+          # chart lives inside an external GitRepository at runtime
+          # (`./charts/dragonfly-operator`).
+          # `--skip-invalid-kustomization-paths` keeps the upfront-collection
+          # path check from short-circuiting the whole pytest run; the upstream
+          # GitHub-action wrapper exposed it in v8.1.0 (PR #1069).
+          # Refs: allenporter/flux-local#1068, anton plan 0016 PR #282.
+          args: test --enable-helm --all-namespaces --sources "flux-system" --skip-invalid-helm-release-paths --skip-invalid-kustomization-paths --path /github/workspace/kubernetes/flux/cluster -v
+
+  promote:
+    name: Promote
+    needs: ["contracts", "render"]
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The environment admits only `main` and holds the promoter App's key, so
+    # workflow code on other branches cannot reach it.
+    environment: deploy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create promotion token
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DEPLOY_PROMOTER_CLIENT_ID }}
+          private-key: ${{ secrets.DEPLOY_PROMOTER_PRIVATE_KEY }}
+          # The default workflow token cannot move a branch past changes to
+          # .github/workflows, which Renovate updates regularly.
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Fast-forward deploy
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: python3 scripts/promote-deploy.py --repository "${GITHUB_REPOSITORY}" --commit "${GITHUB_SHA}"
