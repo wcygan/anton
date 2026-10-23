@@ -8,6 +8,28 @@ spec:
   groups:
     - name: cluster-recovery
       rules:
+        - alert: MaintenanceSnapshotCleanupFailed
+          expr: |
+            max by (namespace, job_name) (
+              (kube_job_status_failed{namespace="storage"} > 0)
+              or on (namespace, job_name)
+              (kube_job_failed{namespace="storage",condition="true"} == 1)
+            )
+            and on (namespace, job_name)
+            max by (namespace, job_name) (
+              kube_job_owner{namespace="storage",owner_kind="CronJob",owner_name="snapshot-retention",owner_is_controller="true"} == 1
+            )
+          for: 5m
+          labels:
+            severity: warning
+            component: snapshot-retention
+          annotations:
+            summary: Released maintenance snapshot cleanup failed
+            description: |
+              The daily cleanup Job {{ $labels.job_name }} failed. Inspect its logs,
+              the recovery Lease, both verified checkpoint generations, restore consumers
+              and Longhorn health. Do not remove finalizers or replica files to force cleanup.
+            runbook_url: https://wcygan.github.io/anton/guides/storage#maintenance-snapshot-retention
         - alert: ClusterRecoveryCheckpointFailed
           expr: |
             max by (namespace, job_name) (

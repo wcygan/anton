@@ -107,6 +107,51 @@ before cleanup. Dedicated leftover/headroom alerts are deferred because the
 controller's UID registry and conservative capacity calculation are not exported
 as robust Prometheus metrics.
 
+## Maintenance snapshot retention
+
+Monthly recovery keeps the latest two verified generations automatically. Older
+maintenance and forensic snapshots have a separate lifecycle: their owner releases
+an exact snapshot only after its upgrade or investigation is verified and closed.
+Age alone never establishes that a snapshot is redundant.
+
+`storage/snapshot-retention` runs daily at 02:30 UTC. It deletes only snapshots in
+`longhorn-wal-forensics` with both annotations below. Set the timestamp to when the
+snapshot may be removed; setting it to the current UTC time makes it eligible for
+the next daily run. The release value must match the actual snapshot UID, so copied
+annotations cannot authorize deletion of a replacement object.
+
+```yaml
+metadata:
+  annotations:
+    retention.anton.wcygan.dev/released-uid: <actual-snapshot-uid>
+    retention.anton.wcygan.dev/delete-after: "2026-11-01T00:00:00Z"
+```
+
+Inspect the exact snapshot and binding before annotating it through the approved
+cluster context. No annotations means indefinite retention. To defer or cancel an
+unstarted cleanup, move the timestamp into the future or remove both annotations.
+Do not release snapshots while their recovery or investigation hold remains open.
+
+The cleanup uses the recovery Lease to exclude concurrent checkpoint runs. It
+requires both verified six-volume generations Ready, a completed recovery journal,
+healthy attached Longhorn volumes, and no PVC referencing the candidate snapshot.
+It verifies the CSI content binding and native Longhorn handle, changes that exact
+content's deletion policy to `Delete`, and deletes the snapshot with UID and resource
+version preconditions. The shared forensic snapshot class remains `Retain`.
+
+Each deletion waits for CSI object removal and checks that the backend snapshot is
+absent or marked removed before proceeding. A crash after the policy update is
+safe to retry; CSI owns any deletion already started. Finalizer removal and direct
+replica-file deletion are never part of this workflow. The job has no PVC mutation
+permission, mounts no data volumes, and communicates only with the Kubernetes API.
+`MaintenanceSnapshotCleanupFailed` reports failed scheduled cleanup Jobs.
+
+Longhorn merges retained snapshot chains and reclaims only blocks no longer needed
+by a remaining snapshot or the live volume. Reported snapshot sizes therefore do
+not predict freed disk space. Measure actual replica allocation and disk free space
+after purge settles. Live application retention and garbage collection remain
+separate from snapshot retention.
+
 ## Serial Longhorn engine upgrades
 
 A manager/chart upgrade does not prove that existing volume engines advanced.

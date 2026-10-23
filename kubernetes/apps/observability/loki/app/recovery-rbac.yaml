@@ -10,3 +10,17 @@ subjects:
   - kind: ServiceAccount
     name: cluster-recovery
     namespace: storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: snapshot-retention
+  namespace: observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: snapshot-retention-namespace
+subjects:
+  - kind: ServiceAccount
+    name: snapshot-retention
+    namespace: storage
