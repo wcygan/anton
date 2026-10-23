@@ -33,6 +33,37 @@ tasks:
       - test -x {{.ANTON_BASH}}
       - which mise kubectl
 
+  node-gate:
+    desc: Read-only gate for one node; pre before cordon, return before uncordon, post after uncordon [NODE= PHASE=]
+    cmd: >-
+      python3 {{.SCRIPTS_DIR}}/node-gate.py
+      --node "$GATE_NODE" --phase "$GATE_PHASE" --wait "$GATE_WAIT"
+      {{if .REBOOTED}}--rebooted "$GATE_REBOOTED"{{end}}
+      {{if .ACCEPT_ALERTS}}--accept-alert "$GATE_ACCEPT_ALERTS"{{end}}
+      {{if .TALOS_VERSION}}--talos-version "$GATE_TALOS_VERSION"{{end}}
+      {{if .KUBERNETES_VERSION}}--kubernetes-version "$GATE_KUBERNETES_VERSION"{{end}}
+      --report "{{.PRIVATE_DIR}}/node-gate/$(date -u +%Y%m%dT%H%M%SZ)-$GATE_NODE-$GATE_PHASE.json"
+    env:
+      GATE_NODE: '{{.NODE}}'
+      GATE_PHASE: '{{.PHASE}}'
+      GATE_WAIT: '{{.WAIT}}'
+      GATE_REBOOTED: '{{.REBOOTED}}'
+      GATE_ACCEPT_ALERTS: '{{.ACCEPT_ALERTS}}'
+      GATE_TALOS_VERSION: '{{.TALOS_VERSION}}'
+      GATE_KUBERNETES_VERSION: '{{.KUBERNETES_VERSION}}'
+    vars:
+      WAIT: '{{.WAIT | default "0"}}'
+    requires:
+      vars:
+        - NODE
+        - name: PHASE
+          enum: [pre, return, post]
+    preconditions:
+      - test -f {{.SCRIPTS_DIR}}/node-gate.py
+      - test -f {{.TALOSCONFIG}}
+      - test -f {{.KUBECONFIG}}
+      - which python3 kubectl talosctl
+
   generate-config:
     desc: Generate Talos configuration
     dir: '{{.TALOS_DIR}}'
