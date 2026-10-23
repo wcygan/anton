@@ -1,4 +1,12 @@
 {
+  "enabledMcpjsonServers": [
+    "grafana"
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__grafana"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

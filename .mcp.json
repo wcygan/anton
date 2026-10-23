@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "command": "uv",
+      "args": ["run", "--quiet", "--script", "${ANTON_PRIVATE_DIR:-../anton-private}/mcp/grafana.py"]
+    }
+  }
+}
