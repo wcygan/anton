@@ -18,6 +18,8 @@ spec:
   # backends or secrets.
   dependsOn:
     - name: harbor-config
+    - name: priority-classes
+      namespace: kube-system
   wait: false
   postBuild:
     substituteFrom:
