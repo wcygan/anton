@@ -71,7 +71,11 @@ spec:
   volume:
     replicas: 3                     # one per node
     metricsPort: 9327
-    maxVolumeCounts: 24
+    # Slots run out before bytes: each bucket settles at one 001 volume per
+    # server pair (six slots). 30 x 5000 MiB = 146.5 GiB fits the ~157 GiB
+    # filesystem of each 160Gi claim after the 1% minFreeSpace and one volume
+    # of compaction space. Raise the claim before going above 30.
+    maxVolumeCounts: 30
     # Advertise the stable StatefulSet peer DNS while keeping startup independent
     # of headless-Service DNS resolution.
     ipBind: 0.0.0.0
