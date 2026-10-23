@@ -83,3 +83,4 @@ flowchart LR
 | 0042 | [Bound numbered log confirmation deadlines](0042-bound-numbered-log-confirmation-deadlines.md) | Accepted | 2026-10-19 |
 | 0043 | [Keep two SeaweedFS copies for node maintenance](0043-keep-two-seaweedfs-copies-for-maintenance.md) | Superseded by [0044](0044-use-stock-shared-s3-with-planned-downtime.md) | 2026-10-19 |
 | 0044 | [Use stock shared S3 with planned downtime](0044-use-stock-shared-s3-with-planned-downtime.md) | Accepted | 2026-10-20 |
+| 0045 | [Deploy only commits that pass the deploy gate](0045-deploy-only-validated-commits.md) | Accepted | 2026-10-23 |

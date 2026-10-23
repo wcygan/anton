@@ -17,10 +17,12 @@ repository template-render step.
 
 ```sh
 mise exec -- task --list
+mise exec -- task hooks:install
 mise exec -- task contracts:validate
 ```
 
-Read [AGENTS.md](AGENTS.md) and the matching `.agents/skills/` procedure before
+The deploy gate validates every commit on `main`; see
+[deploying changes](docs/docs/guides/deploys.md). Read [AGENTS.md](AGENTS.md) and the matching `.agents/skills/` procedure before
 operational changes. These procedures are shared across agent harnesses. Live
 cluster actions require explicit approval; repository validation does not grant it.
 
