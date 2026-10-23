@@ -77,6 +77,9 @@ spec:
     # errors page. (The 2026-05-06/07 silent-attach mode where the daemon
     # returns success without actually attaching is caught separately by the
     # kube-state-metrics annotation-allowlist alert in `prometheusrule.yaml`.)
+    # `multusAutoconfigDir` reads Cilium's config from /etc/cni/multus/net.d,
+    # which the upstream DaemonSet mounts as `multus-conf-dir`; Multus still
+    # writes 00-multus.conf to /etc/cni/net.d (`cniConfigDir`).
     - target:
         kind: ConfigMap
         name: multus-daemon-config
@@ -93,7 +96,7 @@ spec:
                 "logLevel": "verbose",
                 "logToStderr": true,
                 "cniConfigDir": "/host/etc/cni/net.d",
-                "multusAutoconfigDir": "/host/etc/cni/net.d",
+                "multusAutoconfigDir": "/etc/cni/multus/net.d",
                 "multusConfigFile": "auto",
                 "socketDir": "/host/run/multus/",
                 "metricsPort": 9091
@@ -148,6 +151,43 @@ spec:
               - name: cnibin
                 mountPath: /host/opt/cni/bin
                 mountPropagation: Bidirectional
+    # Cilium writes its config to /etc/cni/multus/net.d (cilium `cni.confPath`)
+    # and Multus reads it from there, so 00-multus.conf must be the only config
+    # containerd sees. Remove a Cilium config left in /etc/cni/net.d by an
+    # older Cilium: Multus deletes 00-multus.conf whenever it exits, and pods
+    # created while only that copy remained started without Multus (Longhorn
+    # instance managers without lhnet1). /etc/cni is tmpfs on Talos, so a
+    # reboot also clears it; this closes the gap until then.
+    - target:
+        kind: DaemonSet
+        name: kube-multus-ds
+      patch: |-
+        - op: add
+          path: /spec/template/spec/initContainers/-
+          value:
+            name: remove-direct-cilium-config
+            # renovate: datasource=docker depName=ghcr.io/k8snetworkplumbingwg/multus-cni
+            image: ghcr.io/k8snetworkplumbingwg/multus-cni:v4.3.1-thick@sha256:a357a79359b80ddd5f4699117946cacf3b54f5baecf7944535594863e875fc25
+            command:
+              - /bin/sh
+              - -ec
+              - |
+                if [ -s /etc/cni/multus/net.d/05-cilium.conflist ] && [ -e /host/etc/cni/net.d/05-cilium.conflist ]; then
+                  rm -f /host/etc/cni/net.d/05-cilium.conflist
+                  echo "removed /etc/cni/net.d/05-cilium.conflist; Multus delegates to /etc/cni/multus/net.d"
+                fi
+            resources:
+              requests:
+                cpu: 10m
+                memory: 15Mi
+            securityContext:
+              privileged: true
+            volumeMounts:
+              - name: cni
+                mountPath: /host/etc/cni/net.d
+              - name: multus-conf-dir
+                mountPath: /etc/cni/multus/net.d
+                readOnly: true
     # Pin the upstream `install-multus-binary` init container, which otherwise
     # rides the floating `:snapshot-thick` tag and installs an unpinned CNI
     # binary onto the host filesystem. The containers/0 pin above only covers
