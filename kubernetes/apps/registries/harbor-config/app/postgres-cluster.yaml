@@ -3,9 +3,21 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: harbor-postgres
+  annotations:
+    # CNPG does not restart pods when priorityClassName changes; a new value
+    # here restarts every instance, replicas first.
+    kubectl.kubernetes.io/restartedAt: "2026-10-23T00:00:00Z"
 spec:
   instances: 3
   imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+
+  # On node shutdown the database stops after Harbor and before Longhorn
+  # (kube-system/priority-classes), within the kubelet's 90-second budget for
+  # this tier. Harbor's pooled sessions on other nodes never end on their
+  # own, so cut the smart shutdown short; the fast shutdown still writes a
+  # checkpoint and sends it to the replicas.
+  priorityClassName: storage-service
+  smartShutdownTimeout: 15
 
   affinity:
     enablePodAntiAffinity: true
