@@ -102,6 +102,12 @@ tasks:
     preconditions:
       - which flux kustomize python3 yq
 
+  hooks:install:
+    desc: Install the pre-push hook that runs contracts:fast on every pushed commit
+    cmd: scripts/install-git-hooks.sh
+    preconditions:
+      - which git
+
   deploy:status:
     desc: Show main, the deploy branch, the latest Deploy Gate run, and the cluster's Flux revision
     cmd: scripts/deploy-status.sh
