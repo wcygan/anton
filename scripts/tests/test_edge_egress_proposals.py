@@ -24,9 +24,12 @@ def allows(policy, namespace, labels, port, protocol="TCP", address=None):
             continue
         for peer in rule["to"]:
             if "ipBlock" in peer:
-                if set(peer) != {"ipBlock"} or set(peer["ipBlock"]) != {"cidr"}:
+                if set(peer) != {"ipBlock"} or set(peer["ipBlock"]) - {"cidr", "except"}:
                     raise AssertionError("review changed IP block semantics")
-                if address and ipaddress.ip_address(address) in ipaddress.ip_network(peer["ipBlock"]["cidr"]):
+                if (address
+                    and ipaddress.ip_address(address) in ipaddress.ip_network(peer["ipBlock"]["cidr"])
+                    and not any(ipaddress.ip_address(address) in ipaddress.ip_network(block)
+                                for block in peer["ipBlock"].get("except", []))):
                     return True
                 continue
             if "podSelector" not in peer or set(peer) - {"podSelector", "namespaceSelector"}:
@@ -54,7 +57,10 @@ class EdgeEgressProposalTests(unittest.TestCase):
             app = "cloudflare-tunnel" if name == "cloudflare-tunnel" else "envoy-gateway"
             rendered = subprocess.check_output(
                 ["kubectl", "kustomize", str(REPO / "kubernetes/apps/network" / app / "app")], text=True)
-            self.assertNotIn(policy["metadata"]["name"], rendered)
+            documents = json.loads(subprocess.check_output(
+                ["yq", "eval-all", "-o=json", "[.]", "-"], input=rendered, text=True))
+            self.assertNotIn(policy["spec"], [doc.get("spec") for doc in documents
+                                            if doc.get("kind") == "NetworkPolicy"])
 
     def test_both_allow_only_coredns_for_dns(self):
         for policy in self.policies.values():

@@ -6,6 +6,8 @@ title: Kubernetes logs
 
 The OpenTelemetry Collector reads container logs on every node and sends them to Loki. You query them in Grafana; Loki itself is internal only. Metrics live separately in Prometheus.
 
+Loki runs the stock 3.7.9 release as a single monolithic instance. Its WAL is enabled and flushes on shutdown, and it keeps chunks in SeaweedFS. Under [ADR 0044](../decisions/0044-use-stock-shared-s3-with-planned-downtime.md), occasional log loss during crashes or planned maintenance is accepted, so logs are best-effort diagnostics, not an audit trail.
+
 ```mermaid
 flowchart TB
   Pod["Container output"]:::processing -->|log files| Collector["OTel Collector"]:::flow
@@ -41,6 +43,31 @@ Narrow the stream selector first, then add a line filter. Avoid queries that sca
 
 For collector or Loki symptoms, inspect the named deployment and its recent events before changing configuration. The `query-kubernetes-logs` skill has detailed LogQL and ingestion troubleshooting. Do not create diagnostic pods, port-forwards, or synthetic traffic without approval.
 
+## Log-loss alerts
+
+Alerts watch each stage where records could be lost. Critical alerts page through the existing ntfy route; the queue-high warning shows only in Prometheus and Grafana.
+
+| Stage | Alerts fire on |
+| --- | --- |
+| Collector checkpoints | Failure to load or save reader offsets |
+| Collector queue | Queue above 80% (warning) or 95% (critical); failure to enqueue; final export failure |
+| Loki WAL | Replay errors or discarded samples; failed WAL writes or checkpoints |
+| Coverage | Missing collector or Loki metrics, so an outage cannot look like an empty queue |
+
+A firing alert signals risk, not proven loss. Never restart Loki to clear a WAL recovery alert: keep the evidence, assess the impact, then silence it for that incident.
+
+## Log-delivery canary
+
+A canary DaemonSet proves logs arrive end to end ([ADR 0042](../decisions/0042-bound-numbered-log-confirmation-deadlines.md)). Every ten seconds, each node's probe writes a numbered record to stdout and then looks for it in Loki.
+
+| Alert | Fires when |
+| --- | --- |
+| `LokiCanaryMissingLogs` | A record is still unconfirmed after 180 seconds |
+| `LokiCanaryDeliveryStalled` | No record was emitted, or no query succeeded, for 180 seconds |
+| `LokiCanaryCoverageMissing` | Fewer healthy probes than scheduled nodes |
+
+With healthy monitoring, a missing record pages within 270 seconds. The probes verify only their own records, and a detection can mean delay or a query outage rather than loss. Keep probe pods running during collector or Loki restart tests, because a restarted probe forgets what it expected.
+
 ## Labels and retention
 
 The logging contract is executable. It defines indexed labels, severity normalization, per-stream retention, and safe query vocabulary. Read it from the source rather than copying its tables:
@@ -51,6 +78,8 @@ mise exec -- task contracts:validate
 ```
 
 Older captures may have scrape gaps or use an earlier schema, so compare like with like.
+
+The `query-kubernetes-logs` skill's [pipeline reference](https://github.com/wcygan/anton/blob/main/.agents/skills/query-kubernetes-logs/references/loki-pipeline.md) holds the detailed reader, queue, alert, and canary procedures, including the local verification commands.
 
 ## Change and recovery order
 

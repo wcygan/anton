@@ -3,6 +3,7 @@ set -eu
 
 : "$${S3_ENDPOINT:?S3_ENDPOINT is required}"
 : "$${ORDINARY_BUCKETS:?ORDINARY_BUCKETS is required}"
+ORDINARY_BUCKETS="$ORDINARY_BUCKETS $${AUXILIARY_ORDINARY_BUCKETS:-}"
 TABLE_BUCKETS="$${TABLE_BUCKETS:-}"
 ORDINARY_PREFIXES="$${ORDINARY_PREFIXES:-}"
 
@@ -187,5 +188,18 @@ done
 for prefix in $ORDINARY_PREFIXES; do
   ensure_ordinary_prefix "$prefix"
 done
+
+if [ -n "$${READ_PROBE_BUCKET:-}" ]; then
+  case " $ORDINARY_BUCKETS " in
+    *" $READ_PROBE_BUCKET "*) ;;
+    *) log error "probe bucket must be declared ordinary" >&2; exit 1 ;;
+  esac
+  if ! aws --endpoint-url="$S3_ENDPOINT" s3api head-object --bucket "$READ_PROBE_BUCKET" --key fixture-v1 >/dev/null 2>&1; then
+    dd if=/dev/zero of=/tmp/s3-read-probe-fixture bs=65536 count=1 2>/dev/null
+    aws --endpoint-url="$S3_ENDPOINT" s3api put-object --bucket "$READ_PROBE_BUCKET" --key fixture-v1 --body /tmp/s3-read-probe-fixture >/dev/null
+    rm /tmp/s3-read-probe-fixture
+    log info "read probe fixture created" "bucket=$READ_PROBE_BUCKET"
+  fi
+fi
 
 log info "bucket provisioning complete" "created=$created" "present=$present"

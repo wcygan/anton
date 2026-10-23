@@ -1,0 +1,102 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otel-log-durability
+  labels:
+    app.kubernetes.io/name: otel-collector
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: otel-log-durability
+      interval: 30s
+      rules:
+        - alert: OTelCollectorQueueHigh
+          expr: |
+            otelcol_exporter_queue_size{namespace="observability",exporter="otlp_http/loki",data_type="logs"}
+            / otelcol_exporter_queue_capacity{namespace="observability",exporter="otlp_http/loki",data_type="logs"} > 0.8
+          for: 2m
+          labels:
+            severity: warning
+            component: otel-collector
+          annotations:
+            summary: Collector queue above 80% on {{ $labels.pod }}
+            description: |
+              The node-local Loki export queue has remained above 80% of capacity for two
+              minutes. The configured sizer is bytes despite the metric HELP saying batches.
+              Check Loki readiness, export retries and node storage before the queue fills.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
+        - alert: OTelCollectorQueueSaturated
+          expr: |
+            otelcol_exporter_queue_size{namespace="observability",exporter="otlp_http/loki",data_type="logs"}
+            / otelcol_exporter_queue_capacity{namespace="observability",exporter="otlp_http/loki",data_type="logs"} > 0.95
+          for: 1m
+          labels:
+            severity: critical
+            component: otel-collector
+          annotations:
+            summary: Collector queue nearly full on {{ $labels.pod }}
+            description: |
+              The persistent Loki export queue has remained above 95% for one minute.
+              Readers may pause and source-log rotation can overtake catch-up. Restore
+              export throughput; do not clear checkpoint or queue databases.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
+        - alert: OTelCollectorEnqueueFailure
+          expr: |
+            max by (namespace,pod) (
+              (increase(otelcol_exporter_enqueue_failed_log_records{namespace="observability",exporter="otlp_http/loki"}[15m]) > 0)
+              or
+              (otelcol_exporter_enqueue_failed_log_records{namespace="observability",exporter="otlp_http/loki"} > 0 unless otelcol_exporter_enqueue_failed_log_records{namespace="observability",exporter="otlp_http/loki"} offset 15m)
+            ) > 0
+          labels:
+            severity: critical
+            component: otel-collector
+          annotations:
+            summary: Collector could not enqueue logs on {{ $labels.pod }}
+            description: |
+              Adding logs to the persistent export queue failed. Check queue capacity,
+              file_storage errors and node disk space. Receiver retries can preserve
+              records, but this is a log-loss risk, not proof of loss. First-seen nonzero
+              counters are included.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
+        - alert: OTelCollectorExportFailure
+          expr: |
+            max by (namespace,pod) (
+              (increase(otelcol_exporter_send_failed_log_records{namespace="observability",exporter="otlp_http/loki"}[15m]) > 0)
+              or
+              (otelcol_exporter_send_failed_log_records{namespace="observability",exporter="otlp_http/loki"} > 0 unless otelcol_exporter_send_failed_log_records{namespace="observability",exporter="otlp_http/loki"} offset 15m)
+            ) > 0
+          labels:
+            severity: critical
+            component: otel-collector
+            signal: metrics
+          annotations:
+            summary: Collector log export failed on {{ $labels.pod }}
+            description: |
+              The exporter reported failed log records. Inspect permanent HTTP rejections,
+              dropped-data messages and Loki health. Retryable connection failures are
+              retained in the queue and do not increment this counter in the pinned 0.161.0
+              exporter path. Compare source records before declaring loss.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
+        - alert: OTelCollectorLogMetricsUnavailable
+          expr: |
+            (count(
+              (up{namespace="observability",job="observability/otel-collector-opentelemetry-collector-agent"} == 1)
+              and on(namespace,pod)
+              (otelcol_exporter_queue_capacity{namespace="observability",exporter="otlp_http/loki",data_type="logs"} > 0)
+              and on(namespace,pod)
+              otelcol_exporter_queue_size{namespace="observability",exporter="otlp_http/loki",data_type="logs"}
+            ) or vector(0))
+            < scalar(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="otel-collector-opentelemetry-collector-agent"})
+          for: 5m
+          labels:
+            severity: critical
+            component: otel-collector
+            namespace: observability
+          annotations:
+            summary: Collector log durability monitoring is incomplete
+            description: |
+              Fewer healthy collector targets with queue size and capacity metrics exist
+              than desired DaemonSet pods. This also catches collectors that cannot start
+              because checkpoint storage is unavailable, when self-logs cannot reach Loki.
+              Check pod startup logs and PodMonitor coverage.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts

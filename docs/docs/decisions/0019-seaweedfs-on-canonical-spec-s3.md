@@ -1,11 +1,11 @@
 ---
-status: Accepted
+status: Superseded-by 0043
 date: 2026-04-19
 deciders: ['@wcygan']
 affects: storage
 intent: concrete-need
 supersedes: [0016]
-superseded-by: null
+superseded-by: 0043
 retrospective: false
 edition: condensed-public
 slug: /decisions/0019-seaweedfs-on-canonical-spec-s3
@@ -16,6 +16,10 @@ slug: /decisions/0019-seaweedfs-on-canonical-spec-s3
 > Run SeaweedFS with the canonical top-level `spec.s3` interface and a separate S3 deployment.
 
 _Public edition condensed on 2026-10-21; original decision date and meaning retained._
+
+:::caution Superseded
+[ADR 0043](0043-keep-two-seaweedfs-copies-for-maintenance.md) replaced the `000` replication choice with two-copy placement. The standalone S3 interface, filers, and Longhorn-backed volumes remain.
+:::
 
 ## Context
 

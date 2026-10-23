@@ -5,6 +5,7 @@ metadata:
   name: github-webhook
 spec:
   type: github
+  interval: 1m
   events: ["ping", "push"]
   secretRef:
     name: github-webhook-token-secret

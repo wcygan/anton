@@ -3,3 +3,14 @@ kind: Kustomization
 resources:
   - ./recurringjob.yaml
   - ./volume-labels.yaml
+  - ./recovery.yaml
+  - ./recovery-prometheusrule.yaml
+  - ./snapshot-retention.yaml
+configMapGenerator:
+  - name: cluster-recovery-code
+    namespace: storage
+    files:
+      - run.py=cluster-recovery-checkpoints.py
+      - snapshot-retention.py=snapshot-retention.py
+generatorOptions:
+  disableNameSuffixHash: true

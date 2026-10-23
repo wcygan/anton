@@ -130,5 +130,33 @@
   {
     "from": "/todo",
     "to": "/reference/documentation"
+  },
+  {
+    "from": "/runbooks/cluster-rebuildability",
+    "to": "/guides/operations"
+  },
+  {
+    "from": "/runbooks/cooling-wal-followup",
+    "to": "/records/reboot-and-thermal-investigation"
+  },
+  {
+    "from": "/runbooks/critical-resource-contracts",
+    "to": "/guides/harbor"
+  },
+  {
+    "from": "/runbooks/harbor-continuity",
+    "to": "/guides/harbor"
+  },
+  {
+    "from": "/runbooks/internal-service-boundaries",
+    "to": "/guides/harbor"
+  },
+  {
+    "from": "/runbooks/seaweedfs-health-alerts",
+    "to": "/guides/seaweedfs"
+  },
+  {
+    "from": "/runbooks/seaweedfs-node-maintenance",
+    "to": "/guides/seaweedfs"
   }
 ]

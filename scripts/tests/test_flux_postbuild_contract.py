@@ -74,11 +74,13 @@ resources: []
             )
         return app_root
 
-    def test_generated_configmap_baseline_remains_two_roots(self) -> None:
+    def test_generated_configmap_baseline(self) -> None:
         self.assertEqual(
             [path.relative_to(REPO).as_posix() for path in MODULE.discover_configmap_roots()],
             [
+                "kubernetes/apps/observability/loki/app",
                 "kubernetes/apps/registries/harbor-config/app",
+                "kubernetes/apps/storage/longhorn-maintenance/app",
                 "kubernetes/apps/storage/seaweedfs-config/app",
             ],
         )

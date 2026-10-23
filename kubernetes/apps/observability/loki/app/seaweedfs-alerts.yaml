@@ -1,0 +1,52 @@
+groups:
+  - name: seaweedfs-integrity
+    interval: 30s
+    rules:
+      - alert: SeaweedFSVolumeIntegrityFailure
+        expr: |
+          sum by (k8s_pod_name) (
+            count_over_time(
+              {k8s_namespace_name="storage",k8s_container_name="volume"}
+                |~ "volumeDataIntegrityChecking failed|idx references end=.*marking readonly|invalid CRC for needle"
+              [15m]
+            )
+          ) > 0
+        labels:
+          severity: critical
+          component: seaweedfs
+          namespace: storage
+        annotations:
+          summary: "SeaweedFS integrity failure on {{ $labels.k8s_pod_name }}"
+          description: |
+            A SeaweedFS volume integrity or payload CRC check failed in the last
+            15 minutes. The startup failure can be logged at INFO, so this rule
+            deliberately does not filter by severity. Preserve data and index
+            files and investigate before repair; do not force the volume writable.
+          runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
+
+  - name: seaweedfs-s3-reads
+    interval: 30s
+    rules:
+      - alert: SeaweedFSS3ReadFailures
+        expr: |
+          sum by (k8s_pod_name) (
+            count_over_time(
+              {k8s_namespace_name="storage",k8s_container_name="s3"}
+                |~ "read chunk .* failed|read http[^ ]* failed, err:|GetObjectHandler: (failed to stream|deadline exceeded)|streamFromVolumeServers: (streamFn failed|server-side deadline exceeded|failed to resolve chunks)"
+                !~ "context canceled|client disconnected"
+              [5m]
+            )
+          ) >= 3
+        for: 1m
+        labels:
+          severity: warning
+          component: seaweedfs
+          namespace: storage
+        annotations:
+          summary: "SeaweedFS S3 read failures on {{ $labels.k8s_pod_name }}"
+          description: |
+            Repeated transport or streaming failure log events occurred in five
+            minutes, including INFO retries. Events are not distinct requests.
+            Streaming can fail after HTTP 200 headers; inspect logs and verified
+            read probes even if the HTTP 5xx counter is clear.
+          runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts

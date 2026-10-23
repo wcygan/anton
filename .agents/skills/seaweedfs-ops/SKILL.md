@@ -26,6 +26,8 @@ For a bounded first pass, inspect the Flux Kustomizations and HelmRelease, the S
 
 Use [diagnostic gotchas](references/diagnostics.md) for capacity limits, volume topology and address-cache symptoms, and the chart constraints. The reference is diagnostic guidance; confirm current manifests and live state before recommending action.
 
+For planned work, use the [node-maintenance procedure](references/node-maintenance.md) (planned S3 downtime, writer fencing, recovery checks) and the [integrity alert reference](references/health-alerts.md). The [stock cutover record](references/stock-cutover.md) documents the completed one-time image transition and its rollback; it is not a routine procedure.
+
 ## Recovery sequence
 
 1. Establish whether failure is in Flux/operator readiness, master topology, volume allocation, filer metadata, S3 gateway health, or an external client path.

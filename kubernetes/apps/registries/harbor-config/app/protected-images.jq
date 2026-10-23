@@ -1,5 +1,6 @@
 # Flux preserves jq variables with doubled dollars.
 def parse_ref($$aliases):
+  select(. != "") |
   sub("^(docker-pullable|containerd)://"; "") as $$image |
   ($$image|split("/")) as $$parts |
   if ($$aliases|index($$parts[0]|sub(":(80|443)$";""))) == null then empty
@@ -18,8 +19,10 @@ if any(.workloads.items[]; .kind=="ControllerRevision" and (.data|type)!="object
 # A runtime digest must have a repository identity; never mistake a config hash
 # for a registry manifest. Pending containers may legitimately have no imageID.
 if any(.workloads.items[]|select(.kind=="Pod")|.status|(.containerStatuses[]?,.initContainerStatuses[]?,.ephemeralContainerStatuses[]?);
-   ([.image|parse_ref($$aliases)]|length)>0 and (.imageID // "")!="" and
-   ([.imageID|parse_ref($$aliases)]|length)==0)
+   if (.image|type)!="string" or .image=="" then error("missing runtime image name")
+   elif ([.image|parse_ref($$aliases)]|length)==0 then false
+   elif (.imageID // "")=="" then false
+   else ([.imageID|parse_ref($$aliases)]|length)==0 end)
 then error("ambiguous Harbor runtime image identity") else . end |
 [.workloads.items[] | .. | objects |
   (.image? // empty),(.imageID? // empty) | select(type=="string") | parse_ref($$aliases)] |

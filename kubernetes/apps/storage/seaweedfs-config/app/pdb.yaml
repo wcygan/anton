@@ -1,0 +1,54 @@
+---
+# The operator creates no PodDisruptionBudgets. Masters form a three-member
+# Raft quorum, filers and S3 gateways run two each, and every volume has two
+# copies on different volume servers. Allow one voluntary disruption per
+# component, so a drain or eviction that would take a second Pod waits
+# instead of losing quorum or both copies. AlwaysAllow lets a drain evict a
+# Pod that is already unhealthy.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: seaweedfs-master
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: seaweedfs
+      app.kubernetes.io/component: master
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: seaweedfs-volume
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: seaweedfs
+      app.kubernetes.io/component: volume
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: seaweedfs-filer
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: seaweedfs
+      app.kubernetes.io/component: filer
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: seaweedfs-s3
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: seaweedfs
+      app.kubernetes.io/component: s3

@@ -1,0 +1,70 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki-canary-delivery
+  labels:
+    app.kubernetes.io/name: loki
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: loki-canary-delivery
+      interval: 15s
+      rules:
+        - alert: LokiCanaryMissingLogs
+          expr: |
+            max by (namespace,pod) (
+              (log_canary_oldest_unconfirmed_age_seconds{namespace="observability",service="loki-canary"} > 180)
+              and on(namespace,pod) (up{namespace="observability",service="loki-canary"} == 1)
+            )
+          for: 15s
+          labels:
+            severity: critical
+            component: log-delivery-canary
+          annotations:
+            summary: Numbered canary logs are missing for {{ $labels.pod }}
+            description: |
+              An emitted numbered record has remained unconfirmed by Loki HTTP queries
+              for over three minutes. The deadline remains observable during query failures.
+              This is a canary visibility failure, not proof of permanent application log loss.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-delivery-canary
+        - alert: LokiCanaryDeliveryStalled
+          expr: |
+            max by (namespace,pod) (
+              (time() - log_canary_last_emission_timestamp_seconds{namespace="observability",service="loki-canary"} > 180)
+              or
+              (time() - log_canary_last_successful_query_timestamp_seconds{namespace="observability",service="loki-canary"} > 180)
+            )
+          for: 15s
+          labels:
+            severity: critical
+            component: log-delivery-canary
+          annotations:
+            summary: Canary log delivery stalled for {{ $labels.pod }}
+            description: |
+              The canary stopped emitting records or completing successful Loki queries
+              for three minutes. Inspect the probe, collector, export queue and Loki while
+              preserving checkpoints and WAL before attributing permanent loss.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-delivery-canary
+        - alert: LokiCanaryCoverageMissing
+          expr: |
+            (
+              count(max by (namespace,pod) (
+                (up{namespace="observability",service="loki-canary"} == 1)
+                and on(namespace,pod) (kube_pod_owner{namespace="observability",owner_kind="DaemonSet",owner_name="loki-canary"} == 1)
+                and on(namespace,pod) log_canary_written_total{namespace="observability",service="loki-canary"}
+                and on(namespace,pod) log_canary_oldest_unconfirmed_age_seconds{namespace="observability",service="loki-canary"}
+              )) or vector(0)
+            ) < scalar(max(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="loki-canary"}))
+            or absent(kube_daemonset_status_desired_number_scheduled{namespace="observability",daemonset="loki-canary"})
+          for: 1m
+          labels:
+            severity: critical
+            component: log-delivery-canary
+            namespace: observability
+          annotations:
+            summary: A node is missing log-delivery canary coverage
+            description: |
+              Fewer healthy canary scrapes with expected counters exist than the DaemonSet
+              requires, or the expected DaemonSet is absent. A missing probe is not a healthy
+              pipeline. Check scheduling, readiness and Prometheus discovery.
+            runbook_url: https://wcygan.github.io/anton/guides/logging#log-delivery-canary

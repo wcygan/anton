@@ -1,18 +1,5 @@
 cluster:
   allowSchedulingOnControlPlanes: true
-  apiServer:
-    resources:
-      requests:
-        cpu: 500m
-        memory: 4Gi
-    extraArgs:
-      # https://kubernetes.io/docs/tasks/extend-kubernetes/configure-aggregation-layer/
-      enable-aggregator-routing: true
-  controllerManager:
-    extraArgs:
-      bind-address: 0.0.0.0
-      # Keep terminated pod objects from accumulating after node shutdowns/upgrades.
-      terminated-pod-gc-threshold: "30"
   coreDNS:
     disabled: true
   etcd:
@@ -20,8 +7,32 @@ cluster:
       listen-metrics-urls: http://0.0.0.0:2381
     advertisedSubnets:
       - 192.168.1.0/24
-  proxy:
-    disabled: true
-  scheduler:
-    extraArgs:
-      bind-address: 0.0.0.0
+---
+apiVersion: v1alpha1
+kind: KubeAPIServerConfig
+certExtraSANs:
+  - "127.0.0.1"
+  - "192.168.1.101"
+resources:
+  requests:
+    cpu: 500m
+    memory: 4Gi
+extraArgs:
+  # https://kubernetes.io/docs/tasks/extend-kubernetes/configure-aggregation-layer/
+  enable-aggregator-routing: "true"
+---
+apiVersion: v1alpha1
+kind: KubeControllerManagerConfig
+extraArgs:
+  bind-address: 0.0.0.0
+  # Keep terminated pod objects from accumulating after node shutdowns/upgrades.
+  terminated-pod-gc-threshold: "30"
+---
+apiVersion: v1alpha1
+kind: KubeProxyConfig
+enabled: false
+---
+apiVersion: v1alpha1
+kind: KubeSchedulerConfig
+extraArgs:
+  bind-address: 0.0.0.0

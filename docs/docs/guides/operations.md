@@ -55,6 +55,10 @@ Then use the guide for that layer:
 | Missing or delayed alerts | [Alert delivery](alerts.md) |
 | Missing logs | [Kubernetes logs](logging.md) |
 
+## Rebuild readiness
+
+`scripts/check-rebuild-prerequisites.py` audits, offline, whether committed sources describe a dependency-ordered rebuild. It never contacts the cluster or reads secrets. `PASS` means a declared source exists, and `UNKNOWN` means Git alone cannot prove availability. The current audit flags a possible cold-start cycle: a storage-network image is served from Harbor, which starts later. A clean audit is not a restore test. The [rebuildability reference](https://github.com/wcygan/anton/blob/main/.agents/skills/anton-cluster-health/references/cluster-rebuildability.md) includes a two-hour tabletop exercise.
+
 ## Changing anything
 
 Force reconciliation, restarts, port-forwards, debug pods, storage changes, and Talos applies are live actions. Each needs explicit operator approval, the matching subsystem procedure, and a stated expected result. A passing repository validation is not, by itself, a reason to apply.

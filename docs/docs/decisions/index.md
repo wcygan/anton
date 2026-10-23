@@ -7,7 +7,7 @@ sidebar_position: 0
 
 Each numbered record explains one choice: the situation, the decision, the alternatives, and the costs accepted. Decisions are history, not deployment instructions. An Accepted decision can still describe an experiment that a later decision ended, so follow the chain to the newest relevant record.
 
-The original 40 decisions keep their dates and statuses; their public editions were condensed in October 2026. The [decision policy](../reference/decisions-policy.md) explains statuses and supersession, and the [capabilities map](../overview/capabilities.md) shows what runs today.
+The original 40 decisions keep their dates and statuses; their public editions were condensed in October 2026. Later decisions are public from their first edition. The [decision policy](../reference/decisions-policy.md) explains statuses and supersession, and the [capabilities map](../overview/capabilities.md) shows what runs today.
 
 ## Supersession chains
 
@@ -15,10 +15,11 @@ A solid arrow points from a decision to the one that superseded it. The dashed a
 
 ```mermaid
 flowchart LR
-  A0006["0006"]:::storage --> A0016["0016"]:::storage --> A0019["0019"]:::storage
+  A0006["0006"]:::storage --> A0016["0016"]:::storage --> A0019["0019"]:::storage --> A0043["0043"]:::storage --> A0044["0044"]:::storage
   A0020["0020"]:::flow --> A0021["0021"]:::flow --> A0022["0022"]:::flow
   A0025["0025"]:::control --> A0029["0029"]:::control
   A0008["0008"]:::processing --> A0030["0030"]:::processing --> A0032["0032"]:::processing
+  A0041["0041"]:::processing --> A0042["0042"]:::processing
   A0031["0031"]:::control --> A0033["0033"]:::control --> A0036["0036"]:::control --> A0037["0037"]:::control
   A0034["0034"]:::control --> A0035["0035"]:::control --> A0036
   A0038["0038"]:::control --> A0039["0039"]:::control --> A0040["0040"]:::control
@@ -27,10 +28,11 @@ flowchart LR
 
 | Chain | Topic | Ends at |
 | --- | --- | --- |
-| 0006 → 0016 → 0019 | SeaweedFS interface | [0019](0019-seaweedfs-on-canonical-spec-s3.md) |
+| 0006 → 0016 → 0019 → 0043 → 0044 | SeaweedFS interface, placement, and stock runtime | [0044](0044-use-stock-shared-s3-with-planned-downtime.md) |
 | 0020 → 0021 → 0022 | Cilium memory and clean-state | [0022](0022-keep-3584mi-cilium-limit-reject-permanent-cleanstate.md) |
 | 0025 → 0029 | Network policy and Pod Security | [0029](0029-restore-pod-security-isolate-public-workloads.md) |
 | 0008 → 0030 → 0032 | Logging backend and retention | [0032](0032-honor-loki-stream-retention-minimum.md) |
+| 0041 → 0042 | Log-delivery canaries | [0042](0042-bound-numbered-log-confirmation-deadlines.md) |
 | 0031 → … → 0040 | Lakehouse, from demo to retirement | [0040](0040-retire-lakehouse-and-temporal.md) |
 
 ## All decisions
@@ -55,7 +57,7 @@ flowchart LR
 | 0016 | [Adopt SeaweedFS using embedded filer S3](0016-adopt-seaweedfs-today-via-filerspec-s3.md) | Superseded by [0019](0019-seaweedfs-on-canonical-spec-s3.md) | 2026-04-18 |
 | 0017 | [Adopt Multus for the Longhorn storage network](0017-adopt-multus-for-longhorn-storage-network.md) | Accepted | 2026-04-18 |
 | 0018 | [Install CNI reference plugins for Multus](0018-install-cni-init-container-for-multus-reference-plugins.md) | Accepted | 2026-04-19 |
-| 0019 | [SeaweedFS with the canonical `spec.s3` interface](0019-seaweedfs-on-canonical-spec-s3.md) | Accepted | 2026-04-19 |
+| 0019 | [SeaweedFS with the canonical `spec.s3` interface](0019-seaweedfs-on-canonical-spec-s3.md) | Superseded by [0043](0043-keep-two-seaweedfs-copies-for-maintenance.md) | 2026-04-19 |
 | 0020 | [Size Cilium memory for cgroup working set](0020-size-cilium-memory-limit-for-cgroup-wss.md) | Superseded by [0021](0021-raise-cilium-memory-and-clean-state-on-restart.md) | 2026-04-21 |
 | 0021 | [Raise Cilium memory and clean state on restart](0021-raise-cilium-memory-and-clean-state-on-restart.md) | Superseded by [0022](0022-keep-3584mi-cilium-limit-reject-permanent-cleanstate.md) | 2026-04-23 |
 | 0022 | [Keep the Cilium memory limit; reject permanent clean-state](0022-keep-3584mi-cilium-limit-reject-permanent-cleanstate.md) | Accepted | 2026-04-23 |
@@ -77,3 +79,7 @@ flowchart LR
 | 0038 | [Extend the Airflow and Spark learning review once](0038-extend-airflow-spark-lakehouse-learning-review.md) | Superseded by [0039](0039-retain-airflow-spark-learning-platform.md) | 2026-08-14 |
 | 0039 | [Retain Airflow and Spark as a learning platform](0039-retain-airflow-spark-learning-platform.md) | Superseded by [0040](0040-retire-lakehouse-and-temporal.md) | 2026-08-14 |
 | 0040 | [Retire the lakehouse and Temporal](0040-retire-lakehouse-and-temporal.md) | Accepted | 2026-10-12 |
+| 0041 | [Adopt Loki stdout canaries](0041-adopt-loki-stdout-canaries.md) | Superseded by [0042](0042-bound-numbered-log-confirmation-deadlines.md) | 2026-10-19 |
+| 0042 | [Bound numbered log confirmation deadlines](0042-bound-numbered-log-confirmation-deadlines.md) | Accepted | 2026-10-19 |
+| 0043 | [Keep two SeaweedFS copies for node maintenance](0043-keep-two-seaweedfs-copies-for-maintenance.md) | Superseded by [0044](0044-use-stock-shared-s3-with-planned-downtime.md) | 2026-10-19 |
+| 0044 | [Use stock shared S3 with planned downtime](0044-use-stock-shared-s3-with-planned-downtime.md) | Accepted | 2026-10-20 |

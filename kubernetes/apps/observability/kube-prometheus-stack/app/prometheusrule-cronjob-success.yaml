@@ -1,0 +1,37 @@
+---
+# Scheduled maintenance (bucket and durability policy, Harbor retention, pod
+# GC, snapshot retention, log rotation, release acceptance) fails quietly: the
+# upstream KubeJobFailed rule is a warning that ntfy routing drops, and a job
+# that stops being scheduled raises nothing. Alert on the outcome instead:
+# a CronJob whose last success is older than two schedule intervals plus
+# 15 minutes. The interval is the gap between its last and next schedule
+# times, so every schedule from */2 to weekly gets a matching threshold.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-cronjob-health
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cluster-cronjob-health
+      rules:
+        - alert: CronJobSuccessOverdue
+          expr: |
+            (
+              time() - kube_cronjob_status_last_successful_time
+              > 2 * (kube_cronjob_next_schedule_time - kube_cronjob_status_last_schedule_time) + 900
+            )
+            and on (namespace, cronjob) (kube_cronjob_spec_suspend == 0)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded in two intervals"
+            description: |
+              {{ $labels.namespace }}/{{ $labels.cronjob }} last succeeded
+              {{ $value | humanizeDuration }} ago, more than two schedule
+              intervals. Inspect its recent Jobs and Pods with
+              `kubectl -n {{ $labels.namespace }} get jobs` and their logs.
+              Suspend the CronJob in Git if the pause is intentional.

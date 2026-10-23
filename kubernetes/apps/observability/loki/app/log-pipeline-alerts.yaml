@@ -1,0 +1,55 @@
+groups:
+  - name: log-pipeline-health
+    interval: 30s
+    rules:
+      - alert: OTelCollectorCheckpointFailure
+        expr: |
+          sum by (k8s_pod_name) (
+            count_over_time(
+              {k8s_namespace_name="observability",k8s_container_name="opentelemetry-collector"}
+                |~ "save offsets|load offsets|storage client:|persist known files:|failed to (?:load|save) checkpoint"
+              [15m]
+            )
+          ) > 0
+        labels:
+          severity: critical
+          component: otel-collector
+          namespace: observability
+        annotations:
+          summary: Collector checkpoint failure on {{ $labels.k8s_pod_name }}
+          description: |
+            The collector could not load or save reader state in the last 15 minutes.
+            Inspect node-local /var/lib/otelcol permissions, available space, database
+            limits and storage errors. Export can remain healthy while checkpoints fail.
+            Preserve databases; do not delete state to clear the alert.
+          runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts
+      - alert: OTelCollectorExportFailure
+        expr: |
+          sum by (pod) (
+            count_over_time(
+              {k8s_namespace_name="observability",k8s_container_name="opentelemetry-collector"}
+                |~ "Exporting failed[.] Dropping data[.]"
+                | regexp `(?P<otel_alert_fields>\{.*\})$`
+                | line_format `{{ .otel_alert_fields }}`
+                | json otel_alert_error="error"
+                | drop __error__, __error_details__
+                | otel_alert_error !~ `(?s)^interrupted due to shutdown:.*`
+                | drop otel_alert_fields, otel_alert_error
+                | label_format pod=k8s_pod_name
+              [15m]
+            )
+          ) > 0
+        labels:
+          severity: critical
+          component: otel-collector
+          namespace: observability
+          signal: logs
+        annotations:
+          summary: Collector log export failed on {{ $labels.pod }}
+          description: |
+            The exporter logged a final dropped-data error in the last 15 minutes. Inspect
+            the rejection reason and compare retained source records with Loki. Ordinary
+            retry messages and typed shutdown interruptions retained by the pinned
+            persistent queue do not match this alert. Unknown/malformed dropped-data
+            messages still alert. The logging contract enforces the queue prerequisite.
+          runbook_url: https://wcygan.github.io/anton/guides/logging#log-loss-alerts

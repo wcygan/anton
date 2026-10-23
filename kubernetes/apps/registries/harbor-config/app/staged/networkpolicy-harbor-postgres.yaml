@@ -1,0 +1,54 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: harbor-postgres-ingress-candidate
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: harbor-postgres
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    # Harbor charts connect through harbor-postgres-rw on PostgreSQL's port.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: harbor
+      ports:
+        - protocol: TCP
+          port: 5432
+    # CNPG instances use PostgreSQL for streaming replication and failover.
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: harbor-postgres
+              cnpg.io/podRole: instance
+      ports:
+        - protocol: TCP
+          port: 5432
+    # CNPG operator status/backup operations use the instance-manager port.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: databases
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: cloudnative-pg
+              app.kubernetes.io/name: cloudnative-pg
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Prometheus scrapes the CNPG-generated PodMonitor on the metrics port.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: kube-prometheus-stack-prometheus
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9187

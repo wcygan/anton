@@ -1,0 +1,40 @@
+# Operator-created fixture only; never include in Flux resources.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: notification-egress-check
+  namespace: flux-system
+  labels:
+    app: notification-egress-check
+    app.kubernetes.io/component: notification-controller
+    app.kubernetes.io/part-of: flux
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  activeDeadlineSeconds: 1200
+  terminationGracePeriodSeconds: 5
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: check
+      image: docker.io/library/python@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+      command: [python3, -c, "import time; time.sleep(1100)"]
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+        limits: {cpu: 100m, memory: 128Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: [ALL]}
+      volumeMounts:
+        - name: api-ca
+          mountPath: /var/run/anton-ca
+          readOnly: true
+  volumes:
+    - name: api-ca
+      configMap:
+        name: kube-root-ca.crt

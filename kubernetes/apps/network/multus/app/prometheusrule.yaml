@@ -65,6 +65,37 @@ spec:
               node is genuinely broken (check pod restart count and `kubectl logs
               -n network -l name=multus`).
             runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/guides/storage.md"
+        - alert: PodBypassedMultus
+          # Multus annotates every pod it wires with `network-status`, so a
+          # Running pod-network Pod without it was created through another CNI
+          # config. That was the 2026-10-22 boot race: Cilium's config sat in
+          # /etc/cni/net.d while Multus was absent. Only Pods created in the
+          # last 6h count, so Pods from before the 2026-10-23 fix stay quiet
+          # until they restart.
+          expr: |-
+            (
+              kube_pod_info{host_network="false"}
+              * on (namespace, pod) group_left ()
+                (time() - kube_pod_created < 21600)
+            )
+            * on (namespace, pod) group_left ()
+              (kube_pod_status_phase{phase="Running"} == 1)
+            unless on (namespace, pod)
+              kube_pod_annotations{annotation_k8s_v1_cni_cncf_io_network_status!=""}
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} started without Multus"
+            description: |
+              Pod {{ $labels.namespace }}/{{ $labels.pod }} on {{ $labels.node }}
+              is Running without a `k8s.v1.cni.cncf.io/network-status`
+              annotation, so containerd created it through a CNI config other
+              than 00-multus.conf. Check that `talosctl -n <node> ls
+              /etc/cni/net.d` lists only 00-multus.conf and that Cilium's
+              `cni.confPath` and Multus's `multusAutoconfigDir` both point at
+              /etc/cni/multus/net.d. Restart the Pod after fixing the node.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/guides/storage.md"
     - name: multus.daemon.alerts
       rules:
         - alert: MultusServerRequestErrors

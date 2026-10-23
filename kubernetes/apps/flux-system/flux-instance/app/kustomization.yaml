@@ -12,3 +12,6 @@ resources:
   - ./receiver.yaml
   - ./podmonitor.yaml
   - ./networkpolicy.yaml
+  - ./notification-rbac.yaml
+  - ./notification-admission.yaml
+  - ./notification-egress.yaml

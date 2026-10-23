@@ -1,7 +1,21 @@
 ---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+configMapGenerator:
+  - name: loki-seaweedfs-alerts
+    files:
+      - ./seaweedfs-alerts.yaml
+      - ./log-pipeline-alerts.yaml
+    options:
+      disableNameSuffixHash: true
+  - name: loki-log-canary
+    files:
+      - canary.py=./log-canary.py
 resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
   - ./externalsecret.yaml
+  - ./prometheusrule.yaml
+  - ./canary-prometheusrule.yaml
+  - ./canary.yaml
+  - ./recovery-rbac.yaml

@@ -18,13 +18,15 @@ High-stakes checklist task skill. Two version pins drive everything: `talosVersi
    talosctl --talosconfig ./talos/clusterconfig/talosconfig -n k8s-1 etcd members
    ```
    Expect three members, all `Healthy=true`. If any node is unhealthy, FIX FIRST and abort the upgrade.
-2. **Take an etcd snapshot.** Cheap insurance.
-   ```sh
-   mkdir -p $HOME/anton-backup-$(date +%Y%m%d)
-   talosctl --talosconfig ./talos/clusterconfig/talosconfig -n k8s-1 \
-     etcd snapshot $HOME/anton-backup-$(date +%Y%m%d)/etcd-pre-upgrade.db
-   ls -lh $HOME/anton-backup-$(date +%Y%m%d)/etcd-pre-upgrade.db   # must be > 0 bytes
-   ```
+2. **Take and verify an etcd snapshot at the approved recovery location.**
+   `talosctl etcd snapshot` writes on the machine running the client: invoking it
+   on the Mac transfers the database to the Mac. Follow the recovery-location rule
+   below before selecting that execution host or destination. A cluster-only
+   checkpoint needs an explicitly approved in-cluster client and storage target;
+   missing that capability does not authorize a Mac export. Record the cluster
+   identity, capture time, revision, nonzero size and checksum. Preserve an existing
+   verified pre-upgrade snapshot when continuing the same rollout; state its age
+   and any unmet freshness requirement instead of silently taking another export.
 3. **Confirm Flux is healthy** so it doesn't fight the rolling reboot.
    ```sh
    flux check
@@ -32,6 +34,35 @@ High-stakes checklist task skill. Two version pins drive everything: `talosVersi
    ```
 4. **Read the upstream release notes** for the new Talos and Kubernetes versions. Breaking changes (CRD removals, feature gates, kubelet flags) MUST be triaged before the bump.
 5. **Confirm kubeconfig + talosconfig point at the right cluster.** This skill operates against whichever cluster the local config points to — there is no `--context` guard.
+
+For Anton storage nodes, complete the [Longhorn node preconditions](../longhorn-node-ops/SKILL.md)
+and [SeaweedFS maintenance procedure](../seaweedfs-ops/references/node-maintenance.md)
+before the first node outage. Node readiness alone does not establish storage or
+data readiness.
+
+## Recovery location and transfer authority
+
+Keep maintenance recovery checkpoints and verification near the data by default.
+Do not initiate backups or large exports to the operator's Mac or another external
+destination as an automatic upgrade preflight. A transfer requires a separate,
+explicit user request naming the destination and scope; an upgrade request alone
+does not authorize it. Preserve existing backups and partial files unless their
+removal is separately requested.
+
+In-cluster snapshots and clone-based verification share the cluster's failure
+domain. Do not describe them as independent disaster-recovery backups or claim
+that they satisfy an independent-backup freshness contract. If the operator
+explicitly selects cluster-only recovery for a maintenance window, record that
+choice and the remaining disaster-recovery gap. Keep identity, quorum, storage
+health, writer-fencing and data-consistency gates active; a location preference
+does not authorize data repair or waive those gates.
+
+At verified maintenance closure, account for every temporary recovery snapshot.
+Release redundant maintenance snapshots to the [maintenance retention policy](../../../docs/docs/guides/storage.md#maintenance-snapshot-retention)
+using their actual UID and a delete-after timestamp. Preserve any explicitly open
+recovery or investigation hold; creation age is not evidence that a hold ended.
+Never release the two monthly verified checkpoint generations. The scheduled
+cleanup owns CSI deletion and Longhorn reclamation; do not delete replica files.
 
 ## Workflow A — Talos OS rolling upgrade
 
@@ -75,11 +106,32 @@ For bumping `talosVersion` (the OS image baked into each node).
 | no panicked services | `talosctl ... -n <ip> service` | nothing in `Failed` |
 | Flux still green | `flux get ks -A --status=all` | all `Ready=True` |
 
+When operating off-LAN, the upgrade client's automatic drain can use the node's
+admin kubeconfig and unreachable LAN API endpoint. Complete an approved drain
+through the working Kubernetes proxy first, then upgrade that exact node with
+`--drain=false`. Do not repeat an installer write to diagnose a failed drain.
+
+Keep the node cordoned after it returns until Cilium, Multus, Whereabouts and
+storage VXLAN are ready, and `/etc/cni/net.d/00-multus.conf` exists with
+`type: multus-shim`. Node Ready and Multus Pod Ready can precede that file.
+After uncordoning, verify the node's Longhorn instance manager has `lhnet1` and a
+storage IP, then wait for original volumes and stateful consumers to recover.
+
+`/etc/cni/net.d` must contain only `00-multus.conf` (plus `whereabouts.d`);
+Cilium writes its config to `/etc/cni/multus/net.d`. Before 2026-10-23 a
+Cilium config there let pods start without Multus for about 30 seconds after
+each boot. Confirm no Running, non-host-network pod on the node lacks the
+`k8s.v1.cni.cncf.io/network-status` annotation; such a pod bypassed Multus.
+If an instance manager still lacks `lhnet1`, do not delete it while it serves
+attached volumes: that detaches them mid-write (it left two SeaweedFS volumes
+read-only on 2026-10-22). Stop or move that node's Longhorn consumers first.
+
 If ANY check fails, STOP. Do not move to the next node. Investigate; rollback if needed.
 
 ## Workflow B — Kubernetes version bump
 
-For bumping `kubernetesVersion`. talhelper handles the rolling upgrade across all nodes.
+For bumping `kubernetesVersion`. Talhelper generates the command; `talosctl`
+performs the rolling upgrade across all nodes.
 
 1. **Bump the pin** in `talos/talenv.yaml`:
    ```yaml
@@ -93,7 +145,17 @@ For bumping `kubernetesVersion`. talhelper handles the rolling upgrade across al
    ```sh
    task talos:upgrade-k8s
    ```
-   Under the hood: `talhelper gencommand upgrade-k8s --extra-flags "--to '<version>'" | bash`. talhelper rolls control planes first, then workers. Watch the output — it does NOT auto-pause on failures.
+   Under the hood: `talhelper gencommand upgrade-k8s --extra-flags "--to '<version>'" | bash`.
+   `talosctl` checks compatibility and removed flags/APIs, then updates each
+   control-plane component serially, waiting for its pod to recover before the
+   next node. Kubelets follow, control planes before workers. A failed recovery
+   gate stops the command; investigate the exact component before resuming.
+
+   Off-LAN, this client fetches an admin kubeconfig from Talos rather than using
+   the local Kubernetes proxy context. If its LAN endpoint is unreachable, use
+   `--endpoint` with an approved reachable API path that preserves the cluster CA
+   and certificate names. Never disable TLS verification. Run
+   `upgrade-k8s --dry-run --pre-pull-images=false` with that path first.
 4. **Verify after the run:**
    ```sh
    kubectl get nodes -o wide                    # all nodes show new kubelet version
@@ -120,7 +182,7 @@ Kubernetes downgrade is **not** supported. If a Kubernetes upgrade fails halfway
 - Never parallelize. One node at a time, always.
 - Control planes BEFORE workers, always.
 - Health gate between every node, no exceptions.
-- Never skip the etcd snapshot. The cost of taking it is seconds; the cost of skipping it is hours.
+- Never skip the verified pre-upgrade etcd recovery point. Follow the recovery-location rule; retaining an existing snapshot does not authorize another external export.
 - Never bump both `talosVersion` and `kubernetesVersion` in the same change. Bump one, run that workflow to completion, commit, THEN do the other.
 - Never run `task talos:reset` as part of an upgrade. If you need it, you have a different problem.
 

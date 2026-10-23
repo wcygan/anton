@@ -1,7 +1,7 @@
 ---
 title: Reboot and thermal investigations
 record_type: historical-investigation
-period: 2026-04 to 2026-05
+period: 2026-04 to 2026-10
 ---
 
 # Reboot and thermal investigations
@@ -25,5 +25,9 @@ A canary at one microsecond restored C1, kept the intended restriction on deeper
 ## Slow recovery after reboots
 
 A separate pair of reboots left accumulated ghost pods that blocked replacement ingress workloads, which extended the public outage.
+
+## Cooling fault still open
+
+In October 2026, one node's fan reported zero RPM for most of a 24-hour window while its peers never did, and its fan alert had been firing for about a week. The same channel showed an intermittent zero-RPM pattern back in May. Telemetry alone cannot tell a failing fan from a faulty tachometer signal, so this remains a hardware follow-up for the operator. `scripts/collect-cooling-wal-evidence.py` reruns the read-only evidence collection.
 
 **Lesson:** treat the node event and the service-recovery failure as two problems. Check event times against independent boot evidence before correlating symptoms. These findings describe past node conditions only.

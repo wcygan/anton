@@ -7,16 +7,55 @@ metadata:
   annotations:
     secret.reloader.stakater.com/reload: seaweedfs-s3-config
 spec:
-  image: chrislusf/seaweedfs:4.40
+  image: docker.io/chrislusf/seaweedfs:4.48@sha256:aba492e2a4e4c90bff795745e8e660affa1f09e7650f5981bd7bccd1a06cd931
+  imagePullPolicy: IfNotPresent
   master:
     replicas: 3
-    defaultReplication: "000"      # Longhorn owns durability (ADR 0005)
-    # Allocate one logical volume per growth event. The default batch of seven
-    # exhausts sparse collection slots before the PVCs approach capacity.
+    extraArgs:
+      - -telemetry=false
+    # Operator 1.0.39 can override probe timings, but not its HTTP path.
+    # Keep a Raft-aware readiness guard without patching the operator.
+    sidecars:
+      - name: raft-readiness
+        image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+        command: [/bin/sh, -ec, exec sleep 2147483647]
+        readinessProbe:
+          httpGet:
+            path: /cluster/healthz
+            port: 9333
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 2
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 1m
+            memory: 8Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+          seccompProfile:
+            type: RuntimeDefault
+    # ADR 0044 retains the completed native two-copy placement.
+    # Planned maintenance may interrupt S3; keep both copies during image changes.
+    defaultReplication: "001"
+    # Allocate one logical volume per growth event for either copy count, so
+    # sparse collections do not exhaust slots before the PVCs approach capacity.
     env:
       - name: WEED_MASTER_VOLUME_GROWTH_COPY_1
         value: "1"
-    # Keep logical volumes small enough that each 120Gi volume server has
+      - name: WEED_MASTER_VOLUME_GROWTH_COPY_2
+        value: "1"
+    # Keep logical volumes small enough that each 160Gi volume server has
     # room for multiple collections. Existing volumes are unaffected; this
     # only increases the number of new volume slots available to S3 buckets.
     volumeSizeLimitMB: 5000         # 5 GB per volume file
@@ -31,13 +70,13 @@ spec:
                 app.kubernetes.io/instance: seaweedfs
   volume:
     replicas: 3                     # one per node
-    maxVolumeCounts: 20             # 8 free slots per server at current use
-    # Bind to the injected pod IP. The headless Service DNS record can retain
-    # the old pod IP during a restart, which prevents the volume gRPC listener.
-    extraArgs:
-      - -ip=$(POD_IP)
+    metricsPort: 9327
+    maxVolumeCounts: 24
+    # Advertise the stable StatefulSet peer DNS while keeping startup independent
+    # of headless-Service DNS resolution.
+    ipBind: 0.0.0.0
     requests:
-      storage: 120Gi
+      storage: 160Gi
     storageClassName: longhorn      # default Longhorn SC; no NAD attachment here
     # Phase 1 scratch shakeout showed `replicas: 3` alone does not spread
     # across nodes (all three landed on k8s-2). Chart 0.1.14's Seaweed CRD
@@ -56,7 +95,11 @@ spec:
                 app.kubernetes.io/component: volume
                 app.kubernetes.io/instance: seaweedfs
   filer:
-    replicas: 2                     # Phase 1 verdict: 2 holds under pod-kill
+    replicas: 2                     # preserve the existing persistent metadata pair
+    config: |
+      [leveldb2]
+      enabled = true
+      dir = "/data/filerldb2"
     # Embedded LevelDB is the S3 object index, not disposable runtime state.
     persistence:
       enabled: true
@@ -77,14 +120,68 @@ spec:
                 app.kubernetes.io/component: filer
                 app.kubernetes.io/instance: seaweedfs
   s3:
+    volumes:
+      - name: read-probe-code
+        configMap:
+          name: seaweedfs-s3-read-probe
+      - name: read-probe-credentials
+        secret:
+          secretName: seaweedfs-read-probe
+    sidecars:
+      - name: read-probe
+        image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+        command: [python3, -u, /probe/s3-read-probe.py]
+        env:
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        ports:
+          - name: read-probe
+            containerPort: 9328
+        startupProbe:
+          httpGet:
+            path: /ready
+            port: read-probe
+          periodSeconds: 5
+          failureThreshold: 12
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: read-probe
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: read-probe
+          initialDelaySeconds: 15
+        resources:
+          requests:
+            cpu: 5m
+            memory: 24Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+          - name: read-probe-code
+            mountPath: /probe
+            readOnly: true
+          - name: read-probe-credentials
+            mountPath: /credentials
+            readOnly: true
+    metricsPort: 9327
     replicas: 2                     # standalone Deployment HA per ADR 0019
     iam: false                      # explicit override — operator default is true
-    # SeaweedFS 4.40's built-in Iceberg REST catalog is disabled unless this
-    # listener is explicitly enabled. The operator exposes extraArgs but its
-    # generated Service only publishes the S3 port, so the catalog gets a
-    # separate Flux-managed Service below.
+    # The learning lakehouse is retired; stock 4.48 otherwise listens on 8181.
     extraArgs:
-      - -port.iceberg=8181
+      - -port.iceberg=0
     configSecret:
       name: seaweedfs-s3-config     # matches ExternalSecret target.name
       key: s3.json                  # matches ExternalSecret target.template.data key

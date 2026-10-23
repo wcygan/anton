@@ -1,0 +1,82 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-recovery
+  labels:
+    app.kubernetes.io/name: cluster-recovery
+spec:
+  groups:
+    - name: cluster-recovery
+      rules:
+        - alert: MaintenanceSnapshotCleanupFailed
+          expr: |
+            max by (namespace, job_name) (
+              (kube_job_status_failed{namespace="storage"} > 0)
+              or on (namespace, job_name)
+              (kube_job_failed{namespace="storage",condition="true"} == 1)
+            )
+            and on (namespace, job_name)
+            max by (namespace, job_name) (
+              kube_job_owner{namespace="storage",owner_kind="CronJob",owner_name="snapshot-retention",owner_is_controller="true"} == 1
+            )
+          for: 5m
+          labels:
+            severity: warning
+            component: snapshot-retention
+          annotations:
+            summary: Released maintenance snapshot cleanup failed
+            description: |
+              The daily cleanup Job {{ $labels.job_name }} failed. Inspect its logs,
+              the recovery Lease, both verified checkpoint generations, restore consumers
+              and Longhorn health. Do not remove finalizers or replica files to force cleanup.
+            runbook_url: https://wcygan.github.io/anton/guides/storage#maintenance-snapshot-retention
+        - alert: ClusterRecoveryCheckpointFailed
+          expr: |
+            max by (namespace, job_name) (
+              (kube_job_status_failed{namespace="storage"} > 0)
+              or on (namespace, job_name)
+              (kube_job_failed{namespace="storage",condition="true"} == 1)
+            )
+            and on (namespace, job_name)
+            max by (namespace, job_name) (
+              kube_job_owner{namespace="storage",owner_kind="CronJob",owner_name="cluster-recovery",owner_is_controller="true"} == 1
+            )
+          for: 5m
+          labels:
+            severity: warning
+            component: cluster-recovery
+          annotations:
+            summary: In-cluster recovery rehearsal failed
+            description: |
+              The scheduled checkpoint/rehearsal Job {{ $labels.job_name }} failed.
+              Inspect its coordinator logs and storage/cluster-recovery-journal
+              phase/error, retained snapshot identities and Longhorn headroom.
+              Preserve both verified generations; do not waive a checksum or UID gate.
+            runbook_url: https://wcygan.github.io/anton/guides/storage#recurring-in-cluster-recovery-checkpoints
+        - alert: ClusterRecoveryCheckpointStale
+          expr: |
+            (
+              time() - (
+                max by (namespace, cronjob) (
+                  kube_cronjob_status_last_successful_time{namespace="storage",cronjob="cluster-recovery"} > 0
+                )
+                or on (namespace, cronjob)
+                max by (namespace, cronjob) (
+                  kube_cronjob_created{namespace="storage",cronjob="cluster-recovery"}
+                )
+              ) > 35 * 24 * 60 * 60
+            )
+            or absent(kube_cronjob_info{namespace="storage",cronjob="cluster-recovery"})
+          for: 15m
+          labels:
+            severity: warning
+            component: cluster-recovery
+          annotations:
+            summary: No recent verified in-cluster recovery checkpoint
+            description: |
+              No scheduled rehearsal has succeeded for over 35 days, or its
+              CronJob/metrics are absent. A never-successful new installation
+              gets a 35-day grace period from CronJob creation. Check scheduling,
+              failed Jobs, API-only connectivity, source/clone health and the journal.
+              The success metric records completed rehearsals, not snapshot readiness alone.
+            runbook_url: https://wcygan.github.io/anton/guides/storage#recurring-in-cluster-recovery-checkpoints

@@ -24,7 +24,9 @@ class DocumentationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             shutil.copytree(ROOT / 'docs/docs', root / 'docs/docs')
-            (root / 'docs/docs/decisions/0041-example.md').write_text('---\ndate: 2026-10-21\nstatus: Accepted\naffects: all\nintent: concrete-need\nsupersedes: []\nsuperseded-by: null\n---\n# Future choice\n')
+            decisions = root / 'docs/docs/decisions'
+            next_id = max(int(path.name[:4]) for path in decisions.glob('[0-9][0-9][0-9][0-9]-*.md')) + 1
+            (decisions / f'{next_id:04d}-example.md').write_text('---\ndate: 2026-10-21\nstatus: Accepted\naffects: all\nintent: concrete-need\nsupersedes: []\nsuperseded-by: null\n---\n# Future choice\n')
             self.assertEqual(validator.validate(root), [])
 
     def test_missing_private_records_reports_unavailable(self):

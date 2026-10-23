@@ -28,7 +28,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: provision-buckets
-              image: amazon/aws-cli:2.37.1
+              image: amazon/aws-cli:2.38.3
               imagePullPolicy: IfNotPresent
               envFrom:
                 - secretRef:
@@ -41,7 +41,9 @@ spec:
                 - name: S3_ENDPOINT
                   value: http://seaweedfs-s3.storage.svc.cluster.local:8333
                 - name: ORDINARY_BUCKETS
-                  value: harbor loki
+                  value: harbor loki s3-read-probe
+                - name: READ_PROBE_BUCKET
+                  value: s3-read-probe
                 - name: ORDINARY_PREFIXES
                   value: ""
                 - name: TABLE_BUCKETS
@@ -50,6 +52,8 @@ spec:
                 - /bin/sh
                 - /opt/anton/provision-buckets.sh
               volumeMounts:
+                - name: scratch
+                  mountPath: /tmp
                 - name: provisioner
                   mountPath: /opt/anton
                   readOnly: true
@@ -66,6 +70,8 @@ spec:
                 capabilities:
                   drop: ["ALL"]
           volumes:
+            - name: scratch
+              emptyDir: {}
             - name: provisioner
               configMap:
                 name: seaweedfs-bucket-provisioner

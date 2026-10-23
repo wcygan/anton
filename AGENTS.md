@@ -39,6 +39,7 @@ Read the matching `.agents/skills/<name>/SKILL.md` before following that branch:
 | Kubernetes access, context, kubeconfig, talosconfig, or off-LAN connectivity | `anton-remote-access` |
 | Broad cluster health or an unclear symptom | `anton-cluster-health`; start with `talos-inspect` for node, etcd, disk, route, or interface symptoms |
 | Stuck Flux source, Kustomization, HelmRelease, SOPS, postBuild, or dependency | `debug-flux-reconciliation` |
+| Health glance, metrics, alerts, or dashboards through the `grafana` MCP server | `observe-with-grafana` |
 | Incident logs, LogQL, missing logs, or the OTel-to-Loki path | `query-kubernetes-logs` |
 | Repository security scans, finding validation, or scanner configuration | `codex-security` |
 | Retired learning workloads | Read `docs/docs/records/lakehouse-retirement.md`; re-adoption needs a new decision |

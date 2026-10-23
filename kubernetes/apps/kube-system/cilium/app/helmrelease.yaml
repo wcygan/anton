@@ -29,6 +29,13 @@ spec:
     cni:
       # Required for pairing with Multus CNI
       exclusive: false
+      # Keep Cilium's config out of the directory containerd loads. Talos
+      # mounts /etc/cni as tmpfs, and Multus deletes 00-multus.conf when it
+      # exits, so a Cilium config in /etc/cni/net.d let pods start with only
+      # eth0 after every boot or Multus restart (Longhorn instance managers
+      # without lhnet1). Multus reads this directory as its delegate; until
+      # 00-multus.conf exists the node reports NetworkNotReady and pods wait.
+      confPath: /etc/cni/multus/net.d
     cgroup:
       automount:
         enabled: false

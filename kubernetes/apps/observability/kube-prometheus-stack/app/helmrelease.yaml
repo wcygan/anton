@@ -7,7 +7,7 @@ spec:
   chart:
     spec:
       chart: kube-prometheus-stack
-      version: 83.5.0
+      version: 92.11.0
       sourceRef:
         kind: HelmRepository
         name: prometheus-community
@@ -37,6 +37,9 @@ spec:
     # ---- Prometheus ----
     prometheus:
       prometheusSpec:
+        image:
+          # renovate: datasource=docker depName=quay.io/prometheus/prometheus
+          tag: v3.15.1-distroless
         replicas: 1
         retention: 30d
         retentionSize: 35GB
@@ -105,7 +108,7 @@ spec:
     grafana:
       image:
         # renovate: datasource=docker depName=grafana/grafana
-        tag: "12.4.4"
+        tag: "12.4.13"
       replicas: 1
       # Single replica on a RWO Longhorn PVC: use Recreate so the old pod
       # releases the volume before the new one starts. The chart default

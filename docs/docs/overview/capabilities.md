@@ -13,7 +13,7 @@ This map lists the shared services Anton provides and the component behind each 
 | Capability | Provider and role |
 | --- | --- |
 | Block storage | **Longhorn** — replicated CSI volumes for stateful workloads. |
-| Object storage | **SeaweedFS** — internal S3-compatible storage for Harbor and Loki. |
+| Object storage | **SeaweedFS** — internal S3-compatible storage for applications, Harbor, and Loki, with two copies of each volume. |
 | Managed PostgreSQL | **CloudNativePG** — operator-managed application databases. |
 | Redis-compatible cache | **Dragonfly operator** — managed cache instances. |
 | Container registry | **Harbor** — OCI registry with image blobs in SeaweedFS. **Spegel** separately shares images between nodes' local stores. |
@@ -30,7 +30,7 @@ flowchart LR
 ```
 
 :::caution No off-cluster backup
-Snapshots and replication are not backups. The committed Longhorn backup target is empty, and no recurring off-cluster backup runs. See the [storage record](../records/storage-reliability-and-capacity.md) for what has been rehearsed.
+Snapshots, replicas, and SeaweedFS copies are not backups. The committed Longhorn backup target is empty, and no recurring off-cluster backup runs. See the [storage record](../records/storage-reliability-and-capacity.md) for what has been rehearsed.
 :::
 
 ## Delivery and access
