@@ -54,4 +54,6 @@ Every Talos apply, reboot, reset, upgrade, or replacement needs:
 3. A rollback plan.
 4. Explicit operator approval.
 
+For a reboot or upgrade, `mise exec -- task -x talos:node-gate NODE=<node> PHASE=<phase>` checks the first two for one node and changes nothing. Run `PHASE=pre` before cordon, `PHASE=return` before uncordon and `PHASE=post` after uncordon, and stop at any failure. The [upgrade skill](https://github.com/wcygan/anton/blob/main/.agents/skills/upgrade-talos-or-k8s/SKILL.md#node-gate) lists the checks and what to do when one fails.
+
 For Kubernetes API access during this work, prefer the Tailscale operator context. Use the documented administrator fallback only after confirming which identity it uses.
