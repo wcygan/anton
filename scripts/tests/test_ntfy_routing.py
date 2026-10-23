@@ -56,6 +56,8 @@ class NtfyRouting(unittest.TestCase):
             ('SeaweedFSS3MonitoringUnavailable', 'warning', 'storage', 'ntfy'),
             ('PodBypassedMultus', 'warning', 'observability', 'ntfy'),
             ('PodBypassedMultus', 'info', 'observability', 'drop'),
+            ('CronJobSuccessOverdue', 'warning', 'storage', 'ntfy'),
+            ('CronJobSuccessOverdue', 'info', 'storage', 'drop'),
             ('SeaweedFSS3ReadProbeFailed', 'critical', 'storage', 'ntfy'),
             ('SeaweedFSS3ReadFailures', 'info', 'storage', 'drop'),
             ('PrefixSeaweedFSS3ReadFailures', 'warning', 'storage', 'drop'),

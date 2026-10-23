@@ -52,7 +52,7 @@ spec:
             value: warning
             matchType: "="
           - name: alertname
-            value: "LonghornVolumeDegraded|OTelCollectorQueueHigh|SeaweedFSS3ReadFailures|SeaweedFSS3Read5xx|SeaweedFSS3MonitoringUnavailable|PodBypassedMultus"
+            value: "LonghornVolumeDegraded|OTelCollectorQueueHigh|SeaweedFSS3ReadFailures|SeaweedFSS3Read5xx|SeaweedFSS3MonitoringUnavailable|PodBypassedMultus|CronJobSuccessOverdue"
             matchType: "=~"
   receivers:
     - name: drop

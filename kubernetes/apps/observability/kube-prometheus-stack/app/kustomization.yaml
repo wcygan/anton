@@ -10,6 +10,7 @@ resources:
   - ./dashboard-cluster-health.yaml
   - ./prometheusrule-cilium-memory.yaml
   - ./prometheusrule-cni-plumbing.yaml
+  - ./prometheusrule-cronjob-success.yaml
   - ./prometheusrule-fan-health.yaml
   - ./prometheusrule-pod-crashloop.yaml
   - ./prometheusrule-pod-phase-unknown.yaml
