@@ -18,6 +18,8 @@ spec:
       namespace: external-secrets
     - name: seaweedfs-config
       namespace: storage
+    - name: priority-classes
+      namespace: kube-system
   postBuild:
     substituteFrom:
       - name: cluster-secrets

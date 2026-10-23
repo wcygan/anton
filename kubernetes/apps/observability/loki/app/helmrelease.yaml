@@ -149,6 +149,10 @@ spec:
       enabled: true
       kind: StatefulSet
       replicas: 1
+      # On node shutdown Loki stops after ordinary workloads and before
+      # SeaweedFS, so its shutdown flush still reaches S3. The kubelet gives
+      # this tier 120 seconds, matching the grace period below.
+      priorityClassName: storage-consumer
       terminationGracePeriodSeconds: 120
       extraVolumes:
         - name: seaweedfs-alert-rules
