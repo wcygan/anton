@@ -46,6 +46,21 @@ WAL directories and the current source of truth. Ordinary node work does not
 require changing CR/backend images or adding admission exceptions; those were
 specific to the one-time cutover.
 
+Lessons from the 2026-10-23 storage window (slot raise and priority tiers):
+
+- Stopping Loki pages: `LokiCanaryMissingLogs`, `LokiCanaryDeliveryStalled` and
+  `LokiLogMetricsUnavailable` are critical. Create an Alertmanager silence for
+  them, scoped to the window, before stopping Loki. Collectors buffered every
+  log on disk; Loki showed no gap after it restarted.
+- `seaweedfs-config` declares `suspend: false` on both storage CronJobs, so a
+  reconcile of that Kustomization undoes an imperative CronJob suspension. When
+  the window changes the Seaweed CR through Flux, suspend the CronJobs again
+  after the apply, or schedule the window clear of minutes :17 and :23.
+- Restarting a SeaweedFS component through the CR rolls masters, volume
+  servers, filers and S3 gateways in parallel, one Pod per component at a time;
+  it took about five minutes. Old volume Pods still log their last startup
+  check, so judge integrity only from Pods created by the roll.
+
 The kubelet's priority tiers stop Loki and Harbor before SeaweedFS, and
 SeaweedFS before Longhorn, only on its own graceful shutdown ([Talos shutdown
 order](../../../../docs/docs/guides/talos.md#shutdown-order)). The drain in
