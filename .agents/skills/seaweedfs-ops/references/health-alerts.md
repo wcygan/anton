@@ -135,6 +135,47 @@ volume files or delete PVCs to clear an address cache.
    Longhorn health, dependent applications, and stable restarts. A 15-minute
    integrity alert can remain firing until the original message ages out.
 
+### Repair one read-only copy from its healthy peer
+
+This applies when a two-copy (`001`) volume has one copy loaded read-only by the
+startup integrity check (`data file ... actual N bytes expected M bytes`) and
+the other copy is writable. Used on 2026-10-23 for Loki volumes 31 and 56, after
+a Longhorn detach killed `seaweedfs-volume-0` mid-append: each damaged copy had a
+complete trailing needle whose index entry was 16 zero bytes. Run every `weed
+shell` command from a master pod, between `lock` and `unlock`.
+
+1. Preserve both copies' `.dat`, `.idx`, `.sdx` and `.vif` with hashes outside
+   SeaweedFS (stream them with `kubectl exec ... tar cf -`). Check that a
+   writable copy's last index entry ends exactly at its data size, and copy
+   again if a delete landed mid-copy.
+2. Simulate: `volume.check.disk -volumeId=<id> -fixReadOnly -syncDeleted -v`.
+   The tool reports deletions the read-only copy missed and whether it holds
+   unique live data. Deletions it missed are normal: the filer deletes from every
+   copy and the read-only one refuses.
+3. If it reports a ONE-SIDED divergence (the read-only copy lacks live needles),
+   find out whether the filer references them: run
+   `volume.fsck -collection <c> -volumeId <id> -v` (detection only without
+   `-reallyDeleteFromVolume`) and subtract each copy's orphan list from its live
+   index entries. `-resurrectMissingNeedles` refuses volumes whose compaction
+   revision is not 0.
+4. Rehearse on the preserved files with the production image digest: one
+   master and three volume servers in Docker, the copies placed as in production,
+   then the planned commands, a restart of every server, and a read of every
+   referenced needle from every copy.
+5. Repair:
+   - Nothing referenced is missing: `volume.check.disk -volumeId=<id>
+     -fixReadOnly -syncDeleted -apply -v`. It applies the missed deletions and
+     marks the copy writable; the unindexed tail stays as unreferenced bytes.
+   - A referenced needle is missing: `volume.copy` the healthy copy to a third
+     server with a free slot, read every referenced needle there, then
+     `volume.delete` the damaged copy. Do not use `volume.fix.replication`
+     for one volume: it scans whole collections and also trims surplus copies.
+6. Verify: `volume.list` shows two writable copies, the read-only gauge is 0,
+   every referenced needle reads with identical hashes from each copy,
+   `volume.check.disk -slow -syncDeleted` reports no differences, and each
+   repaired copy's last index entry ends at its data size, so it passes the
+   startup check after the next restart.
+
 ## Historical durability review — 2026-10-19
 
 Reviewed the deployed SeaweedFS 4.40 source at revision `875cd1f67` and current

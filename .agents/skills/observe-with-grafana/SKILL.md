@@ -56,7 +56,17 @@ panel's own query, which keeps your numbers identical to what the user sees.
 ## Follow a red layer into logs
 
 Use `query_loki_logs` with a narrow selector and a time range of one hour or
-less, for example `{namespace="storage", pod="seaweedfs-volume-0"} |~ "(?i)error|warn"`.
+less. Anton's indexed labels are `k8s_namespace_name`, `k8s_container_name`,
+`k8s_deployment_name`, `k8s_statefulset_name`, `k8s_daemonset_name`,
+`k8s_job_name`, `k8s_cronjob_name` and `severity`; there is no `namespace` or
+`pod` label. For example:
+`{k8s_namespace_name="storage", k8s_statefulset_name="seaweedfs-volume"} |~ "(?i)error|warn|integrity"`.
+
+An empty result is not evidence until `query_loki_stats` shows the selector has
+streams in that range. Info logs are kept for 24 hours, warn for 14 days and
+error for 30 days, and many components, including SeaweedFS, log warnings at
+info severity, so filter on line text rather than `severity` for them.
+
 The server enforces a Loki guardrail: it rejects broad selectors and ranges
 over 24 hours, and returns at most 100 lines. `query_loki_patterns` groups
 repeated lines when a pod is noisy. For deeper LogQL work, use the

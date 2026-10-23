@@ -23,6 +23,8 @@ Stop when: the changed network resource matches the intended scope and read-only
 
 Preserve the `storage-vxlan` host shim unless a new diagnosis proves Longhorn iSCSI still works without it. The host iSCSI initiator reaches same-node instance-manager pods through `lhnet1-host`; bare macvlan/ipvlan attempts on the VXLAN parent failed this gate.
 
+Keep Cilium's CNI config in `/etc/cni/multus/net.d` (Cilium `cni.confPath`) and Multus's `multusAutoconfigDir` pointed there. `/etc/cni/net.d` must hold only `00-multus.conf`: Talos mounts `/etc/cni` as tmpfs and Multus deletes its config when it exits, so any other config there lets pods start without their secondary networks after a boot or Multus restart. Verify with `talosctl -n <ip> ls /etc/cni/net.d`.
+
 Use `docs/docs/guides/secrets-and-exposure.md` before adding secondary-domain routes. Add an explicit `DNSEndpoint` for those domains.
 
 ## Validation

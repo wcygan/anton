@@ -117,6 +117,15 @@ storage VXLAN are ready, and `/etc/cni/net.d/00-multus.conf` exists with
 After uncordoning, verify the node's Longhorn instance manager has `lhnet1` and a
 storage IP, then wait for original volumes and stateful consumers to recover.
 
+`/etc/cni/net.d` must contain only `00-multus.conf` (plus `whereabouts.d`);
+Cilium writes its config to `/etc/cni/multus/net.d`. Before 2026-10-23 a
+Cilium config there let pods start without Multus for about 30 seconds after
+each boot. Confirm no Running, non-host-network pod on the node lacks the
+`k8s.v1.cni.cncf.io/network-status` annotation; such a pod bypassed Multus.
+If an instance manager still lacks `lhnet1`, do not delete it while it serves
+attached volumes: that detaches them mid-write (it left two SeaweedFS volumes
+read-only on 2026-10-22). Stop or move that node's Longhorn consumers first.
+
 If ANY check fails, STOP. Do not move to the next node. Investigate; rollback if needed.
 
 ## Workflow B — Kubernetes version bump

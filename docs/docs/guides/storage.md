@@ -17,6 +17,8 @@ flowchart TB
 
 Multus gives Longhorn's instance managers a second network interface, and Whereabouts assigns its address. That interface carries traffic over a VXLAN on the direct 10 Gbit mesh between nodes ([ADR 0009](../decisions/0009-10g-sfp-full-mesh-networking.md), [ADR 0017](../decisions/0017-adopt-multus-for-longhorn-storage-network.md)).
 
+Every pod's network goes through Multus. Cilium writes its CNI config to `/etc/cni/multus/net.d`, where only Multus reads it, so `/etc/cni/net.d` holds just `00-multus.conf`. While that file is missing, after a boot or during a Multus restart, pods wait instead of starting with Cilium alone. Until 2026-10-23 both configs sat in `/etc/cni/net.d`, and pods created in the first half-minute after a boot started without their storage interface.
+
 ## Diagnose an attachment failure
 
 An attachment that was requested is not the same as one that succeeded. Follow the chain for the affected pod, in order:
