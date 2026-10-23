@@ -5,11 +5,17 @@
 # ///
 """Repair one read-only SeaweedFS volume copy from its healthy peer, preview first.
 
+`plan` also classifies writable copies whose live needles differ: when no
+filer references the differing needles it accepts the divergence (nothing to
+repair), otherwise it stops with the candidate repair, which this tool does
+not run.
+
 Run the subcommands in order; each writes evidence under
 <repo-root>/.private/seaweedfs-repair/volume-<id>/:
 
-  plan <id>      Read-only. Topology, read-only cause, check.disk simulation,
-                 volume.fsck reference join, file hashes, recommended action.
+  plan <id>      Read-only. Topology, read-only cause or differing needles,
+                 check.disk simulation, volume.fsck reference join against
+                 every filer, file hashes, recommended action.
   preserve <id>  Copy .dat/.idx/.sdx/.vif of every copy and write SHA256SUMS.
   rehearse <id>  Replay the planned repair on the preserved files in Docker with
                  the production image digest, restart every server, check reads.
@@ -33,11 +39,12 @@ import os
 import re
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Mapping, Protocol, Sequence
@@ -53,22 +60,28 @@ from seaweedfs_repair import (  # noqa: E402
     REQUIRED_EXTENSIONS,
     CopyFacts,
     DataCheck,
+    FsckReport,
     IndexState,
+    MissingChunks,
     NeedleHeader,
     RepairError,
     Step,
     SuperBlock,
     Topology,
     VolumeInfo,
+    append_time_offset,
     check_data,
     check_disk_diff,
+    check_disk_shortfall,
     copy_count,
     cross_check,
     decide,
+    differing_needles,
     file_id,
     key_hex,
     parse_check_disk,
     parse_fsck,
+    parse_missing_chunks,
     parse_volume_list,
     validate_steps,
     volume_base_name,
@@ -88,6 +101,7 @@ SHELL_TIMEOUT = 1800.0
 RESTART_SETTLE = 5.0
 TOPOLOGY_TIMEOUT = 120.0
 SAMPLE = 20
+PLAN_SCHEMA = 2
 
 FILE_STATUS_SCRIPT = r"""
 set -eu
@@ -173,6 +187,12 @@ class State:
         except FileNotFoundError:
             raise RepairError(f"{path} is missing; run the earlier subcommand first") from None
 
+    def read_plan(self) -> dict:
+        plan = self.read_json("plan.json")
+        if plan.get("schema") != PLAN_SCHEMA:
+            raise RepairError(f"{self.path('plan.json')} was written by an older version of this tool; run plan again")
+        return plan
+
     def digest(self, name: str) -> str:
         return sha256_file(self.path(name))
 
@@ -224,6 +244,7 @@ class Runtime:
     max_volumes: int
     volume_size_limit_mb: int
     default_replication: str
+    filers: tuple[str, ...]
 
     def to_json(self) -> dict:
         return {
@@ -235,6 +256,7 @@ class Runtime:
             "max_volumes": self.max_volumes,
             "volume_size_limit_mb": self.volume_size_limit_mb,
             "default_replication": self.default_replication,
+            "filers": list(self.filers),
         }
 
     @classmethod
@@ -248,6 +270,7 @@ class Runtime:
             value["max_volumes"],
             value["volume_size_limit_mb"],
             value["default_replication"],
+            tuple(value["filers"]),
         )
 
 
@@ -279,7 +302,7 @@ def _ready(pod: Mapping) -> bool:
     )
 
 
-def parse_runtime(volume_pods: Mapping, master_pods: Mapping) -> Runtime:
+def parse_runtime(volume_pods: Mapping, master_pods: Mapping, filer_pods: Mapping) -> Runtime:
     """Read server addresses, flags and the image digest from the live pod specs."""
     images: set[str] = set()
     servers: dict[str, ServerPod] = {}
@@ -303,6 +326,16 @@ def parse_runtime(volume_pods: Mapping, master_pods: Mapping) -> Runtime:
     if not masters:
         raise RepairError("no Ready SeaweedFS master pod")
     images.update(_image_id(pod, "master") for pod in master_pods["items"])
+    filers: list[str] = []
+    for pod in filer_pods.get("items", []):
+        command = _container_command(pod, "filer")
+        host, port = _flag(command, "ip"), _flag(command, "port")
+        if not host or not port:
+            raise RepairError(f"{pod['metadata']['name']}: filer command lacks -ip/-port")
+        filers.append(f"{host.replace('$(POD_NAME)', pod['metadata']['name'])}:{port}")
+        images.add(_image_id(pod, "filer"))
+    if not filers:
+        raise RepairError("no SeaweedFS filer pod; volume.fsck needs every filer's store")
     if len(images) != 1:
         raise RepairError(f"SeaweedFS pods run different images: {sorted(images)}")
     master = masters[0]
@@ -311,7 +344,9 @@ def parse_runtime(volume_pods: Mapping, master_pods: Mapping) -> Runtime:
     host = (_flag(command, "ip") or "").replace("$(POD_NAME)", master["metadata"]["name"])
     if not limit or not replication or not host:
         raise RepairError("master command lacks -ip/-volumeSizeLimitMB/-defaultReplication")
-    return Runtime(images.pop(), master["metadata"]["name"], host, servers, ports.pop(), maxima.pop(), int(limit), replication)
+    return Runtime(
+        images.pop(), master["metadata"]["name"], host, servers, ports.pop(), maxima.pop(), int(limit), replication, tuple(sorted(filers))
+    )
 
 
 def parse_file_status(text: str) -> dict[str, dict]:
@@ -483,21 +518,34 @@ class Cluster:
             selector = f"{INSTANCE},app.kubernetes.io/component={component}"
             return json.loads(self.kube.checked(["-n", NAMESPACE, "get", "pods", "-l", selector, "-o", "json"]))
 
-        self._runtime = parse_runtime(pods("volume"), pods("master"))
+        self._runtime = parse_runtime(pods("volume"), pods("master"), pods("filer"))
         return self._runtime
 
-    def weed_shell(self, commands: Sequence[str], *, approved: bool = False, timeout: float = SHELL_TIMEOUT) -> ShellResult:
+    def weed_shell(
+        self, commands: Sequence[str], *, approved: bool = False, timeout: float = SHELL_TIMEOUT, filer: str | None = None
+    ) -> ShellResult:
         mutating = [command for command in commands if weed_mutation(command)]
         if mutating and not approved:
             raise RepairError(f"refusing unapproved weed shell mutation: {mutating}")
+        shell = ["weed", "shell", "-master=localhost:9333", *([f"-filer={filer}"] if filer else [])]
         result = self.kube.run(
-            ["-n", NAMESPACE, "exec", "-i", self.runtime.master_pod, "-c", "master", "--", "weed", "shell", "-master=localhost:9333"],
+            ["-n", NAMESPACE, "exec", "-i", self.runtime.master_pod, "-c", "master", "--", *shell],
             input="".join(f"{command}\n" for command in commands).encode(),
             timeout=timeout,
             mutation=True,
             note="weed shell: " + "; ".join(commands),
         )
         return ShellResult(result.returncode, result.stdout.decode("utf-8", "replace"), result.stderr.decode("utf-8", "replace"))
+
+    def fsck(self, command: str) -> tuple[FsckReport, dict[str, str]]:
+        """Run one read-only fsck against each filer's store; weed shell alone picks a filer at random."""
+        outputs = {filer: self.weed_shell(["lock", command, "unlock"], filer=filer).text for filer in self.runtime.filers}
+        return FsckReport.intersect([parse_fsck(text) for text in outputs.values()]), outputs
+
+    def missing_chunks(self, command: str) -> tuple[MissingChunks, dict[str, str]]:
+        """The same per-filer walk with -findMissingChunksInFiler: references a copy cannot serve."""
+        outputs = {filer: self.weed_shell(["lock", command, "unlock"], filer=filer).text for filer in self.runtime.filers}
+        return MissingChunks.union([parse_missing_chunks(text) for text in outputs.values()]), outputs
 
     def _pod(self, server: str) -> ServerPod:
         try:
@@ -943,6 +991,35 @@ def sample_fids(
     return samples
 
 
+def needle_details(view: CopyView, state: IndexState, keys: Sequence[int], volume_id: int) -> dict[int, dict]:
+    """fid, size and append time of live needles, from each needle's header and v3 footer."""
+    keys = sorted(keys)
+    offsets: list[int] = []
+    for key in keys:
+        footer = append_time_offset(state.present[key])
+        offsets += [state.present[key].offset, footer - footer % 8]
+    raw = view.read_headers(offsets)
+    details: dict[int, dict] = {}
+    for index, key in enumerate(keys):
+        entry = state.present[key]
+        header = NeedleHeader.parse(raw[2 * index])
+        if header.key != key or header.size != entry.size:
+            raise RepairError(f"{view.server}: needle header at key {key:x} does not match its index entry")
+        start = append_time_offset(entry) % 8
+        appended = struct.unpack(">Q", raw[2 * index + 1][start : start + 8])[0]
+        details[key] = {
+            "fid": file_id(volume_id, key, header.cookie),
+            "size": entry.size,
+            "appended_at": datetime.fromtimestamp(appended / 1e9, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    return details
+
+
+def in_flight_keys(first: Mapping[str, IndexState], second: Mapping[str, IndexState], fsck: FsckReport, volume_id: int) -> frozenset[int]:
+    """Keys whose difference shows in only one of two index snapshots: writes or deletes landing between the reads."""
+    return frozenset(n.key for n in set(differing_needles(first, fsck, volume_id)) ^ set(differing_needles(second, fsck, volume_id)))
+
+
 def cmd_plan(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
     volume_id = args.volume_id
     runtime = cluster.discover()
@@ -962,13 +1039,20 @@ def cmd_plan(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
         raise RepairError(f"unexpected collection name {collection!r}")
     base = volume_base_name(collection, volume_id)
     servers = [copy.server for copy in copies]
-    before = {server: cluster.file_status(server, base, "all") for server in servers}
-    views = {server: cluster.copy_view(server, base, before[server]) for server in servers}
+    # Writable copies keep taking writes: hash only the small files, and read each index before its sizes.
+    writable = not any(copy.read_only for copy in copies)
+    before = {server: cluster.file_status(server, base, "small" if writable else "all") for server in servers}
+    views = {server: cluster.copy_view(server, base, None if writable else before[server]) for server in servers}
 
-    simulation_command = f"volume.check.disk -volumeId={volume_id} -fixReadOnly -syncDeleted -v"
+    if writable:
+        simulation_command = f"volume.check.disk -volumeId={volume_id} -slow -syncDeleted -v"
+    else:
+        simulation_command = f"volume.check.disk -volumeId={volume_id} -fixReadOnly -syncDeleted -v"
     simulation = cluster.weed_shell(["lock", simulation_command, "unlock"])
-    fsck_command = f"volume.fsck -collection {collection} -volumeId {volume_id} -v" if collection else f"volume.fsck -volumeId {volume_id} -v"
-    fsck_shell = cluster.weed_shell(["lock", fsck_command, "unlock"])
+    scope = f"volume.fsck -collection {collection} -volumeId {volume_id}" if collection else f"volume.fsck -volumeId {volume_id}"
+    fsck_command, missing_command = f"{scope} -v", f"{scope} -findMissingChunksInFiler -v"
+    fsck_report, fsck_outputs = cluster.fsck(fsck_command)
+    missing, missing_outputs = cluster.missing_chunks(missing_command) if writable else (None, {})
     after = {server: cluster.file_status(server, base, "small") for server in servers}
     stable = stable_between(before, after)
 
@@ -978,8 +1062,19 @@ def cmd_plan(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
         if server not in servers
     }
     facts = [copy_facts(views[c.server], c.read_only, before[c.server]) for c in copies]
+    states = {fact.server: fact.index for fact in facts}
+    in_flight: frozenset[int] = frozenset()
+    if writable:
+        later = {server: cluster.copy_view(server, base) for server in servers}
+        if any(SuperBlock.parse(later[f.server].superblock).compaction_revision != f.superblock.compaction_revision for f in facts):
+            raise RepairError(f"volume {volume_id} was compacted while planning; plan again")
+        in_flight = in_flight_keys(states, {s: IndexState.parse(v.index) for s, v in later.items()}, fsck_report, volume_id)
+        # A write in flight leaves its .dat bytes ahead of the index; trust a later read that ends cleanly.
+        facts = [
+            fact if fact.data.consistent else replace(fact, data=copy_facts(later[fact.server], False, after[fact.server]).data)
+            for fact in facts
+        ]
     simulation_report = parse_check_disk(simulation.text)
-    fsck_report = parse_fsck(fsck_shell.text)
     decision = decide(
         volume_id=volume_id,
         replica_placement=placement,
@@ -989,8 +1084,14 @@ def cmd_plan(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
         fsck=fsck_report,
         stable=stable,
         leftovers=leftovers,
+        in_flight=in_flight,
+        missing=missing,
     )
-    states = {fact.server: fact.index for fact in facts}
+    settled = [n for n in differing_needles(states, fsck_report, volume_id) if n.key not in in_flight] if writable else []
+    details: dict[tuple[str, int], dict] = {}
+    for holder in {needle.holder for needle in settled}:
+        keys = [needle.key for needle in settled if needle.holder == holder]
+        details.update({(holder, key): value for key, value in needle_details(views[holder], states[holder], keys, volume_id).items()})
     referenced = {server: len(states[server].live - fsck_report.orphans_on(server, volume_id)) for server in servers}
     differences = {
         f"{source} -> {target}": {
@@ -1007,7 +1108,7 @@ def cmd_plan(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
     }
     samples = sample_fids(views, states, {k: v for k, v in decision.sets.items() if k in owners}, volume_id, owners)
     document = {
-        "schema": 1,
+        "schema": PLAN_SCHEMA,
         "volume_id": volume_id,
         "collection": collection,
         "replica_placement": placement,
@@ -1043,15 +1144,34 @@ def cmd_plan(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
         "simulation": {
             "command": simulation_command,
             "problems": simulation_report.problems(),
-            "cross_check": cross_check(simulation_report, states, volume_id),
+            "cross_check": (
+                check_disk_shortfall(simulation_report, settled, volume_id) if writable else cross_check(simulation_report, states, volume_id)
+            ),
         },
         "fsck": {
             "command": fsck_command,
+            "filers": list(runtime.filers),
             "problems": fsck_report.problems(),
             "orphans": {server: len(fsck_report.orphans_on(server, volume_id)) for server in servers},
             "referenced": referenced,
+            "missing_command": missing_command if writable else None,
+            "missing": {server: sorted(missing.missing_on(server, volume_id)) for server in servers} if missing else {},
         },
         "differences": differences,
+        "divergence": {
+            "needles": [
+                {
+                    "key": key_hex(n.key),
+                    **details[(n.holder, n.key)],
+                    "holder": n.holder,
+                    "lacking": n.lacking,
+                    "deleted": n.deleted,
+                    "referenced": n.referenced,
+                }
+                for n in settled
+            ],
+            "in_flight": [key_hex(key) for key in sorted(in_flight)],
+        },
         "decision": {
             "action": decision.action,
             "summary": decision.summary,
@@ -1062,12 +1182,15 @@ def cmd_plan(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
             "steps": [step.to_json() for step in decision.steps],
             "final_copies": list(decision.final_copies),
             "referenced": [key_hex(key) for key in sorted(decision.referenced)],
-            "accepted_divergence": [key_hex(key) for key in sorted(decision.accepted_divergence)],
+            "accepted": {server: [key_hex(key) for key in sorted(keys)] for server, keys in sorted(decision.accepted.items())},
             "sets": samples,
         },
     }
     state.write_text("plan-simulation.txt", simulation.text)
-    state.write_text("plan-fsck.txt", fsck_shell.text)
+    for filer, text in fsck_outputs.items():
+        state.write_text(f"plan-fsck-{filer.split('.')[0]}.txt", text)
+    for filer, text in missing_outputs.items():
+        state.write_text(f"plan-fsck-missing-{filer.split('.')[0]}.txt", text)
     path = state.write_json("plan.json", document)
     print_plan(document, path)
     return 1 if decision.action == "stop" else 0
@@ -1098,11 +1221,26 @@ def print_plan(document: Mapping, path: Path) -> None:
     pods = {server: value["pod"] for server, value in document["runtime"]["servers"].items()}
     fsck = document["fsck"]
     per_copy = ", ".join(f"{pods[s]} {fsck['referenced'][s]} referenced/{fsck['orphans'][s]} orphaned" for s in fsck["referenced"])
-    print(f"  volume.fsck: {per_copy}{' | ' + '; '.join(fsck['problems']) if fsck['problems'] else ''}")
-    for pair, counts in document["differences"].items():
-        if any(counts.values()):
-            source, target = (pods.get(part, part) for part in pair.split(" -> "))
-            print(f"  {target} missed {counts['partially_deleted']} deletion(s) and lacks {counts['absent']} needle(s) present on {source}")
+    print(f"  volume.fsck ({len(fsck['filers'])} filer stores): {per_copy}{' | ' + '; '.join(fsck['problems']) if fsck['problems'] else ''}")
+    for server, paths in fsck["missing"].items():
+        if paths:
+            print(f"    {pods[server]} cannot serve {len(paths)} referenced chunk(s), e.g. {paths[0]}")
+    divergence = document["divergence"]
+    if divergence["needles"] or divergence["in_flight"]:
+        for needle in divergence["needles"][:SAMPLE]:
+            gap = "deleted it" if needle["deleted"] else "lacks it"
+            role = "REFERENCED" if needle["referenced"] else "unreferenced"
+            print(
+                f"    {pods[needle['holder']]} holds {needle['fid']} ({needle['size']} bytes, appended {needle['appended_at']}); "
+                f"{pods[needle['lacking']]} {gap}: {role}"
+            )
+        if divergence["in_flight"]:
+            print(f"    {len(divergence['in_flight'])} needle(s) differed in one snapshot only (writes in flight)")
+    else:
+        for pair, counts in document["differences"].items():
+            if any(counts.values()):
+                source, target = (pods.get(part, part) for part in pair.split(" -> "))
+                print(f"  {target} missed {counts['partially_deleted']} deletion(s) and lacks {counts['absent']} needle(s) present on {source}")
     for name, value in decision["sets"].items():
         if value["count"]:
             print(f"    {name}: {value['count']} {value['sample'][:5]}")
@@ -1115,6 +1253,8 @@ def print_plan(document: Mapping, path: Path) -> None:
         print(f"  {number}. {describe_step(step)}")
     if decision["action"] in ("check-disk", "copy"):
         print(f"Next: preserve {document['volume_id']}, rehearse {document['volume_id']}, then apply {document['volume_id']}.")
+    elif decision["accepted"]:
+        print(f"Next: verify {document['volume_id']} reads every referenced needle from each copy.")
     print(f"Evidence: {path}")
 
 
@@ -1122,7 +1262,7 @@ def print_plan(document: Mapping, path: Path) -> None:
 
 
 def cmd_preserve(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
-    plan = state.read_json("plan.json")
+    plan = state.read_plan()
     runtime = Runtime.from_json(plan["runtime"])
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     snapshot = state.dir / "snapshots" / stamp
@@ -1198,7 +1338,7 @@ def snapshot_fids(plan: Mapping, snapshot: Path) -> dict[int, str]:
 
 
 def cmd_rehearse(args: argparse.Namespace, state: State, log: CommandLog, docker_factory=DockerCluster) -> int:
-    plan = state.read_json("plan.json")
+    plan = state.read_plan()
     require_repair_plan(plan)
     snapshot = load_snapshot(state, plan, state.read_json("preserve.json"))
     runtime = Runtime.from_json(plan["runtime"])
@@ -1271,6 +1411,11 @@ def cmd_rehearse(args: argparse.Namespace, state: State, log: CommandLog, docker
     return 0 if not failures else 1
 
 
+def accepted_divergence(decision: Mapping) -> dict[str, frozenset[int]]:
+    """Needles each copy may keep lacking: unreferenced ones the plan accepted."""
+    return {server: frozenset(int(key, 16) for key in keys) for server, keys in decision.get("accepted", {}).items()}
+
+
 def final_checks(
     backend: Backend,
     plan: Mapping,
@@ -1281,7 +1426,7 @@ def final_checks(
 ) -> dict:
     decision = plan["decision"]
     servers = sorted(final)
-    accepted = {decision["damaged"]: frozenset(int(key, 16) for key in decision["accepted_divergence"])}
+    accepted = accepted_divergence(decision)
     copies, referenced, disk = settled_checks(backend, plan["volume_id"], servers, plan["base"], accepted, lambda _: frozenset(fids))
     reads = check_reads(backend, servers, fids, baseline)
     failures = copies.failures() + disk["failures"] + reads["failures"]
@@ -1327,7 +1472,7 @@ def apply_preconditions(cluster: Cluster, state: State, plan: Mapping) -> list[s
 
 
 def cmd_apply(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
-    plan = state.read_json("plan.json")
+    plan = state.read_plan()
     require_repair_plan(plan)
     preserve = state.read_json("preserve.json")
     snapshot = load_snapshot(state, plan, preserve)
@@ -1365,7 +1510,7 @@ def cmd_apply(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
 
 def cmd_verify(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
     volume_id = args.volume_id
-    plan = state.read_json("plan.json") if state.path("plan.json").exists() else None
+    plan = state.read_plan() if state.path("plan.json").exists() else None
     runtime = cluster.discover()
     topology = parse_volume_list(cluster.weed_shell(["volume.list"], timeout=120).stdout)
     copies = topology.copies_of(volume_id)
@@ -1395,14 +1540,12 @@ def cmd_verify(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
         failures.append(f"read-only gauge for {collection or 'default'} on {sorted(pods)}: {gauge}")
 
     fsck_command = f"volume.fsck -collection {collection} -volumeId {volume_id} -v" if collection else f"volume.fsck -volumeId {volume_id} -v"
-    fsck = parse_fsck(cluster.weed_shell(["lock", fsck_command, "unlock"]).text)
+    fsck, _ = cluster.fsck(fsck_command)
     failures += fsck.problems()
     for server in servers:
         if (server, volume_id) not in fsck.collected:
             failures.append(f"volume.fsck did not collect {server}")
-    accepted: dict[str, frozenset[int]] = {}
-    if plan and plan["decision"]["action"] == "check-disk":
-        accepted[plan["decision"]["damaged"]] = frozenset(int(key, 16) for key in plan["decision"]["accepted_divergence"])
+    accepted = accepted_divergence(plan["decision"]) if plan and plan["decision"]["action"] in ("none", "check-disk") else {}
 
     def referenced_for(states: Mapping[str, IndexState]) -> frozenset[int]:
         return frozenset().union(*(states[s].live - fsck.orphans_on(s, volume_id) for s in servers))
@@ -1430,7 +1573,8 @@ def cmd_verify(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
         "gauge": gauge,
         "tails": dict(copies_checked.tails),
         "check_disk": disk,
-        "fsck": {"command": fsck_command, "referenced": len(referenced)},
+        "fsck": {"command": fsck_command, "filers": list(runtime.filers), "referenced": len(referenced)},
+        "accepted": {server: len(keys) for server, keys in sorted(accepted.items())},
         "reads": reads,
         "failures": failures,
         "pass": not failures,
@@ -1438,6 +1582,8 @@ def cmd_verify(args: argparse.Namespace, cluster: Cluster, state: State) -> int:
     path = state.write_json("verify.json", document)
     verdict = "PASS" if not failures else "FAIL"
     print(f"Verify {verdict} for volume {volume_id}: {len(servers)} copies, {len(referenced)} referenced needle(s) read from each.")
+    if accepted:
+        print(f"Accepted divergence from the plan: {sum(len(keys) for keys in accepted.values())} unreferenced needle(s).")
     print(f"Evidence: {path}")
     for failure in failures:
         print(f"  - {failure}")

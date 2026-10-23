@@ -1,0 +1,10 @@
+Running in simulation mode. Use "-apply" option to apply the changes.
+Pass #1 (writable volumes)
+sync iteration 1/5 for volume 31
+load collection loki volume 31 index size 96 from seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 ...
+load collection loki volume 31 index size 80 from seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 ...
+volume 31 seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444: not resurrecting 2 needle(s) absent on seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 (cannot prove they are missing writes vs vacuumed deletes)
+volume 31 seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 has 5 entries, seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 missed 0 and partially deleted 0 entries
+volume 31 seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444: not resurrecting 1 needle(s) absent on seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 (cannot prove they are missing writes vs vacuumed deletes)
+volume 31 seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 has 4 entries, seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 missed 0 and partially deleted 0 entries
+volume 31: TWO-SIDED (split-brain) divergence — seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444.18444 has 2 unique live needle(s) AND seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444.18444 has 1. Do NOT auto-repair: each side may hold data the other lacks. Confirm orphans with volume.fsck -collection <c> -volumeId 31 -findMissingChunksInFiler before re-copying the complete replica, or restore the missing needles manually.
