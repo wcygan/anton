@@ -16,6 +16,28 @@ machine:
         nodefs.inodesFree: 5%
         imagefs.available: 15%
         imagefs.inodesFree: 5%
+      # On a graceful shutdown or reboot, stop pods one priority tier at a
+      # time, lowest first: writers stop and unmount before SeaweedFS stops,
+      # and SeaweedFS before Longhorn. Each tier gets up to its budget, then
+      # the next tier starts. Tier values match kube-system/priority-classes.
+      # Kubelet refuses these groups alongside shutdownGracePeriod, which Talos
+      # sets to 30s unless it is explicitly zeroed. Talos waits at most 20
+      # minutes for the kubelet; drains still evict every pod at once.
+      shutdownGracePeriod: 0s
+      shutdownGracePeriodCriticalPods: 0s
+      shutdownGracePeriodByPodPriority:
+        - priority: 0 # ordinary workloads
+          shutdownGracePeriodSeconds: 60
+        - priority: 100000000 # storage-consumer
+          shutdownGracePeriodSeconds: 120
+        - priority: 500000000 # storage-service
+          shutdownGracePeriodSeconds: 90
+        - priority: 1000000000 # longhorn-critical
+          shutdownGracePeriodSeconds: 60
+        - priority: 2000000000 # system-cluster-critical
+          shutdownGracePeriodSeconds: 30
+        - priority: 2000001000 # system-node-critical
+          shutdownGracePeriodSeconds: 30
     nodeIP:
       validSubnets:
         - 192.168.1.0/24
