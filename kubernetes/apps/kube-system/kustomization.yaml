@@ -15,6 +15,7 @@ resources:
   - ./idle-mitigations/ks.yaml
   - ./metrics-server/ks.yaml
   - ./pod-gc/ks.yaml
+  - ./priority-classes/ks.yaml
   - ./reloader/ks.yaml
   - ./snapshot-controller/ks.yaml
   - ./spegel/ks.yaml

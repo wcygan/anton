@@ -158,6 +158,55 @@ class FluxApplicationContractTests(unittest.TestCase):
             self.create_raw_app(root, "external-secrets", "external-secrets", extra="  wait: true\n")
             self.assertEqual(validate_repository(root), [])
 
+    def create_priority_classes(self, root: Path, *, extra: str = "  wait: true\n") -> None:
+        self.create_raw_app(
+            root,
+            "kube-system",
+            "priority-classes",
+            manifest=(
+                "apiVersion: scheduling.k8s.io/v1\nkind: PriorityClass\n"
+                "metadata:\n  name: storage-service\nvalue: 500000000\n"
+            ),
+            extra=extra,
+        )
+
+    def test_requires_dependency_for_shared_priority_class(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.create_priority_classes(root)
+            self.create_raw_app(
+                root,
+                "storage",
+                "consumer",
+                manifest="apiVersion: example.io/v1\nkind: Store\nspec:\n  volume:\n    priorityClassName: storage-service\n",
+            )
+            self.assertIn("flux.dependency.missing", self.codes(root))
+
+    def test_accepts_priority_class_dependency_and_ignores_other_classes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.create_priority_classes(root)
+            self.create_raw_app(
+                root,
+                "storage",
+                "consumer",
+                manifest="apiVersion: example.io/v1\nkind: Store\nspec:\n  priorityClassName: \"storage-service\"\n",
+                extra="  dependsOn:\n    - name: priority-classes\n      namespace: kube-system\n",
+            )
+            self.create_raw_app(
+                root,
+                "network",
+                "gateway",
+                manifest="apiVersion: example.io/v1\nkind: Gateway\nspec:\n  priorityClassName: system-cluster-critical\n  schema:\n    priorityClassName:\n      type: string\n",
+            )
+            self.assertEqual(validate_repository(root), [])
+
+    def test_requires_priority_class_provider_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.create_priority_classes(root, extra="")
+            self.assertIn("flux.provider.readiness", self.codes(root))
+
     def test_requires_provider_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
