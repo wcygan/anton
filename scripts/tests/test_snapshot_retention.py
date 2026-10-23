@@ -61,6 +61,7 @@ class API:
         if path.endswith("/content"):
             if method == "PUT":
                 self.content = copy.deepcopy(data)
+                self.snapshot["metadata"]["resourceVersion"] = "12"
             return copy.deepcopy(self.content)
         if method == "DELETE":
             self.snapshot = None
@@ -121,7 +122,7 @@ class RetentionTests(unittest.TestCase):
         retention.remove(api, snapshot(), NOW)
         self.assertEqual([x[0] for x in api.writes], ["PUT", "DELETE"])
         self.assertEqual(api.writes[0][2]["spec"]["deletionPolicy"], "Delete")
-        self.assertEqual(api.writes[1][2]["preconditions"], {"uid": "snapshot-uid", "resourceVersion": "10"})
+        self.assertEqual(api.writes[1][2]["preconditions"], {"uid": "snapshot-uid", "resourceVersion": "12"})
         retention.remove(api, snapshot(), NOW)
         self.assertEqual(len(api.writes), 2)
 
@@ -130,6 +131,19 @@ class RetentionTests(unittest.TestCase):
         api.content["spec"]["deletionPolicy"] = "Delete"
         retention.remove(api, snapshot(), NOW)
         self.assertEqual([x[0] for x in api.writes], ["DELETE"])
+
+    def test_release_revoked_during_policy_update_blocks_delete(self):
+        api = API()
+        request = api.request
+        def revoke(method, path, data=None):
+            result = request(method, path, data)
+            if method == "PUT":
+                api.snapshot["metadata"]["annotations"].clear()
+            return result
+        api.request = revoke
+        with self.assertRaisesRegex(RuntimeError, "revoked after"):
+            retention.remove(api, snapshot(), NOW)
+        self.assertEqual([x[0] for x in api.writes], ["PUT"])
 
     def test_replaced_snapshot_and_revoked_release_cannot_write(self):
         for change in (lambda a: a.snapshot["metadata"].update(uid="replacement"),

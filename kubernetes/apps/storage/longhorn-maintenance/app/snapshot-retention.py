@@ -106,6 +106,11 @@ def remove(api, candidate, now):
         updated = api.request("PUT", path, content)
         require(updated is not None and updated["metadata"]["uid"] == content["metadata"]["uid"] and
                 updated["spec"]["deletionPolicy"] == "Delete", "Content policy update was not confirmed")
+    current = api.get(namespace, "volumesnapshots", name)
+    require(current is not None and current["metadata"]["uid"] == uid, "Snapshot changed after policy update")
+    require(released(current, now), "Snapshot release was revoked after policy update")
+    require(current.get("status", {}).get("boundVolumeSnapshotContentName") == content_name,
+            "Snapshot binding changed after policy update")
     api.request("DELETE", api.path(namespace, "volumesnapshots", name), {
         "apiVersion": "v1", "kind": "DeleteOptions", "preconditions": {
             "uid": uid, "resourceVersion": current["metadata"]["resourceVersion"]}})
