@@ -298,7 +298,10 @@ class DrainNodeTests(unittest.TestCase):
         self.assertNotIn("drain_count", self.state())
 
     def test_hung_bulk_drain_is_bounded_by_overall_deadline(self) -> None:
-        result = self.invoke(state={"proxy_off_node": True, "drain_hang": True}, timeout=0.5)
+        # The fake drain hangs for 10 s. Allow enough of the overall deadline
+        # for the earlier fake kubectl calls to finish on a loaded machine;
+        # 0.5 s let the deadline expire before the drain started (1 in 6 runs).
+        result = self.invoke(state={"proxy_off_node": True, "drain_hang": True}, timeout=2)
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("remaining overall timeout", result.stderr)
