@@ -63,6 +63,8 @@ Read-only volumes are not proof of corruption; full slots or deliberate maintena
 
 When an abrupt kill leaves one copy of a two-copy volume read-only and its peer writable, `scripts/seaweedfs-readonly-repair.py` does this work: `plan`, `preserve`, `rehearse`, `apply`, `verify`. `plan` and `verify` only read. `apply` previews its commands and runs them only after explicit approval, a passing Docker rehearsal on the preserved files, and a check that the live files still match the planned hashes.
 
+Two writable copies can also hold different needles after a replicated write fails partway. `plan` checks each differing needle against every filer. When no filer references any of them, nothing needs repair: `verify` reads every referenced needle from both copies, and the placement audit accepts the unequal copy sizes only with that recent evidence.
+
 ## Volume slot capacity
 
 Each volume server holds at most `maxVolumeCounts` logical volumes, whatever their size. Slots can run out while the Longhorn claims still have free bytes, so check both limits.
@@ -83,7 +85,7 @@ To add slots, raise `maxVolumeCounts` within that byte budget. The change restar
 
 Plan node work as S3 downtime. Two copies remain, but uninterrupted service during a node outage is not promised.
 
-1. Run the read-only placement audit, `scripts/verify-seaweedfs-maintenance.py`, and confirm quorum, Longhorn health, and free capacity.
+1. Run the read-only placement audit, `scripts/verify-seaweedfs-maintenance.py`, and confirm quorum, Longhorn health, and free capacity. If copies report different sizes, check them with the repair tool first.
 2. Confirm a tested, independent recovery point exists for any unique uploads.
 3. Fence writers: pause Harbor's jobs and front door, flush and stop Loki cleanly, and hold application writers.
 4. Maintain one node with the matching Talos procedure, and wait for it and its storage workloads to recover before touching another.
