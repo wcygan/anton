@@ -61,6 +61,22 @@ Each S3 gateway runs a sidecar that reads a fixed 64 KiB object every minute and
 
 Read-only volumes are not proof of corruption; full slots or deliberate maintenance also cause them. For an integrity failure, record the status and logs, preserve the original files outside the affected system, and rehearse any repair on a disposable copy before seeking approval. Never force a volume writable to silence an alert.
 
+## Volume slot capacity
+
+Each volume server holds at most `maxVolumeCounts` logical volumes, whatever their size. Slots can run out while the Longhorn claims still have free bytes, so check both limits.
+
+- A new two-copy volume needs a free slot on each of two servers.
+- While one server is down, volumes with a copy on it stop taking writes. For any bucket with no writable volume on the other two servers, the master creates one there, even if nothing is writing. Each bucket therefore settles at one or more volumes per server pair: at least three volumes and six slots. Budget six slots for every new bucket.
+- Repairing a damaged copy from its healthy peer onto a third server needs a free slot on that server.
+- Keep `maxVolumeCounts` × `volumeSizeLimitMB` below the claim's filesystem size, minus 1% (the volume server's minimum free space) and room for one volume to compact. Then the disk cannot fill before the slots do.
+
+| Alert | Fires when | Severity |
+| --- | --- | --- |
+| `SeaweedFSVolumeSlotsLow` | A volume server has fewer than two free slots for 30 minutes | warning |
+| `SeaweedFSVolumeSlotsExhausted` | Fewer than two volume servers have a free slot for 5 minutes, so no new two-copy volume fits | critical |
+
+To add slots, raise `maxVolumeCounts` within that byte budget. The change restarts the three volume servers one at a time, so plan it as storage maintenance. Deleting empty volumes frees slots only until the next node maintenance, when the master recreates them.
+
 ## Node maintenance
 
 Plan node work as S3 downtime. Two copies remain, but uninterrupted service during a node outage is not promised.

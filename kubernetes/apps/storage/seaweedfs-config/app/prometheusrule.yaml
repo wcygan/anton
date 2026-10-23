@@ -47,3 +47,49 @@ spec:
               is incomplete. Check the operator-managed seaweedfs-volume
               ServiceMonitor, its volume-metrics endpoints, and Prometheus targets.
             runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#integrity-and-read-alerts
+        # Logical volume slots run out independently of PVC bytes. Two free
+        # slots per server keep room for one maintenance-time growth and one
+        # copy repair; below two servers with a free slot, no 001 volume fits.
+        - alert: SeaweedFSVolumeSlotsLow
+          expr: |
+            SeaweedFS_volumeServer_max_volumes{namespace="storage",endpoint="volume-metrics"}
+              - on(namespace,pod)
+            sum by (namespace,pod) (SeaweedFS_volumeServer_volumes{namespace="storage",endpoint="volume-metrics",type="volume"})
+              < 2
+          for: 30m
+          labels:
+            severity: warning
+            component: seaweedfs
+          annotations:
+            summary: "SeaweedFS {{ $labels.pod }} has {{ $value }} free volume slots"
+            description: |
+              {{ $labels.pod }} can host {{ $value }} more logical volumes. A new
+              two-copy volume needs a free slot on two servers, and a copy repair
+              needs one on its target server. PVC bytes are a separate limit.
+              Raise maxVolumeCounts within the PVC byte budget before adding
+              buckets or starting node maintenance.
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#volume-slot-capacity
+        - alert: SeaweedFSVolumeSlotsExhausted
+          expr: |
+            (count(
+              (
+                SeaweedFS_volumeServer_max_volumes{namespace="storage",endpoint="volume-metrics"}
+                  - on(namespace,pod)
+                sum by (namespace,pod) (SeaweedFS_volumeServer_volumes{namespace="storage",endpoint="volume-metrics",type="volume"})
+              ) > 0
+            ) or vector(0)) < 2
+            and on()
+            count(SeaweedFS_volumeServer_max_volumes{namespace="storage",endpoint="volume-metrics"}) > 0
+          for: 5m
+          labels:
+            severity: critical
+            component: seaweedfs
+            namespace: storage
+          annotations:
+            summary: SeaweedFS cannot create another two-copy volume
+            description: |
+              Fewer than two reporting volume servers have a free logical volume
+              slot, so the master cannot place a new 001 volume. New buckets, and
+              collections that lose their last writable volume, fail S3 writes
+              even while PVCs have free bytes.
+            runbook_url: https://wcygan.github.io/anton/guides/seaweedfs#volume-slot-capacity
