@@ -4,6 +4,7 @@ import datetime
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[2] / "kubernetes/apps/storage/longhorn-maintenance/app/snapshot-retention.py"
 spec = importlib.util.spec_from_file_location("retention", SOURCE)
@@ -13,7 +14,7 @@ NOW = datetime.datetime(2026, 10, 22, tzinfo=datetime.timezone.utc)
 
 
 def snapshot():
-    return {"metadata": {"namespace": "storage", "name": "maintenance", "uid": "snapshot-uid", "resourceVersion": "10",
+    return {"metadata": {"namespace": "storage", "name": "maintenance", "uid": "snapshot-uid", "resourceVersion": "10", "finalizers": [retention.BOUND],
                          "annotations": {retention.RELEASE: "snapshot-uid", retention.AFTER: "2026-10-21T00:00:00Z"}},
             "spec": {"volumeSnapshotClassName": retention.CLASS},
             "status": {"boundVolumeSnapshotContentName": "content"}}
@@ -143,6 +144,26 @@ class RetentionTests(unittest.TestCase):
         api.request = revoke
         with self.assertRaisesRegex(RuntimeError, "revoked after"):
             retention.remove(api, snapshot(), NOW)
+        self.assertEqual([x[0] for x in api.writes], ["PUT"])
+
+    def test_waits_for_async_csi_finalizer_and_uses_resulting_revision(self):
+        api = API()
+        api.snapshot["metadata"]["finalizers"] = []
+        def controller_step(_):
+            self.assertEqual([x[0] for x in api.writes], ["PUT"])
+            api.snapshot["metadata"]["finalizers"] = [retention.BOUND]
+            api.snapshot["metadata"]["resourceVersion"] = "13"
+        with patch.object(retention.time, "sleep", side_effect=controller_step) as sleep:
+            retention.remove(api, snapshot(), NOW)
+        sleep.assert_called_once_with(2)
+        self.assertEqual(api.writes[1][2]["preconditions"]["resourceVersion"], "13")
+
+    def test_missing_csi_protection_times_out_without_delete(self):
+        api = API()
+        api.snapshot["metadata"]["finalizers"] = []
+        with patch.object(retention.time, "monotonic", side_effect=[0, 241]):
+            with self.assertRaisesRegex(RuntimeError, "installed Delete-policy protection"):
+                retention.remove(api, snapshot(), NOW)
         self.assertEqual([x[0] for x in api.writes], ["PUT"])
 
     def test_replaced_snapshot_and_revoked_release_cannot_write(self):
