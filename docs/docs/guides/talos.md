@@ -45,6 +45,31 @@ mise exec -- talosctl get disks
 
 Start with node readiness and etcd membership. Then look for the earliest relevant evidence in the OS, network interfaces, disks, or services. Line evidence up by node and time rather than by symptom. Avoid broad log dumps, and redact credentials and machine identifiers before sharing.
 
+## Shutdown order
+
+When a node shuts down or reboots gracefully, the kubelet stops pods one priority tier at a time, lowest first, so writers finish before the storage under them stops. The budgets live in `talos/patches/global/machine-kubelet.yaml`; the two storage classes live in `kubernetes/apps/kube-system/priority-classes/`.
+
+| Tier | PriorityClass | Members | Budget |
+| --- | --- | --- | --- |
+| Ordinary workloads | none (priority 0) | Everything not listed below | 60 s |
+| Storage consumers | `storage-consumer` | Loki; Harbor core, jobservice and registry | 120 s |
+| Storage services | `storage-service` | SeaweedFS; Harbor's database and cache | 90 s |
+| Longhorn | `longhorn-critical` | Longhorn | 60 s |
+| Cluster critical | `system-cluster-critical` | Control plane, Flux, DNS, gateways | 30 s |
+| Node critical | `system-node-critical` | Cilium, Multus, storage network | 30 s |
+
+Each pod gets the shorter of its own grace period and its tier's budget. The next tier starts once every pod in the current one has exited and its volumes are unmounted, or when the budget runs out. Talos waits at most 20 minutes for the kubelet, and Kubernetes starts evicting a NotReady node's pods after five minutes, so the budgets stay inside both; `scripts/tests/test_shutdown_tiers.py` checks them. Under memory pressure the kubelet evicts lower tiers first among pods that use more memory than they request, so tiered workloads request their observed working set.
+
+Only the kubelet's own shutdown follows the tiers:
+
+| Operation | What stops the pods |
+| --- | --- |
+| `talosctl reboot`, `talosctl shutdown --force`, the power button | The kubelet, in tier order |
+| `talosctl upgrade`, `talosctl reboot --drain`, `talosctl shutdown` | A drain first evicts every evictable pod at once, honoring disruption budgets; the kubelet then stops what is left in tier order |
+| `talosctl reboot --mode=force`, power loss, kernel panic, watchdog reset | Nothing; processes die with the node |
+
+Because a drain ignores priority, planned maintenance still fences writers first ([SeaweedFS node maintenance](seaweedfs.md#node-maintenance)).
+
 ## Changing a node
 
 Every Talos apply, reboot, reset, upgrade, or replacement needs:

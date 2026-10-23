@@ -46,6 +46,12 @@ WAL directories and the current source of truth. Ordinary node work does not
 require changing CR/backend images or adding admission exceptions; those were
 specific to the one-time cutover.
 
+The kubelet's priority tiers stop Loki and Harbor before SeaweedFS, and
+SeaweedFS before Longhorn, only on its own graceful shutdown ([Talos shutdown
+order](../../../../docs/docs/guides/talos.md#shutdown-order)). The drain in
+`talosctl upgrade`, `talosctl reboot --drain` and `talosctl shutdown` evicts
+every pod at once, so keep this writer fence for planned work.
+
 Maintain one named node using the matching Talos/node skill and its separately
 approved commands. Preserve quorum and Longhorn preconditions; accepting S3
 downtime does not waive node safety. Wait for the node and original storage
