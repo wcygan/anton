@@ -61,6 +61,8 @@ Each S3 gateway runs a sidecar that reads a fixed 64 KiB object every minute and
 
 Read-only volumes are not proof of corruption; full slots or deliberate maintenance also cause them. For an integrity failure, record the status and logs, preserve the original files outside the affected system, and rehearse any repair on a disposable copy before seeking approval. Never force a volume writable to silence an alert.
 
+When an abrupt kill leaves one copy of a two-copy volume read-only and its peer writable, `scripts/seaweedfs-readonly-repair.py` does this work: `plan`, `preserve`, `rehearse`, `apply`, `verify`. `plan` and `verify` only read. `apply` previews its commands and runs them only after explicit approval, a passing Docker rehearsal on the preserved files, and a check that the live files still match the planned hashes.
+
 ## Volume slot capacity
 
 Each volume server holds at most `maxVolumeCounts` logical volumes, whatever their size. Slots can run out while the Longhorn claims still have free bytes, so check both limits.

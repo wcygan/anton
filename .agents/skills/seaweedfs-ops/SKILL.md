@@ -28,6 +28,8 @@ Use [diagnostic gotchas](references/diagnostics.md) for capacity limits, volume 
 
 For planned work, use the [node-maintenance procedure](references/node-maintenance.md) (planned S3 downtime, writer fencing, recovery checks) and the [integrity alert reference](references/health-alerts.md). The [stock cutover record](references/stock-cutover.md) documents the completed one-time image transition and its rollback; it is not a routine procedure.
 
+When `SeaweedFSReadOnlyVolumes` fires because one copy of a two-copy volume failed the startup check and its peer is writable, start with the read-only `mise exec -- python3 scripts/seaweedfs-readonly-repair.py plan <id>` and follow [Repair one read-only copy from its healthy peer](references/health-alerts.md#repair-one-read-only-copy-from-its-healthy-peer). Its `apply` subcommand is a live mutation: it needs a passing rehearsal and explicit operator approval.
+
 ## Recovery sequence
 
 1. Establish whether failure is in Flux/operator readiness, master topology, volume allocation, filer metadata, S3 gateway health, or an external client path.
