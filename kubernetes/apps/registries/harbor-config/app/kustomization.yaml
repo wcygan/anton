@@ -23,3 +23,4 @@ resources:
   - ./retention-cronjob.yaml
   - ./retention-rbac.yaml
   - ./retention-status.yaml
+  - ./snapshot-retention-rbac.yaml

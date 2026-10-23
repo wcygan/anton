@@ -57,6 +57,13 @@ choice and the remaining disaster-recovery gap. Keep identity, quorum, storage
 health, writer-fencing and data-consistency gates active; a location preference
 does not authorize data repair or waive those gates.
 
+At verified maintenance closure, account for every temporary recovery snapshot.
+Release redundant maintenance snapshots to the [maintenance retention policy](../../../docs/docs/guides/storage.md#maintenance-snapshot-retention)
+using their actual UID and a delete-after timestamp. Preserve any explicitly open
+recovery or investigation hold; creation age is not evidence that a hold ended.
+Never release the two monthly verified checkpoint generations. The scheduled
+cleanup owns CSI deletion and Longhorn reclamation; do not delete replica files.
+
 ## Workflow A — Talos OS rolling upgrade
 
 For bumping `talosVersion` (the OS image baked into each node).
