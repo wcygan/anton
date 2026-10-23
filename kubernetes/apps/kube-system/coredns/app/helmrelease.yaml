@@ -69,6 +69,19 @@ spec:
             - matchExpressions:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
+    # Keep the two replicas on different nodes and let a drain take only one,
+    # so cluster DNS survives any single-node maintenance.
+    podDisruptionBudget:
+      maxUnavailable: 1
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/instance: coredns
+        matchLabelKeys:
+          - pod-template-hash
     tolerations:
       - key: CriticalAddonsOnly
         operator: Exists

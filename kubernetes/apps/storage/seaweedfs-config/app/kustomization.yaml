@@ -20,6 +20,7 @@ configMapGenerator:
 resources:
   - ./durability-cronjob.yaml
   - ./seaweed.yaml
+  - ./pdb.yaml
   - ./prometheusrule.yaml
   - ./s3-read-alerts.yaml
   - ./s3-probe-monitor.yaml
