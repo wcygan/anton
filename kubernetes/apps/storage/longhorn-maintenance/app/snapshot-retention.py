@@ -19,6 +19,7 @@ require = recovery.require
 RELEASE = "retention.anton.wcygan.dev/released-uid"
 AFTER = "retention.anton.wcygan.dev/delete-after"
 CLASS = "longhorn-wal-forensics"
+BOUND = "snapshot.storage.kubernetes.io/volumesnapshot-bound-protection"
 NAMESPACES = ("storage", "observability", "registries")
 CONTENT = "/apis/snapshot.storage.k8s.io/v1/volumesnapshotcontents/"
 LONGHORN = "/apis/longhorn.io/v1beta2/namespaces/storage/"
@@ -106,14 +107,22 @@ def remove(api, candidate, now):
         updated = api.request("PUT", path, content)
         require(updated is not None and updated["metadata"]["uid"] == content["metadata"]["uid"] and
                 updated["spec"]["deletionPolicy"] == "Delete", "Content policy update was not confirmed")
-    current = api.get(namespace, "volumesnapshots", name)
-    require(current is not None and current["metadata"]["uid"] == uid, "Snapshot changed after policy update")
-    require(released(current, now), "Snapshot release was revoked after policy update")
-    require(current.get("status", {}).get("boundVolumeSnapshotContentName") == content_name,
-            "Snapshot binding changed after policy update")
-    api.request("DELETE", api.path(namespace, "volumesnapshots", name), {
-        "apiVersion": "v1", "kind": "DeleteOptions", "preconditions": {
-            "uid": uid, "resourceVersion": current["metadata"]["resourceVersion"]}})
+    end = time.monotonic() + 240
+    while True:
+        current = api.get(namespace, "volumesnapshots", name)
+        if current is None:
+            break
+        require(current["metadata"]["uid"] == uid, "Snapshot changed after policy update")
+        require(released(current, now), "Snapshot release was revoked after policy update")
+        require(current.get("status", {}).get("boundVolumeSnapshotContentName") == content_name,
+                "Snapshot binding changed after policy update")
+        if BOUND in current["metadata"].get("finalizers", []):
+            api.request("DELETE", api.path(namespace, "volumesnapshots", name), {
+                "apiVersion": "v1", "kind": "DeleteOptions", "preconditions": {
+                    "uid": uid, "resourceVersion": current["metadata"]["resourceVersion"]}})
+            break
+        require(time.monotonic() < end, "CSI has not installed Delete-policy protection")
+        time.sleep(2)
     wait_absent(api, api.path(namespace, "volumesnapshots", name), uid)
     wait_absent(api, path, content["metadata"]["uid"])
     end = time.monotonic() + 240

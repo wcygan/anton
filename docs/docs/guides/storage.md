@@ -136,8 +136,9 @@ The cleanup uses the recovery Lease to exclude concurrent checkpoint runs. It
 requires both verified six-volume generations Ready, a completed recovery journal,
 healthy attached Longhorn volumes, and no PVC referencing the candidate snapshot.
 It verifies the CSI content binding and native Longhorn handle, changes that exact
-content's deletion policy to `Delete`, and deletes the snapshot with UID and resource
-version preconditions. The shared forensic snapshot class remains `Retain`.
+content's deletion policy to `Delete`, waits for CSI to install its bound-protection
+finalizer, and deletes the snapshot with UID and resource version preconditions.
+The shared forensic snapshot class remains `Retain`.
 
 Each deletion waits for CSI object removal and checks that the backend snapshot is
 absent or marked removed before proceeding. A crash after the policy update is
