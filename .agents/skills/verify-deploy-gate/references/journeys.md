@@ -35,12 +35,13 @@ repository root. Evidence records live in the ignored `.private/deploy-gate/`.
 - **Success:** Contracts, Render, and Promote succeeded; Flux fetched the
   commit no earlier than Promote's completion (5 s clock allowance); every
   Kustomization on `flux-system` applied it.
-- **Last run:** 2026-10-24, `9b9d6744` (`.gitignore` and a test fix), watched
-  before the helper existed. Pushed 15:58:04Z; Render 15:58:08–15:58:46;
-  Contracts 15:58:08–15:59:26; Promote 15:59:30–15:59:37; Flux fetched
-  `deploy@9b9d6744` at 15:59:39; all 46 Kustomizations applied it by 16:00:06.
-  Earlier that day Promote fast-forwarded `deploy` past the Renovate
-  workflow-file bump `77091a29`, which proves the App token path.
+- **Last run:** 2026-10-24, pass on `1c8449db`, the commit that added this
+  skill. Pushed 16:10:44Z; Render 16:10:49–16:11:23; Contracts
+  16:10:49–16:12:02; Promote 16:12:06–16:12:13; Flux fetched it at 16:12:18,
+  6 s after Promote, and all 46 Kustomizations applied it by 16:12:41.
+  `9b9d6744` showed the same order earlier, watched before the helper existed,
+  and Promote fast-forwarded `deploy` past the Renovate workflow-file bump
+  `77091a29`, which proves the App token path.
 
 ## 3. Pre-push hook
 
