@@ -24,5 +24,6 @@ node_modules
 # QMD
 .qmd/index.sqlite*
 
-# Retained local Flight Recorder evidence
-.scratch/flight-recorder/evidence/
+# Local scratch: session ledgers, notes and Flight Recorder evidence. The public
+# privacy check also scans untracked files, so private notes here would fail it.
+.scratch/
