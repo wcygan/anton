@@ -56,6 +56,14 @@ It prints the tips of `main` and `deploy`, how far `deploy` is behind, the lates
 | `DIVERGED` | `deploy` has commits that are not on `main`; see [Recover a diverged deploy branch](#recover-a-diverged-deploy-branch) |
 | Cluster revision at neither tip | Flux has not fetched yet; follow the [Flux guide](flux.md) if it stays that way |
 
+To check the whole path rather than one snapshot, `scripts/verify-deploy-gate.py` runs three journeys. `steady` checks that every layer names `deploy` and agrees. `follow <commit>` proves that a pushed commit reached the cluster only after Promote finished. `hook` exercises the pre-push hook against a throwaway local remote:
+
+```sh
+mise exec -- python3 scripts/verify-deploy-gate.py follow <commit>
+```
+
+Each journey exits 0 when it passes, 3 while the commit is still on its way, and 1 when it fails.
+
 ## When the gate fails
 
 1. Open the failed run from `task deploy:status` and read the first failing check.

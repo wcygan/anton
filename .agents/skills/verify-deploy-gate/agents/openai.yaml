@@ -1,0 +1,3 @@
+interface:
+  display_name: "Verify Deploy Gate"
+  short_description: "Prove commits reach the cluster only through the Deploy Gate"
