@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Anton pre-push hook. Install once per clone with `mise exec -- task hooks:install`.
+#
+# Runs `task contracts:fast` against every commit being pushed, each in a
+# throwaway worktree, so uncommitted and untracked files cannot change the
+# result. It only fails sooner: the Deploy Gate workflow still runs the full
+# suite before Flux can apply a commit. Skip it with `git push --no-verify`.
+#
+# Pushing `deploy` directly is the break-glass path and needs
+# ANTON_BREAK_GLASS=1; see docs/docs/guides/deploys.md.
+set -Eeuo pipefail
+
+top="$(git rev-parse --show-toplevel)"
+# shellcheck source=scripts/lib/common.sh
+source "${top}/scripts/lib/common.sh"
+
+# Git exports repository variables to hooks. The checks run in another
+# worktree, whose own index must answer `git ls-files`.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+
+remote="${1:-origin}"
+commits=""
+main_commit=""
+deploy_commit=""
+# One "<local-ref> <local-sha> <remote-ref> <remote-sha>" line per pushed ref.
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+    if [[ "${local_sha}" =~ ^0+$ ]]; then
+        continue # deleting a ref pushes no commit
+    fi
+    case "${remote_ref}" in
+        refs/heads/main) main_commit="${local_sha}" ;;
+        refs/heads/deploy) deploy_commit="${local_sha}" ;;
+    esac
+    case " ${commits} " in
+        *" ${local_sha} "*) ;;
+        *) commits="${commits} ${local_sha}" ;;
+    esac
+done
+
+on_main() {
+    if [[ -n "${main_commit}" ]] && git merge-base --is-ancestor "$1" "${main_commit}"; then
+        return 0
+    fi
+    git rev-parse --verify --quiet "refs/remotes/${remote}/main^{commit}" >/dev/null &&
+        git merge-base --is-ancestor "$1" "refs/remotes/${remote}/main"
+}
+
+if [[ -n "${deploy_commit}" ]]; then
+    if [[ "${ANTON_BREAK_GLASS:-}" != "1" ]]; then
+        log error "Refusing to push deploy: the Deploy Gate promotes main commits that pass" \
+            "commit=${deploy_commit}" "break-glass=ANTON_BREAK_GLASS=1"
+    fi
+    if ! on_main "${deploy_commit}"; then
+        log error "Refusing to push deploy: the commit is not on ${remote}/main, so later promotions could not fast-forward. Push it to main first, or fetch if it is already there" \
+            "commit=${deploy_commit}"
+    fi
+    log warn "Break-glass push: Flux applies this commit without waiting for the Deploy Gate" \
+        "commit=${deploy_commit}"
+fi
+
+if [[ -z "${commits// /}" ]]; then
+    exit 0
+fi
+check_cli mise
+
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/anton-pre-push.XXXXXX")"
+cleanup() {
+    local tree
+    for tree in "${scratch}"/*; do
+        if [[ -d "${tree}" ]]; then
+            git worktree remove --force "${tree}" >/dev/null 2>&1 || true
+        fi
+    done
+    rm -rf "${scratch}"
+}
+trap cleanup EXIT
+
+for commit in ${commits}; do
+    taskfile="$(git show "${commit}:Taskfile.yaml" 2>/dev/null || true)"
+    if [[ "${taskfile}" != *$'\n  contracts:fast:'* ]]; then
+        log warn "Skipping fast checks: this commit predates contracts:fast" "commit=${commit}"
+        continue
+    fi
+
+    tree="${scratch}/${commit}"
+    git worktree add --quiet --detach "${tree}" "${commit}"
+    log info "Running fast contract checks" "commit=${commit}"
+    status=0
+    # The pushing worktree supplies the pinned tools; the checks read the pushed tree.
+    MISE_TRUSTED_CONFIG_PATHS="${top}" mise exec -C "${top}" -- task --dir "${tree}" contracts:fast || status=$?
+    git worktree remove --force "${tree}"
+    if [[ "${status}" -ne 0 ]]; then
+        log error "Fast contract checks failed; nothing was pushed" \
+            "commit=${commit}" "exit=${status}" "skip=git push --no-verify"
+    fi
+done
+log info "Fast contract checks passed"
