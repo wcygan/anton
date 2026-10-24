@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       '@openai/codex-security':
-        specifier: 0.5.1
-        version: 0.5.1(graphql@17.0.2)
+        specifier: 0.6.0
+        version: 0.6.0(graphql@17.0.2)
 
 packages:
 
@@ -318,8 +318,8 @@ packages:
       '@types/node':
         optional: true
 
-  '@linear/sdk@97.1.0':
-    resolution: {integrity: sha512-HPk0zY8+SAOEoUEPxZZgqTU7xpNJ5BYcN3grngaWsesecaGMUrn2bzhmWtsQ0jOtTvLImZKHxgiL3hqEjb6oig==}
+  '@linear/sdk@97.2.0':
+    resolution: {integrity: sha512-X/bFimpb2PnEY1jt1NjWXf25t6XEOxici0+D1xmYAcriliTTeGGjzNPT+H5A8ZdCHGjxCQ/nGTUszokzXLyaXA==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@modelcontextprotocol/server@2.0.0-alpha.4':
@@ -435,8 +435,8 @@ packages:
     resolution: {integrity: sha512-o10d8dqxFjhzoWp75MUrhaN8C6QrXPQqUJGwVnySj++ztAnrA322UuFRzHZvSa903lFgjjaimuf5rkqVsj0RHg==}
     engines: {node: '>=18'}
 
-  '@openai/codex-security@0.5.1':
-    resolution: {integrity: sha512-K8aJOcORHGBhfQL8TUcA+dScB3iH/awzMGlcyTFFtTCC6+yjvgcK/1aNNqCULQ9g8ne9Gb1kGeYzulAki4TJ1g==}
+  '@openai/codex-security@0.6.0':
+    resolution: {integrity: sha512-22wVRwv6H+L31hzfHZlTr8hVwKI+ENCeA271hWEAaMxmNf8/QeqjnP3hk8e55Pdyaqro3z4tMXV7/LDz//+ceQ==}
     engines: {node: ^22.13.0 || ^24.0.0 || ^26.0.0}
     hasBin: true
 
@@ -764,9 +764,6 @@ packages:
   yoga-layout@3.2.1:
     resolution: {integrity: sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
-
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -874,7 +871,7 @@ snapshots:
 
   '@inquirer/type@4.2.0': {}
 
-  '@linear/sdk@97.1.0(graphql@17.0.2)':
+  '@linear/sdk@97.2.0(graphql@17.0.2)':
     dependencies:
       '@graphql-typed-document-node/core': 3.2.0(graphql@17.0.2)
     transitivePeerDependencies:
@@ -882,7 +879,7 @@ snapshots:
 
   '@modelcontextprotocol/server@2.0.0-alpha.4':
     dependencies:
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@napi-rs/canvas-android-arm64@1.0.11':
     optional: true
@@ -978,10 +975,10 @@ snapshots:
     dependencies:
       '@openai/codex': 0.163.0
 
-  '@openai/codex-security@0.5.1(graphql@17.0.2)':
+  '@openai/codex-security@0.6.0(graphql@17.0.2)':
     dependencies:
       '@inquirer/prompts': 8.7.3
-      '@linear/sdk': 97.1.0(graphql@17.0.2)
+      '@linear/sdk': 97.2.0(graphql@17.0.2)
       '@octokit/core': 7.0.8
       '@openai/codex': 0.163.0
       '@openai/codex-sdk': 0.163.0
@@ -1124,7 +1121,7 @@ snapshots:
       '@toon-format/toon': 2.3.1
       tokenx: 1.6.0
       yaml: 2.9.1
-      zod: 4.6.5
+      zod: 4.6.7
 
   indent-string@5.0.0: {}
 
@@ -1267,7 +1264,5 @@ snapshots:
       pend: 1.2.0
 
   yoga-layout@3.2.1: {}
-
-  zod@4.6.5: {}
 
   zod@4.6.7: {}
