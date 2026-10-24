@@ -1,4 +1,4 @@
-"""Model SeaweedFS 4.48 volume files and plan a read-only copy repair.
+"""Model SeaweedFS 4.48 volume files and plan a repair of one volume's copies.
 
 Everything here is pure: callers pass index bytes, needle headers and weed
 shell output. The semantics follow the deployed 4.48 sources:
@@ -8,6 +8,7 @@ weed/shell/command_volume_check_disk.go and weed/shell/command_volume_fsck.go.
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import struct
@@ -117,6 +118,11 @@ def needle_disk_size(size: int, version: int = 3) -> int:
     raw = 0 if size == TOMBSTONE_SIZE else abs(size)
     unpadded = NEEDLE_HEADER_SIZE + raw + 4 + (8 if version == 3 else 0)
     return unpadded + 8 - unpadded % 8
+
+
+def append_time_offset(entry: IndexEntry) -> int:
+    """Where a v3 needle stores AppendAtNs: after its header, body and checksum."""
+    return entry.offset + NEEDLE_HEADER_SIZE + max(entry.size, 0) + 4
 
 
 def dat_tail_entry(entries: Sequence[IndexEntry], dat_size: int, version: int = 3) -> IndexEntry | None:
@@ -519,6 +525,22 @@ class FsckReport:
     def orphans_on(self, server: str, volume_id: int) -> frozenset[int]:
         return self.orphans.get((server, volume_id), frozenset())
 
+    @classmethod
+    def intersect(cls, reports: Sequence[FsckReport]) -> FsckReport:
+        """Combine one fsck per filer. Each filer walks its own store, and the
+        filer metadata log lives only in the store of the filer that wrote it,
+        so a needle is an orphan only when every filer leaves it unreferenced."""
+        if not reports:
+            raise RepairError("volume.fsck needs at least one filer")
+        keys = set().union(*(report.orphans for report in reports))
+        return cls(
+            frozenset.intersection(*(report.collected for report in reports)),
+            {key: frozenset.intersection(*(report.orphans_on(*key) for report in reports)) for key in keys},
+            sum(report.unresolved_manifests for report in reports),
+            tuple(error for report in reports for error in report.errors),
+            tuple(line for report in reports for line in report.unrecognized),
+        )
+
 
 _FSCK_INFO = (
     re.compile(r"^\s*$"),
@@ -584,6 +606,61 @@ def parse_fsck(text: str) -> FsckReport:
     )
 
 
+@dataclass(frozen=True)
+class MissingChunks:
+    """volume.fsck -findMissingChunksInFiler: filer paths whose chunk a copy lacks or has deleted."""
+
+    checked: frozenset[tuple[str, int]] = frozenset()
+    paths: Mapping[tuple[str, int], frozenset[str]] = field(default_factory=dict)
+    errors: tuple[str, ...] = ()
+    unrecognized: tuple[str, ...] = ()
+
+    def problems(self) -> list[str]:
+        return [*self.errors, *(f"unrecognized output: {line}" for line in self.unrecognized)]
+
+    def missing_on(self, server: str, volume_id: int) -> frozenset[str]:
+        return self.paths.get((server, volume_id), frozenset())
+
+    @classmethod
+    def union(cls, reports: Sequence[MissingChunks]) -> MissingChunks:
+        """Combine one run per filer: a path any filer's store holds is a reference."""
+        if not reports:
+            raise RepairError("volume.fsck needs at least one filer")
+        keys = set().union(*(report.paths for report in reports))
+        return cls(
+            frozenset.intersection(*(report.checked for report in reports)),
+            {key: frozenset().union(*(report.missing_on(*key) for report in reports)) for key in keys},
+            tuple(error for report in reports for error in report.errors),
+            tuple(line for report in reports for line in report.unrecognized),
+        )
+
+
+_MISSING_ERRORS = (*_FSCK_ERRORS, re.compile(r"^delet(?:ing|ed) "), re.compile(r"^\S+ volume not found$"))
+
+
+def parse_missing_chunks(text: str) -> MissingChunks:
+    checked: set[tuple[str, int]] = set()
+    paths: dict[tuple[str, int], set[str]] = {}
+    current: tuple[str, int] | None = None
+    errors: list[str] = []
+    unrecognized: list[str] = []
+    for line in text.splitlines():
+        line = line.rstrip("\r")
+        if match := re.match(r"^find missing file chunks in dataNodeId (\S+) volume (\d+) \.\.\.$", line):
+            current = (match.group(1), int(match.group(2)))
+            checked.add(current)
+        elif line.startswith("/"):
+            if current is None:
+                errors.append(f"missing chunk without a volume: {line}")
+            else:
+                paths.setdefault(current, set()).add(line)
+        elif any(pattern.match(line) for pattern in _MISSING_ERRORS):
+            errors.append(line)
+        elif not (re.match(r"^collecting volume \d+ file ids from \S+ \.\.\.$", line) or any(p.match(line) for p in _FSCK_INFO)):
+            unrecognized.append(line)
+    return MissingChunks(frozenset(checked), {key: frozenset(value) for key, value in paths.items()}, tuple(errors), tuple(unrecognized))
+
+
 def cross_check(report: CheckDiskReport, states: Mapping[str, IndexState], volume_id: int) -> list[str]:
     """Compare each direction check.disk printed with the same diff computed from the indexes."""
     mismatches: list[str] = []
@@ -607,6 +684,46 @@ def cross_check(report: CheckDiskReport, states: Mapping[str, IndexState], volum
                 f"{observed}, the indexes give {modeled}"
             )
     return mismatches
+
+
+@dataclass(frozen=True)
+class DifferingNeedle:
+    """A needle live on `holder` that `lacking` has no entry for, or has deleted."""
+
+    key: int
+    holder: str
+    lacking: str
+    deleted: bool
+    referenced: bool  # not an orphan of `holder`; fsck counts needles newer than its cutoff as referenced
+
+
+def differing_needles(states: Mapping[str, IndexState], fsck: FsckReport, volume_id: int) -> tuple[DifferingNeedle, ...]:
+    """Every live needle one copy holds that another copy lacks, joined with fsck's orphans."""
+    needles: list[DifferingNeedle] = []
+    for holder, lacking in itertools.permutations(sorted(states), 2):
+        absent = check_disk_diff(states[holder], states[lacking]).absent
+        deleted = check_disk_diff(states[lacking], states[holder]).partially_deleted
+        orphans = fsck.orphans_on(holder, volume_id)
+        needles += [DifferingNeedle(key, holder, lacking, key in deleted, key not in orphans) for key in sorted(absent | deleted)]
+    return tuple(needles)
+
+
+def check_disk_shortfall(report: CheckDiskReport, needles: Sequence[DifferingNeedle], volume_id: int) -> list[str]:
+    """Writable copies: check.disk must see at least the differences both index snapshots showed.
+
+    Writes landing while it reads can add differences, so only fewer is a mismatch.
+    """
+    printed_absent = {(source, target): count for vid, source, count, target in report.not_resurrecting if vid == volume_id}
+    printed_deleted = {(line.source, line.target): line.partially_deleted for line in report.sync if line.volume_id == volume_id}
+    shortfalls: list[str] = []
+    for holder, lacking in {(needle.holder, needle.lacking) for needle in needles}:
+        absent = sum(1 for n in needles if (n.holder, n.lacking) == (holder, lacking) and not n.deleted)
+        deleted = sum(1 for n in needles if (n.holder, n.lacking) == (holder, lacking) and n.deleted)
+        if printed_absent.get((holder, lacking), 0) < absent:
+            shortfalls.append(f"check.disk reported {printed_absent.get((holder, lacking), 0)} needle(s) absent on {lacking}, the indexes give {absent}")
+        if printed_deleted.get((lacking, holder), 0) < deleted:
+            shortfalls.append(f"check.disk reported {printed_deleted.get((lacking, holder), 0)} deletion(s) {holder} missed, the indexes give {deleted}")
+    return shortfalls
 
 
 # --- Repair decision -------------------------------------------------------
@@ -647,9 +764,10 @@ class Decision:
     target: str | None = None
     steps: tuple[Step, ...] = ()
     referenced: frozenset[int] = frozenset()
-    accepted_divergence: frozenset[int] = frozenset()
+    accepted: Mapping[str, frozenset[int]] = field(default_factory=dict)  # copy -> keys it may keep lacking
     final_copies: tuple[str, ...] = ()
     sets: Mapping[str, frozenset[int]] = field(default_factory=dict)
+    differing: tuple[DifferingNeedle, ...] = ()
 
 
 def _stop(summary: str, reasons: Iterable[str], **known) -> Decision:
@@ -763,13 +881,16 @@ def decide(
     fsck: FsckReport,
     stable: bool,
     leftovers: Mapping[str, Sequence[str]],
+    in_flight: frozenset[int] = frozenset(),
+    missing: MissingChunks | None = None,
 ) -> Decision:
     """Choose `none`, `check-disk`, `copy` or `stop` for one volume.
 
     check-disk is the documented in-place repair; it is chosen only when nothing
     referenced is missing from the read-only copy and the sync has deletions to
-    apply (otherwise check.disk flips the copy back to read-only). Anything the
-    model cannot prove safe stops instead.
+    apply (otherwise check.disk flips the copy back to read-only). When every
+    copy is writable, see `decide_writable`. Anything the model cannot prove
+    safe stops instead.
     """
     problems = _unsupported(copies)
     if len(copies) != copy_count(replica_placement):
@@ -777,10 +898,7 @@ def decide(
     read_only = [copy for copy in copies if copy.read_only]
     writable = [copy for copy in copies if not copy.read_only]
     if not read_only:
-        inconsistent = [f"{copy.server}: {copy.data.status}" for copy in copies if not copy.data.consistent]
-        if problems or inconsistent:
-            return _stop("no copy is read-only, but the volume needs manual review", [*problems, *inconsistent])
-        return Decision("none", "every copy is writable and ends where its index says; nothing to repair")
+        return decide_writable(volume_id, copies, simulation, fsck, problems, in_flight, missing)
     if len(read_only) != 1 or not writable:
         problems.append("the repair needs exactly one read-only copy and a writable peer")
     if problems:
@@ -890,7 +1008,7 @@ def decide(
             f"repair {damaged.server} in place from {healthy.server}",
             tuple(reasons),
             steps=tuple(steps),
-            accepted_divergence=absent,
+            accepted={damaged.server: absent} if absent else {},
             final_copies=tuple(sorted((healthy.server, damaged.server))),
             **known,
         )
@@ -917,3 +1035,101 @@ def decide(
         final_copies=final,
         **known,
     )
+
+
+def decide_writable(
+    volume_id: int,
+    copies: Sequence[CopyFacts],
+    simulation: CheckDiskReport,
+    fsck: FsckReport,
+    problems: Sequence[str],
+    in_flight: frozenset[int] = frozenset(),
+    missing: MissingChunks | None = None,
+) -> Decision:
+    """Every copy is writable: which live needles differ, and does any filer reference them?
+
+    Divergence made only of needles no filer references needs no repair, because
+    every referenced needle already has all its copies. Re-copying the fuller copy
+    or volume.merge would revive needles the other copy deleted and vacuumed, and
+    deleting the extras is cleanup, not repair. A referenced needle missing from a
+    copy stops with the candidate stock repair; this tool does not run it.
+
+    `missing` (fsck -findMissingChunksInFiler) checks the join from the filer's
+    side and names references that no copy can serve.
+    """
+    problems = list(problems)
+    problems += [f"{c.server}: the writable copy fails the startup check ({c.data.status})" for c in copies if not c.data.consistent]
+    problems += simulation.problems() + fsck.problems()
+    problems += [f"volume.fsck did not collect {c.server}" for c in copies if (c.server, volume_id) not in fsck.collected]
+    for copy in copies:
+        stray = fsck.orphans_on(copy.server, volume_id) - frozenset(k for k, e in copy.index.present.items() if e.size >= 0)
+        if stray:
+            problems.append(f"{copy.server}: {len(stray)} fsck orphans are not live in the captured index")
+    states = {copy.server: copy.index for copy in copies}
+    differing = tuple(needle for needle in differing_needles(states, fsck, volume_id) if needle.key not in in_flight)
+    problems += check_disk_shortfall(simulation, differing, volume_id)
+    notes = [f"{len(in_flight)} needle(s) differed in only one of two index snapshots (writes in flight) and are ignored"] if in_flight else []
+    if missing is not None:
+        problems += missing.problems()
+        problems += [f"fsck -findMissingChunksInFiler did not check {c.server}" for c in copies if (c.server, volume_id) not in missing.checked]
+        lost = frozenset.intersection(*(missing.missing_on(c.server, volume_id) for c in copies)) if copies else frozenset()
+        for copy in copies:
+            only_here = missing.missing_on(copy.server, volume_id) - lost
+            if only_here and not any(n.referenced and n.lacking == copy.server for n in differing):
+                problems.append(f"fsck -findMissingChunksInFiler lists {len(only_here)} reference(s) missing only from {copy.server}; the index join found none")
+        if lost:
+            notes.append(f"{len(lost)} filer entr(ies) reference needles no copy holds; no peer can restore them (see plan.json)")
+    if problems:
+        return _stop("the copies cannot be compared automatically", problems)
+
+    referenced = frozenset().union(*(copy.index.live - fsck.orphans_on(copy.server, volume_id) for copy in copies))
+    known = {"referenced": referenced, "differing": differing}
+    if not differing:
+        return Decision("none", "every copy is writable and holds the same live needles; nothing to repair", tuple(notes), **known)
+    gaps = [needle for needle in differing if needle.referenced]
+    if gaps:
+        return _stop("a referenced needle is missing from a copy", [*_divergence_counts(gaps, "referenced"), _writable_candidate(volume_id, copies, gaps), *notes], **known)
+    accepted: dict[str, set[int]] = {}
+    for needle in differing:
+        accepted.setdefault(needle.lacking, set()).add(needle.key)
+    return Decision(
+        "none",
+        "the copies differ only by needles no filer references; every referenced needle has all its copies",
+        (
+            *_divergence_counts(differing, "unreferenced"),
+            "accept this divergence: no repair copies, re-copies or deletes these needles",
+            "a whole-volume copy or volume.merge would revive needles the other copy deleted and vacuumed",
+            *notes,
+        ),
+        accepted={server: frozenset(keys) for server, keys in accepted.items()},
+        **known,
+    )
+
+
+def _divergence_counts(needles: Sequence[DifferingNeedle], label: str) -> list[str]:
+    counts: dict[tuple[str, str, bool], int] = {}
+    for needle in needles:
+        counts[(needle.holder, needle.lacking, needle.deleted)] = counts.get((needle.holder, needle.lacking, needle.deleted), 0) + 1
+    return [
+        f"{count} {label} needle(s) live on {holder} are {'deleted on' if deleted else 'missing from'} {lacking}"
+        for (holder, lacking, deleted), count in sorted(counts.items())
+    ]
+
+
+def _writable_candidate(volume_id: int, copies: Sequence[CopyFacts], gaps: Sequence[DifferingNeedle]) -> str:
+    revision = {copy.server: copy.superblock.compaction_revision for copy in copies}
+    caution = "; rehearse it on preserved copies with writers fenced before any approval"
+    if any(needle.deleted for needle in gaps):
+        caution += "; never run volume.check.disk -syncDeleted -apply here, it would delete the last copy"
+    if not any(needle.deleted for needle in gaps) and all(revision[needle.lacking] == 0 for needle in gaps):
+        return (
+            f"candidate repair: volume.check.disk -volumeId={volume_id} -slow -resurrectMissingNeedles -apply -v copies every "
+            "live needle into each never-vacuumed copy that lacks it, unreferenced ones included" + caution
+        )
+    complete = sorted(copy.server for copy in copies if not any(needle.lacking == copy.server for needle in gaps))
+    if complete:
+        return (
+            f"candidate repair: volume.copy -source {complete[0]} to a third server with a free slot, read every referenced "
+            "needle there, then volume.delete the other copy; it revives needles the other copy deleted" + caution
+        )
+    return "no stock command restores referenced needles into vacuumed copies in both directions; this needs a needle-level copy" + caution

@@ -20,7 +20,11 @@ mise exec -- python3 scripts/verify-seaweedfs-maintenance.py \
 ```
 
 The audit is read-only. Matching copy counts/sizes do not prove matching bytes,
-S3 cache freshness or authority to drain. Historical migration and failed
+S3 cache freshness or authority to drain. It fails when a volume's copies
+report different sizes: run `scripts/seaweedfs-readonly-repair.py plan <id>`
+for each such volume. If every plan accepts the divergence, run `verify <id>`
+for each, then rerun the audit with `--accept-size-divergence <ids>` (see
+[Writable copies that disagree](health-alerts.md#writable-copies-that-disagree)). Historical migration and failed
 continuity exercises remain in `https://github.com/wcygan/anton/blob/628e15ba1c9b40b2731240dcfb3a282f013319cc/context/plans/0027-improve-cluster-operational-outcomes.md`.
 Do not rerun the retired one-off migration fixtures for routine maintenance.
 

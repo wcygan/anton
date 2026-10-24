@@ -200,6 +200,54 @@ Behavior the tool depends on:
   append times; compare needle reads, not file hashes.
 - `volume.fsck` skips needles newer than its 5-hour cutoff; the plan counts
   them as referenced.
+- Each filer walks its own store, and `weed shell` picks a filer at random, so
+  the tool runs every fsck against each filer. A needle is unreferenced only
+  when no filer references it: the filer metadata log lives only in the store
+  of the filer that wrote it.
+
+### Writable copies that disagree
+
+Two writable copies of one `001` volume can hold different live needles. A
+replicated write that fails partway leaves its needle on one copy, and a copy
+that misses a deletion keeps a needle its peer deleted and vacuumed. The
+placement audit then reports `copySizesAgree: false`, and
+`volume.check.disk -slow` reports a ONE-SIDED or TWO-SIDED divergence. Neither
+says whether data is at risk.
+
+`plan <id>` answers that. For writable copies it reads both indexes twice and
+ignores needles that differ in only one read (writes in flight). It joins each
+differing needle with `volume.fsck` on every filer, and
+`volume.fsck -findMissingChunksInFiler` checks the result from the filer's side,
+listing references that no copy can serve.
+
+- `none` with accepted divergence: no filer references a differing needle, so
+  every referenced needle already has both copies. Nothing to repair. Run
+  `verify <id>`: it reads every referenced needle from each copy and lets only
+  the accepted needles differ.
+- `stop`: a referenced needle is missing from, or deleted on, one copy. The
+  reasons name the candidate stock repair: `volume.check.disk -slow
+  -resurrectMissingNeedles -apply` when the copy that lacks it was never
+  vacuumed (compaction revision 0), otherwise a `volume.copy` of the complete
+  copy to a third server, then a `volume.delete` of the other. The tool runs
+  neither for writable copies; rehearse the chosen one on preserved copies with
+  writers fenced, and get approval for the exact commands.
+
+Do not converge an accepted divergence. A whole-volume copy of the fuller copy
+or `volume.merge` revives needles the other copy deleted and vacuumed, the risk
+upstream's divergence warning names. `volume.fsck -reallyDeleteFromVolume` is
+cleanup, not repair. Never run `volume.check.disk -syncDeleted -apply` when a
+copy deleted a needle the filer still references: it deletes the last copy.
+
+The placement audit accepts unequal copy sizes only for volumes named in
+`--accept-size-divergence` that have a passing `verify` from the last 6 hours on
+the same copies. Older evidence says nothing about recent writes, because
+`volume.fsck` ignores needles newer than 5 hours.
+
+On 2026-10-23, thirteen volumes (default 12 and 53, Loki 25–30, 50, 58 and 62,
+Harbor 60 and 61) differed by 32 needles, all unreferenced in both filer stores.
+They were appended during the 2026-10-20 stock cutover and the 2026-10-22 node
+restarts. Loki volumes 25, 29 and 30 also hold four filer entries from
+2026-10-12 whose needles no copy has; no peer can restore them.
 
 ## Historical durability review — 2026-10-19
 

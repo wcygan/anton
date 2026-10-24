@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -182,6 +183,69 @@ class SeaweedMaintenanceAudit(unittest.TestCase):
         self.assertIn("replica copies report different volume sizes", result["issues"])
         self.assertIn("not_assessed", result["bytesAndCacheBehavior"])
 
+    def diverged(self):
+        values = evidence(copies=("seaweedfs-volume-0", "seaweedfs-volume-1"), replication="001")
+        values["vol_status"]["Volumes"]["DataCenters"]["dc"]["rack"][
+            "seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444"][0]["Size"] = 2048
+        values["observation_started_at"] = "2026-10-23T23:40:00.000000Z"
+        return values
+
+    def verified(self, **changes):
+        document = {
+            "volume_id": 9, "pass": True, "observed_at": "2026-10-23T23:33:13Z",
+            "copies": [f"seaweedfs-volume-{i}.seaweedfs-volume-peer.storage:8444" for i in (1, 0)],
+        }
+        document.update(changes)
+        return document
+
+    def test_size_divergence_with_fresh_verify_evidence_is_accepted(self):
+        result = AUDIT.analyze(**self.diverged(), accepted_divergence={9: self.verified()})
+        volume = result["volumes"][0]
+        self.assertFalse(volume["copySizesAgree"], "the sizes still differ; only the verdict changes")
+        self.assertTrue(volume["copySizeDivergenceAccepted"])
+        self.assertTrue(volume["hasCopiesSurvivingAnyOneNode"])
+        self.assertTrue(result["auditPass"], result["issues"])
+        self.assertEqual([9], result["acceptedSizeDivergenceIDs"])
+        self.assertEqual([], result["issues"])
+
+    def test_size_divergence_without_valid_verify_evidence_still_fails(self):
+        cases = {
+            "missing": (None, "no verify.json"),
+            "failed": (self.verified(**{"pass": False}), "did not pass"),
+            "stale": (self.verified(observed_at="2026-10-23T17:00:00Z"), "older than 6 hours"),
+            "future": (self.verified(observed_at="2026-10-24T00:00:00Z"), "older than 6 hours"),
+            "other copies": (self.verified(copies=["seaweedfs-volume-2.seaweedfs-volume-peer.storage:8444"]), "other copies"),
+            "other volume": (self.verified(volume_id=10), "did not pass"),
+        }
+        for name, (document, reason) in cases.items():
+            with self.subTest(name):
+                result = AUDIT.analyze(**self.diverged(), accepted_divergence={9: document})
+                self.assertFalse(result["volumes"][0]["hasCopiesSurvivingAnyOneNode"])
+                self.assertFalse(result["auditPass"])
+                self.assertIn("replica copies report different volume sizes", result["issues"])
+                self.assertTrue(any(issue.startswith("size divergence not accepted for volume 9") and reason in issue
+                                    for issue in result["issues"]), result["issues"])
+
+    def test_size_only_divergence_is_not_reported_as_a_placement_failure(self):
+        result = AUDIT.analyze(**self.diverged())
+        self.assertNotIn("selected volumes lack observed nonzero two-node replica placement", result["issues"])
+        self.assertIn("replica copies report different volume sizes", result["issues"])
+
+    def test_live_cli_reads_verify_evidence_for_named_volumes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "volume-9").mkdir()
+            (root / "volume-9" / "verify.json").write_text(json.dumps(self.verified()))
+            (root / "volume-10").mkdir()
+            (root / "volume-10" / "verify.json").write_text("not json")
+            self.assertEqual(self.verified(), AUDIT.load_verify(root, 9))
+            self.assertIsNone(AUDIT.load_verify(root, 10))
+            self.assertIsNone(AUDIT.load_verify(root, 11))
+        self.assertEqual([12, 25], AUDIT.volume_ids("12,25"))
+        for bad in ("", "x", "0"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                AUDIT.volume_ids(bad)
+
     def test_duplicate_file_with_000_placement_does_not_pass(self):
         result = audit(**evidence(copies=("seaweedfs-volume-0", "seaweedfs-volume-1"), replication="000"))
         self.assertEqual(result["volumes"][0]["copyCount"], 2)
@@ -288,7 +352,8 @@ class SeaweedMaintenanceAudit(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
         args = argparse.Namespace(expected_context=CONTEXT, expected_kube_system_uid="kube-uid",
-                                  expected_seaweed_uid="seaweed-uid", collection=None)
+                                  expected_seaweed_uid="seaweed-uid", collection=None,
+                                  accept_size_divergence=[], repair_evidence=Path("/nonexistent"))
         with patch.object(AUDIT.subprocess, "run", side_effect=fake_run):
             AUDIT.run_live(args)
         self.assertEqual(len(calls), 9)
@@ -306,7 +371,8 @@ class SeaweedMaintenanceAudit(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout="admin@wrong", stderr="")
 
         args = argparse.Namespace(expected_context=CONTEXT, expected_kube_system_uid="kube-uid",
-                                  expected_seaweed_uid="seaweed-uid", collection=None)
+                                  expected_seaweed_uid="seaweed-uid", collection=None,
+                                  accept_size_divergence=[], repair_evidence=Path("/nonexistent"))
         with patch.object(AUDIT.subprocess, "run", side_effect=fake_run):
             with self.assertRaises(AUDIT.AuditError):
                 AUDIT.run_live(args)

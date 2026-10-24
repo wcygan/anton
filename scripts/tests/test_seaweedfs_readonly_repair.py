@@ -19,6 +19,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from typing import Callable
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +52,11 @@ MASTER_COMMAND = (
     "weed -logtostderr=true master -volumeSizeLimitMB=5000 -defaultReplication=001 "
     "-ip=$(POD_NAME).seaweedfs-master-peer.storage -ip.bind=0.0.0.0 -telemetry=false"
 )
+FILER_COMMAND = (
+    "weed -logtostderr=true filer -port=8888 -ip=$(POD_NAME).seaweedfs-filer-peer.storage -ip.bind=0.0.0.0 "
+    "-master=seaweedfs-master-0.seaweedfs-master-peer.storage:9333"
+)
+FILERS = [f"seaweedfs-filer-{i}.seaweedfs-filer-peer.storage:8888" for i in range(2)]
 
 
 def fixture(name: str) -> str:
@@ -61,8 +67,9 @@ def cookie(key: int) -> int:
     return 0x10000 + key
 
 
-def needle(key: int, size: int) -> bytes:
-    record = struct.pack(">IQi", cookie(key), key, size) + bytes([key % 251 + 1]) * size + b"\0" * 4 + struct.pack(">Q", key)
+def needle(key: int, size: int, appended: int | None = None) -> bytes:
+    stamp = key if appended is None else appended
+    record = struct.pack(">IQi", cookie(key), key, size) + bytes([key % 251 + 1]) * size + b"\0" * 4 + struct.pack(">Q", stamp)
     return record + b"\0" * (8 - len(record) % 8)
 
 
@@ -78,9 +85,9 @@ class Volume:
         clone.dat, clone.idx = bytearray(self.dat), bytearray(self.idx)
         return clone
 
-    def put(self, key: int, size: int = 40, *, indexed: bool = True) -> Volume:
+    def put(self, key: int, size: int = 40, *, indexed: bool = True, appended: int | None = None) -> Volume:
         offset = len(self.dat)
-        self.dat += needle(key, size)
+        self.dat += needle(key, size, appended)
         self.idx += struct.pack(">QIi", key, offset // 8, size) if indexed else bytes(16)
         return self
 
@@ -106,6 +113,27 @@ def scenario(*, trailing_referenced: bool) -> tuple[Volume, Volume]:
     if not trailing_referenced:
         healthy.delete(7)
     return healthy.delete(2).delete(3), damaged
+
+
+FIRST, SECOND = SERVERS[0], SERVERS[1]
+OCT22 = 1792643832_000_000_000  # 2026-10-22T04:37:12Z, the Talos roll's write burst
+
+
+def diverged() -> tuple[Volume, Volume]:
+    """Volume 26 on 2026-10-23: each copy kept writes its peer missed, and no filer references them.
+
+    fsck-diverged.txt lists key 10 as an orphan of FIRST and keys 11 and 12 as orphans of SECOND.
+    """
+    common = Volume().put(1).put(2).put(3).delete(3)
+    first = common.copy().put(10, appended=OCT22)
+    second = common.copy().put(11, appended=OCT22 + 1).put(12, appended=OCT22 + 2)
+    return first, second
+
+
+def append(store, server: str, key: int, size: int = 40) -> None:
+    dat, idx = store.get(server, f"{BASE}.dat"), store.get(server, f"{BASE}.idx")
+    store.put(server, f"{BASE}.dat", dat + needle(key, size))
+    store.put(server, f"{BASE}.idx", idx + struct.pack(">QIi", key, len(dat) // 8, size))
 
 
 def index_state(volume: Volume) -> model.IndexState:
@@ -216,22 +244,30 @@ class SeaweedShell:
         self.copies = dict(copies)
         self.simulation, self.slow, self.fsck, self.free = simulation, slow, fsck, free
         self.sessions: list[list[str]] = []
+        self.filers: list[str | None] = []
+        self.missing = "fsck-missing-diverged.txt"
+        self.on_fsck: Callable[[], None] | None = None
 
     def tombstone(self, server: str, key: int) -> None:
         dat, idx = self.store.get(server, f"{BASE}.dat"), self.store.get(server, f"{BASE}.idx")
         self.store.put(server, f"{BASE}.dat", dat + needle(key, 0))
         self.store.put(server, f"{BASE}.idx", idx + struct.pack(">QIi", key, len(dat) // 8, -1))
 
-    def __call__(self, commands: list[str]) -> tuple[int, str, str]:
+    def __call__(self, commands: list[str], filer: str | None = None) -> tuple[int, str, str]:
         self.sessions.append(list(commands))
+        self.filers.append(filer)
         output: list[str] = []
         for command in commands:
             if command in ("lock", "unlock"):
                 continue
             if command == "volume.list":
                 output.append(render_volume_list(self.copies, self.free))
+            elif command.startswith("volume.fsck") and "-findMissingChunksInFiler" in command:
+                output.append(fixture(self.missing))
             elif command.startswith("volume.fsck"):
-                output.append(fixture(self.fsck))
+                output.append(fixture(self.fsck[filer] if isinstance(self.fsck, dict) else self.fsck))
+                if self.on_fsck:
+                    self.on_fsck()
             elif command.startswith("volume.check.disk") and "-apply" not in command:
                 output.append(fixture(self.slow if "-slow" in command else self.simulation))
             elif "-fixReadOnly" in command:
@@ -272,6 +308,7 @@ MASTER_PODS = {
         pod("seaweedfs-master-1", "master", MASTER_COMMAND, "k8s-2"),
     ]
 }
+FILER_PODS = {"items": [pod(f"seaweedfs-filer-{i}", "filer", FILER_COMMAND, f"k8s-{i + 1}") for i in range(2)]}
 
 
 class FakeKube:
@@ -305,7 +342,8 @@ class FakeKube:
 
     def dispatch(self, args: list[str], payload: bytes | None) -> tuple[bytes, bytes, int]:
         if args[2:4] == ["get", "pods"]:
-            return json.dumps(VOLUME_PODS if "component=volume" in args[5] else MASTER_PODS).encode(), b"", 0
+            component = args[5].rsplit("=", 1)[1]
+            return json.dumps({"volume": VOLUME_PODS, "master": MASTER_PODS, "filer": FILER_PODS}[component]).encode(), b"", 0
         if args[:2] == ["get", "--raw"]:
             result = [
                 {"metric": {"pod": name, "collection": "loki", "type": "IsReadOnly"}, "value": [0, str(value)]}
@@ -317,7 +355,8 @@ class FakeKube:
         tail = args[args.index("--") + 1 :]
         target = args[args.index("-c") - 1]
         if tail[:2] == ["weed", "shell"]:
-            code, out, err = self.shell(payload.decode().splitlines())
+            filer = next((arg.split("=", 1)[1] for arg in tail if arg.startswith("-filer=")), None)
+            code, out, err = self.shell(payload.decode().splitlines(), filer)
             return out.encode(), err.encode(), code
         if tail[:3] == ["sh", "-c", CLI.READ_SCRIPT]:
             return read_output(self.store, payload), b"", 0
@@ -422,6 +461,17 @@ class Flow:
 
     def plan(self) -> dict:
         return json.loads(self.state().path("plan.json").read_text())
+
+    @classmethod
+    def diverged(cls, testcase: unittest.TestCase, *, fsck: str | dict[str, str] = "fsck-diverged.txt") -> Flow:
+        """Both copies writable, holding different unreferenced needles."""
+        flow = cls(testcase, trailing_referenced=False)
+        first, second = diverged()
+        flow.store = MemoryStore({FIRST: first.files(), SECOND: second.files(), TARGET: {}})
+        flow.simulation = flow.slow = "check-disk-slow-diverged.txt"
+        flow.shell = SeaweedShell(flow.store, {FIRST: False, SECOND: False}, simulation=flow.slow, slow=flow.slow, fsck=fsck)
+        flow.kube = FakeKube(flow.store, flow.shell, gauge={})
+        return flow
 
 
 class IndexModelTests(unittest.TestCase):
@@ -647,8 +697,14 @@ class DecisionTests(unittest.TestCase):
 
     def test_healthy_volume_needs_nothing(self) -> None:
         healthy, _ = scenario(trailing_referenced=False)
-        decision = self.decide(healthy, healthy, simulation="check-disk-simulation-sync.txt", copies=[facts(healthy, DAMAGED, False), facts(healthy, HEALTHY, False)])
-        self.assertEqual("none", decision.action)
+        orphans = {(DAMAGED, 31): frozenset({5}), (HEALTHY, 31): frozenset({5})}
+        decision = self.decide(
+            healthy, healthy, simulation=model.CheckDiskReport(), fsck=model.FsckReport(frozenset(orphans), orphans),
+            copies=[facts(healthy, DAMAGED, False), facts(healthy, HEALTHY, False)],
+        )
+        self.assertEqual("none", decision.action, decision.reasons)
+        self.assertEqual((), decision.differing)
+        self.assertEqual({1, 4}, decision.referenced)
 
     def test_plans_are_checked_against_the_allowed_commands(self) -> None:
         healthy, damaged = scenario(trailing_referenced=True)
@@ -701,7 +757,7 @@ class GuardTests(unittest.TestCase):
         kube, _, _, stream = self.kube()
         store = MemoryStore({})
         cluster = CLI.Cluster(kube)
-        cluster._runtime = CLI.parse_runtime(VOLUME_PODS, MASTER_PODS)
+        cluster._runtime = CLI.parse_runtime(VOLUME_PODS, MASTER_PODS, FILER_PODS)
         cluster.weed_shell(["lock", "volume.fsck -collection loki -volumeId 31 -v", "unlock"])
         self.assertIn("# weed shell: lock; volume.fsck -collection loki -volumeId 31 -v; unlock", stream.getvalue())
 
@@ -722,7 +778,7 @@ class GuardTests(unittest.TestCase):
             cluster.weed_shell(["lock", f"volume.delete -node {DAMAGED} -volumeId 31", "unlock"])
 
     def test_runtime_comes_from_the_live_pod_specs(self) -> None:
-        runtime = CLI.parse_runtime(VOLUME_PODS, MASTER_PODS)
+        runtime = CLI.parse_runtime(VOLUME_PODS, MASTER_PODS, FILER_PODS)
         self.assertEqual("seaweedfs-master-1", runtime.master_pod)
         self.assertEqual("seaweedfs-master-1.seaweedfs-master-peer.storage", runtime.master_host)
         self.assertEqual(set(SERVERS), set(runtime.servers))
@@ -730,12 +786,12 @@ class GuardTests(unittest.TestCase):
         self.assertEqual((IMAGE, 8444, 24, 5000, "001"), (runtime.image, runtime.volume_port, runtime.max_volumes, runtime.volume_size_limit_mb, runtime.default_replication))
         mixed = {"items": [*VOLUME_PODS["items"][:2], pod("seaweedfs-volume-2", "volume", VOLUME_COMMAND, "k8s-3", image=IMAGE[:-1] + "b")]}
         with self.assertRaisesRegex(model.RepairError, "different images"):
-            CLI.parse_runtime(mixed, MASTER_PODS)
+            CLI.parse_runtime(mixed, MASTER_PODS, FILER_PODS)
 
     def test_rehearsal_containers_reuse_production_names_flags_and_image(self) -> None:
         commands = []
         runner = lambda argv, **kwargs: commands.append(argv) or subprocess.CompletedProcess(argv, 0, b"", b"")  # noqa: E731
-        runtime = CLI.parse_runtime(VOLUME_PODS, MASTER_PODS)
+        runtime = CLI.parse_runtime(VOLUME_PODS, MASTER_PODS, FILER_PODS)
         CLI.DockerCluster(runtime, Path("/work"), "v31", CLI.CommandLog(stream=io.StringIO()), runner=runner).start()
         volume = next(c for c in commands if "seaweedfs-volume-0.seaweedfs-volume-peer.storage" in c and "run" in c)
         for expected in ("--network-alias", "-ip=seaweedfs-volume-0.seaweedfs-volume-peer.storage", "-port=8444", "-max=24", "/work/seaweedfs-volume-0:/data0", IMAGE):
@@ -928,6 +984,230 @@ class CommandFlowTests(unittest.TestCase):
         self.assertEqual(1, code)
         for expected in ("read-only copies", "read-only gauge", "index does not end at its data size", "missed 2 deletion(s)"):
             self.assertIn(expected, output)
+
+
+class DivergenceModelTests(unittest.TestCase):
+    def writable(self, first: Volume, second: Volume, *, fsck="fsck-diverged.txt", revisions=(0, 0), simulation=None, in_flight=frozenset(), missing=None) -> model.Decision:
+        copies = []
+        for server, volume, revision in ((FIRST, first, revisions[0]), (SECOND, second, revisions[1])):
+            fact = facts(volume, server, False)
+            copies.append(model.CopyFacts(server, False, fact.index, fact.data, model.SuperBlock(3, "001", revision, 0), fact.info))
+        report = model.parse_fsck(fixture(fsck)) if isinstance(fsck, str) else fsck
+        return model.decide(
+            volume_id=31, replica_placement="001", copies=copies, nodes=nodes(),
+            simulation=simulation or model.parse_check_disk(fixture("check-disk-slow-diverged.txt")),
+            fsck=report, stable=False, leftovers={}, in_flight=in_flight, missing=missing,
+        )
+
+    def test_fsck_intersection_keeps_every_needle_some_filer_references(self) -> None:
+        first = model.parse_fsck(fixture("fsck-diverged.txt"))
+        second = model.parse_fsck(fixture("fsck-diverged-referenced.txt") + "WARNING: ResolveChunkManifest failed for /x\n")
+        merged = model.FsckReport.intersect([first, second])
+        self.assertEqual({10}, merged.orphans_on(FIRST, 31))
+        self.assertEqual({12}, merged.orphans_on(SECOND, 31), "filer-1 still references key 11")
+        self.assertEqual({(FIRST, 31), (SECOND, 31)}, set(merged.collected))
+        self.assertEqual(1, merged.unresolved_manifests)
+        partial = model.FsckReport.intersect([first, model.FsckReport(collected=frozenset({(FIRST, 31)}))])
+        self.assertEqual(frozenset(), partial.orphans_on(FIRST, 31), "a filer that printed no orphans references them all")
+        self.assertEqual({(FIRST, 31)}, set(partial.collected))
+        with self.assertRaises(model.RepairError):
+            model.FsckReport.intersect([])
+
+    def test_differing_needles_name_the_holder_and_the_gap(self) -> None:
+        first, second = diverged()
+        second.delete(1)
+        states = {FIRST: index_state(first), SECOND: index_state(second)}
+        found = model.differing_needles(states, model.parse_fsck(fixture("fsck-diverged.txt")), 31)
+        self.assertEqual(
+            [(1, FIRST, SECOND, True, True), (10, FIRST, SECOND, False, False), (11, SECOND, FIRST, False, False), (12, SECOND, FIRST, False, False)],
+            [(n.key, n.holder, n.lacking, n.deleted, n.referenced) for n in found],
+        )
+
+    def test_unreferenced_divergence_is_accepted_without_a_repair(self) -> None:
+        decision = self.writable(*diverged(), revisions=(111, 111))
+        self.assertEqual("none", decision.action, decision.reasons)
+        self.assertEqual({FIRST: {11, 12}, SECOND: {10}}, {s: set(k) for s, k in decision.accepted.items()})
+        self.assertEqual({1, 2}, decision.referenced)
+        self.assertEqual((), decision.steps)
+        self.assertIn(f"2 unreferenced needle(s) live on {SECOND} are missing from {FIRST}", decision.reasons)
+        self.assertIn("revive needles the other copy deleted", " ".join(decision.reasons))
+
+    def test_identical_writable_copies_need_nothing(self) -> None:
+        first, _ = diverged()
+        decision = self.writable(first, first.copy(), fsck=model.FsckReport(frozenset({(FIRST, 31), (SECOND, 31)})), simulation=model.CheckDiskReport())
+        self.assertEqual(("none", ()), (decision.action, decision.differing))
+
+    def test_writes_in_flight_are_not_divergence(self) -> None:
+        first, second = diverged()
+        append_to = second.copy().put(20)
+        decision = self.writable(first, append_to, in_flight=frozenset({20}))
+        self.assertEqual("none", decision.action, decision.reasons)
+        self.assertNotIn(20, {n.key for n in decision.differing})
+        self.assertIn("writes in flight", " ".join(decision.reasons))
+
+    def test_referenced_gaps_stop_with_the_candidate_stock_repair(self) -> None:
+        first, second = diverged()
+        referenced_on_second = model.parse_fsck(fixture("fsck-diverged-referenced.txt"))
+        cases = {
+            "never vacuumed": (dict(fsck=referenced_on_second, revisions=(0, 5)), "-resurrectMissingNeedles"),
+            "vacuumed, one complete copy": (dict(fsck=referenced_on_second, revisions=(5, 5)), f"volume.copy -source {SECOND}"),
+        }
+        both = model.FsckReport(frozenset({(FIRST, 31), (SECOND, 31)}))
+        cases["vacuumed, both sides"] = (dict(fsck=both, revisions=(5, 5)), "needle-level copy")
+        for name, (override, expected) in cases.items():
+            with self.subTest(name):
+                decision = self.writable(first, second, **override)
+                self.assertEqual("stop", decision.action)
+                self.assertIn("referenced needle is missing", decision.summary)
+                self.assertIn(expected, " ".join(decision.reasons))
+                self.assertIn("rehearse it", " ".join(decision.reasons))
+
+    def test_a_referenced_needle_deleted_on_one_copy_never_syncs_deletions(self) -> None:
+        first, second = diverged()
+        second.delete(1)
+        simulation = model.CheckDiskReport(
+            sync=(model.SyncLine(31, SECOND, 6, FIRST, 0, 1), model.SyncLine(31, FIRST, 4, SECOND, 0, 0)),
+            not_resurrecting=((31, SECOND, 2, FIRST), (31, FIRST, 1, SECOND)),
+        )
+        decision = self.writable(first, second, revisions=(0, 0), simulation=simulation)
+        self.assertEqual("stop", decision.action)
+        reasons = " ".join(decision.reasons)
+        self.assertIn(f"1 referenced needle(s) live on {FIRST} are deleted on {SECOND}", reasons)
+        self.assertIn(f"volume.copy -source {FIRST}", reasons)
+        self.assertIn("never run volume.check.disk -syncDeleted -apply", reasons)
+
+    def test_unprovable_writable_states_stop(self) -> None:
+        first, second = diverged()
+        cases = {
+            "check.disk saw less": dict(simulation=model.CheckDiskReport()),
+            "fsck skipped a copy": dict(fsck=model.FsckReport(frozenset({(FIRST, 31)}))),
+            "unresolved manifests": dict(fsck=model.parse_fsck(fixture("fsck-diverged.txt") + "WARNING: ResolveChunkManifest failed for /x\n")),
+        }
+        for name, override in cases.items():
+            with self.subTest(name):
+                self.assertEqual("stop", self.writable(first, second, **override).action)
+
+    def test_missing_chunks_per_copy_and_per_filer(self) -> None:
+        lost = "/buckets/loki/fake/570fecd39dc1dbe3/1a1312cbfde:1a131a535f0:4d42c523"
+        # The fixture checks SECOND, then FIRST; a path after FIRST's header is missing from FIRST.
+        report = model.parse_missing_chunks(fixture("fsck-missing-diverged.txt") + f"{lost}\n")
+        self.assertEqual([], report.problems())
+        self.assertEqual({(FIRST, 31), (SECOND, 31)}, set(report.checked))
+        self.assertEqual({lost}, report.missing_on(FIRST, 31))
+        self.assertEqual(frozenset(), report.missing_on(SECOND, 31))
+        other = model.parse_missing_chunks(fixture("fsck-missing-diverged.txt"))
+        merged = model.MissingChunks.union([report, other])
+        self.assertEqual({lost}, merged.missing_on(FIRST, 31), "a reference in any filer's store counts")
+        purged = model.parse_missing_chunks(f"find missing file chunks in dataNodeId {FIRST} volume 31 ...\ndeleting path {lost} after volume not found\n")
+        self.assertTrue(purged.problems())
+        self.assertTrue(model.parse_missing_chunks(f"{lost}\n").problems(), "a path before any volume header")
+
+    def test_missing_chunks_cross_check_the_join(self) -> None:
+        first, second = diverged()
+        lost = "/buckets/loki/fake/f452c6601b8c1be6/1a1313a090c:1a131a8ba69:9ff8c431"
+        both = model.MissingChunks(frozenset({(FIRST, 31), (SECOND, 31)}), {(FIRST, 31): frozenset({lost}), (SECOND, 31): frozenset({lost})})
+        decision = self.writable(first, second, missing=both)
+        self.assertEqual("none", decision.action, decision.reasons)
+        self.assertIn("1 filer entr(ies) reference needles no copy holds", " ".join(decision.reasons))
+        one = model.MissingChunks(frozenset({(FIRST, 31), (SECOND, 31)}), {(SECOND, 31): frozenset({lost})})
+        decision = self.writable(first, second, missing=one)
+        self.assertEqual("stop", decision.action)
+        self.assertIn("missing only from", " ".join(decision.reasons))
+        unchecked = model.MissingChunks(frozenset({(FIRST, 31)}))
+        self.assertEqual("stop", self.writable(first, second, missing=unchecked).action)
+
+    def test_needle_details_read_the_v3_append_time(self) -> None:
+        first, _ = diverged()
+        state = index_state(first)
+        view = CLI.CopyView(FIRST, bytes(first.idx), len(first.dat), bytes(first.dat[:8]), VIF, lambda offsets: [bytes(first.dat[o : o + 16]) for o in offsets])
+        details = CLI.needle_details(view, state, [10], 31)
+        self.assertEqual({10: {"fid": f"31,a{cookie(10):08x}", "size": 40, "appended_at": "2026-10-22T04:37:12Z"}}, details)
+        entry = state.present[10]
+        self.assertEqual(entry.offset + 16 + 40 + 4, model.append_time_offset(entry))
+
+
+class DivergenceFlowTests(unittest.TestCase):
+    def test_plan_accepts_divergence_no_filer_references(self) -> None:
+        flow = Flow.diverged(self)
+        code, output = flow.run("plan", "31")
+        self.assertEqual(0, code, output)
+        plan = flow.plan()
+        self.assertEqual(2, plan["schema"])
+        self.assertEqual("none", plan["decision"]["action"])
+        self.assertEqual({FIRST: ["b", "c"], SECOND: ["a"]}, plan["decision"]["accepted"])
+        needles = {n["key"]: n for n in plan["divergence"]["needles"]}
+        self.assertEqual({"a", "b", "c"}, set(needles))
+        self.assertEqual((FIRST, SECOND, False, False), tuple(needles["a"][k] for k in ("holder", "lacking", "deleted", "referenced")))
+        self.assertEqual("2026-10-22T04:37:12Z", needles["a"]["appended_at"])
+        self.assertEqual(f"31,b{cookie(11):08x}", needles["b"]["fid"])
+        self.assertEqual([], plan["simulation"]["cross_check"])
+        self.assertEqual(FILERS, plan["fsck"]["filers"])
+        for flag in ("-v", "-findMissingChunksInFiler -v"):
+            command = f"volume.fsck -collection loki -volumeId 31 {flag}"
+            used = [f for session, f in zip(flow.shell.sessions, flow.shell.filers) if command in session]
+            self.assertEqual(FILERS, used, f"{command}: one run per filer store")
+        self.assertEqual({FIRST: [], SECOND: []}, plan["fsck"]["missing"])
+        self.assertIn(["lock", "volume.check.disk -volumeId=31 -slow -syncDeleted -v", "unlock"], flow.shell.sessions)
+        self.assertFalse(any(model.weed_mutation(c) for session in flow.shell.sessions for c in session))
+        self.assertTrue(flow.state().path("plan-fsck-seaweedfs-filer-1.txt").exists())
+        self.assertIn("unreferenced", output)
+        self.assertIn("Next: verify 31", output)
+
+    def test_a_needle_one_filer_references_is_a_gap(self) -> None:
+        flow = Flow.diverged(self, fsck={FILERS[0]: "fsck-diverged.txt", FILERS[1]: "fsck-diverged-referenced.txt"})
+        code, output = flow.run("plan", "31")
+        self.assertEqual(1, code)
+        plan = flow.plan()
+        self.assertEqual("stop", plan["decision"]["action"])
+        self.assertEqual({"b": True, "a": False, "c": False}, {n["key"]: n["referenced"] for n in plan["divergence"]["needles"]})
+        self.assertIn("-resurrectMissingNeedles", output)
+
+    def test_writes_landing_between_the_snapshots_are_ignored(self) -> None:
+        flow = Flow.diverged(self)
+        flow.shell.on_fsck = lambda: append(flow.store, SECOND, 20) if 20 not in index_state_of(flow.store, SECOND).present else None
+        code, output = flow.run("plan", "31")
+        self.assertEqual(0, code, output)
+        plan = flow.plan()
+        self.assertEqual(["14"], plan["divergence"]["in_flight"])
+        self.assertEqual("none", plan["decision"]["action"])
+        self.assertNotIn("14", {n["key"] for n in plan["divergence"]["needles"]})
+
+    def test_verify_accepts_only_the_planned_divergence(self) -> None:
+        flow = Flow.diverged(self)
+        flow.kube.gauge = {"seaweedfs-volume-0": 0.0, "seaweedfs-volume-1": 0.0}
+        code, output = flow.run("verify", "31", "--settle-seconds", "0")
+        self.assertEqual(1, code, "without a plan the extra needles are unexplained")
+        self.assertIn("lacks 2 needle(s) live on", output)
+        self.assertEqual(0, flow.run("plan", "31")[0])
+        code, output = flow.run("verify", "31", "--settle-seconds", "0")
+        self.assertEqual(0, code, output)
+        verify = json.loads(flow.state().path("verify.json").read_text())
+        self.assertEqual({FIRST: 2, SECOND: 1}, verify["accepted"])
+        self.assertEqual(4, verify["reads"]["reads"], "keys 1 and 2 read from both copies")
+        self.assertIn("Accepted divergence from the plan: 3 unreferenced needle(s).", output)
+
+    def test_an_accepted_divergence_has_nothing_to_rehearse_or_apply(self) -> None:
+        flow = Flow.diverged(self)
+        self.assertEqual(0, flow.run("plan", "31")[0])
+        code, _ = flow.run("rehearse", "31")
+        self.assertEqual(1, code)
+        with patch.dict(os.environ, {CLI.APPROVAL: "1"}):
+            self.assertEqual(1, flow.run("apply", "31")[0])
+        self.assertFalse(any(model.weed_mutation(c) for session in flow.shell.sessions for c in session))
+
+    def test_plans_from_an_older_tool_must_be_redone(self) -> None:
+        flow = Flow.diverged(self)
+        self.assertEqual(0, flow.run("plan", "31")[0])
+        plan = flow.plan()
+        plan["schema"] = 1
+        flow.state().write_json("plan.json", plan)
+        for subcommand in ("verify", "preserve"):
+            with self.subTest(subcommand):
+                self.assertEqual(1, flow.run(subcommand, "31")[0])
+
+
+def index_state_of(store, server: str) -> model.IndexState:
+    return model.IndexState.parse(store.get(server, f"{BASE}.idx"))
 
 
 if __name__ == "__main__":

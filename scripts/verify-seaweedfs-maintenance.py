@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import re
 import subprocess
@@ -24,6 +24,9 @@ SEAWEED_NAME = "seaweedfs"
 VOLUME_SERVICE = "seaweedfs-volume-peer"
 TOTAL_TIMEOUT = 15
 REQUEST_TIMEOUT = "10s"
+REPO = Path(__file__).resolve().parents[1]
+# volume.fsck ignores needles newer than 5 hours, so older proof says nothing about recent writes.
+DIVERGENCE_EVIDENCE_MAX_AGE = timedelta(hours=6)
 
 
 class AuditError(ValueError):
@@ -66,6 +69,23 @@ def redact_tailnet(value: Any) -> Any:
     return value
 
 
+def divergence_acceptance(evidence: dict[str, Any] | None, volume_id: int, servers: list[str], observed_at: datetime) -> str | None:
+    """Why a named volume's size divergence cannot be accepted, or None when its verify evidence holds."""
+    if evidence is None:
+        return "no verify.json from scripts/seaweedfs-readonly-repair.py"
+    if evidence.get("volume_id") != volume_id or evidence.get("pass") is not True:
+        return "its last verify did not pass"
+    try:
+        verified_at = datetime.strptime(str(evidence.get("observed_at")), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return "its verify has no observation time"
+    if not timedelta(0) <= observed_at - verified_at <= DIVERGENCE_EVIDENCE_MAX_AGE:
+        return f"its verify is older than {DIVERGENCE_EVIDENCE_MAX_AGE.total_seconds() / 3600:g} hours"
+    if sorted(evidence.get("copies", [])) != sorted(servers):
+        return "its verify checked other copies"
+    return None
+
+
 def analyze(
     *,
     context: str,
@@ -82,8 +102,16 @@ def analyze(
     vol_status: dict[str, Any],
     collection_filter: set[str] | None = None,
     observation_started_at: str | None = None,
+    accepted_divergence: dict[int, dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
-    """Analyze API responses without kubectl, network access, or mutable state."""
+    """Analyze API responses without kubectl, network access, or mutable state.
+
+    `accepted_divergence` maps volume IDs the operator accepts despite unequal
+    copy sizes to their verify evidence (None when missing). Copies of one
+    volume differ in size when one holds needles no filer references; the
+    repair tool's verify proves every referenced needle reads the same from
+    each copy.
+    """
     if not isinstance(dir_status, dict) or not isinstance(dir_status.get("Topology"), dict):
         raise AuditError("malformed master /dir/status response")
     volumes = vol_status.get("Volumes") if isinstance(vol_status, dict) else None
@@ -264,6 +292,12 @@ def analyze(
     collections: dict[str, dict[str, Any]] = {}
     volume_reports = []
     copy_safe: list[bool] = []
+    placement_safe: list[bool] = []
+    accepted_divergence = accepted_divergence or {}
+    observed_at = datetime.now(timezone.utc)
+    if observation_started_at:
+        observed_at = datetime.fromisoformat(observation_started_at.replace("Z", "+00:00"))
+    rejected_acceptances: list[str] = []
     for volume_id in selected_ids:
         copies = physical[volume_id]
         active_copies = [copy for copy in copies if copy["activeTopology"]]
@@ -280,11 +314,21 @@ def analyze(
         sizes = {copy["sizeBytes"] for copy in active_copies}
         copy_collections = {copy["collection"] for copy in active_copies}
         collections_agree = copy_collections == {collection}
-        placement_survives = (
+        divergence_accepted = False
+        if len(sizes) > 1 and volume_id in accepted_divergence:
+            refusal = divergence_acceptance(
+                accepted_divergence[volume_id], volume_id, [copy["server"] for copy in active_copies], observed_at,
+            )
+            divergence_accepted = refusal is None
+            if refusal:
+                rejected_acceptances.append(f"volume {volume_id}: {refusal}")
+        placement_ok = (
             len(active_copies) >= 2 and len(ready_nodes) >= 2 and len(placements) == 1
-            and layout_matches and collections_agree and len(sizes) == 1
+            and layout_matches and collections_agree
             and replication is not None and replication != "000"
         )
+        placement_survives = placement_ok and (len(sizes) == 1 or divergence_accepted)
+        placement_safe.append(placement_ok)
         copy_safe.append(placement_survives)
         report = {
             "id": volume_id,
@@ -303,6 +347,7 @@ def analyze(
             "reportedVolumeBytes": next(iter(sizes)) if len(sizes) == 1 else None,
             "copyReportedVolumeBytes": sum(copy["sizeBytes"] for copy in active_copies),
             "copySizesAgree": len(sizes) == 1,
+            "copySizeDivergenceAccepted": divergence_accepted,
             "copyCollectionsAgree": collections_agree,
             "hasCopiesSurvivingAnyOneNode": placement_survives,
             "copies": copies,
@@ -354,9 +399,10 @@ def analyze(
         issues.append("unmapped owner or unbound PVC")
     if any(not volume["copyPlacementsAgree"] or not volume["layoutMatchesCopies"] for volume in volume_reports):
         issues.append("per-copy replica placements disagree with each other or the writable layout")
-    if any(not volume["copySizesAgree"] for volume in volume_reports):
+    if any(not volume["copySizesAgree"] and not volume["copySizeDivergenceAccepted"] for volume in volume_reports):
         issues.append("replica copies report different volume sizes")
-    if selected_ids and not all(copy_safe):
+    issues += [f"size divergence not accepted for {refusal}" for refusal in rejected_acceptances]
+    if selected_ids and not all(placement_safe):
         issues.append("selected volumes lack observed nonzero two-node replica placement")
     if extra_layout_ids:
         issues.append("layout references missing physical volume")
@@ -390,6 +436,7 @@ def analyze(
         "unmappedVolumeServers": sorted(set(unmapped)),
         "unreadyVolumeServers": sorted(set(unready)),
         "unmappedOwners": sorted(set(unmapped_owners)),
+        "acceptedSizeDivergenceIDs": sorted(v["id"] for v in volume_reports if v["copySizeDivergenceAccepted"]),
         "volumesWithoutWritableLayoutIDs": without_writable_layout,
         "layoutWithoutPhysicalVolumeIDs": extra_layout_ids,
         "hasCopiesSurvivingAnyOneNode": placement_survives and identity_ok and not unmapped and not unready and not unmapped_owners,
@@ -454,7 +501,26 @@ def run_live(args: argparse.Namespace) -> dict[str, Any]:
         pvcs_response=pvcs, dir_status=dir_status, vol_status=vol_status,
         collection_filter=set(args.collection) if args.collection else None,
         observation_started_at=observation_started_at,
+        accepted_divergence={volume_id: load_verify(args.repair_evidence, volume_id) for volume_id in args.accept_size_divergence},
     )
+
+
+def load_verify(root: Path, volume_id: int) -> dict[str, Any] | None:
+    try:
+        value = json.loads((root / f"volume-{volume_id}" / "verify.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def volume_ids(value: str) -> list[int]:
+    try:
+        ids = [int(part) for part in value.split(",") if part]
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected comma-separated volume IDs") from None
+    if not ids or any(volume_id <= 0 for volume_id in ids):
+        raise argparse.ArgumentTypeError("expected comma-separated volume IDs")
+    return ids
 
 
 def main() -> int:
@@ -463,6 +529,14 @@ def main() -> int:
     parser.add_argument("--expected-kube-system-uid")
     parser.add_argument("--expected-seaweed-uid")
     parser.add_argument("--collection", action="append", help="explicitly limit the report to this collection; repeatable")
+    parser.add_argument(
+        "--accept-size-divergence", type=volume_ids, default=[], metavar="ID[,ID...]",
+        help="accept unequal copy sizes for these volumes when each has a passing seaweedfs-readonly-repair.py verify from the last 6 hours",
+    )
+    parser.add_argument(
+        "--repair-evidence", type=Path, default=REPO / ".private" / "seaweedfs-repair",
+        help="evidence directory of scripts/seaweedfs-readonly-repair.py (default: this checkout's)",
+    )
     args = parser.parse_args()
     try:
         report = run_live(args)
