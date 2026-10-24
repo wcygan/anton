@@ -159,6 +159,13 @@ if "eviction_count" in state or "drain_count" in state:
 '''
 
 
+# Overall drain deadline for tests that expect the drain to finish. Every
+# fake kubectl call is a fresh Python process, and a loaded machine (the
+# full contract suite) pushed 5 s runs past their deadline in 17 tests.
+# Tests of deadline expiry pass their own short timeout.
+DEFAULT_TIMEOUT = 30
+
+
 class DrainNodeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
@@ -173,7 +180,7 @@ class DrainNodeTests(unittest.TestCase):
         self.log_path = self.root / "commands.jsonl"
         self.state_path.write_text("{}", encoding="utf-8")
 
-    def invoke(self, *extra: str, state: dict | None = None, timeout: float = 5) -> subprocess.CompletedProcess[str]:
+    def invoke(self, *extra: str, state: dict | None = None, timeout: float = DEFAULT_TIMEOUT) -> subprocess.CompletedProcess[str]:
         if state is not None:
             self.state_path.write_text(json.dumps(state), encoding="utf-8")
         env = os.environ.copy()
@@ -217,7 +224,7 @@ class DrainNodeTests(unittest.TestCase):
         self.assertFalse(any(arg == "--delete-emptydir-data" for arg in state["drain_args"]))
         timeout_arg = next(arg for arg in state["drain_args"] if arg.startswith("--timeout="))
         self.assertGreater(float(timeout_arg.split("=", 1)[1][:-1]), 0)
-        self.assertLessEqual(float(timeout_arg.split("=", 1)[1][:-1]), 5)
+        self.assertLessEqual(float(timeout_arg.split("=", 1)[1][:-1]), DEFAULT_TIMEOUT)
         self.assertLess(
             next(i for i, call in enumerate(self.commands()) if call["args"][:2] == ["create", "--raw"]),
             next(i for i, call in enumerate(self.commands()) if call["args"][0] == "drain"),

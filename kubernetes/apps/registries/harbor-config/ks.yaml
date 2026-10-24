@@ -28,6 +28,9 @@ spec:
     # installed. See plan 0016.
     - name: external-secrets
       namespace: external-secrets
+    # The database and cache Pods name a PriorityClass from this provider.
+    - name: priority-classes
+      namespace: kube-system
   # Check the resources Harbor actually consumes. Using `wait: true` here also
   # health-checks the ExternalSecrets themselves, so a periodic 1Password
   # refresh failure blocks Harbor even when the target Secrets already exist.

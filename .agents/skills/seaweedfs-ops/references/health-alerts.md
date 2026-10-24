@@ -141,40 +141,113 @@ This applies when a two-copy (`001`) volume has one copy loaded read-only by the
 startup integrity check (`data file ... actual N bytes expected M bytes`) and
 the other copy is writable. Used on 2026-10-23 for Loki volumes 31 and 56, after
 a Longhorn detach killed `seaweedfs-volume-0` mid-append: each damaged copy had a
-complete trailing needle whose index entry was 16 zero bytes. Run every `weed
-shell` command from a master pod, between `lock` and `unlock`.
+complete trailing needle whose index entry was 16 zero bytes.
 
-1. Preserve both copies' `.dat`, `.idx`, `.sdx` and `.vif` with hashes outside
-   SeaweedFS (stream them with `kubectl exec ... tar cf -`). Check that a
-   writable copy's last index entry ends exactly at its data size, and copy
-   again if a delete landed mid-copy.
-2. Simulate: `volume.check.disk -volumeId=<id> -fixReadOnly -syncDeleted -v`.
-   The tool reports deletions the read-only copy missed and whether it holds
-   unique live data. Deletions it missed are normal: the filer deletes from every
-   copy and the read-only one refuses.
-3. If it reports a ONE-SIDED divergence (the read-only copy lacks live needles),
-   find out whether the filer references them: run
-   `volume.fsck -collection <c> -volumeId <id> -v` (detection only without
-   `-reallyDeleteFromVolume`) and subtract each copy's orphan list from its live
-   index entries. `-resurrectMissingNeedles` refuses volumes whose compaction
-   revision is not 0.
-4. Rehearse on the preserved files with the production image digest: one
-   master and three volume servers in Docker, the copies placed as in production,
-   then the planned commands, a restart of every server, and a read of every
-   referenced needle from every copy.
-5. Repair:
-   - Nothing referenced is missing: `volume.check.disk -volumeId=<id>
-     -fixReadOnly -syncDeleted -apply -v`. It applies the missed deletions and
-     marks the copy writable; the unindexed tail stays as unreferenced bytes.
-   - A referenced needle is missing: `volume.copy` the healthy copy to a third
-     server with a free slot, read every referenced needle there, then
-     `volume.delete` the damaged copy. Do not use `volume.fix.replication`
-     for one volume: it scans whole collections and also trims surplus copies.
-6. Verify: `volume.list` shows two writable copies, the read-only gauge is 0,
-   every referenced needle reads with identical hashes from each copy,
-   `volume.check.disk -slow -syncDeleted` reports no differences, and each
-   repaired copy's last index entry ends at its data size, so it passes the
-   startup check after the next restart.
+`scripts/seaweedfs-readonly-repair.py` runs this procedure. Every subcommand
+prints each cluster command before running it, applies the guard-hook rules
+itself (target preflight, destructive and secret-output policy), runs every
+`weed shell` command from a master pod between `lock` and `unlock`, and writes
+JSON evidence to `.private/seaweedfs-repair/volume-<id>/` under `--repo-root`
+(pass the canonical checkout from a worktree). Fence the collection's writers
+and deleters before `preserve`: `apply` refuses if any file changed since `plan`.
+
+```sh
+mise exec -- python3 scripts/seaweedfs-readonly-repair.py plan <id>
+mise exec -- python3 scripts/seaweedfs-readonly-repair.py preserve <id>
+mise exec -- python3 scripts/seaweedfs-readonly-repair.py rehearse <id>
+mise exec -- python3 scripts/seaweedfs-readonly-repair.py apply <id>
+mise exec -- python3 scripts/seaweedfs-readonly-repair.py verify <id>
+```
+
+| Subcommand | Changes | What it does |
+| --- | --- | --- |
+| `plan` | Nothing | Hashes each copy's `.dat`, `.idx`, `.sdx` and `.vif`; finds the read-only cause from the index tail and startup log; runs `volume.check.disk -volumeId=<id> -fixReadOnly -syncDeleted -v` and `volume.fsck -collection <c> -volumeId <id> -v`; checks the simulation against both indexes; subtracts each copy's orphans from its live index entries; recommends `none`, `check-disk`, `copy` or `stop`. |
+| `preserve` | Nothing in the cluster | Streams every planned file to `snapshots/<UTC>/` with `SHA256SUMS`, and refuses if a hash differs from the plan. |
+| `rehearse` | Disposable Docker containers | One master and one volume server per production server, with the production image digest and peer names. Confirms the copy loads read-only, runs the planned commands, restarts every server, then checks reads, `check.disk -slow` and each index tail. Pull the image first; the tool does not download it. |
+| `apply` | The volume, after approval | Prints the planned commands. Only with `ANTON_DESTRUCTIVE_OK=1`, a passing rehearsal of this `plan.json`, and live hashes equal to the plan does it run each command in its own `lock`/`unlock` session, checking each before the next. |
+| `verify` | Nothing | Requires the read-only gauge at 0, `volume.check.disk -slow -syncDeleted` without unplanned differences, every referenced needle read with identical hashes from each copy, and each index ending at its data size. |
+
+The plan chooses one repair:
+
+- `check-disk` when nothing the filer references is missing from the read-only
+  copy and that copy missed at least one deletion. `volume.check.disk
+  -fixReadOnly -syncDeleted -apply` appends the missed deletions after the
+  unindexed tail, which stays as unreferenced bytes, and marks the copy
+  writable. If the damaged copy also holds deletions its peer missed,
+  `volume.check.disk -slow -syncDeleted -apply` then applies them to the peer;
+  volume 56 needed this. Unreferenced needles that stay absent from the
+  repaired copy are accepted divergence, listed in the plan.
+- `copy` when a referenced needle is missing, the damaged copy deleted a
+  referenced needle, holds needles its peer lacks, or has nothing to sync:
+  `volume.copy` the healthy copy to a third server with a free slot, read every
+  referenced needle there, then `volume.delete` the damaged copy, as for volume
+  31. Do not use `volume.fix.replication` for one volume: it scans whole
+  collections and also trims surplus copies.
+- `stop` otherwise, for example: no free slot for a needed copy, `readOnly`
+  persisted in `.vif`, another read-only cause, files changing during the plan,
+  unresolved chunk manifests, or a simulation that disagrees with the indexes.
+
+Behavior the tool depends on:
+
+- The read-only copy missing deletions is normal: the filer deletes from every
+  copy and the read-only one refuses.
+- `volume.check.disk -fixReadOnly -apply` returns the copy to read-only when it
+  has nothing to sync, and `-resurrectMissingNeedles` refuses volumes whose
+  compaction revision is not 0.
+- A volume server that lacks the volume proxies reads to a peer, so read checks
+  only target servers that hold a copy, with `?cm=false`.
+- Copies of one volume differ byte for byte because each server stamps its own
+  append times; compare needle reads, not file hashes.
+- `volume.fsck` skips needles newer than its 5-hour cutoff; the plan counts
+  them as referenced.
+- Each filer walks its own store, and `weed shell` picks a filer at random, so
+  the tool runs every fsck against each filer. A needle is unreferenced only
+  when no filer references it: the filer metadata log lives only in the store
+  of the filer that wrote it.
+
+### Writable copies that disagree
+
+Two writable copies of one `001` volume can hold different live needles. A
+replicated write that fails partway leaves its needle on one copy, and a copy
+that misses a deletion keeps a needle its peer deleted and vacuumed. The
+placement audit then reports `copySizesAgree: false`, and
+`volume.check.disk -slow` reports a ONE-SIDED or TWO-SIDED divergence. Neither
+says whether data is at risk.
+
+`plan <id>` answers that. For writable copies it reads both indexes twice and
+ignores needles that differ in only one read (writes in flight). It joins each
+differing needle with `volume.fsck` on every filer, and
+`volume.fsck -findMissingChunksInFiler` checks the result from the filer's side,
+listing references that no copy can serve.
+
+- `none` with accepted divergence: no filer references a differing needle, so
+  every referenced needle already has both copies. Nothing to repair. Run
+  `verify <id>`: it reads every referenced needle from each copy and lets only
+  the accepted needles differ.
+- `stop`: a referenced needle is missing from, or deleted on, one copy. The
+  reasons name the candidate stock repair: `volume.check.disk -slow
+  -resurrectMissingNeedles -apply` when the copy that lacks it was never
+  vacuumed (compaction revision 0), otherwise a `volume.copy` of the complete
+  copy to a third server, then a `volume.delete` of the other. The tool runs
+  neither for writable copies; rehearse the chosen one on preserved copies with
+  writers fenced, and get approval for the exact commands.
+
+Do not converge an accepted divergence. A whole-volume copy of the fuller copy
+or `volume.merge` revives needles the other copy deleted and vacuumed, the risk
+upstream's divergence warning names. `volume.fsck -reallyDeleteFromVolume` is
+cleanup, not repair. Never run `volume.check.disk -syncDeleted -apply` when a
+copy deleted a needle the filer still references: it deletes the last copy.
+
+The placement audit accepts unequal copy sizes only for volumes named in
+`--accept-size-divergence` that have a passing `verify` from the last 6 hours on
+the same copies. Older evidence says nothing about recent writes, because
+`volume.fsck` ignores needles newer than 5 hours.
+
+On 2026-10-23, thirteen volumes (default 12 and 53, Loki 25–30, 50, 58 and 62,
+Harbor 60 and 61) differed by 32 needles, all unreferenced in both filer stores.
+They were appended during the 2026-10-20 stock cutover and the 2026-10-22 node
+restarts. Loki volumes 25, 29 and 30 also hold four filer entries from
+2026-10-12 whose needles no copy has; no peer can restore them.
 
 ## Historical durability review — 2026-10-19
 

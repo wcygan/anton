@@ -52,6 +52,11 @@ DEPENDENCY_RULES = {
     )
 }
 
+# The API server rejects a Pod that names a missing PriorityClass, so an
+# application that sets a class defined here must wait for this Kustomization.
+PRIORITY_CLASS_PROVIDER = ("kube-system", "priority-classes")
+PRIORITY_CLASS_REFERENCE = re.compile(r"(?m)^[ \t]*(?:-[ \t]+)?priorityClassName:[ \t]*([^#\s]+)")
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -314,9 +319,52 @@ def _dependency_violations(app_root: Path) -> list[Violation]:
     return violations
 
 
+def _provided_priority_classes(root: Path) -> set[str]:
+    namespace, name = PRIORITY_CLASS_PROVIDER
+    app_dir = root / "kubernetes" / "apps" / namespace / name / "app"
+    names: set[str] = set()
+    for path in sorted((*app_dir.glob("*.yaml"), *app_dir.glob("*.yml"))):
+        for document in _yaml_documents(_read(path)):
+            if _top_level_kind(document) != "PriorityClass":
+                continue
+            match = re.search(r"(?m)^  name:\s*([^#\n]+?)\s*$", document)
+            if match:
+                names.add(_unquote(match.group(1)))
+    return names
+
+
+def _priority_class_violations(app_root: Path, root: Path) -> list[Violation]:
+    if (app_root.parent.name, app_root.name) == PRIORITY_CLASS_PROVIDER:
+        return []
+    ks = app_root / "ks.yaml"
+    if not ks.exists():
+        return []
+    provided = _provided_priority_classes(root)
+    app_dir = app_root / "app"
+    referencing = sorted(
+        path.name
+        for path in (*app_dir.glob("*.yaml"), *app_dir.glob("*.yml"))
+        if any(
+            _unquote(match.group(1)) in provided
+            for match in PRIORITY_CLASS_REFERENCE.finditer(_read(path))
+        )
+    )
+    if not referencing or PRIORITY_CLASS_PROVIDER in _depends_on(_read(ks), app_root.parent.name):
+        return []
+    namespace, name = PRIORITY_CLASS_PROVIDER
+    return [
+        Violation(
+            "flux.dependency.missing",
+            ks,
+            f"{', '.join(referencing)} sets a PriorityClass from {namespace}/{name}; add dependsOn {namespace}/{name}",
+        )
+    ]
+
+
 def _provider_violations(app_root: Path) -> list[Violation]:
     key = (app_root.parent.name, app_root.name)
     providers = {(rule.namespace, rule.name) for rule in DEPENDENCY_RULES.values()}
+    providers.add(PRIORITY_CLASS_PROVIDER)
     if key not in providers:
         return []
     ks = app_root / "ks.yaml"
@@ -341,6 +389,7 @@ def validate_app(app_root: Path, root: Path) -> list[Violation]:
     return [
         *_shape_violations(app_root, root),
         *_dependency_violations(app_root),
+        *_priority_class_violations(app_root, root),
         *_provider_violations(app_root),
     ]
 

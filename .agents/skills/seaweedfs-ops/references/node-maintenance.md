@@ -20,7 +20,11 @@ mise exec -- python3 scripts/verify-seaweedfs-maintenance.py \
 ```
 
 The audit is read-only. Matching copy counts/sizes do not prove matching bytes,
-S3 cache freshness or authority to drain. Historical migration and failed
+S3 cache freshness or authority to drain. It fails when a volume's copies
+report different sizes: run `scripts/seaweedfs-readonly-repair.py plan <id>`
+for each such volume. If every plan accepts the divergence, run `verify <id>`
+for each, then rerun the audit with `--accept-size-divergence <ids>` (see
+[Writable copies that disagree](health-alerts.md#writable-copies-that-disagree)). Historical migration and failed
 continuity exercises remain in `https://github.com/wcygan/anton/blob/628e15ba1c9b40b2731240dcfb3a282f013319cc/context/plans/0027-improve-cluster-operational-outcomes.md`.
 Do not rerun the retired one-off migration fixtures for routine maintenance.
 
@@ -45,6 +49,27 @@ Stop provisioning/policy jobs during the window. Preserve CNPG, cache, all PVCs,
 WAL directories and the current source of truth. Ordinary node work does not
 require changing CR/backend images or adding admission exceptions; those were
 specific to the one-time cutover.
+
+Lessons from the 2026-10-23 storage window (slot raise and priority tiers):
+
+- Stopping Loki pages: `LokiCanaryMissingLogs`, `LokiCanaryDeliveryStalled` and
+  `LokiLogMetricsUnavailable` are critical. Create an Alertmanager silence for
+  them, scoped to the window, before stopping Loki. Collectors buffered every
+  log on disk; Loki showed no gap after it restarted.
+- `seaweedfs-config` declares `suspend: false` on both storage CronJobs, so a
+  reconcile of that Kustomization undoes an imperative CronJob suspension. When
+  the window changes the Seaweed CR through Flux, suspend the CronJobs again
+  after the apply, or schedule the window clear of minutes :17 and :23.
+- Restarting a SeaweedFS component through the CR rolls masters, volume
+  servers, filers and S3 gateways in parallel, one Pod per component at a time;
+  it took about five minutes. Old volume Pods still log their last startup
+  check, so judge integrity only from Pods created by the roll.
+
+The kubelet's priority tiers stop Loki and Harbor before SeaweedFS, and
+SeaweedFS before Longhorn, only on its own graceful shutdown ([Talos shutdown
+order](../../../../docs/docs/guides/talos.md#shutdown-order)). The drain in
+`talosctl upgrade`, `talosctl reboot --drain` and `talosctl shutdown` evicts
+every pod at once, so keep this writer fence for planned work.
 
 Maintain one named node using the matching Talos/node skill and its separately
 approved commands. Preserve quorum and Longhorn preconditions; accepting S3

@@ -171,7 +171,7 @@ spec:
 
     # ---- Control-plane scrape targets Talos does not expose ----
     # Talos hides the static control-plane pods; Cilium replaces kube-proxy on
-    # anton. Leaving these enabled produces four permanently-Down targets and
+    # anton. Leaving these enabled produces permanently-Down targets and
     # noises up /api/v1/targets. Disable explicitly.
     kubeControllerManager:
       enabled: false
@@ -179,11 +179,31 @@ spec:
       enabled: false
     kubeProxy:
       enabled: false
-    # TODO: verify whether Talos exposes etcd metrics on this cluster; if so,
-    # re-enable with the correct endpoint. Disabled for now to keep the smoke
-    # test's target set clean (plan 0002).
+
+    # ---- etcd ----
+    # Talos runs etcd as a host service, not a pod. The controller patch
+    # (talos/patches/controller/cluster.yaml) makes every member serve
+    # plain-HTTP /metrics on port 2381, so scrape the node addresses directly.
+    # Keep the endpoints equal to the control-plane addresses in
+    # talos/talconfig.yaml; scripts/tests/test_etcd_monitoring.py checks it.
     kubeEtcd:
-      enabled: false
+      enabled: true
+      endpoints:
+        - 192.168.1.98
+        - 192.168.1.99
+        - 192.168.1.100
+      service:
+        port: 2381
+        targetPort: 2381
+      serviceMonitor:
+        # The chart sends Prometheus's long-lived service-account token by
+        # default. The listener is plain HTTP and ignores it, so sending it
+        # would only expose the token on the LAN.
+        authorization: null
+    # prometheusrule-etcd.yaml replaces the chart's etcd mixin rules.
+    defaultRules:
+      rules:
+        etcd: false
 
     # ---- kube-state-metrics ----
     # Annotation allowlist — feeds the `PodNADAttachFailed` alert in

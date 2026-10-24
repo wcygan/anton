@@ -15,8 +15,8 @@
 # global "null" receiver from inside an AC CR — receivers are scoped).
 # The sub-routes broaden ADR 0026's initial severity=critical-only
 # design to also page on hard node-state alerts, degraded Longhorn volumes,
-# and collector queue pressure. Add explicit warning-level alertnames here as the
-# allowlist grows; do NOT match all warnings broadly.
+# collector queue pressure, and etcd health. Add explicit warning-level
+# alertnames here as the allowlist grows; do NOT match all warnings broadly.
 #
 # Webhook URL contains the secret topic — sourced from the ntfy-topic
 # Secret's `url` key (templated by externalsecret.yaml from the 1Password
@@ -52,7 +52,17 @@ spec:
             value: warning
             matchType: "="
           - name: alertname
-            value: "LonghornVolumeDegraded|OTelCollectorQueueHigh|SeaweedFSS3ReadFailures|SeaweedFSS3Read5xx|SeaweedFSS3MonitoringUnavailable|PodBypassedMultus|CronJobSuccessOverdue"
+            value: "LonghornVolumeDegraded|OTelCollectorQueueHigh|SeaweedFSS3ReadFailures|SeaweedFSS3Read5xx|SeaweedFSS3MonitoringUnavailable|SeaweedFSVolumeSlotsLow|PodBypassedMultus|CronJobSuccessOverdue"
+            matchType: "=~"
+      # etcd warnings from kube-prometheus-stack/app/prometheusrule-etcd.yaml.
+      # EtcdDatabaseFragmented is info and stays unrouted.
+      - receiver: ntfy
+        matchers:
+          - name: severity
+            value: warning
+            matchType: "="
+          - name: alertname
+            value: "EtcdMembersDown|EtcdFrequentLeaderChanges|EtcdHighFsyncDurations|EtcdHighCommitDurations|EtcdDatabaseNearQuota|EtcdDatabaseGrowingFast|EtcdMetricsUnavailable"
             matchType: "=~"
   receivers:
     - name: drop

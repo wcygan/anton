@@ -1,0 +1,10 @@
+Running in simulation mode. Use "-apply" option to apply the changes.
+Pass #1 (writable volumes)
+skipping readonly volume 31 on seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444
+Pass #2 (read-only volumes)
+sync iteration 1/5 for volume 31
+load collection loki volume 31 index size 128 from seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 ...
+load collection loki volume 31 index size 112 from seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 ...
+volume 31 seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444: not resurrecting 1 needle(s) absent on seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 (cannot prove they are missing writes vs vacuumed deletes)
+volume 31 seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 has 6 entries, seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 missed 0 and partially deleted 2 entries
+volume 31: ONE-SIDED divergence — seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444.18444 is missing 1 live needle(s) that exist on seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444.18444; seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444.18444 holds no unique live data. Do NOT re-copy the whole volume: the absent needles may be valid deletions already vacuumed away on the lagging side, which a re-copy would resurrect. Restore only the confirmed-missing needles (volume.fsck -collection <c> -volumeId 31 -findMissingChunksInFiler, then needle-level repair), or re-copy only after accepting that risk.

@@ -1,0 +1,22 @@
+Topology volumeSizeLimit:5000 MB hdd(volume:70/72 active:69 free:2 remote:0)
+  DataCenter DefaultDataCenter hdd(volume:70/72 active:69 free:2 remote:0)
+    Rack DefaultRack hdd(volume:70/72 active:69 free:2 remote:0)
+      DataNode seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 hdd(volume:23/24 active:22 free:1 remote:0)
+        Disk hdd(volume:23/24 active:22 free:1 remote:0) id:0
+          volume Id:31, Size:1088, ReplicaPlacement:001, Collection:loki, Version:3, Ttl:, FileCount:6, DeleteCount:1, DeletedByteCount:56, ReadOnly:true, ModifiedAtSecond:1792647280 
+        Disk hdd {Size:1088 FileCount:6 DeletedFileCount:1 DeletedBytes:56} 
+      DataNode seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 {Size:1088 FileCount:6 DeletedFileCount:1 DeletedBytes:56} 
+      DataNode seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 hdd(volume:24/24 active:24 free:0 remote:0)
+        Disk hdd(volume:24/24 active:24 free:0 remote:0) id:0
+          volume Id:9, Size:794299624, ReplicaPlacement:001, Collection:, Version:3, Ttl:, FileCount:5983, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1792780926 
+          volume Id:31, Size:1216, ReplicaPlacement:001, Collection:loki, Version:3, Ttl:, FileCount:6, DeleteCount:3, DeletedByteCount:168, ReadOnly:false, ModifiedAtSecond:1792740795 
+        Disk hdd {Size:794300840 FileCount:5989 DeletedFileCount:3 DeletedBytes:168} 
+      DataNode seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 {Size:794300840 FileCount:5989 DeletedFileCount:3 DeletedBytes:168} 
+      DataNode seaweedfs-volume-2.seaweedfs-volume-peer.storage:8444 hdd(volume:23/24 active:23 free:1 remote:0)
+        Disk hdd(volume:23/24 active:23 free:1 remote:0) id:0
+          volume Id:9, Size:794299624, ReplicaPlacement:001, Collection:, Version:3, Ttl:, FileCount:5983, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1792780926 
+        Disk hdd {Size:794299624 FileCount:5983 DeletedFileCount:0 DeletedBytes:0} 
+      DataNode seaweedfs-volume-2.seaweedfs-volume-peer.storage:8444 {Size:794299624 FileCount:5983 DeletedFileCount:0 DeletedBytes:0} 
+    Rack DefaultRack {Size:1588601552 FileCount:11978 DeletedFileCount:4 DeletedBytes:224} 
+  DataCenter DefaultDataCenter {Size:1588601552 FileCount:11978 DeletedFileCount:4 DeletedBytes:224} 
+total size:1588601552 file_count:11978 deleted_file:4 deleted_bytes:224

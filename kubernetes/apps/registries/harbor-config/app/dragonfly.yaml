@@ -6,6 +6,9 @@ metadata:
 spec:
   replicas: 3
   image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.2
+  # Harbor's job queue and cache: stop after Harbor on node shutdown
+  # (kube-system/priority-classes).
+  priorityClassName: storage-service
   # NetworkPolicy is owned by GitOps. Operator v1.7.0 removed its managed
   # policy and the spec.networkPolicyEnabled field.
 

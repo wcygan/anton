@@ -137,7 +137,12 @@ spec:
         limits:
           memory: 256Mi
 
+    # Core, jobservice and registry write to the database, cache and S3. They
+    # stop after ordinary workloads and before those backends on node
+    # shutdown (kube-system/priority-classes); nginx, portal and exporter
+    # stay in the default tier, so the front door closes first.
     core:
+      priorityClassName: storage-consumer
       replicas: 2
       # Soft anti-affinity — keep the two replicas on different nodes when
       # possible, but fall back to co-location instead of staying Pending
@@ -161,6 +166,7 @@ spec:
           memory: 512Mi
 
     jobservice:
+      priorityClassName: storage-consumer
       replicas: 1
       resources:
         requests:
@@ -170,6 +176,7 @@ spec:
           memory: 256Mi
 
     registry:
+      priorityClassName: storage-consumer
       replicas: 2
       registry:
         resources:

@@ -74,11 +74,13 @@ $TALOS -n "$K8S1" logs etcd             # peer warnings, compaction, slow apply
 
 Warning signs:
 
-- **`alarm: NOSPACE`** — the etcd database needs defragmentation. Plan a defrag (separate operation, not in this skill's scope — read Talos docs under `advanced/disaster-recovery`).
+- **`alarm: NOSPACE`** — the database reached its quota and etcd rejects writes. Hand off the operator-approved defragmentation in [the Talos guide](../../../../docs/docs/guides/talos.md#defragmentation) (one member at a time, leader last), then disarm the alarm.
 - **`slow fdatasync` / `apply took too long (> 100ms)`** in logs — disk I/O contention. Cross-check `references/disks.md` for NVMe errors on the same node.
 - **`request stats sender failed: EOF`** / **peer loss** — network path between control planes is flaky. Cross-check `references/network.md` for MTU / link state.
 - **Quorum loss (< 2 healthy members)** — STOP. Do not reboot anything else. This is a disaster-recovery situation; do not improvise.
-- **`db size in use` vs `db size` divergence** — compaction is keeping up but defrag hasn't run recently. Not urgent until `NOSPACE` alarms fire.
+- **`db size in use` vs `db size` divergence** — compaction is keeping up but defrag hasn't run recently. etcd reuses the free pages; not urgent until `EtcdDatabaseFragmented` or `EtcdDatabaseNearQuota` fires.
+
+Prometheus scrapes every member as job `kube-etcd`; firing etcd alerts carry `component="etcd"`, and their responses are in [the Talos guide](../../../../docs/docs/guides/talos.md#etcd-alerts).
 
 Etcd **snapshots** are a separate mutating operation; this skill only reads state. See the pre-flight block in `upgrade-talos-or-k8s` for the exact snapshot command, or run the Talos docs `advanced/disaster-recovery` procedure.
 

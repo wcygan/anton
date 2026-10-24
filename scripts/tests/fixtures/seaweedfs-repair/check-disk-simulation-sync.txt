@@ -1,0 +1,8 @@
+Running in simulation mode. Use "-apply" option to apply the changes.
+Pass #1 (writable volumes)
+skipping readonly volume 31 on seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444
+Pass #2 (read-only volumes)
+sync iteration 1/5 for volume 31
+load collection loki volume 31 index size 144 from seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 ...
+load collection loki volume 31 index size 112 from seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 ...
+volume 31 seaweedfs-volume-1.seaweedfs-volume-peer.storage:8444 has 6 entries, seaweedfs-volume-0.seaweedfs-volume-peer.storage:8444 missed 0 and partially deleted 2 entries

@@ -1,0 +1,31 @@
+---
+# Storage tiers, lowest first: ordinary workloads (no class, priority 0) <
+# storage-consumer < storage-service < longhorn-critical (Longhorn chart,
+# 1000000000) < system-cluster-critical < system-node-critical. On node
+# shutdown the kubelet stops one tier at a time (talos/patches/global/
+# machine-kubelet.yaml uses these values as its group boundaries), and under
+# memory pressure it evicts lower tiers first among pods above their requests.
+#
+# A value is immutable: changing one means a new class, a rolling restart of
+# its members and a matching kubelet patch. Pruning is disabled because a
+# deleted class stops its members' Pods from being recreated, which would
+# block storage recovery after a node failure.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: storage-consumer
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+value: 100000000
+globalDefault: false
+description: Loki and Harbor, which write to SeaweedFS. Stopped and evicted before the storage they use.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: storage-service
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+value: 500000000
+globalDefault: false
+description: SeaweedFS and Harbor's database and cache. Stopped after their clients and before Longhorn.

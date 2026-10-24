@@ -76,6 +76,39 @@ def prometheus(root: Path) -> None:
             checks.append({"expr": f'count(ALERTS{{alertname="{alert}",alertstate="firing"}}) or vector(0)',
                            "eval_time": "20m", "exp_samples": [{"labels": "{}", "value": expected}]})
         tests.append({"name": name, "interval": "1m", "input_series": series, "promql_expr_test": checks})
+
+    def slot_series(servers: dict[str, tuple[int, dict[str, int]]]) -> list[dict]:
+        series = []
+        for pod, (maximum, collections) in servers.items():
+            labels = f'namespace="storage",endpoint="volume-metrics",pod="{pod}"'
+            series.append({"series": f"SeaweedFS_volumeServer_max_volumes{{{labels}}}", "values": f"{maximum}+0x60"})
+            for collection, count in collections.items():
+                series.append({"series": f'SeaweedFS_volumeServer_volumes{{{labels},type="volume",collection="{collection}"}}',
+                               "values": f"{count}+0x60"})
+        return series
+
+    # S3 gateways export the same Go gauge with value 0; it must not count as a volume server.
+    s3 = [{"series": f'SeaweedFS_volumeServer_max_volumes{{namespace="storage",endpoint="s3-metrics",pod="s3-{i}"}}',
+           "values": "0+0x60"} for i in range(2)]
+    slot_scenarios = [
+        ("slots-headroom", {"volume-0": (30, {"harbor": 9, "loki": 14}), "volume-1": (30, {"": 23}),
+                            "volume-2": (30, {"": 24})}, s3, 0, 0),
+        ("slots-one-server-low", {"volume-0": (30, {"": 23}), "volume-1": (30, {"": 23}),
+                                  "volume-2": (30, {"": 29})}, [], 1, 0),
+        ("slots-observed-2026-10-23", {"volume-0": (24, {"": 23}), "volume-1": (24, {"": 23}),
+                                       "volume-2": (24, {"": 24})}, s3, 3, 0),
+        ("slots-exhausted", {"volume-0": (24, {"": 23}), "volume-1": (24, {"": 24}),
+                             "volume-2": (24, {"": 24})}, [], 3, 1),
+        ("slots-survivor-full-during-maintenance", {"volume-0": (30, {"": 27}), "volume-1": (30, {"": 30})}, [], 1, 1),
+        ("slots-metrics-missing", {}, s3, 0, 0),
+    ]
+    for name, servers, extra, low, exhausted in slot_scenarios:
+        checks = []
+        for alert, expected, fired_by in (("SeaweedFSVolumeSlotsLow", low, "45m"), ("SeaweedFSVolumeSlotsExhausted", exhausted, "10m")):
+            expr = f'count(ALERTS{{alertname="{alert}",alertstate="firing"}}) or vector(0)'
+            checks.append({"expr": expr, "eval_time": "4m", "exp_samples": [{"labels": "{}", "value": 0}]})
+            checks.append({"expr": expr, "eval_time": fired_by, "exp_samples": [{"labels": "{}", "value": expected}]})
+        tests.append({"name": name, "interval": "1m", "input_series": slot_series(servers) + extra, "promql_expr_test": checks})
     save(root, "prom-tests.json", {"rule_files": ["/test/prom-rules.json"], "evaluation_interval": "30s", "tests": tests})
     for command in (("check", "rules", "/test/prom-rules.json"), ("test", "rules", "/test/prom-tests.json")):
         print(run("docker", "run", "--rm", "-v", f"{root}:/test:ro", "--entrypoint", "/bin/promtool", PROM, *command))
