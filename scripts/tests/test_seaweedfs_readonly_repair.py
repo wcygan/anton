@@ -31,6 +31,8 @@ SCRIPT = ROOT / "scripts" / "seaweedfs-readonly-repair.py"
 SPEC = importlib.util.spec_from_file_location("seaweedfs_readonly_repair", SCRIPT)
 CLI = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
+# dataclasses resolves string annotations through sys.modules; Python 3.14 fails without it.
+sys.modules[SPEC.name] = CLI
 SPEC.loader.exec_module(CLI)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "seaweedfs-repair"
