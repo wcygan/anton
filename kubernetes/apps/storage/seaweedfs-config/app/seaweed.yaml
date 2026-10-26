@@ -7,7 +7,7 @@ metadata:
   annotations:
     secret.reloader.stakater.com/reload: seaweedfs-s3-config
 spec:
-  image: docker.io/chrislusf/seaweedfs:4.48@sha256:aba492e2a4e4c90bff795745e8e660affa1f09e7650f5981bd7bccd1a06cd931
+  image: docker.io/chrislusf/seaweedfs:4.51@sha256:3a522c379599e163433a636e75022630848b63a74f08ea37bf06f8d776e9a707
   imagePullPolicy: IfNotPresent
   master:
     replicas: 3
