@@ -30,9 +30,13 @@ spec:
       upgradeJob:
         enabled: true
 
-    # ---- Prometheus Operator (defaults; no overrides needed) ----
+    # ---- Prometheus Operator ----
     prometheusOperator:
       enabled: true
+      admissionWebhooks:
+        patch:
+          # Preserve the existing Opaque admission Secret during this upgrade.
+          secretType: ""
 
     # ---- Prometheus ----
     prometheus:
