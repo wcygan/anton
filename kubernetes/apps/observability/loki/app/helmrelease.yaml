@@ -24,8 +24,6 @@ spec:
       enabled: false
     lokiCanary:
       enabled: false
-    minio:
-      enabled: false
     rollout_operator:
       enabled: false
     test:
