@@ -45,7 +45,7 @@ spec:
                   memory: 384Mi
           containers:
             - name: ensure-durability
-              image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+              image: docker.io/library/python:3.14-alpine@sha256:eb2c62658b8d51bff0acc408504b76521d02030de56a8a3c1e830083e89b89d2
               command: [python3, /policy/ensure-durability.py]
               args:
                 - --master=seaweedfs-master-0.seaweedfs-master-peer.storage:9333,seaweedfs-master-1.seaweedfs-master-peer.storage:9333,seaweedfs-master-2.seaweedfs-master-peer.storage:9333
