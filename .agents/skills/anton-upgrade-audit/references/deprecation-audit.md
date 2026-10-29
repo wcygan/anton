@@ -4,14 +4,14 @@ Renovate sees version bumps. It does **not** see "you are using an API the new v
 
 ## Tools
 
-| Tool | Scope | Install (do NOT run from skill) |
+| Tool | Scope | Install (explicit operator request only) |
 |---|---|---|
 | `kubent` | Live cluster: in-use API versions vs. removal schedule | `brew install kubent` |
 | `pluto` | Rendered manifests + installed Helm releases | `brew install FairwindsOps/tap/pluto` |
 | `nova` | Helm release versions vs. upstream latest | `brew install FairwindsOps/tap/nova` |
 | `mise outdated` | Toolchain pins in `.mise.toml` | already in toolchain |
 
-As of April 2026, `kubent`, `pluto`, and `nova` are **not** installed in Anton's toolchain. Report them missing and continue — do not install them from this skill. Recommend adding them to `.mise.toml` or a `brew` bundle as a follow-up.
+Check availability at runtime with `command -v kubent pluto nova` through the repository environment. Local installation can differ between operator machines. Report missing tools and continue; install them only when the operator explicitly requests it. Prefer the repository environment via `mise exec --` for each command.
 
 ## Commands
 
@@ -27,7 +27,7 @@ kubent --context "$(kubectl config current-context)" 2>&1
 pluto detect-files -d kubernetes/ --target-versions k8s="${K8S_VERSION}"
 
 # Installed Helm releases — check what is actually in the cluster
-pluto detect-helm -A --target-versions k8s="${K8S_VERSION}"
+pluto detect-helm --target-versions k8s="${K8S_VERSION}"
 
 # Helm release drift vs. upstream latest
 nova find --format table
@@ -46,11 +46,11 @@ Output rows list an in-use API, the version that deprecated it, and the version 
 - **`REMOVED IN` ≤ current k8s + 2 minors** → warning. Include in the report; the next Tier 4 kube bump PR depends on it.
 - **`REMOVED IN` > current k8s + 2 minors** → informational.
 
-Empty output is the desired state.
+Empty findings are the desired state. Record collector counts and coverage: kubent can find no directly annotated resources while collecting installed Helm manifests. A zero-resource collector is not proof that every live object was checked; use complementary source and rendered-manifest scans. Results cover only the tools' known deprecation rules.
 
 ### pluto
 
-`detect-files` scans rendered manifests under `kubernetes/`. `detect-helm` scans installed Helm releases in the cluster. They can disagree — the cluster may have stale releases from before a chart refactor. Trust `detect-helm` for what the cluster will actually break on, `detect-files` for what will break on re-render.
+`detect-files` scans the files supplied to it. Scanning `kubernetes/` covers committed source manifests, not the objects rendered from Helm charts. Also render the exact candidate chart with Anton values and run `pluto detect <rendered-manifest.yaml>` with the same Kubernetes target. `detect-helm` scans installed Helm releases in the cluster. They can disagree — the cluster may have stale releases from before a chart refactor. Trust `detect-helm` for what the cluster will actually break on, `detect-files` for what will break on re-render.
 
 **Known false positives in Anton**:
 

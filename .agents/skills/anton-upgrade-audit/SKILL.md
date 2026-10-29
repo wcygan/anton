@@ -26,7 +26,7 @@ Read-only triage for what can be upgraded in Anton — GitHub side (Renovate PRs
 - **Never merge, close, or comment on a PR.** This skill recommends; the user acts.
 - **Never run mutating commands** — no `kubectl apply`, `flux reconcile`, `talosctl apply`, `gh pr merge`, `gh pr close`, or `git push`. Read-only only.
 - **Never bump `talosVersion` or `kubernetesVersion`** directly. Recommend the bump and hand off to `upgrade-talos-or-k8s` — that skill owns the rolling upgrade and the etcd-quorum health gates.
-- **Never install audit tools** (kubent, pluto, nova, trivy). Report them missing and keep going.
+- **Do not install audit tools without an explicit operator request** (kubent, pluto, nova, trivy). Otherwise report them missing and keep going.
 
 ## Green-path one-liner
 
@@ -89,12 +89,12 @@ Renovate sees version bumps. It does **not** see "you are using an API the new v
 ```sh
 kubent --context "$(kubectl config current-context)" 2>&1 | tail -40
 pluto detect-files -d kubernetes/ --target-versions k8s=$(yq '.kubernetesVersion' talos/talenv.yaml) 2>&1 | tail -40
-pluto detect-helm -A --target-versions k8s=$(yq '.kubernetesVersion' talos/talenv.yaml) 2>&1 | tail -40
+pluto detect-helm --target-versions k8s=$(yq '.kubernetesVersion' talos/talenv.yaml) 2>&1 | tail -40
 nova find --format table 2>&1 | tail -40
 mise outdated 2>&1
 ```
 
-If a tool is not installed, report it missing and continue — do not install from the skill. Interpretation, known false positives, target-version rules → [deprecation-audit](references/deprecation-audit.md).
+If a tool is not installed, report it missing and continue unless the operator explicitly requested installation. Interpretation, known false positives, target-version rules → [deprecation-audit](references/deprecation-audit.md).
 
 ### Step 6 — Read the Dependency Dashboard
 
@@ -119,9 +119,9 @@ Details → [dependency-dashboard](references/dependency-dashboard.md).
 - Does not run `kubectl apply` / `flux reconcile` / `talosctl apply` / `gh pr merge`
 - Does not bump `talosVersion` / `kubernetesVersion` — hand off to `upgrade-talos-or-k8s`
 - Does not re-trigger failing CI on a Renovate PR
-- Does not scan running images for CVEs — that needs `trivy k8s`, not yet installed in this repo
+- Does not scan running images for CVEs — that requires a separately authorized image audit
 - Does not verify cluster health after a merge — that is `anton-cluster-health`
-- Does not install missing audit tools
+- Does not install missing audit tools unless the operator explicitly requests installation
 
 ## Related skills
 
