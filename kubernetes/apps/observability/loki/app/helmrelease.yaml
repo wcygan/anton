@@ -9,7 +9,7 @@ spec:
   chart:
     spec:
       chart: loki
-      version: 19.4.0
+      version: 20.0.2
       sourceRef:
         kind: HelmRepository
         name: grafana-community
@@ -23,8 +23,6 @@ spec:
     gateway:
       enabled: false
     lokiCanary:
-      enabled: false
-    minio:
       enabled: false
     rollout_operator:
       enabled: false
