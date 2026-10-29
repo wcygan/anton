@@ -9,6 +9,6 @@ spec:
     mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
     operation: copy
   ref:
-    # kyverno chart 3.9.2 / controller 1.19.2, verified against upstream OCI.
+    tag: 3.9.2
     digest: sha256:83054f30148c3cfc001087c1f5772eda7c7224e9b74b7f0e70c39c9cafe009d1
   url: oci://ghcr.io/kyverno/charts/kyverno

@@ -37,6 +37,13 @@
   },
   packageRules: [
     {
+      description: "Host-agent images are built and published to LAN-only Harbor",
+      matchManagers: ["kubernetes"],
+      matchDatasources: ["docker"],
+      matchPackageNames: ["192.168.1.106/library/storage-vxlan", "192.168.1.106/library/nvme-power-collector"],
+      enabled: false,
+    },
+    {
       description: "Override Helmfile Dependency Name",
       matchDatasources: ["docker"],
       matchManagers: ["helmfile"],
