@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ntfy
-          image: docker.io/binwiederhier/ntfy:v2.32.0@sha256:59250e1d8be2ee2186c4560322f625faef22ace380331f05b63f8842dbd62602
+          image: docker.io/binwiederhier/ntfy:v2.35.0@sha256:6f0c9abab7b99a978d816611cc90dabb4849b81f60c53114e91cd07931085dc0
           args: ["serve", "--config", "/etc/ntfy/server.yml"]
           ports:
             - name: http
