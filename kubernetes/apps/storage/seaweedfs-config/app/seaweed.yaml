@@ -25,7 +25,7 @@ spec:
     # Keep a Raft-aware readiness guard without patching the operator.
     sidecars:
       - name: raft-readiness
-        image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+        image: docker.io/library/python:3.14-alpine@sha256:a18b20ad69e74df6cf6d2e1b1a260d7a1ecf5380fd83b310f83ba88c461cf894
         command: [/bin/sh, -ec, exec sleep 2147483647]
         readinessProbe:
           httpGet:
@@ -149,7 +149,7 @@ spec:
           secretName: seaweedfs-read-probe
     sidecars:
       - name: read-probe
-        image: docker.io/library/python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+        image: docker.io/library/python:3.14-alpine@sha256:a18b20ad69e74df6cf6d2e1b1a260d7a1ecf5380fd83b310f83ba88c461cf894
         command: [python3, -u, /probe/s3-read-probe.py]
         env:
           - name: PYTHONDONTWRITEBYTECODE
