@@ -13,6 +13,45 @@ spec:
     - name: physical-fan-health
       interval: 30s
       rules:
+        - alert: NodePhysicalFanTelemetryMissing
+          expr: |
+            (
+              label_replace(
+                max by (instance, nodename) (node_uname_info{job="node-exporter"})
+                  or on(instance)
+                label_replace(
+                  max by (instance) (up{job="node-exporter"} == 1),
+                  "nodename", "$1", "instance", "(.+)"
+                ),
+                "sensor", "fan1", "instance", ".+"
+              )
+              or
+              label_replace(
+                max by (instance, nodename) (node_uname_info{job="node-exporter"})
+                  or on(instance)
+                label_replace(
+                  max by (instance) (up{job="node-exporter"} == 1),
+                  "nodename", "$1", "instance", "(.+)"
+                ),
+                "sensor", "fan2", "instance", ".+"
+              )
+            )
+              and on(instance) (up{job="node-exporter"} == 1)
+              unless on(instance, sensor)
+                node_hwmon_fan_rpm{job="node-exporter",chip=~"platform_nct6775_.*",sensor=~"fan1|fan2"}
+          for: 10m
+          labels:
+            severity: warning
+            component: hardware
+          annotations:
+            summary: "Physical fan {{ $labels.sensor }} telemetry missing on {{ $labels.nodename }}"
+            description: |
+              The node-exporter target is reachable, but the expected nct6775
+              {{ $labels.sensor }} reading has been absent for 10 minutes.
+              Fan health is unknown. Check the Talos nct6775 module, host hwmon
+              devices, and node-exporter hwmon collection. A missing reading does
+              not mean the fan stopped. Unreachable exporters use TargetDown.
+            runbook_url: "https://github.com/wcygan/anton/blob/main/docs/docs/guides/talos.md#fan-telemetry"
         - alert: NodePhysicalFanStoppedOrUnstable
           expr: |
             (

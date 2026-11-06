@@ -1338,10 +1338,10 @@ data:
         {
           "id": 802,
           "type": "timeseries",
-          "title": "CPU Throttle Events (5m)",
+          "title": "CPU Thermal Throttle Events (5m)",
           "gridPos": { "x": 12, "y": 124, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Counter increments on either thermal or power-budget throttle. A spike just before a node reboot is a primary suspect for the silent-reboot investigation in plan 0009.",
+          "description": "Package thermal-status transitions reported by Linux. This counter does not measure CFS throttling or PL1/PL2 power-limit events. Compare core counters, thermal duration and package temperatures; short excursions can fall between scrapes.",
           "fieldConfig": {
             "defaults": {
               "unit": "short",
@@ -1434,7 +1434,7 @@ data:
           "title": "Fan RPM per Node",
           "gridPos": { "x": 0, "y": 140, "w": 24, "h": 7 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "MS-01 chassis fan RPMs (nct6775 Super-I/O). Unconnected fan headers report 0 and are filtered out — a connected fan reading 0 is a stall, which lets temps run away before coretemp ever crosses its threshold.",
+          "description": "MS-01 physical fan1/fan2 RPMs from nct6775. Zero readings remain visible; unused channels are excluded by sensor name. Missing readings mean unknown fan health and are covered by NodePhysicalFanTelemetryMissing.",
           "fieldConfig": {
             "defaults": {
               "unit": "rpm",
@@ -1455,7 +1455,7 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "node_hwmon_fan_rpm{chip=\"platform_nct6775_2592\"} > 0",
+              "expr": "node_hwmon_fan_rpm{chip=~\"platform_nct6775_.*\",sensor=~\"fan1|fan2\"}",
               "legendFormat": "{{instance}} {{sensor}}"
             }
           ]
@@ -1605,7 +1605,7 @@ data:
           "title": "CPU Watts vs Package Temp — correlation",
           "gridPos": { "x": 12, "y": 160, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Twin-axis: RAPL package watts (left, watt) vs coretemp package temp (right, °C). Answers the throttle-counter question — if a panel-802 spike correlates with a watts spike, it is a power-budget (PL1/PL2) throttle; if temp leads watts, it is thermal. Per-instance overrides set right-axis assignment for the temperature series.",
+          "description": "RAPL package watts (left) and coretemp package temperature (right). Use these signals to locate workload and thermal-event windows. Their correlation alone cannot distinguish power-limit events, short thermal excursions or external PROCHOT; brief excursions may fall between scrapes.",
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10 }
@@ -1799,7 +1799,7 @@ data:
           "title": "Throttle Why — overlay",
           "gridPos": { "x": 0, "y": 176, "w": 24, "h": 9 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Correlates the panel-814 throttle band with average CPU clock, package temperature, RAPL package watts, and node load. Thermal throttle: temp leads. PL1/power-budget throttle: load leads while watts are pinned and frequency falls. External PROCHOT: frequency collapses without matching temp/watt lead. Added after the 2026-05-06 k8s-2 episode: 0.73 GHz / 15.5 W / 65 °C with 9000+ throttle events in the prior hour while peer nodes held ~2.9 GHz / 30 W / 69 °C and zero throttles.",
+          "description": "Correlate package thermal-status transitions with CPU frequency, temperature, package power and load. Short thermal excursions may fall between scrapes; a low sampled temperature or a frequency change does not identify a power-limit or external PROCHOT cause.",
           "fieldConfig": {
             "defaults": {
               "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 5, "lineWidth": 2 }

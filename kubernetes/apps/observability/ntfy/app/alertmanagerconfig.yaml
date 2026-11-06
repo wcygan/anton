@@ -52,7 +52,7 @@ spec:
             value: warning
             matchType: "="
           - name: alertname
-            value: "LonghornVolumeDegraded|OTelCollectorQueueHigh|SeaweedFSS3ReadFailures|SeaweedFSS3Read5xx|SeaweedFSS3MonitoringUnavailable|SeaweedFSVolumeSlotsLow|PodBypassedMultus|CronJobSuccessOverdue"
+            value: "LonghornVolumeDegraded|OTelCollectorQueueHigh|SeaweedFSS3ReadFailures|SeaweedFSS3Read5xx|SeaweedFSS3MonitoringUnavailable|SeaweedFSVolumeSlotsLow|PodBypassedMultus|CronJobSuccessOverdue|NodePhysicalFanTelemetryMissing"
             matchType: "=~"
       # etcd warnings from kube-prometheus-stack/app/prometheusrule-etcd.yaml.
       # EtcdDatabaseFragmented is info and stays unrouted.

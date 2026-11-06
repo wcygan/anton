@@ -8,6 +8,7 @@ from contextlib import redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 SCRIPT = Path(__file__).resolve().parents[1] / "collect-cooling-wal-evidence.py"
 SPEC = importlib.util.spec_from_file_location("cooling_wal_evidence", SCRIPT)
@@ -64,6 +65,24 @@ class CoolingWalEvidenceTests(unittest.TestCase):
         with patch.object(MODULE, "anton_kubectl_prefix", side_effect=MODULE.TargetPreflightError("wrong context")), patch("sys.stderr") as stderr:
             self.assertEqual(1, MODULE.main(["--window", "1"]))
             self.assertIn("blocked by target preflight", "".join(str(part) for part in stderr.write.call_args_list))
+
+    def test_collect_distinguishes_missing_fan_from_stopped_second_channel(self) -> None:
+        start = datetime(2026, 11, 6, 0, 0, tzinfo=UTC)
+        end = datetime(2026, 11, 6, 0, 1, tzinfo=UTC)
+
+        def runner(argv, timeout):
+            query = parse_qs(urlsplit(argv[-1]).query)["query"][0]
+            payload = json.dumps({"status": "success", "data": {"result": []}})
+            if 'sensor="fan2"' in query:
+                payload = response({"nodename": "k8s-2", "sensor": "fan2"}, [[179, "0"], [209, "0"]])
+            return type("Result", (), {"returncode": 0, "stdout": payload})()
+
+        report = MODULE.collect(start, end, 30, prefix=("kubectl",), runner=runner)
+        self.assertEqual("no_data", report["metrics"]["fan1_rpm"]["state"])
+        fan2 = report["metrics"]["fan2_rpm"]
+        self.assertEqual("observed", fan2["state"])
+        self.assertEqual(1.0, fan2["series"][0]["zero_fraction"])
+        self.assertEqual(0.0, fan2["series"][0]["max"])
 
     def test_cli_success_emits_unknown_metric_states_from_fixture(self) -> None:
         fixture_report = {"schema_version": 1, "metrics": {"fan1_rpm": {"state": "no_data", "series": []}, "nvme_temp2_celsius": {"state": "query_error", "series": []}}, "interpretation": {"source_is_read_only": True}}

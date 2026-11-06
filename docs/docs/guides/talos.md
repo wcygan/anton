@@ -45,6 +45,50 @@ mise exec -- talosctl get disks
 
 Start with node readiness and etcd membership. Then look for the earliest relevant evidence in the OS, network interfaces, disks, or services. Line evidence up by node and time rather than by symptom. Avoid broad log dumps, and redact credentials and machine identifiers before sharing.
 
+## Fan telemetry
+
+Physical fan readings come from the host's Nuvoton `nct6775` driver through
+node-exporter's hwmon collector. The Talos source requests this module in
+`talos/patches/global/machine-kernel.yaml`. A successful hwmon scrape does not
+prove that the fan device exists: other temperature sensors can still be scraped
+when the Nuvoton driver is missing.
+
+Talos 1.14 changed this driver from built-in to a module. Anton's earlier module
+list did not request it, so the upgrade removed the fan device from sysfs.
+The [upstream change](https://github.com/siderolabs/pkgs/commit/c5a168538eac21a4b4cfab4cd2c08eb8fdcd05af)
+explains why an explicit module declaration is now needed.
+
+`NodePhysicalFanTelemetryMissing` warns after a reachable node-exporter has lacked
+either expected `fan1` or `fan2` reading for ten minutes. The warning is explicitly
+routed to ntfy. Unreachable exporters are covered by `TargetDown` instead.
+`NodePhysicalFanStoppedOrUnstable` remains a separate critical alert for repeated
+zero-RPM readings. The fan graph preserves zero values; absent data means unknown
+health, not a stopped or healthy fan.
+
+After resolving the node through `scripts/cluster-targets.py`, inspect its
+`kernelmodulespecs`, `/proc/modules`, and `/sys/class/hwmon/*/name` using read-only
+Talos commands. If `nct6775` is requested but not loaded, inspect the module status
+and bounded kernel logs before changing anything. If the host exposes fan inputs,
+check node-exporter's hwmon collector, mounts, and scrape filters next.
+
+Collect the two fan channels and package-throttle counters over a bounded window:
+
+```sh
+mise exec -- python3 scripts/collect-cooling-wal-evidence.py --window 24
+```
+
+Linux's `node_cpu_package_throttles_total` reports thermal-status transitions, not
+CFS throttling or PL1/PL2 power-limit events. Compare per-core counts and sysfs
+thermal-duration counters; a short thermal excursion can occur between temperature
+scrapes. Correlation with package power alone does not identify its cause. See the
+[Linux thermal reporting reference](https://www.kernel.org/doc/html/next/admin-guide/thermal/intel_thermal_throttle.html).
+
+Restoring the driver restores visibility; it does not repair a physical fan or
+prove cooling is adequate. Module loading, node maintenance, and physical work
+need the separate approval described below. Verify both channels after an approved
+apply and across the next planned reboot, then retain a full observation window
+before closing a cooling investigation.
+
 ## Shutdown order
 
 When a node shuts down or reboots gracefully, the kubelet stops pods one priority tier at a time, lowest first, so writers finish before the storage under them stops. The budgets live in `talos/patches/global/machine-kubelet.yaml`; the two storage classes live in `kubernetes/apps/kube-system/priority-classes/`.

@@ -18,7 +18,8 @@ from cluster_target_contract import TargetPreflightError, anton_kubectl_prefix  
 
 PROXY = "/api/v1/namespaces/observability/services/http:kube-prometheus-stack-prometheus:9090/proxy"
 QUERIES = {
-    "fan1_rpm": 'node_hwmon_fan_rpm{chip="platform_nct6775_2592",sensor="fan1"} * on(instance) group_left(nodename) node_uname_info',
+    "fan1_rpm": 'node_hwmon_fan_rpm{chip=~"platform_nct6775_.*",sensor="fan1"} * on(instance) group_left(nodename) node_uname_info',
+    "fan2_rpm": 'node_hwmon_fan_rpm{chip=~"platform_nct6775_.*",sensor="fan2"} * on(instance) group_left(nodename) node_uname_info',
     "nvme_temp2_celsius": 'node_hwmon_temp_celsius{chip=~"nvme_.*",sensor="temp2"} * on(instance) group_left(nodename) node_uname_info',
     "package_throttles": 'node_cpu_package_throttles_total * on(instance) group_left(nodename) node_uname_info',
 }
@@ -72,7 +73,7 @@ def summarize_series(response: object, start: datetime, end: datetime, step_seco
             "min": min(numbers) if numbers else None,
             "max": max(numbers) if numbers else None,
         }
-        if metric_name == "fan1_rpm":
+        if metric_name in {"fan1_rpm", "fan2_rpm"}:
             record["zero_fraction"] = round(sum(number == 0 for number in numbers) / len(numbers), 4) if numbers else None
         if metric_name == "package_throttles" and len(numbers) >= 2:
             reset = any(current < previous for previous, current in zip(numbers, numbers[1:]))
