@@ -3,7 +3,7 @@ module anton.local/notification-admission-tests
 go 1.26.0
 
 require (
-	github.com/google/cel-go v0.26.0
+	github.com/google/cel-go v0.30.0
 	k8s.io/api v0.36.0
 	k8s.io/apimachinery v0.36.0
 	k8s.io/apiserver v0.36.0
@@ -12,7 +12,7 @@ require (
 
 require (
 	cel.dev/expr v0.25.1 // indirect
-	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
