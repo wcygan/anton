@@ -24,6 +24,6 @@ TALOSCONFIG = "{{config_root}}/talos/clusterconfig/talosconfig"
 "aqua:kubescape/kubescape" = "4.0.21"
 "aqua:mikefarah/yq" = "4.54.3"
 # amtool for the ntfy routing contract; keep near the cluster's Alertmanager version.
-"aqua:prometheus/alertmanager" = "0.34.2"
+"aqua:prometheus/alertmanager" = "0.35.0"
 "aqua:siderolabs/talos" = "1.14.6"
 "aqua:yannh/kubeconform" = "0.8.0"
