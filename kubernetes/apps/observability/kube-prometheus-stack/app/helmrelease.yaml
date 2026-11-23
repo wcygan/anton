@@ -43,7 +43,7 @@ spec:
       prometheusSpec:
         image:
           # renovate: datasource=docker depName=quay.io/prometheus/prometheus
-          tag: v3.15.1-distroless
+          tag: v3.16.0-distroless
         replicas: 1
         retention: 30d
         retentionSize: 35GB
