@@ -9,7 +9,7 @@ metadata:
     kubectl.kubernetes.io/restartedAt: "2026-10-23T00:00:00Z"
 spec:
   instances: 3
-  imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.12-system-bookworm
 
   # On node shutdown the database stops after Harbor and before Longhorn
   # (kube-system/priority-classes), within the kubelet's 90-second budget for
